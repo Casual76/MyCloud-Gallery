@@ -158,7 +158,7 @@ abstract class PickerLayoutTests : PickerComposeBase() {
   fun ilTettoDeiSoloNasEnellAvvisoConLeCifreGiuste() {
     val ui = PickerSamples.grid(library, multi, selected = 1, notice = PickerNotice.TooManyNasOnly(120, 3L * 1024 * 1024 * 1024))
     show { PickerScreen(ui = ui, request = multi, env = env, actions = PickerActions()) }
-    composeRule.onNodeWithText("Hai scelto 120 media solo sul NAS", substring = true).assertExists()
+    composeRule.onNodeWithText("Hai scelto 120 foto solo sul NAS", substring = true).assertExists()
     assertThat(DocumentPolicy.MAX_NAS_ONLY_ITEMS).isEqualTo(100)
   }
 }

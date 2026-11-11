@@ -1,6 +1,9 @@
 package dev.pampa.mycloudgallery.feature.onboarding.steps
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -14,17 +17,27 @@ import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.TabletAndroid
 import androidx.compose.material.icons.rounded.VisibilityOff
-import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
-import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTileDefaults
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustration
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingPath
@@ -73,13 +86,12 @@ internal fun WelcomeScreen(
         GalleryIllustration(icon = Icons.Rounded.PhotoLibrary, tone = GalleryIllustrationTone.Brand)
       }
     }
+    // I4 (fase I, «l'app parla troppo»): le tre promesse sono tre segni con due parole sotto, in fila; la frase intera la dice TalkBack.
     item(key = "promises") {
-      FluidListGroup {
-        PromiseRow(Icons.Rounded.VisibilityOff, R.string.welcome_promise_telemetry, R.string.welcome_promise_telemetry_detail)
-        FluidListDivider()
-        PromiseRow(Icons.Rounded.CloudOff, R.string.welcome_promise_cloud, R.string.welcome_promise_cloud_detail)
-        FluidListDivider()
-        PromiseRow(Icons.Rounded.Storage, R.string.welcome_promise_home, R.string.welcome_promise_home_detail)
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+        Promise(Icons.Rounded.VisibilityOff, GalleryIconFamily.Security, R.string.welcome_promise_telemetry, R.string.welcome_promise_telemetry_detail, Modifier.weight(1f))
+        Promise(Icons.Rounded.CloudOff, GalleryIconFamily.Network, R.string.welcome_promise_cloud, R.string.welcome_promise_cloud_detail, Modifier.weight(1f))
+        Promise(Icons.Rounded.Storage, GalleryIconFamily.Backup, R.string.welcome_promise_home, R.string.welcome_promise_home_detail, Modifier.weight(1f))
       }
     }
     if (!isSystemUser) {
@@ -98,66 +110,60 @@ internal fun WelcomeScreen(
     item(key = "header-start") { GallerySectionHeader(title = stringResource(R.string.welcome_section_start)) }
     item(key = "found") {
       FluidListGroup {
-        FluidListRow(
-          title = stringResource(R.string.welcome_path_found),
-          subtitle = stringResource(R.string.welcome_path_found_detail),
-          tone = FluidTone.Primary,
-          leading = { Icon(Icons.Rounded.Groups, contentDescription = null) },
-          onClick = choose(OnboardingPath.FOUND_FAMILY),
-        )
+        PathRow(Icons.Rounded.Groups, GalleryIconFamily.People, R.string.welcome_path_found, R.string.welcome_path_found_detail, choose(OnboardingPath.FOUND_FAMILY))
       }
     }
     item(key = "header-join") { GallerySectionHeader(title = stringResource(R.string.welcome_section_join)) }
     item(key = "join") {
       FluidListGroup {
-        FluidListRow(
-          title = stringResource(R.string.welcome_path_join_qr),
-          subtitle = stringResource(R.string.welcome_path_join_qr_detail),
-          tone = FluidTone.Info,
-          leading = { Icon(Icons.Rounded.QrCodeScanner, contentDescription = null) },
-          onClick = choose(OnboardingPath.JOIN_QR),
-        )
+        PathRow(Icons.Rounded.QrCodeScanner, GalleryIconFamily.People, R.string.welcome_path_join_qr, R.string.welcome_path_join_qr_detail, choose(OnboardingPath.JOIN_QR))
         FluidListDivider()
-        FluidListRow(
-          title = stringResource(R.string.welcome_path_join_manual),
-          subtitle = stringResource(R.string.welcome_path_join_manual_detail),
-          tone = FluidTone.Info,
-          leading = { Icon(Icons.Rounded.Edit, contentDescription = null) },
-          onClick = choose(OnboardingPath.JOIN_MANUAL),
-        )
+        PathRow(Icons.Rounded.Edit, GalleryIconFamily.People, R.string.welcome_path_join_manual, R.string.welcome_path_join_manual_detail, choose(OnboardingPath.JOIN_MANUAL))
       }
     }
     item(key = "header-admin") { GallerySectionHeader(title = stringResource(R.string.welcome_section_admin)) }
     item(key = "admin") {
       FluidListGroup {
-        FluidListRow(
-          title = stringResource(R.string.welcome_path_recover),
-          subtitle = stringResource(R.string.welcome_path_recover_detail),
-          tone = FluidTone.Warning,
-          leading = { Icon(Icons.Rounded.Key, contentDescription = null) },
-          onClick = choose(OnboardingPath.RECOVER_ADMIN),
-        )
+        PathRow(Icons.Rounded.Key, GalleryIconFamily.Security, R.string.welcome_path_recover, R.string.welcome_path_recover_detail, choose(OnboardingPath.RECOVER_ADMIN))
         FluidListDivider()
-        FluidListRow(
-          title = stringResource(R.string.welcome_path_second_admin),
-          subtitle = stringResource(R.string.welcome_path_second_admin_detail),
-          tone = FluidTone.Warning,
-          leading = { Icon(Icons.Rounded.AdminPanelSettings, contentDescription = null) },
-          onClick = choose(OnboardingPath.SECOND_ADMIN),
-        )
+        PathRow(Icons.Rounded.AdminPanelSettings, GalleryIconFamily.Security, R.string.welcome_path_second_admin, R.string.welcome_path_second_admin_detail, choose(OnboardingPath.SECOND_ADMIN))
       }
     }
     item(key = "footnote") { FluidSectionFootnote(text = stringResource(R.string.welcome_footnote)) }
   }
 }
 
+/** Una promessa: la piastrella colorata e due parole sotto. TalkBack dice anche la frase che spiega. */
 @Composable
-private fun PromiseRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: Int, detail: Int) {
+private fun Promise(icon: ImageVector, family: GalleryIconFamily, title: Int, detail: Int, modifier: Modifier = Modifier) {
+  val spoken = stringResource(title) + ". " + stringResource(detail)
+  Column(
+    modifier = modifier.padding(horizontal = PromiseGap).clearAndSetSemantics { contentDescription = spoken },
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(PromiseGap),
+  ) {
+    GalleryIconTile(icon = icon, family = family, size = GalleryIconTileDefaults.Medium)
+    Text(
+      text = stringResource(title),
+      style = MaterialTheme.typography.labelLarge,
+      color = MaterialTheme.colorScheme.onSurface,
+      textAlign = TextAlign.Center,
+    )
+  }
+}
+
+/** Un percorso: la piastrella colorata e il titolo. La frase che lo spiega la dice TalkBack dopo il titolo. */
+@Composable
+private fun PathRow(icon: ImageVector, family: GalleryIconFamily, title: Int, detail: Int, onClick: (() -> Unit)?) {
+  val spoken = stringResource(detail)
   FluidListRow(
     title = stringResource(title),
-    subtitle = stringResource(detail),
-    tone = FluidTone.Primary,
-    leading = { Icon(icon, contentDescription = null) },
-    disclosure = false,
+    subtitle = "",
+    leading = { GalleryIconTile(icon = icon, family = family) },
+    leadingTile = false,
+    onClick = onClick,
+    modifier = Modifier.semantics { stateDescription = spoken },
   )
 }
+
+private val PromiseGap = 8.dp

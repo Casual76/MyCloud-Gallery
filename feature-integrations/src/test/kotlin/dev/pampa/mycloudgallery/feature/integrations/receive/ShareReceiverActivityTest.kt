@@ -286,7 +286,8 @@ class ShareReceiverActivityTest {
     install()
     val scenario = launch(send(shared("a.jpg", ReceiveSamples.jpeg(3_000, 1))))
     waitForText("Salva sul NAS", partial = false)
-    compose.waitUntil(10_000) { compose.onAllNodesWithText("Non carico niente", substring = true).fetchSemanticsNodes().isNotEmpty() }
+    // I4: la frase «Non carico niente finche'...» non c'e' piu': la pagina e' pronta quando c'e' il tasto «Salva sul NAS» sotto il titolo.
+    compose.waitUntil(10_000) { compose.onAllNodesWithText("Salva sul NAS").fetchSemanticsNodes().size >= 2 }
     incoming.deleteRecursively()
     compose.onAllNodesWithText("Salva sul NAS")[1].performClick()
     waitForText("I file copiati non ci sono più", partial = true)

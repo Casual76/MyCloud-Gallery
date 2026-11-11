@@ -37,7 +37,6 @@
   </plurals>
   <string name="integrations_receive_summary_both">%1$s e %2$s · %3$s</string>
   <string name="integrations_receive_summary_one">%1$s · %2$s</string>
-  <string name="integrations_receive_summary_label">Da salvare</string>
 
   <string name="integrations_receive_rejected_title">Non ho copiato alcuni file</string>
   <string name="integrations_receive_rejected_file_scheme">%1$d indicati come percorso del telefono, non come file</string>
@@ -58,7 +57,6 @@
   <string name="integrations_receive_area_common">Area comune</string>
   <string name="integrations_receive_common_notice">Lo vedranno tutti i familiari.</string>
   <string name="integrations_receive_save">Salva sul NAS</string>
-  <string name="integrations_receive_save_hint">Non carico niente finché non tocchi “Salva sul NAS”.</string>
 
   <string name="integrations_receive_saving_title">Metto in coda i file</string>
   <string name="integrations_receive_saving_detail">Un momento.</string>
@@ -91,8 +89,8 @@
   <string name="integrations_receive_album_where">In quale album</string>
   <string name="integrations_receive_album_back">Torna alla scelta della cartella</string>
   <string name="integrations_receive_album_mine">Il tuo album</string>
-  <string name="integrations_receive_album_shared">Album condiviso: ti chiedo conferma quando i file sono sul NAS</string>
-  <string name="integrations_receive_album_hint">I file si salvano sul NAS nella cartella scelta, e appena arrivano li metto nell’album. Un album condiviso mi chiede una conferma col conteggio: non sposto niente da solo.</string>
+  <string name="integrations_receive_album_shared">Album condiviso</string>
+  <string name="integrations_receive_album_hint">Arrivati sul NAS, entrano nell’album. Per un album condiviso ti chiedo prima conferma.</string>
   <string name="integrations_receive_album_new">Oppure un album nuovo</string>
   <string name="integrations_receive_album_new_name">Nome dell’album</string>
   <string name="integrations_receive_album_new_create">Crea l’album</string>

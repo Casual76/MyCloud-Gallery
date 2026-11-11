@@ -7,18 +7,22 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTileDefaults
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.security.device.ScreenLockStatus
 import dev.pampa.mycloudgallery.feature.onboarding.R
@@ -49,6 +53,13 @@ private fun PermissionKind.icon(): ImageVector = when (this) {
   PermissionKind.MEDIA -> Icons.Rounded.PhotoLibrary
   PermissionKind.MEDIA_LOCATION -> Icons.Rounded.LocationOn
   PermissionKind.LOCAL_NETWORK -> Icons.Rounded.Lan
+}
+
+private fun PermissionKind.family(): GalleryIconFamily = when (this) {
+  PermissionKind.NOTIFICATIONS -> GalleryIconFamily.Memories
+  PermissionKind.MEDIA -> GalleryIconFamily.Photos
+  PermissionKind.MEDIA_LOCATION -> GalleryIconFamily.Places
+  PermissionKind.LOCAL_NETWORK -> GalleryIconFamily.Network
 }
 
 private fun PermissionKind.title(): Int = when (this) {
@@ -143,7 +154,6 @@ internal fun PermissionsScreen(
     ui.problem?.let { problem ->
       item(key = "problem") { ProblemPanel(problem = problem, onAction = actions.onProblemAction) }
     }
-    item(key = "footnote") { FluidSectionFootnote(text = stringResource(R.string.permissions_footnote)) }
   }
 }
 
@@ -171,13 +181,28 @@ private fun PermissionRow(
       if (asked) R.string.permissions_state_denied to FluidTone.Danger else R.string.permissions_state_todo to FluidTone.Warning
     PermissionState.NOT_NEEDED -> R.string.permissions_state_not_needed to FluidTone.Neutral
   }
+  // I4 (fase I): la piastrella dice che cosa si ottiene (la campanella, le foto, il segnaposto, la rete) con il colore della sua famiglia;
+  // concesso e' il segno «fatto» nell'angolo, il resto la capsula che chiede il tocco. Lo stato si dice una volta; la frase del perche'
+  // la dice TalkBack.
+  val done = state == PermissionState.GRANTED || state == PermissionState.NOT_NEEDED
+  val stateText = stringResource(label)
+  val why = stringResource(kind.detail())
   FluidListRow(
     title = stringResource(kind.title()),
-    subtitle = stringResource(kind.detail()),
-    tone = FluidTone.Primary,
-    leading = { Icon(kind.icon(), contentDescription = null) },
-    labels = { FluidStatusBadge(label = stringResource(label), tone = tone) },
+    subtitle = "",
+    leading = {
+      GalleryIconTile(
+        icon = kind.icon(),
+        family = kind.family(),
+        size = GalleryIconTileDefaults.Medium,
+        status = if (state == PermissionState.GRANTED) GalleryIconStatus.Done else null,
+        statusDescription = stateText,
+      )
+    },
+    leadingTile = false,
+    labels = if (done) null else ({ FluidStatusBadge(label = stateText, tone = tone) }),
     onClick = if (needsAction) ({ if (asked && state == PermissionState.DENIED) onOpenSettings() else onRequest(kind) }) else null,
     disclosure = false,
+    modifier = Modifier.semantics { stateDescription = if (done) "$stateText. $why" else why },
   )
 }

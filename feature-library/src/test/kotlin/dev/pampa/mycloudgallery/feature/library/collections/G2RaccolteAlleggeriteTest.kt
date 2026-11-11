@@ -46,7 +46,7 @@ class G2RaccolteAlleggeriteTest {
   private fun TestScope.controller(
     providers: List<CollectionsSectionProvider> = emptyList(),
     store: CollectionsLayoutStore = MemoryCollectionsLayoutStore(),
-  ) = CollectionsLayoutController(world.source, canTrash = true, providers, store, backgroundScope, SharingStarted.Eagerly)
+  ) = CollectionsLayoutController(canTrash = true, providers, store, backgroundScope, SharingStarted.Eagerly)
 
   private fun CollectionsLayoutController.layout(): CollectionsLayoutState =
     inputs.value.let { CollectionsLayout.state(it.present, emptyList(), it.saved, it.hidden, it.editing, it.saveFailed) }

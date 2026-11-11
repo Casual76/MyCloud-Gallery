@@ -110,23 +110,20 @@ abstract class CollectionEntriesPreviewBase(private val dark: Boolean, private v
   /** I gruppi di sempre come righe (stessi titoli, icone e toni delle Raccolte), cosi' l'anteprima mostra l'elenco intero. */
   @Composable
   private fun standardGroups(): List<CollectionEntryGroup> {
-    val state = collectionsUiState(mapOf(CollectionKind.FAVORITES to 312, CollectionKind.VIDEOS to 148, CollectionKind.SCREENSHOTS to 1_204, CollectionKind.WHATSAPP to 3_890), canTrash = true)
+    // CS-17: la scheda fa da sola solo i posti protetti (il vecchio "Telefono" sta nella scheda Album).
+    val state = collectionsUiState(canTrash = true)
     @Composable fun CollectionRow.asEntry(subtitle: String) = CollectionEntry(kind.code, stringResource(kind.titleRes), subtitle, kind.icon, kind.tone)
-    val phone = state.media.map { it.asEntry("${it.count} elementi") }
     val safe = state.protectedRows.map {
       it.asEntry(stringResource(if (it.kind == CollectionKind.HIDDEN) R.string.collection_hidden_subtitle else R.string.collection_recently_deleted_subtitle))
     }
-    return listOf(
-      CollectionEntryGroup(stringResource(R.string.collections_section_phone), phone),
-      CollectionEntryGroup(stringResource(R.string.collections_section_protected), safe),
-    )
+    return listOf(CollectionEntryGroup(stringResource(R.string.collections_section_protected), safe))
   }
 
   @Composable
   private fun RaccolteWithNas(operations: Int, initial: String?) {
     var selected by rememberSaveable { mutableStateOf(initial) }
-    // Il gruppo del NAS dopo quello dei posti protetti: in cima all'anteprima, cosi' si vede intero (l'elenco vero ha anche "Dal telefono").
-    val groups = standardGroups().drop(1) + nasGroup(operations)
+    // Il gruppo del NAS dopo quello dei posti protetti: in cima all'anteprima, cosi' si vede intero.
+    val groups = standardGroups() + nasGroup(operations)
     FluidListDetailScaffold(
       ambient = null,
       list = { twoPane ->

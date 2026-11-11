@@ -98,7 +98,7 @@ abstract class H5RaccolteShotBase(private val dark: Boolean, private val device:
   private fun controller(fresh: Boolean): CollectionsLayoutController {
     val resources = ApplicationProvider.getApplicationContext<Application>().resources
     val providers = CollectionsSectionSamples.production(resources, photos, faces, fresh)
-    return CollectionsLayoutController(world.source, true, providers, MemoryCollectionsLayoutStore(), scope, SharingStarted.Eagerly)
+    return CollectionsLayoutController(true, providers, MemoryCollectionsLayoutStore(), scope, SharingStarted.Eagerly)
   }
 
   @Composable

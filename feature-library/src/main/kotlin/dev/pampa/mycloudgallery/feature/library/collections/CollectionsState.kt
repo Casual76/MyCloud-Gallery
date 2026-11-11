@@ -5,9 +5,6 @@ import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 
 /**
  * Una riga dell'elenco delle Raccolte.
@@ -19,41 +16,27 @@ import kotlinx.coroutines.flow.map
 data class CollectionRow(val kind: CollectionKind, val count: Int?)
 
 /**
- * Le righe che la scheda fa da sola, prima di diventare sezioni ([builtinSections], D33): le quattro raccolte-filtro (Telefono) e i due
- * posti protetti, cioe' i Nascosti (sezione Nascosti) e gli Eliminati di recente (sezione Da tenere al sicuro), questi solo dove il
- * cestino di sistema esiste (Android 11+: nessuna voce morta, D13). Lo stato della scheda intera, con le sezioni dei fornitori,
- * l'ordine e la visibilita', e' [CollectionsLayoutState].
+ * Le righe che la scheda fa da sola, prima di diventare sezioni ([builtinSections], D33): i due posti protetti, cioe' i Nascosti (sezione Nascosti) e
+ * gli Eliminati di recente (sezione Da tenere al sicuro), questi solo dove il cestino di sistema esiste (Android 11+: nessuna voce morta, D13). In
+ * produzione `:app` toglie "Da tenere al sicuro" con un fornitore vuoto (gli Eliminati di recente stanno nell'Utility). Lo stato della scheda intera,
+ * con le sezioni dei fornitori, l'ordine e la visibilita', e' [CollectionsLayoutState].
+ *
+ * CS-17 (fase H): le quattro raccolte-filtro della vecchia sezione "Telefono" (Preferiti, Fotocamera, Video, Screenshot, Messaggistica) non ci sono
+ * piu': dalla G2 stanno nella scheda Album, e la scheda non le costruisce ne' le conta.
  */
 @Immutable
-data class CollectionsUiState(
-  val media: List<CollectionRow>,
-  val protectedRows: List<CollectionRow>,
-) {
-  /** Tutte le righe, nell'ordine dell'elenco. */
-  val all: List<CollectionRow> get() = media + protectedRows
-
+data class CollectionsUiState(val protectedRows: List<CollectionRow>) {
   /** Se [kind] e' nell'elenco (gli Eliminati di recente possono mancare). */
-  operator fun contains(kind: CollectionKind): Boolean = all.any { it.kind == kind }
+  operator fun contains(kind: CollectionKind): Boolean = protectedRows.any { it.kind == kind }
 }
 
-/** Costruisce lo stato dell'elenco dai conteggi delle quattro raccolte-filtro. Pura: la provano i test su JVM. */
-fun collectionsUiState(counts: Map<CollectionKind, Int>, canTrash: Boolean): CollectionsUiState = CollectionsUiState(
-  media = CollectionKind.filters.map { CollectionRow(it, counts[it] ?: 0) },
+/** Le righe dei posti protetti. Pura: la provano i test su JVM. */
+fun collectionsUiState(canTrash: Boolean): CollectionsUiState = CollectionsUiState(
   protectedRows = buildList {
     add(CollectionRow(CollectionKind.HIDDEN, count = null))
     if (canTrash) add(CollectionRow(CollectionKind.RECENTLY_DELETED, count = null))
   },
 )
-
-/** I conteggi vivi delle raccolte-filtro: si aggiornano con l'indice (una modifica esterna, un preferito nuovo). */
-internal fun CollectionItemsSource.counts(): Flow<Map<CollectionKind, Int>> {
-  val flows = CollectionKind.filters.map { kind -> items(kind.filter!!).view.map { view -> kind to view.size } }
-  return combine(flows) { pairs -> pairs.toMap() }
-}
-
-/** I conteggi di adesso, senza aspettare il flusso: lo stato iniziale della schermata. */
-internal fun CollectionItemsSource.countsNow(): Map<CollectionKind, Int> =
-  CollectionKind.filters.associateWith { kind -> items(kind.filter!!).view.value.size }
 
 /** Quante foto e quanti video ci sono in [view]: il riepilogo in fondo alla griglia ("12 foto, 3 video"). */
 internal fun photoAndVideoCounts(view: TimelineView): Pair<Int, Int> {

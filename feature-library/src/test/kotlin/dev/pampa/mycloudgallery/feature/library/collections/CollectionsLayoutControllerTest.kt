@@ -33,7 +33,7 @@ class CollectionsLayoutControllerTest {
     providers: List<CollectionsSectionProvider> = emptyList(),
     store: CollectionsLayoutStore = MemoryCollectionsLayoutStore(),
     canTrash: Boolean = true,
-  ) = CollectionsLayoutController(world.source, canTrash, providers, store, backgroundScope, SharingStarted.Eagerly)
+  ) = CollectionsLayoutController(canTrash, providers, store, backgroundScope, SharingStarted.Eagerly)
 
   /** Lo stato come lo vede la scheda (senza i gruppi di `:app`). */
   private fun CollectionsLayoutController.layout(legacy: List<CollectionEntryGroup> = emptyList()): CollectionsLayoutState =
@@ -70,12 +70,11 @@ class CollectionsLayoutControllerTest {
     val c = controller()
     val state = c.layout()
 
-    // G2: il Telefono (Preferiti, Video, Screenshot, WhatsApp) e' nella scheda Album.
+    // G2: il Telefono e' nella scheda Album (CS-17: la scheda non lo costruisce piu').
     assertThat(state.sections.map { it.code }).containsExactly("safe", "hidden").inOrder()
     val rows = state.visibleRows.map { (it as SectionRow.Kind).row.kind }
     assertThat(rows).containsExactly(CollectionKind.RECENTLY_DELETED, CollectionKind.HIDDEN).inOrder()
     assertThat(state.editing).isFalse()
-    assertThat(state.firstFilter).isNull()
   }
 
   @Test
@@ -172,25 +171,6 @@ class CollectionsLayoutControllerTest {
     val withProvider = controller(listOf(FixedCollectionsSection("nas", group("nas/nuovo", title = "Cartelle NAS"))))
     val section = withProvider.layout(listOf(nas)).sections.first { it.code == "nas" }
     assertThat(section.rows.map { (it as SectionRow.Entry).entry.code }).containsExactly("nas/nuovo")
-  }
-
-  /**
-   * G2: i conteggi dal vivo erano quelli del Telefono (Preferiti, Video...), che adesso sta nella scheda Album. Un preferito in piu' cambia i
-   * conteggi della sorgente ma non rimette il Telefono nelle Raccolte.
-   */
-  @Test
-  fun unPreferitoInPiuNonRimetteIlTelefonoNelleRaccolte() = runTest(UnconfinedTestDispatcher()) {
-    val c = controller()
-    val before = c.codes()
-    val plain = world.visibleIds.first { id ->
-      val view = world.source.items(dev.pampa.mycloudgallery.core.library.contract.LibraryFilter.FAVORITES).view.value
-      view.viewIndexOf(id) < 0
-    }
-
-    world.actions.setFavorite(setOf(plain), true)
-
-    assertThat(c.codes()).isEqualTo(before)
-    assertThat(c.codes()).doesNotContain("phone")
   }
 
   // --- Ordine e visibilita' ----------------------------------------------------------------------------------------------------------------

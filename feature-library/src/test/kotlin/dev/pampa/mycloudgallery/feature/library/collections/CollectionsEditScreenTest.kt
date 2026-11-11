@@ -54,7 +54,7 @@ abstract class CollectionsEditScreenBase : ComposeScreenTest() {
   protected val opened = mutableListOf<String>()
 
   protected val controller = CollectionsLayoutController(
-    world.source, true, CollectionsSectionSamples.all(), store, scope, SharingStarted.Eagerly,
+    true, CollectionsSectionSamples.all(), store, scope, SharingStarted.Eagerly,
   )
 
   @After
@@ -316,7 +316,7 @@ class CollectionsEditScreenPhoneTest : CollectionsEditScreenBase() {
       override suspend fun setHidden(code: String, hidden: Boolean) = throw IllegalStateException("disco pieno")
     }
     val failingController = CollectionsLayoutController(
-      world.source, true, CollectionsSectionSamples.all(), failing, CoroutineScope(Dispatchers.Unconfined + Job()), SharingStarted.Eagerly,
+      true, CollectionsSectionSamples.all(), failing, CoroutineScope(Dispatchers.Unconfined + Job()), SharingStarted.Eagerly,
     )
     show {
       val inputs by failingController.inputs.collectAsState()
@@ -343,7 +343,7 @@ class CollectionsEditScreenPhoneTest : CollectionsEditScreenBase() {
   @Test
   fun senzaNessunaSezioneDaMostrareLaSchedaLoDiceEPortaAllaModifica() {
     val hidden = MemoryCollectionsLayoutStore(hidden = setOf("safe", "hidden"))
-    val c = CollectionsLayoutController(world.source, true, emptyList(), hidden, CoroutineScope(Dispatchers.Unconfined + Job()), SharingStarted.Eagerly)
+    val c = CollectionsLayoutController(true, emptyList(), hidden, CoroutineScope(Dispatchers.Unconfined + Job()), SharingStarted.Eagerly)
     show {
       val inputs by c.inputs.collectAsState()
       val state = remember(inputs) { CollectionsLayout.state(inputs.present, emptyList(), inputs.saved, inputs.hidden, inputs.editing, inputs.saveFailed) }

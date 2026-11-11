@@ -175,11 +175,10 @@ const val TABLET_QUALIFIERS = "w1280dp-h800dp-land-xhdpi"
 const val SHOT_PHONE_QUALIFIERS = "w360dp-h780dp-xhdpi"
 
 /**
- * Lo stato della scheda per i test (D33): le sezioni che la scheda fa da sola con i [counts] dati, piu' quelle dei [providers] e i gruppi
- * di `:app` ([extra]), nell'ordine [saved] (vuoto = quello predefinito) e senza le sezioni [hidden].
+ * Lo stato della scheda per i test (D33): le sezioni che la scheda fa da sola (i posti protetti) piu' quelle dei [providers] e i gruppi di `:app`
+ * ([extra]), nell'ordine [saved] (vuoto = quello predefinito) e senza le sezioni [hidden]. CS-17: niente piu' la sezione "Telefono".
  */
 internal fun layoutOf(
-  counts: Map<CollectionKind, Int>,
   canTrash: Boolean = true,
   providers: List<CollectionsSection> = emptyList(),
   extra: List<CollectionEntryGroup> = emptyList(),
@@ -188,11 +187,13 @@ internal fun layoutOf(
   editing: Boolean = false,
   saveFailed: Boolean = false,
 ): CollectionsLayoutState {
-  val builtin = builtinSections(collectionsUiState(counts, canTrash))
+  val builtin = builtinSections(collectionsUiState(canTrash))
   val provided = providers.map { it.code }.toSet()
   return CollectionsLayout.state(builtin.filter { it.code !in provided } + providers, extra, saved, hidden, editing, saveFailed)
 }
 
+/** Lo stesso, per i test che hanno un mondo finto: le sezioni della scheda non dipendono piu' dai suoi conteggi. */
+@Suppress("UNUSED_PARAMETER")
 internal fun layoutOf(
   world: dev.pampa.mycloudgallery.feature.library.collections.testing.FakeCollectionsWorld,
   canTrash: Boolean = true,
@@ -202,7 +203,7 @@ internal fun layoutOf(
   hidden: Set<String> = emptySet(),
   editing: Boolean = false,
   saveFailed: Boolean = false,
-): CollectionsLayoutState = layoutOf(world.source.countsNow(), canTrash, providers, extra, saved, hidden, editing, saveFailed)
+): CollectionsLayoutState = layoutOf(canTrash, providers, extra, saved, hidden, editing, saveFailed)
 
 /**
  * Le Raccolte come sono in produzione dalla G2: le sezioni di tutti i fornitori di prova, senza quelle passate alla scheda Album (Album, Album smart,

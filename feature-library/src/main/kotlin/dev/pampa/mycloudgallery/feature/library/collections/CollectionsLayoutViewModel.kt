@@ -42,7 +42,7 @@ private data class Provided(val code: String, val section: CollectionsSection?)
  * Le sezioni della scheda Raccolte (D33, §2.7) e le scelte dell'utente su di loro: da dove arrivano, in che ordine, quali si vedono, e
  * il salvataggio. Senza Android a parte [CollectionsLayoutViewModel], cosi' lo prova la JVM.
  *
- * - **Sezioni come dati.** La scheda fa da sola Telefono, Da tenere al sicuro e Nascosti (le raccolte che c'erano gia'); tutto il resto
+ * - **Sezioni come dati.** La scheda fa da sola Da tenere al sicuro e Nascosti (le raccolte che c'erano gia'); tutto il resto
  *   arriva da un [CollectionsSectionProvider] registrato dal pacchetto che lo possiede (e dai gruppi che `:app` passa ancora). Un
  *   fornitore con il codice di una sezione della scheda **la sostituisce**; di due fornitori con lo stesso codice vale il primo; uno con
  *   un codice che non si puo' scrivere nelle impostazioni e' ignorato.
@@ -51,7 +51,6 @@ private data class Provided(val code: String, val section: CollectionsSection?)
  * - **Una sezione nuova va in coda** (E-L14) e non rompe l'ordine salvato: [CollectionsLayout].
  */
 class CollectionsLayoutController(
-  private val source: CollectionItemsSource,
   private val canTrash: Boolean,
   providers: Collection<CollectionsSectionProvider>,
   private val store: CollectionsLayoutStore,
@@ -76,9 +75,7 @@ class CollectionsLayoutController(
     scope.launch { store.hidden.collect { hiddenCodes.value = it } }
   }
 
-  private val presentFlow: Flow<List<CollectionsSection>> = combine(counts(), providedSections()) { counts, provided ->
-    merged(collectionsUiState(counts, canTrash), provided)
-  }
+  private val presentFlow: Flow<List<CollectionsSection>> = providedSections().map { provided -> merged(collectionsUiState(canTrash), provided) }
 
   private val choices: Flow<Triple<List<String>, Set<String>, Pair<Boolean, Boolean>>> =
     combine(savedOrder, hiddenCodes, editing, failed) { order, hidden, edit, fail -> Triple(order, hidden, edit to fail) }
@@ -86,8 +83,6 @@ class CollectionsLayoutController(
   internal val inputs: StateFlow<CollectionsInputs> = combine(presentFlow, choices) { present, (order, hidden, mode) ->
     CollectionsInputs(present, order, hidden, editing = mode.first, saveFailed = mode.second)
   }.stateIn(scope, sharing, initialInputs())
-
-  private fun counts(): Flow<Map<CollectionKind, Int>> = source.counts()
 
   /** Cio' che dicono i fornitori: per ognuno il suo codice e la sezione, o null se dice "e' mia e non ha voci"; chi non fornisce niente (null) non c'e'. */
   private fun providedSections(): Flow<List<Provided>> {
@@ -117,7 +112,7 @@ class CollectionsLayoutController(
   private fun initialInputs(): CollectionsInputs {
     val provided = providers.mapNotNull { p -> provided(p.code, p.group.value) }
     return CollectionsInputs(
-      merged(collectionsUiState(source.countsNow(), canTrash), provided), savedOrder.value, hiddenCodes.value, editing = false, saveFailed = false,
+      merged(collectionsUiState(canTrash), provided), savedOrder.value, hiddenCodes.value, editing = false, saveFailed = false,
     )
   }
 
@@ -175,15 +170,8 @@ class CollectionsLayoutController(
   }
 }
 
-/** Le sezioni che la scheda fa da sola, dalle raccolte che c'erano gia': Telefono, Da tenere al sicuro (il cestino) e Nascosti. */
+/** Le sezioni che la scheda fa da sola: Da tenere al sicuro (il cestino) e Nascosti. CS-17: non piu' il Telefono, che sta nella scheda Album dalla G2. */
 internal fun builtinSections(state: CollectionsUiState): List<CollectionsSection> = listOfNotNull(
-  // G2: Telefono va nella scheda Album; si costruisce ancora (il codice e le righe restano quelli di sempre), ma le Raccolte non la mostrano
-  // (`CollectionsLayoutController.merged` toglie le sezioni di `CollectionSections.inAlbumsTab`).
-  CollectionsSection(
-    code = CollectionSections.PHONE,
-    title = SectionText.Res(R.string.collections_section_phone),
-    rows = state.media.map { SectionRow.Kind(it) },
-  ).takeIf { state.media.isNotEmpty() },
   CollectionsSection(
     code = CollectionSections.SAFE,
     title = SectionText.Res(R.string.collections_section_protected),
@@ -234,7 +222,6 @@ class CollectionsLayoutViewModel private constructor(
   internal val covers: CollectionCovers? = loader.map { CollectionCovers(it, source.items(LibraryFilter.ALL), faces.orElse(null)) }.orElse(null)
 
   internal val controller: CollectionsLayoutController = CollectionsLayoutController(
-    source = source,
     canTrash = intents.canTrash,
     providers = providers,
     store = store.orElseGet { MemoryCollectionsLayoutStore() },

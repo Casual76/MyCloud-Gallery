@@ -58,7 +58,7 @@ class CollectionsProductionSamplesTest {
   fun inProduzioneNessunaVoceCompareDueVolte() {
     for (fresh in listOf(false, true)) {
       val providers = CollectionsSectionSamples.production(resources, world.visibleIds.toList(), emptyList(), fresh)
-      val c = CollectionsLayoutController(world.source, true, providers, MemoryCollectionsLayoutStore(), scope, SharingStarted.Eagerly)
+      val c = CollectionsLayoutController(true, providers, MemoryCollectionsLayoutStore(), scope, SharingStarted.Eagerly)
       val inputs = c.inputs.value
       val state = CollectionsLayout.state(inputs.present, emptyList(), inputs.saved, inputs.hidden, inputs.editing, inputs.saveFailed)
       val titles = state.visible.flatMap { section ->

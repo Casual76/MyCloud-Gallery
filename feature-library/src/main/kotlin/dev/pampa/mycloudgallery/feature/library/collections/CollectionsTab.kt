@@ -47,7 +47,7 @@ val LocalCollectionDetailClose = staticCompositionLocalOf<() -> Unit> { {} }
  * La scheda **Raccolte** (D17, D33): le sezioni, una sotto l'altra, nell'ordine che l'utente ha scelto e senza quelle che ha nascosto.
  * Ogni sezione e' un **dato** ([CollectionEntryGroup], con un codice stabile) che un fornitore registrato consegna
  * ([CollectionsSectionProvider]: Album, Album smart, Viaggi, Utility, Nascosti... lo decide chi le possiede): la scheda non le conosce
- * una per una. Fa da sola le raccolte che c'erano gia' (Telefono: Preferiti, Video, Screenshot, WhatsApp; Da tenere al sicuro: Eliminati
+ * una per una. Fa da sola i due posti protetti (Da tenere al sicuro: Eliminati
  * di recente; Nascosti), che ogni fornitore con lo stesso codice puo' sostituire. Ogni voce di una raccolta-filtro apre una griglia con lo
  * stesso `MediaGrid` e lo stesso viewer della Libreria.
  *
@@ -143,13 +143,13 @@ internal fun CollectionsScreen(
   onReorder: (List<String>) -> Unit = {},
   onSetShown: (String, Boolean) -> Unit = { _, _ -> },
 ) {
-  // Su due pannelli una raccolta e' sempre scelta: quella di prima, o la prima raccolta-filtro dell'elenco (mai i Nascosti da soli:
-  // chiederebbero la credenziale senza che nessuno l'abbia toccato). Il codice sopravvive alla rotazione. Una voce consegnata come
-  // dato ha il suo codice a parte: se sparisce (NAS scollegato, sezione nascosta) la scelta torna a una raccolta. Senza nessuna
-  // raccolta che si vede (Telefono nascosto) il pannello dice di sceglierne una.
+  // Su due pannelli la scelta e' quella di prima (il codice sopravvive alla rotazione); se non ce n'e' una, il pannello dice di sceglierne una:
+  // mai i Nascosti da soli (chiederebbero la credenziale senza che nessuno l'abbia toccato), e le prime voci possono essere comandi. Una voce
+  // consegnata come dato ha il suo codice a parte: se sparisce (NAS scollegato, sezione nascosta) la scelta torna li'. CS-17: le raccolte-filtro
+  // del vecchio "Telefono", che si sceglievano da sole, stanno nella scheda Album dalla G2.
   var savedCode by rememberSaveable { mutableStateOf(initialSelection?.code) }
   var savedEntry by rememberSaveable { mutableStateOf<String?>(null) }
-  val selectedKind = CollectionKind.fromCode(savedCode)?.takeIf { it in state } ?: state.firstFilter
+  val selectedKind = CollectionKind.fromCode(savedCode)?.takeIf { it in state }
   val selectedEntry = if (entryDetail != null) state.findEntry(savedEntry)?.takeIf(entryHasDetail) else null
   val selection: CollectionsSelection = when {
     selectedEntry != null -> CollectionsSelection.Entry(selectedEntry)

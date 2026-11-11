@@ -1,6 +1,10 @@
 package dev.pampa.mycloudgallery.feature.search.models
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -92,6 +96,8 @@ internal class ActionSettingsHandlers(
 @Composable
 fun SearchSettingsRoute(actions: SearchActions, onBack: () -> Unit, viewModel: SearchSettingsViewModel = hiltViewModel()) {
   val controller = viewModel.controller
+  val lifecycle = LocalLifecycleOwner.current.lifecycle
+  LaunchedEffect(controller, lifecycle) { observeProbeWhileStarted(controller, lifecycle) }
   val state by controller.state.collectAsStateWithLifecycle()
   val measuring by controller.measuring.collectAsStateWithLifecycle()
   val probeFailed by controller.probeFailed.collectAsStateWithLifecycle()
@@ -110,6 +116,11 @@ fun SearchSettingsRoute(actions: SearchActions, onBack: () -> Unit, viewModel: S
       onBack = onBack,
     )
   }
+}
+
+/** Lo stesso collegamento usato dalla rotta e dalle prove del ciclo di vita. */
+internal suspend fun observeProbeWhileStarted(controller: SearchSettingsController, lifecycle: Lifecycle) {
+  lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { controller.whilePageVisible() }
 }
 
 /**

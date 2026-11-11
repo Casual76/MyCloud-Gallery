@@ -32,12 +32,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
 
 /**
  * Il cervello della pagina Impostazioni → Ricerca e modelli (Fase 6, P8, docs/fase6-progetto.md §2.6; D15, D20, D41; Q3, Q13): compone
@@ -60,6 +63,9 @@ class SearchSettingsController(
   private val probeDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Default,
   private val io: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO,
 ) {
+  @Volatile private var pageJob: kotlinx.coroutines.Job? = null
+  private val pageVisible: Boolean get() = pageJob?.isActive == true
+  private var probeLoaded = false
   val probeFailed = MutableStateFlow(false)
   val probeHot = MutableStateFlow(false)
   val probeBusy = MutableStateFlow(false)
@@ -173,32 +179,47 @@ class SearchSettingsController(
 
   init {
     // IX-3: l'ultima misura si ritrova, e si rifa' quando il modello del calcolo diventa pronto (la prima falliva se mancava).
-    // La pagina resta aperta: riparte dal caldo appena il giudizio delle regole torna favorevole.
-    scope.launch {
-      while (true) {
-        kotlinx.coroutines.delay(2000)
-        if (probeHot.value || probeBusy.value) {
-          val wasHot = probeHot.value
-          val available = kotlinx.coroutines.withContext(io) { probe?.availability() }
-          probeHot.value = available == dev.pampa.mycloudgallery.core.ai.contract.ProbeAvailability.HOT
-          probeBusy.value = available == dev.pampa.mycloudgallery.core.ai.contract.ProbeAvailability.BUSY || attempt?.isCompleted == false
-          if (wasHot && !probeHot.value && !probeBusy.value && probeResult.value == null) measure()
-        }
-      }
-    }
     val control = indexer
     val manager = models
     scope.launch {
       val saved = kotlinx.coroutines.withContext(io) { control?.savedProbe() }
       if (probeResult.value == null) probeResult.value = saved
+      probeLoaded = true
       if (control != null && manager != null) {
         combine(manager.states, control.indexer) { states, on ->
           on && states[ModelCatalog.INDEX_440M.id] is ModelState.Ready
         }.distinctUntilChanged().collect { ready ->
-          if (ready && probeResult.value == null && !probeFailed.value) measure()
+          if (ready) maybeMeasure()
         }
       }
     }
+  }
+
+  /** Solo la pagina STARTED possiede questa attesa; senza HOT/BUSY nessun timer. */
+  suspend fun whilePageVisible() {
+    val owner = currentCoroutineContext().job
+    pageJob = owner
+    try {
+      maybeMeasure()
+      combine(probeHot, probeBusy) { hot, busy -> hot || busy }.distinctUntilChanged().collectLatest { waiting ->
+        if (waiting) {
+          while (true) {
+            kotlinx.coroutines.delay(2000)
+            val wasHot = probeHot.value
+            val available = kotlinx.coroutines.withContext(io) { probe?.availability() }
+            probeHot.value = available == dev.pampa.mycloudgallery.core.ai.contract.ProbeAvailability.HOT
+            probeBusy.value = available == dev.pampa.mycloudgallery.core.ai.contract.ProbeAvailability.BUSY || attempt?.isCompleted == false
+            if (wasHot && !probeHot.value && !probeBusy.value && probeResult.value == null) measure()
+          }
+        }
+      }
+    } finally {
+      if (pageJob === owner) pageJob = null
+    }
+  }
+
+  private fun maybeMeasure() {
+    if (probeLoaded && probeResult.value == null && !probeFailed.value && !probeHot.value && !probeBusy.value) measure()
   }
 
   /** La pagina si apre: il lavoro che resta, lo spazio e lo stato si rileggono (IX-3). */
@@ -234,6 +255,7 @@ class SearchSettingsController(
 
   /** La misura breve del dispositivo (20 immagini sintetiche dell'APK): una sola alla volta. */
   fun measure() {
+    if (!pageVisible) return
     val device = probe ?: return
     if (indexer?.indexer?.value != true || models?.states?.value?.get(ModelCatalog.INDEX_440M.id) !is ModelState.Ready) return
     // Una chiamata nativa non cancellabile puo' sopravvivere alla scadenza: mai accodarne altre.
@@ -245,6 +267,7 @@ class SearchSettingsController(
     probeBusy.value = false
     val work = scope.async(probeDispatcher) {
       try {
+        if (!pageVisible) throw CancellationException("Pagina non visibile")
         Result.success(device.measure())
       } catch (e: CancellationException) {
         throw e

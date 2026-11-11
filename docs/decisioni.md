@@ -18583,3 +18583,7 @@ Ramo `fix/h4-ricerca-barra` dopo l'unione di `integra/beta-grafica` (`ad4310a5`,
 - Verifiche: H4-13 FAIL (compilazione), H4-14 core-designsystem 324, feature-search 188, feature-library 1309 verdi, `lintDebug` di feature-search
   verde, `:app` 57 prove con 3 rosse note non di H4 (`LibraryScaffoldTabletScreenshotTest.viewerSopraLaPillola` x2, `SchedeCheRicordanoTest` del
   tablet), H4-15 screenshot H4 (32 prove).
+
+### HR, ultimo giro di correzione (11 novembre 2026)
+
+Build: tolta la protezione riflessiva del layout; in un worktree riusato dopo un cambio di commit, se serve ricostruire core-designsystem usare nel batch autorizzato `.\gradlew.bat --no-daemon --no-watch-fs --max-workers=2 --no-parallel :core-designsystem:compileDebugKotlin --rerun`: provati cambio main/debug e modifica API main con e senza protezione, tutti riusciti, quindi queste prove non spiegano la causa del guasto storico.

@@ -87,6 +87,10 @@ import dev.pampa.mycloudgallery.feature.library.grid.GridTopChrome
 import dev.pampa.mycloudgallery.feature.library.grid.GridTopEdgeScrim
 import dev.pampa.mycloudgallery.feature.library.grid.gridTopChromeHeight
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGrid
+import dev.pampa.mycloudgallery.feature.library.grid.shownDateUnder
+import dev.pampa.mycloudgallery.feature.library.grid.jumpToDay
+import dev.pampa.mycloudgallery.feature.library.grid.handOverLine
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTitleAction
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGridSection
 import dev.pampa.mycloudgallery.feature.library.grid.rememberMediaGridSection
 import dev.pampa.mycloudgallery.feature.library.photoVideoSummary
@@ -308,6 +312,7 @@ private fun LibraryTopChrome(
     topChrome = topChrome,
     modifier = modifier,
     showCommands = !permission || cloud != null,
+    titleAction = rememberDateJump(state, topChrome).takeIf { !permission && !empty && !grid.selecting },
   ) {
     LibraryCommandsContent(
       state = state,
@@ -330,6 +335,34 @@ private fun LibraryTopChrome(
           modifier = cloudModifier,
         )
       }
+    }
+  }
+}
+
+/**
+ * Fase H (R2, scelta dell'utente dell'11/11): toccare la data in alto apre il calendario del salto a una data ([LibraryDateCalendar]), ancorato
+ * all'etichetta. Si apre sul mese che l'etichetta dice in quel momento (letto all'apertura, mai scorrendo); un giorno scelto porta la griglia li'
+ * e chiude il calendario. Il salto gira nello scope della riga in alto, non in quello del pop-up, che lascia la composizione alla chiusura; se
+ * scende da Anni o Mesi a Giorni il livello si ricorda come quando lo si sceglie dal menu.
+ */
+@Composable
+private fun rememberDateJump(state: LibraryTabState, topChrome: Dp): GalleryChromeTitleAction {
+  val grid = state.grid
+  val scope = rememberCoroutineScope()
+  val linePx = with(LocalDensity.current) { handOverLine(topChrome).roundToPx() }
+  val label = stringResource(R.string.library_date_jump)
+  return remember(state, linePx, label) {
+    GalleryChromeTitleAction(label = label, paneTitle = label) { close ->
+      val shown = remember { grid.shownDateUnder(linePx) }
+      LibraryDateCalendar(
+        grid = grid,
+        shown = shown,
+        today = grid.currentDay,
+        onPick = { days, date ->
+          close()
+          scope.launch { grid.jumpToDay(days, date) { level -> scope.launch { state.preferences.setLevel(level) } } }
+        },
+      )
     }
   }
 }

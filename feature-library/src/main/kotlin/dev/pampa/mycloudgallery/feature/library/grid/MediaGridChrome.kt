@@ -17,6 +17,7 @@ import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.pampa.mycloudgallery.core.designsystem.design.ContentRange
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryScrubber
 import dev.pampa.mycloudgallery.core.library.contract.GridLayout
+import dev.pampa.mycloudgallery.core.library.contract.GridLevel
 import dev.pampa.mycloudgallery.core.library.contract.RowKind
 import java.time.LocalDate
 import java.time.YearMonth
@@ -67,6 +68,23 @@ private fun sectionOf(state: MediaGridState, k: SectionKey, strings: GridStrings
     val month = checkNotNull(k.month)
     MediaGridSection(GridText.month(month), null, GridText.shorterMonths(month))
   }
+}
+
+/**
+ * Fase H (R2): la data che l'etichetta in alto dice adesso, per aprire il calendario li'. [exactDay] e' vero se l'etichetta dice un giorno
+ * (livello Giorni); a Mesi, Anni e Tutte dice un mese o un anno e [date] e' il suo primo giorno con foto (o il primo del mese).
+ */
+@Immutable
+data class ShownDate(val date: LocalDate, val exactDay: Boolean)
+
+/** La data sotto la linea [linePx] (vedi [rememberMediaGridSection]): si legge **una volta**, quando il calendario si apre, non scorrendo. */
+internal fun MediaGridState.shownDateUnder(linePx: Int): ShownDate? {
+  val k = sectionKeyAt(this, linePx) ?: return null
+  if (k.section < 0) return k.month?.let { ShownDate(it.atDay(1), exactDay = false) }
+  val section = k.layout.sections[k.section]
+  val day = section.firstDay
+  val date = runCatching { LocalDate.of(day / 10_000, (day / 100) % 100, day % 100) }.getOrNull() ?: return null
+  return ShownDate(date, exactDay = section.level == GridLevel.DAYS)
 }
 
 /** Cio' che decide la sezione mostrata: il layout, la sezione (o, a "Tutte", il mese). */

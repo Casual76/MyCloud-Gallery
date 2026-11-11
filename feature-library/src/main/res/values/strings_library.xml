@@ -149,4 +149,15 @@
 
   <!-- G2: la chrome della Libreria (direzione C). -->
   <string name="library_done">Fine</string>
+
+  <!-- Fase H (R2): il salto a una data, il calendario che si apre toccando la data in alto. -->
+  <string name="library_date_jump">Vai a una data</string>
+  <string name="library_calendar_previous">Mese precedente</string>
+  <string name="library_calendar_next">Mese successivo</string>
+  <string name="library_calendar_choose">Scegli mese e anno</string>
+  <string name="library_calendar_back">Torna al calendario</string>
+  <string name="library_calendar_today">oggi</string>
+  <string name="library_calendar_day_photos">%1$s, con foto</string>
+  <string name="library_calendar_day_empty">%1$s, nessuna foto</string>
+  <string name="library_calendar_month_empty">%1$s, nessuna foto</string>
 </resources>

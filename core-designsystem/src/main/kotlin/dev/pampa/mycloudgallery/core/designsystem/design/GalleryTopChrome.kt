@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBackIos
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
@@ -201,6 +202,7 @@ fun GalleryTopChrome(
   shorterTitles: List<String> = emptyList(),
   shorterSubtitles: List<String>? = null,
   contentMoving: () -> Boolean = { false },
+  titleAction: GalleryChromeTitleAction? = null,
   commands: @Composable RowScope.() -> Unit,
 ) {
   val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -238,7 +240,8 @@ fun GalleryTopChrome(
       Spacer(Modifier.width(GalleryChromeDefaults.Gap))
     }
     Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-      GalleryChromeLabel(
+      @Composable
+      fun Label(onClick: (() -> Unit)?) = GalleryChromeLabel(
         title = title,
         subtitle = subtitle,
         style = labelStyle,
@@ -247,6 +250,16 @@ fun GalleryTopChrome(
         shorterTitles = shorterTitles,
         shorterSubtitles = shorterSubtitles,
         contentMoving = contentMoving,
+        onClick = onClick,
+        onClickLabel = titleAction?.label,
+      )
+      // Fase H (R2): con [titleAction] l'etichetta apre il suo pannello, ancorato a lei (il pop-up della chrome, composto solo dalla prima
+      // apertura: chiuso non costa niente). L'etichetta sta sempre nello stesso punto della composizione, con o senza azione: entrando in
+      // selezione (l'azione sparisce) non perde il suo stato e la capsula cambia larghezza con la molla come prima (B1).
+      GalleryChromePopoverAnchor(
+        paneTitle = titleAction?.paneTitle.orEmpty(),
+        trigger = { open -> Label(onClick = if (titleAction != null) open else null) },
+        panel = { close -> titleAction?.panel?.invoke(close) },
       )
     }
     if (showCommands) {
@@ -260,6 +273,17 @@ fun GalleryTopChrome(
     }
   }
 }
+
+/**
+ * Fase H (R2): che cosa fa un tocco sull'etichetta della chrome in alto. [panel] e' il contenuto del pop-up che si apre ancorato all'etichetta
+ * (riceve l'azione che lo chiude); [label] e' cio' che TalkBack dice che il tocco fa; [paneTitle] il titolo del pannello aperto.
+ */
+@Immutable
+class GalleryChromeTitleAction(
+  val label: String,
+  val paneTitle: String,
+  val panel: @Composable (close: () -> Unit) -> Unit,
+)
 
 /**
  * La sfumatura del colore della pagina in alto (lo "scroll edge effect", scelta 2 dell'utente: la cima segue il tema), da posare

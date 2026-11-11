@@ -312,6 +312,10 @@ class RuleEvaluator(private val config: EvaluatorConfig = EvaluatorConfig()) {
    * farsi sentire mentre l'utente la usa. Si rallenta, non ci si ferma (chi usa molto l'app deve vedere finire l'indicizzazione), e in
    * secondo piano si torna al ritmo pieno alla prima rivalutazione. Il caldo vince sul motivo: e' quello che l'utente deve leggere.
    */
+  /** La misura richiede un telefono fresco, con le stesse soglie e isteresi dei lavori. */
+  fun canMeasureDevice(power: PowerState): Boolean = thermalBlock(power) == null &&
+    power.thermalStatus < ThermalStatus.LIGHT && (power.thermalHeadroom ?: 0f) < config.headroomReduce
+
   private fun paceFor(activity: BackgroundActivity, power: PowerState, appInForeground: Boolean): Pace {
     if (!activity.cpuIntensive) return Pace.NORMAL
     val warm =

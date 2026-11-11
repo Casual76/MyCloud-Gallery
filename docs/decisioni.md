@@ -17906,6 +17906,11 @@ bytecode delle librerie usate (Compose ui e foundation 1.10.5, BOM 2026.03.00).
 - Prove: 305 core-library, 290 database, 350 IA, 670 Album, 278 ricerca; 38 app mirati piu 2 test delta (uno comune), tutti verdi, 12 PNG nei formati richiesti in `docs/screenshots/beta-grafica/HR/`. Batch HR-1..HR-7 documentati, posti rilasciati e nessun Java proprio residuo.
 - Telefono ancora NV: installazione pulita/onboarding/aprire subito Album, fling durante prima lettura telefono+NAS, durata a riposo non raddoppiata, misura caldo/errore/Riprova e memoria GPU, trigger ROLE_CHANGED di giorno con Notte, ripresa copie dopo miniature NAS, due finestre/inerzia lunga. Confrontare soglie S25/Tab S9. Passi ed esiti attesi nel report; nessuna conclusione FPS dalla JVM.
 
+
+### HR, correzione 1 della review CR (11 novembre 2026)
+
+CR-1: priorita dei thread e thread di inferenza ridotti per tutto il primo piano; busy determina solo ritmo e pause. CR-2: ruolo salvato -> RULES solo per modello mancante non rimosso; ROLE_CHANGED soltanto per false -> true; risultati vuoti non pubblicano modelli e non rilanciano AI/volti. CR-4: misura attesa dall'utente fuori da quietly e giudizio termico dal valutatore delle regole. CR-5: refresh sotto quietly con nota persistente dello stat completo per evitare hash invariati; ogni caricamento nei motori verifica ancora tutti i byte sul descrittore. Dettagli, controlli negativi e batch in docs/hr-primo-avvio.md, sezione Giro di correzione 1. Nessuna prova fisica eseguita.
+
 ## HK - provenienza delle istruzioni R8 (11 novembre 2026)
 
 I controlli del bytecode attribuiscono le chiamate all'origine della singola istruzione tramite mapping, firma residuale e posizioni dex, anche dopo fusioni e inline. Gli outline API vengono esentati solo dopo lettura del corpo; i riferimenti a librerie o client HTTPS restano soggetti alla policy del chiamante. Origini mancanti o ambigue fanno fallire il controllo. La stessa logica copre HTTPS/ML Kit, LiteRT, OkHttp/MapLibre, Glance e le prove dei chiamanti delle recinzioni D12/D30/D34; tolta l'autorizzazione per unione delle origini di un metodo fuso.

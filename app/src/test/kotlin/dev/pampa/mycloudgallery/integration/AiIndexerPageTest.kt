@@ -60,6 +60,23 @@ class AiIndexerPageTest {
     rig.close()
   }
 
+  @Test fun cr4_laMisuraDiProduzioneNonEreditataLaPrioritaDiFondo() = runBlocking<Unit> {
+    val delegate = dev.pampa.mycloudgallery.core.ai.testing.FakeImageEmbedder()
+    var calls = 0
+    rig.imageOverride = object : dev.pampa.mycloudgallery.core.ai.contract.ImageEmbedder by delegate {
+      override suspend fun embed(images: List<dev.pampa.mycloudgallery.core.ai.contract.ModelImage>): List<FloatArray> {
+        assertThat(kotlin.coroutines.coroutineContext[dev.pampa.mycloudgallery.core.rules.run.YieldToApp]).isNull()
+        calls++
+        return delegate.embed(images)
+      }
+    }
+    val device = rig.founder()
+    device.test.graph.appContext.update(inForeground = true, profileActive = true)
+    dev.pampa.mycloudgallery.work.UiWorkActivity.budget.interacted()
+    dev.pampa.mycloudgallery.di.AiModule.deviceProbe(device.stack, device.test.graph).measure()
+    assertThat(calls).isGreaterThan(0)
+  }
+
   private val stats = StageStats(batches = 0, bytes = 0, roundBytes = 0, elapsed = Duration.ZERO, resumed = false)
 
   @Test

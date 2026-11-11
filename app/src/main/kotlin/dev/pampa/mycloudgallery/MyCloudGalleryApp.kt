@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery
 
+import dev.pampa.mycloudgallery.work.quietly
+
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
@@ -258,9 +260,13 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
         if (::widget.isInitialized) widget.resume()
         // D15: accendere Indicizzatore chiede subito il modello del calcolo (lavoro accelerato). Iscritti subito: un cambio non va perso.
         graph.scope.launch {
-          dev.pampa.mycloudgallery.ai.watchIndexerModels(ai.ai.indexer, { gallery.backgroundWorkAllowed }) {
+          dev.pampa.mycloudgallery.ai.watchIndexerModels(ai.ai.indexer, { gallery.backgroundWorkAllowed }, { trigger ->
+            AfterFirstDraw.await()
+            graph.quietly { ai.localModels.refreshOnce() }
+            ai.localModels.needsRequest(dev.pampa.mycloudgallery.core.models.contract.ModelCatalog.INDEX_440M.id, trigger)
+          }) { trigger ->
             AfterFirstDraw.launchAfter(graph.scope) {
-              AiWorkScheduling.fetchNow(this@MyCloudGalleryApp, ModelTrigger.ROLE_CHANGED)
+              AiWorkScheduling.fetchNow(this@MyCloudGalleryApp, trigger)
             }
           }
         }
@@ -292,7 +298,7 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
       // Fase 6 (P11): l'indice di ricerca si apre con il catalogo (vive anche senza NAS), i modelli presenti si verificano (P3).
       graph.scope.launch {
         AvvioTrace.asyncSection("MCG:ai:ricercaApri") { runCatching { ai.search.open() } }
-        AvvioTrace.asyncSection("MCG:ai:modelli") { runCatching { ai.localModels.refreshOnce() } }
+        AvvioTrace.asyncSection("MCG:ai:modelli") { runCatching { graph.quietly { ai.localModels.refreshOnce() } } }
         // P13: una riga in attesa lasciata da un "Salva come nuova foto" interrotto dalla morte del processo si toglie (IS_PENDING).
         AvvioTrace.asyncSection("MCG:ai:ritagli") { runCatching { ai.cutoutPhotos.purgeOrphans() } }
       }

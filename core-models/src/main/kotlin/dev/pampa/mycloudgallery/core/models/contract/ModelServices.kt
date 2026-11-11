@@ -185,7 +185,7 @@ class VerifiedModel internal constructor(
  * Lo `stat` di un file (I1): dispositivo, inode, dimensione e `ctime` in secondi. Il `ctime` cambia a ogni scrittura, anche sullo stesso
  * inode, e a ogni cambio di permessi: confrontato prima e dopo l'apertura, scopre anche una modifica che non cambia ne' inode ne' dimensione.
  */
-data class FileStat(val device: Long, val inode: Long, val size: Long, val ctimeSeconds: Long) {
+data class FileStat(val device: Long, val inode: Long, val size: Long, val ctimeSeconds: Long, val ctimeNanos: Long = 0, val mtimeSeconds: Long = 0, val mtimeNanos: Long = 0) {
   /** Lo stesso file di prima: stesso dispositivo, stesso inode, stessa dimensione e stessa `ctime` (una scrittura sullo stesso inode cambia la `ctime`). */
   fun isSameFileAs(other: FileStat): Boolean =
     device == other.device && inode == other.inode && size == other.size && ctimeSeconds == other.ctimeSeconds

@@ -113,6 +113,7 @@ internal class ModelStore(
   fun deleteVerified(spec: ModelSpec): Boolean {
     cacheDirs(spec).forEach { it.deleteRecursively() }
     StateFiles.delete(metaFile(spec))
+    StateFiles.delete(File(root, "meta/${spec.sha256.hex}.checked"))
     val file = finalFile(spec)
     deleteFile(file)
     return !file.exists()
@@ -238,7 +239,7 @@ internal class ModelStore(
     private const val MAX_WRITERS = 8
 
     private val SHA = Regex("^[0-9a-f]{64}$")
-    private val META_NAME = Regex("^([0-9a-f]{64})(\\.removed)?$")
+    private val META_NAME = Regex("^([0-9a-f]{64})(\\.(removed|checked))?$")
     private val PARTIAL_NAME = Regex("^([0-9a-f]{64})\\.part(\\.etag|\\.src)?$")
     private val CACHE_NAME = Regex("^([0-9a-f]{64})-.+$")
   }

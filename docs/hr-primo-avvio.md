@@ -5,7 +5,7 @@ Base: `261a3553`, worktree `mcg-k5`, ramo `fix/hr-primo-avvio`. Nessun dispositi
 ## Esito delle voci
 
 1. **Fatto in parte - crash Album:** riprodotta con Compose la collisione delle chiavi degli avvisi, corretta con tipo + UUID completo e verificata nella suite Album completa (670 test). La causa dell'incidente specifico dell'utente resta non attribuita senza log. Non aggiunti catch alle letture di Album.
-2. **Fatto nelle prove JVM - lavoro di fondo:** raggruppamento delle pubblicazioni della timeline in primo piano e ampliamento della priorita' Linux gia' presente. Resta da verificare sul telefono la fluidita'; il segnale di processo dei tocchi, dello scroll e dell'inerzia raffina YieldToApp e Pace.APP_IN_USE; dopo 800 ms di calma torna il ritmo normale, senza cambiare i fermi termici o di rete.
+2. **Fatto nelle prove JVM - lavoro di fondo:** raggruppamento delle pubblicazioni della timeline in primo piano e ampliamento della priorita' Linux gia' presente. Resta da verificare sul telefono la fluidita'; dal giro CR-1 la priorita YieldToApp segue tutto il primo piano; tocchi, scroll e inerzia regolano solo Pace.APP_IN_USE; dopo 800 ms di calma torna il ritmo normale, senza cambiare i fermi termici o di rete.
 3. **Fatto - Ricerca e modelli:** preparazione immagini su Default; lettura/salvataggio misura su IO; errore visibile e Riprova, timer separato di 120 s, modello pronto obbligatorio e cancello termico prima del motore. Scansione spazio indice su IO con cache di un minuto. Perimetro models autorizzato dall'aggiunta dell'utente.
 
 ## Cause del crash e ipotesi controllate
@@ -38,8 +38,8 @@ Le frequenze sono quelle del codice, non misure sul telefono. Non esiste un tett
 | Timeline, `CatalogTimelineRepository` | Default con YieldToApp, consumatore seriale; nuove finestre 250 ms solo in primo piano. | Nessuna scrittura Room aggiuntiva; pubblica snapshot e viste filtrate insieme; file snapshot accorpato 5 s, rimozioni salvate subito. `forget` dei nascosti resta immediato. |
 | Copie simili, `SimilarCopiesGraph`, `CatalogSimilarCopies` | Default + YieldToApp, un job per grafo e Mutex nel rilevatore; prima partenza dopo disegno + 10 s, poi nessuna attesa iniziale; fette 1 s + pausa 1 s durante interazione, 30 s a riposo/background, tetto cumulato 600 s. | Firme per versione e unioni per secondo; decodifiche fuori dalle scritture brevi. Stato pending/awaiting dopo i giri, non per frame. |
 | Miniature / viewer, `ImagingBudget`, `PipelineThumbnailLoader` | Default/IO; 2-4 miniature insieme, viewer massimo 3, priorita' a finestra visibile. | Cache immagini, non un aggiornamento Room per ogni fotogramma; arrivi per richiesta. Nessuna modifica HR. |
-| Indice ricerca / modelli, `SearchGraph`, `LocalModels` | Indice Default + Mutex; modelli IO, refreshOnce per processo; ModelFetchWorker usa ora YieldToApp. Chiavi accorpate tramite canale conflated; documenti con ritardo e conflate. | Indice locale e file; flussi version/stati, non scritture catalogo per immagine sintetica. |
-| Misura dispositivo, `RealDeviceProbe` | 20 scene e 2 giri + avvio; ora preparazione su Default, motore sul suo dispatcher. Un tentativo per processo, timer UI 120 s, rifiuto se caldo, rilascio motore nel finally. La cancellazione non termina una chiamata nativa bloccata. | Un risultato e piccolo file finale; nessuna scrittura catalogo per scena. |
+| Indice ricerca / modelli, `SearchGraph`, `LocalModels` | Indice Default + Mutex; modelli IO, refreshOnce per processo dentro YieldToApp. Il refresh prima rileggeva circa 1,1 GB per processo; CR-5 legge stat e una nota <1 KiB/modello se invariati, altrimenti verifica tutto. La verifica per caricare un motore resta intera. ModelFetchWorker usa YieldToApp. Chiavi accorpate tramite canale conflated; documenti con ritardo e conflate. | Indice locale e file; flussi version/stati, non scritture catalogo per immagine sintetica. |
+| Misura dispositivo, `RealDeviceProbe` | 20 scene e 2 giri + avvio; preparazione su Default, motore sul suo dispatcher, a priorita normale (CR-4: nessun quietly/YieldToApp). Il giudizio termico viene dal valutatore delle regole. Un tentativo per processo, timer UI 120 s, rifiuto se caldo, rilascio motore nel finally. La cancellazione non termina una chiamata nativa bloccata. | Un risultato e piccolo file finale; nessuna scrittura catalogo per scena. |
 | IA / OCR, `AiWork`, `AiComputeEngine` | Worker a tappe, YieldToApp gia' presente, Pace.APP_IN_USE per attivita' intensive, buffer locale e lotti secondo control. | Indice e outbox per risultati; non regolati dalla nuova finestra se non producono una modifica timeline. |
 | Volti, `FacesWork` | Worker dedicato; YieldToApp gia' presente, massimo 2 thread inferenza in primo piano; notturno separato. | Archivio volti separato e aggiornamenti a lotti; budget e checkpoint esistenti. |
 | Backup, `SafeUploadEngine` | Parallelismo predefinito 2; lettura in primo piano su executor singolo con Thread.MIN_PRIORITY, regole e semafori di corsia esistenti. | Diario per passaggio di stato, catalogo per copia verificata, outbox; nessun accorpamento nuovo HR sul diario. |
@@ -50,9 +50,9 @@ La nuova finestra agisce sul produttore della timeline, non sulla griglia H3 e n
 
 ## Aggiunta HA verificata nel codice
 
-- a: confermati avvio immediato e fino a 20 fette da 30 s. Ora anche la prima lettura del rilevatore aspetta primo disegno + 10 s, una volta per processo (delta HR-7); YieldToApp e fette da 1 s con pausa 1 s in primo piano, 30 s senza pause in secondo piano, stesso tetto cumulato di 600 s di budget. Non riduciamo il tetto di lavoro a 20 secondi per errore. Il dosaggio usa il segnale di interazione comune dell'app: a UI ferma riprende il budget pieno dopo 800 ms.
+- a: confermati avvio immediato e fino a 20 fette da 30 s. Ora anche la prima lettura del rilevatore aspetta primo disegno + 10 s, una volta per processo (delta HR-7); YieldToApp per tutto il primo piano; fette da 1 s con pausa 1 s durante busy, 30 s senza pause a riposo o in secondo piano, stesso tetto cumulato di 600 s di budget. Non riduciamo il tetto di lavoro a 20 secondi per errore. Il dosaggio usa il segnale di interazione comune dell'app: a UI ferma riprende il budget pieno dopo 800 ms.
 - b: confermati timeout mancante, errore ingoiato, misura senza modello e duplicazione frase. Correzioni nella sola pagina models, core-ai e adattatore DI; stato di errore esplicito e Riprova, timer 120 s indipendente dal lavoro nativo. Il tentativo cancellato mantiene il posto fino alla fine reale, anche riaprendo la pagina. Con telefono gia' caldo (almeno LIGHT o headroom >= soglia di riduzione delle regole) la misura non inizia. La stima delle notti resta come prima, fuori incarico.
-- c: confermato drop(1) sul ruolo gia' salvato. Il test include il vecchio flusso come controllo negativo (zero richieste) e il nuovo osservatore (una richiesta immediata). Il vincolo non a consumo e KEEP rimangono nel pianificatore esistente.
+- c (corretto da CR-2): il primo valore true non viene perso, ma usa RULES dopo il disegno/refresh solo per modello non Ready e non rimosso dall'utente; un vero false -> true usa ROLE_CHANGED. Due avvii non sono due cambi di ruolo. Nessuna pubblicazione NAS o afterNews per risultati vuoti. fetchNow usa REPLACE, non KEEP come riportato erroneamente nella prima consegna.
 - d: confermato walkTopDown a ogni refresh. La catena AiModule -> AppIndexerControl -> graph.scope (GraphModule) usa gia' Default: il passaggio sul main ipotizzato da HA non e' confermato in produzione. Ora IO e cache serializzata di 60 s, condivisa dall'IndexerControl singleton; leggere arretrato non obbliga a ricamminare i file. Il test conta 20 aperture = una lettura, poi una nuova dopo scadenza. Spazio mostrato potenzialmente vecchio di un minuto: scelta deliberata.
 - e: confermato il flag mancante in PreparationWorker. Ora usa lo stesso richiamo gia' esistente per replica/dati personali, anche dopo tappa parziale. Ordine dai piu' recenti valutato e lasciato invariato: similarRuns usa query crescente, completamento del secondo e nextSecond+1; invertirlo significa modificare query, contratto e ripresa, oltre il piccolo trigger sicuro. Resta proposta, non implementazione dichiarata.
 
@@ -83,7 +83,7 @@ Nessun numero di FPS, durata reale della prima scansione o assenza di regression
 5. Nascondere e riaprire immediatamente durante import: il media deve sparire subito e non riapparire al riavvio (forget bypassa l'accorpamento).
 6. Recuperare Diagnostica > registro crash e stack completo (caused by, versione, ora); logcat crash/AndroidRuntime/SQLite/Room con contesto prima della chiusura. Cercare no such table, database is locked, indici fuori limite, chiavi duplicate e OOM. Non stampare account, percorsi privati o credenziali nel report pubblico.
 
-7. Con preset Notte di giorno, dopo onboarding con Indicizzatore acceso, verificare nei log di ModelFetch il trigger ROLE_CHANGED e l'accodamento con rete non a consumo, senza dover cambiare ruolo o premere Scarica ora. In rete a consumo il download deve restare in attesa.
+7. CR-2: con preset Notte di giorno e ruolo inizialmente acceso, modello mancante: trigger RULES e attesa della fascia/carica/termica/rete; un vero spegni-accendi usa ROLE_CHANGED e rete non a consumo. Due avvii con modelli Ready non accodano nulla; dopo Rimuovi il modello resta assente al riavvio.
 8. Preparare miniature di coppie NAS prima indecidibili: al termine della tappa deve partire un nuovo confronto e i gruppi devono aggiornarsi senza riaprire l'app. L'ordine crescente resta invariato.
 9. Con telefono gia' caldo aprire la pagina modelli: nessuna inferenza deve partire; deve comparire il fallimento con Riprova. Dopo raffreddamento, Riprova deve riuscire. La scadenza del driver bloccato e' provata da finto non cancellabile in JVM, non provocata sul telefono.
 10. Con inerzia della Libreria di oltre 800 ms verificare che il dosaggio resti ridotto fino alla fine dello scroll; dopo la calma deve tornare normale. Con due finestre, chiuderne una mentre l'altra scorre non deve dichiarare la UI ferma.
@@ -183,3 +183,42 @@ Non sommare le ripetizioni come test distinti. L'ultimo delta tocca solo Similar
 - `app/src/main/kotlin/dev/pampa/mycloudgallery/backup/SimilarRunPacing.kt:26`
 - `app/src/main/kotlin/dev/pampa/mycloudgallery/work/NasWork.kt:465`
 - `feature-search/src/main/kotlin/dev/pampa/mycloudgallery/feature/search/models/SearchSettingsController.kt:221`
+
+
+## Giro di correzione 1: CR-1, CR-2, CR-4, CR-5
+
+Questa sezione aggiorna la prima consegna; le tabelle dei commit e dei batch HR-1..HR-7 sopra restano la cronologia della prima implementazione.
+
+- CR-1: priorita bassa e due thread dei motori per tutto il primo piano; busy regola soltanto ritmo e pause. Nessuna riapertura causata dai gesti.
+- CR-2: il ruolo iniziale usa RULES, dopo il primo disegno e il refresh; Ready e removedByUser impediscono la richiesta. Solo false -> true usa ROLE_CHANGED. Un elenco di risultati vuoto non pubblica sul NAS e non notifica AI/volti.
+- CR-4: la misura attesa dall'utente non passa piu da quietly. Il giudizio termico usa lo stesso valutatore/configurazione delle regole, inclusa isteresi.
+- CR-5, integrazione inventario: il refresh modelli su IO, serializzato dal lock dei modelli e ora dentro quietly, costava circa 1,1 GB di letture e SHA-256 per ogni processo. Ora una nota locale della verifica confronta dispositivo, inode, dimensione, ctime e mtime (nanosecondi): a file invariati si leggono soltanto stat e nota (<1 KiB/modello). File nuovo/cambiato o stat/nota assente: verifica intera. La nota sopravvive al processo, viene tolta con il modello. Ogni apertura per il motore continua a verificare tutto sul proprio descrittore. Non e una cache di fiducia per caricare modelli.
+
+Prove fisiche ancora NV: video/foto ferma durante inferenza, gesto dopo quiete senza riaperture YuNet/SFace, secondo avvio senza I/O sequenziale dei modelli; modello rimosso che resta assente e misura a temperatura fresca. Nessun dispositivo usato.
+
+
+### Controlli negativi del giro 1
+
+HR-G2-ripresa (1m34s, FAIL atteso) ha completato i controlli interrotti dal riavvio esterno:
+- CR-1: QuietWork e GalleryGraph esattamente da df23eae2; la prova su attachSync fallisce dopo 850 ms di quiete (yielding false).
+- CR-2: ripristinato il precedente algoritmo dell'osservatore mantenendo la nuova firma per poter eseguire i test. Due avvii emettono ROLE_CHANGED invece di RULES; la condizione modello pronto/rimosso non impedisce due richieste (attese zero).
+- CR-4: AiModule esattamente da df23eae2; il motore finto della misura riceve YieldToApp, atteso null.
+- CR-5: disabilitato soltanto il riuso della nota, quindi ogni refresh richiama la verifica completa come prima. Il secondo oggetto/processo conta 2 hash invece di 1.
+
+Sono prove differenziali mirate, non una ricompilazione integrale del vecchio commit con tutte le nuove API. Tutte le modifiche temporanee sono state ripristinate prima di HR-G3. XML in docs/qa/hr/giro1/G2.
+
+HR-G1: OK in 16m37s; core-models 304, core-rules 401, app 15 test (4 classi); zero errori o saltati. Il filtro della nuova prova misura era stato aggiunto al file del lanciatore dopo che il processo lo aveva caricato: non e contato in G1, eseguito in G2-ripresa e incluso in G3.
+HR-G2 originale: interrotto dal riavvio esterno verso le 16:08, senza esito finale; al rientro rilasciato il posto HR-G2. La ripresa e stata esplicitamente autorizzata dall'orchestratore; nessun retry di test implicito.
+Ogni batch usa un posto, --no-daemon --no-watch-fs --max-workers=2 --no-parallel, offline e compilatore in-process. Heap del progetto 4 GiB + 4 GiB, eccezione dichiarata. Righe di esito inviate al Coordinatore subito dopo il rilascio; processi chiusi solo tramite discendenza del lanciatore o percorso mcg-k5, mai per nome.
+
+
+HR-G3: **OK in 1m48s** sul codice corretto, con cache di compilazione riusata e test rieseguiti. core-models: 35 test, 0 falliti; core-rules: 1 test, 0 falliti; core-ai: 32 test, 0 falliti; app: 20 test, 0 falliti. Zero errori o saltati. XML e conteggi in docs/qa/hr/giro1/G3; i conteggi sono corse distinte, non si sommano fra G1 e G3. La prova misura passa nel cablaggio di AiModule, con motore finto che controlla l'assenza di YieldToApp. I test esistenti dei volti verificano priorita ridotta, numero thread e riaperture soltanto quando cambia yielding; l'attach di produzione mantiene yielding true prima/dopo busy, anche dopo 850 ms di quiete.
+
+### Prove fisiche residue del giro 1 (NV, non eseguite)
+
+1. Avviare indicizzazione e riprodurre un video, poi restare su una foto senza toccare per almeno 10 s. Atteso: thread del fondo a priorita bassa e motori volti con thread ridotti per tutto il primo piano. Difetto: ritorno a priorita piena o aumento thread dopo 800 ms.
+2. Alternare gesto, inerzia e quiete durante i volti. Atteso: cambi del ritmo ma nessuna chiusura/apertura YuNet o SFace causata dal gesto; a riposo lotti pieni. Difetto: ricaricamento dei motori a ogni gesto.
+3. Due avvii con modelli pronti, poi Rimuovi e nuovo avvio: nessuna richiesta extra e modello ancora assente. Modello mancante non rimosso: RULES rispetta caldo/carica/fascia/rete; vero off/on: ROLE_CHANGED e rete non a consumo.
+4. Misura a telefono fresco: priorita normale senza alternanze indotte dai tocchi; telefono caldo: non parte. Secondo avvio con file invariati: nessuna lettura SHA sequenziale da refresh; file modificato: verifica completa. Ogni apertura per il motore resta verificata, anche con nota presente.
+
+Scelte: nota di verifica locale persistente solo per refresh, invalidazione con stat completo (ctime/mtime inclusi i nanosecondi); nessuna modifica alle soglie, uso dello stesso valutatore delle regole. Ritmo, attesa iniziale e timer della prima consegna invariati.

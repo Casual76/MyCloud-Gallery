@@ -460,6 +460,9 @@ class NasOrganizeIntegrationTest {
 
     assertThat(organizer.areas.setPrivateExclusions(setOf(SharePath.of("Album")))).isTrue()
 
+    // Le esclusioni arrivano da uno `stateIn` sul registro personale: si aspetta l'evento, non si legge `.value` subito dopo la scrittura
+    // (sotto carico la lettura arrivava prima: controllo intero dell'11/11).
+    withTimeout(TIMEOUT) { organizer.areas.privateExclusions.first { it == setOf(SharePath.of("Album")) } }
     assertThat(organizer.privateExclusions()).containsExactly(SharePath.of("Album"))
     assertThat(organizer.areas.privateExclusions.value).containsExactly(SharePath.of("Album"))
     assertWithMessage("chiede la verifica").that(closed.get()).isGreaterThan(before)

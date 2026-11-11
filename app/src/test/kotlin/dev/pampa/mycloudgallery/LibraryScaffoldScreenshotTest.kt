@@ -109,8 +109,13 @@ internal abstract class LibraryScreenshotBase(private val dark: Boolean, private
 
   @Test
   fun viewerSopraLaPillola() = shoot("viewer", state = syntheticLibraryTabState()) {
-    // Si tocca la prima cella disegnata: il viewer finto si apre sopra la griglia e sopra la pillola.
-    composeRule.onAllNodesWithContentDescription("Foto, ", substring = true)[0].performClick()
+    // Si tocca una cella sotto la barra in alto: il viewer finto si apre sopra la griglia e sopra la pillola. Non la prima disegnata: sul
+    // tablet sta sotto la capsula della data, e la chrome trattiene i tocchi (H3, D2), quindi quel tocco non apre niente.
+    val cells = composeRule.onAllNodesWithContentDescription("Foto, ", substring = true)
+    val rootHeight = composeRule.onRoot().fetchSemanticsNode().size.height
+    val below = cells.fetchSemanticsNodes().indexOfFirst { it.boundsInRoot.center.y > rootHeight * CELL_BELOW_CHROME }
+    check(below >= 0) { "Nessuna cella sotto la chrome." }
+    cells[below].performClick()
     composeRule.waitForIdle()
     assertThat(composeRule.onAllNodesWithContentDescription("Chiudi").fetchSemanticsNodes()).isNotEmpty()
   }
@@ -121,6 +126,9 @@ internal abstract class LibraryScreenshotBase(private val dark: Boolean, private
   companion object {
     const val DIR = "../docs/screenshots/3-P0"
     const val LARGE_TEXT = 1.3f
+
+    /** La frazione dell'altezza sotto cui una cella e' di sicuro fuori dalla barra in alto (come `cellBelowChrome` di `:feature-library`). */
+    const val CELL_BELOW_CHROME = 0.25f
 
     fun looks(): List<Array<Any>> = listOf(arrayOf<Any>(false), arrayOf<Any>(true))
   }

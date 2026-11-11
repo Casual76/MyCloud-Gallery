@@ -18554,3 +18554,32 @@ Unione: `integra/beta-grafica` (`3f686ef9`) era gia' figlia del ramo H5: avanzam
 - **Non coperto da un test:** la preparazione a griglia ferma (`keepWarm`) dipende dal cancello del primo disegno, che nei test della Libreria
   sintetica non si apre; e' da guardare sul telefono (prova 4 qui sopra: alla prima apertura dopo qualche secondo di griglia ferma il calendario
   deve essere gia' pieno).
+
+### H4, giro di correzione 2 (11/11 sera)
+Ramo `fix/h4-ricerca-barra` dopo l'unione di `integra/beta-grafica` (`ad4310a5`, avanzamento veloce, nessun conflitto).
+- **CU-2 = CS-3, voci intere** (`SuggestionFit`): si mostrano le voci che entrano intere, nell'ordine, fino a tre, al testo piu' grande a cui ne entrano
+  di piu' (due intere sono meglio di tre mozzate); mai puntini in testa e in coda; se nessuna entra intera, una sola con i puntini in coda. Lo spazio
+  conta margini e separatori delle voci mostrate. Con «compleanno della nonna · Castiglione della Pescaia · compleanno di Anna al mare» a 360 dp si vede
+  «compleanno della nonna», intera.
+- **CS-12, le recenti**: a campo vuoto erano gia' le prime voci; ora anche quando la ricerca non trova niente la barra in alto propone le ultime
+  ricerche (senza quella scritta), dalla stessa sorgente dei suggerimenti a riposo e con le sue regole (niente dai Nascosti). Scrivendo ancora senza
+  completamenti restano; con i risultati tornano i completamenti; senza recenti la barra resta com'era. (`RecentsPrivacy` e' l'anteprima dell'app nei
+  recenti di Android: non c'entra e non cambia.)
+- **CS-23**: con la ricerca aperta il riepilogo in fondo alla Libreria sfuma con i pezzi in alto (alfa nel disegno, il piede tiene il posto).
+- **CG-2 (a)**: il capo destro ritagliato ha l'ombra dei vetri sospesi dell'engine (20 dp di sfocatura, un sesto in giu', nero 16%/10% del ruolo scrim,
+  al 70%), disegnata accanto al ritaglio; il segnaposto durante la molla e' una copia che compare solo quando il capo destro non lo taglierebbe piu'
+  (calcolato dalla sua larghezza), in dissolvenza, e a barra aperta torna quello del campo (TalkBack lo legge nel campo). **(b)**: ritaglio e ombra
+  si fanno una volta per misura in `drawWithCache`; nessuna operazione di `Path` (due contorni nello stesso verso). **(c)**: la cattura dello sfondo
+  si ri-registra a ogni fotogramma della molla (e della salita con la tastiera) a misura fissa: `DrawBackdropNode` la rifa' quando cambia la posizione
+  del vetro rispetto alla sorgente (`moved`), e il campo si sposta. `FluidSearchField` non espone `frozen`, `sampleOnce` ne' `resampleIntervalMillis`
+  (passa i valori di serie a `glassSurface`): dal nostro lato non si evita senza toccare l'engine. **Da misurare con Perfetto sull'S25**, Libreria
+  carica, apertura e chiusura dal cerchio 10 volte (da Libreria e da Album), poi la stessa traccia scrivendo: (1) le dimensioni dei layer della barra
+  (`RenderNode` del campo e dell'ombra) costanti per tutta la molla; (2) nessuna allocazione di texture o buffer per fotogramma (`vkAllocateMemory`,
+  `GrResourceCache` / `purge`) e nessun riciclo della cache delle miniature; (3) quante registrazioni del vetro per fotogramma (`Record View#draw`,
+  `prepareTree`) e il tempo GPU della sfocatura della barra, confrontati con la pillola sopra la Libreria che scorre (lo stesso lavoro, gia' accettato);
+  (4) `drawFrame` sotto i 16 ms (8 a 120 Hz) e nessun fotogramma perso durante la molla; (5) le stesse misure sul commit `14558864` (prima di CG-2).
+- **Lint**: `:feature-search:lintDebug` era rosso (`LocalContextGetResourceValueCall` in `SearchInLibrary`): ora `LocalResources.current` come chiave del
+  `remember`, e lo stesso nei risultati (`pluralStringResource`). Gli usi in `models/` sono di HR.
+- Verifiche: H4-13 FAIL (compilazione), H4-14 core-designsystem 324, feature-search 188, feature-library 1309 verdi, `lintDebug` di feature-search
+  verde, `:app` 57 prove con 3 rosse note non di H4 (`LibraryScaffoldTabletScreenshotTest.viewerSopraLaPillola` x2, `SchedeCheRicordanoTest` del
+  tablet), H4-15 screenshot H4 (32 prove).

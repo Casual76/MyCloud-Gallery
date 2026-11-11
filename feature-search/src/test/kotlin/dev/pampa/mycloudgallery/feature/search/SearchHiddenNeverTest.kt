@@ -110,6 +110,23 @@ class SearchHiddenNeverTest {
     assertThat(top.filterIsInstance<Suggestion.PlaceSuggestion>().flatMap { it.option.ids }.toSet() - inSnapshot).isEmpty()
   }
 
+  /**
+   * CS-12 (giro 2): cercando cio' che e' solo nei nascosti non si trova niente, e in alto tornano le ricerche recenti, le stesse di quando la ricerca e'
+   * a riposo (la stessa sorgente, con le sue regole): nessuna parola dei nascosti fra i suggerimenti.
+   */
+  @Test
+  fun senzaRisultatiInAltoLeRecentiDellaLibreriaVisibile_CS12() = runTest {
+    history.record("tazza blu", emptyList())
+    val c = controller()
+    c.onQueryChange("segretissima")
+    advanceTimeBy(300)
+    runCurrent()
+    assertThat(c.state.value).isInstanceOf(SearchScreenState.NoResults::class.java)
+    val labels = c.topSuggestions.value.map { it.label.lowercase() }
+    assertThat(labels).containsExactly("tazza blu")
+    assertThat(labels.none { it.contains("segretissima") }).isTrue()
+  }
+
   @Test
   fun trovaSimiliSuUnNascostoNonDaNiente_E_Q14() = runTest {
     val c = controller()

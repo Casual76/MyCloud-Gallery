@@ -147,10 +147,18 @@ internal class ScaffoldScenes(
   )
 
   /**
-   * Nessun risultato per «zebre in montagna»: la Libreria attenuata dietro (CU-11) e una riga sola sopra la barra; nessun completamento, la barra in alto si
-   * ritira.
+   * Nessun risultato per «zebre in montagna»: la Libreria attenuata dietro (CU-11), una riga sola sopra la barra e, in alto, le ultime ricerche da cui
+   * ripartire (CS-12 del giro 2).
    */
-  val searchNothing: SearchSource = FixedSearchSource(query = "zebre in montagna", state = SearchScreenState.NoResults("zebre in montagna", emptyList()))
+  val searchNothing: SearchSource = FixedSearchSource(
+    query = "zebre in montagna",
+    suggestions = listOf(
+      Suggestion.Recent(HistoryEntry(1, "mare ad agosto", listOf("Agosto"))),
+      Suggestion.Recent(HistoryEntry(2, "Natale", emptyList())),
+      Suggestion.Recent(HistoryEntry(3, "cane", emptyList())),
+    ),
+    state = SearchScreenState.NoResults("zebre in montagna", emptyList()),
+  )
 
   /** "Trova simili" da una foto: il campo vuoto, i simili per pertinenza, la riga che dice da dove vengono. */
   val searchSimilar: SearchSource = FixedSearchSource(

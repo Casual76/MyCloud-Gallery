@@ -200,6 +200,50 @@ class SearchControllerTest {
   }
 
   @Test
+  fun senzaRisultati_inAltoLeUltimeRicerche_senzaQuellaScritta_CS12() = runTest {
+    engine.script = { lib.results(confident = IntRange.EMPTY) }
+    suggestions.idle = IdleSuggestions(listOf(recent(1, "zebre"), recent(2, "mare ad agosto"), recent(3, "Natale")), listOf(roma), emptyList())
+    val c = controller()
+    type(c, "zebre")
+    assertThat(c.state.value).isInstanceOf(SearchScreenState.NoResults::class.java)
+    // Solo le ricerche recenti (non i luoghi), senza quella appena scritta.
+    assertThat(c.topSuggestions.value.map { it.label }).containsExactly("mare ad agosto", "Natale").inOrder()
+  }
+
+  @Test
+  fun senzaRisultatiESenzaRecenti_laBarraRestaComE_CS12() = runTest {
+    engine.script = { lib.results(confident = IntRange.EMPTY) }
+    suggestions.completions = { listOf(Suggestion.PlaceSuggestion(PlaceOption(setOf(9), "Zermatt", PlaceLevel.PLACE))) }
+    val c = controller()
+    type(c, "zebre")
+    assertThat(c.state.value).isInstanceOf(SearchScreenState.NoResults::class.java)
+    assertThat(c.topSuggestions.value.map { it.label }).containsExactly("Zermatt")
+  }
+
+  @Test
+  fun scrivendoAncoraSenzaCompletamentiLeRecentiRestano_eConIRisultatiTornanoICompletamenti_CS12() = runTest {
+    var found = false
+    engine.script = { if (found) lib.results(confident = 0..2) else lib.results(confident = IntRange.EMPTY) }
+    suggestions.idle = IdleSuggestions(listOf(recent(2, "mare ad agosto")), emptyList(), emptyList())
+    val c = controller()
+    type(c, "zebre")
+    assertThat(c.topSuggestions.value.map { it.label }).containsExactly("mare ad agosto")
+    // Un'altra lettera senza completamenti: la barra non si svuota per poi tornare.
+    c.onQueryChange("zebrei")
+    advanceTimeBy(COMPLETION + 10)
+    runCurrent()
+    assertThat(c.topSuggestions.value.map { it.label }).containsExactly("mare ad agosto")
+    advanceTimeBy(SEARCH)
+    runCurrent()
+    assertThat(c.topSuggestions.value.map { it.label }).containsExactly("mare ad agosto")
+    // Arrivano i risultati: in alto i completamenti di cio' che si scrive (qui nessuno: la barra si ritira).
+    found = true
+    type(c, "zebra")
+    assertThat(c.state.value).isInstanceOf(SearchScreenState.Results::class.java)
+    assertThat(c.topSuggestions.value).isEmpty()
+  }
+
+  @Test
   fun iMenoProbabiliArrivanoInCodaSenzaChiederli_E_Q12() = runTest {
     engine.script = { lib.results(confident = 0..2, likely = 10..13) }
     val c = controller()

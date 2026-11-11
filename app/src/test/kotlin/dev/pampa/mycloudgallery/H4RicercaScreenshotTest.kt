@@ -121,8 +121,8 @@ internal abstract class H4RicercaScreenshotBase(private val dark: Boolean, priva
   }
 
   /**
-   * Nessun risultato (CU-11 del giro 1): una riga sola sopra la barra e, dietro, la Libreria attenuata da un velo (non uno schermo vuoto); senza
-   * completamenti la barra in alto si e' ritirata.
+   * Nessun risultato (CU-11 del giro 1, CS-12 e CS-23 del giro 2): una riga sola sopra la barra, dietro la Libreria attenuata da un velo (non uno schermo
+   * vuoto) senza il riepilogo in fondo, e in alto le ultime ricerche da cui ripartire.
    */
   @Test
   fun nessunRisultato() {
@@ -241,7 +241,7 @@ internal class H4RicercaPhoneScreenshotTest(dark: Boolean) : H4RicercaScreenshot
   private fun longSuggestions(scenes: ScaffoldScenes) = FixedSearchSource(
     query = "compleanno",
     suggestions = listOf(
-      Suggestion.Recent(HistoryEntry(1, "compleanno della nonna a Firenze", emptyList())),
+      Suggestion.Recent(HistoryEntry(1, "compleanno della nonna", emptyList())),
       Suggestion.PlaceSuggestion(PlaceOption(setOf(7), "Castiglione della Pescaia", PlaceLevel.PLACE)),
       Suggestion.Recent(HistoryEntry(2, "compleanno di Anna al mare", emptyList())),
     ),
@@ -249,8 +249,8 @@ internal class H4RicercaPhoneScreenshotTest(dark: Boolean) : H4RicercaScreenshot
   )
 
   /**
-   * CU-2 del giro 1: a 360 dp i tre suggerimenti lunghi restano **distinguibili** (prima «comple… | Castigli… | comple…»): il testo si rimpicciolisce,
-   * poi la parte gia' scritta diventa i puntini all'inizio.
+   * CU-2 (giri 1 e 2): a 360 dp i suggerimenti lunghi si mostrano **interi**, come la barra delle parole della tastiera (prima «comple… | Castigli… |
+   * comple…», poi «…della nonn… | Castiglione… | …di Anna al…»): quelli che entrano interi, il piu' adatto per primo.
    */
   @Test
   fun suggerimentiLunghi() {
@@ -258,7 +258,7 @@ internal class H4RicercaPhoneScreenshotTest(dark: Boolean) : H4RicercaScreenshot
     shoot("suggerimenti-lunghi") { GalleryScaffold(scenes, GalleryTab.Library, searchOpen = true, search = longSuggestions(scenes)) }
   }
 
-  /** Gli stessi con il testo a 1,3x (solo in chiaro): ancora distinguibili, senza andare a capo. */
+  /** Gli stessi con il testo a 1,3x (solo in chiaro): ancora interi (meno voci), senza puntini ne' a capo. */
   @Test
   fun suggerimentiLunghiTestoGrande() {
     if (dark) return

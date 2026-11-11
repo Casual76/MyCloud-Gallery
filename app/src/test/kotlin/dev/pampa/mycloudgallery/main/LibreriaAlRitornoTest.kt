@@ -10,6 +10,8 @@ import androidx.compose.runtime.saveable.LocalSaveableStateRegistry
 import androidx.compose.runtime.saveable.SaveableStateRegistry
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.hasScrollAction
+import dev.pampa.mycloudgallery.feature.search.FixedSearchSource
+import dev.pampa.mycloudgallery.feature.search.SearchSource
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performTouchInput
@@ -40,7 +42,8 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
- * GS-10 (K6): tornando alla Libreria dopo Cerca o dopo un'altra scheda la griglia e' **esattamente dov'era** (stessa prima riga, stesso scostamento
+ * GS-10 (K6): tornando alla Libreria dopo la ricerca (H4: chiusa dopo aver mostrato i risultati al posto della griglia) o dopo un'altra scheda la griglia e'
+ * **esattamente dov'era** (stessa prima riga, stesso scostamento
  * entro 1 px), con il centro dell'area utile su un'intestazione e dentro una foto, a Giorni e agli altri livelli. Con lo scaffold delle prove (le
  * pagine vere nel `SaveableStateHolder` di `MainScaffold`, K3a) sul telefono dell'utente.
  *
@@ -72,6 +75,7 @@ class LibreriaAlRitornoTest {
 
   private var tab by mutableStateOf(GalleryTab.Library)
   private var searchOpen by mutableStateOf(false)
+  private var search by mutableStateOf<SearchSource>(FixedSearchSource())
   private var scenes: ScaffoldScenes? by mutableStateOf(null)
 
   // Lo stato salvato dell'activity (il `Bundle`) e la composizione che si toglie e si rimette: la ricreazione, come in `LibrarySelectionRestoreTest`.
@@ -89,6 +93,7 @@ class LibreriaAlRitornoTest {
               scenes = checkNotNull(scenes),
               tab = tab,
               searchOpen = searchOpen,
+              search = search,
               onSelectTab = { tab = it },
               onOpenSearch = { searchOpen = true },
               onCloseSearch = { searchOpen = false },
@@ -174,16 +179,27 @@ class LibreriaAlRitornoTest {
 
   private enum class Via { SEARCH, ALBUMS, COLLECTIONS }
 
-  /** Si lascia la Libreria (Cerca, Album o Raccolte) e si torna. La pagina della Libreria esce davvero dalla composizione (niente menu "Vista"). */
+  /**
+   * Si lascia la Libreria (Album o Raccolte) e si torna; o si apre la ricerca, si scrive (H4: i risultati prendono il posto della griglia, che esce dalla
+   * composizione) e si chiude. La pagina della Libreria, o la sua griglia, esce davvero dalla composizione (niente menu "Vista").
+   */
   private fun leaveAndReturn(via: Via) {
     when (via) {
-      Via.SEARCH -> searchOpen = true
+      Via.SEARCH -> {
+        search = checkNotNull(scenes).searchTyping
+        searchOpen = true
+      }
       Via.ALBUMS -> tab = GalleryTab.Albums
       Via.COLLECTIONS -> tab = GalleryTab.Collections
     }
     compose.waitForIdle()
     compose.onNodeWithContentDescription(VIEW_MENU).assertDoesNotExist()
-    if (via == Via.SEARCH) searchOpen = false else tab = GalleryTab.Library
+    if (via == Via.SEARCH) {
+      searchOpen = false
+      search = FixedSearchSource()
+    } else {
+      tab = GalleryTab.Library
+    }
     compose.waitForIdle()
     compose.onNodeWithContentDescription(VIEW_MENU).assertExists()
   }

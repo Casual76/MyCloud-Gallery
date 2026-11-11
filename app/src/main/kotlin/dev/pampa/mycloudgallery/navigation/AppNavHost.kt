@@ -80,6 +80,10 @@ import dev.pampa.mycloudgallery.integrations.ShareHostEffect
 import dev.pampa.mycloudgallery.main.LibraryCommandHostEffect
 import dev.pampa.mycloudgallery.main.LocalViewerHost
 import dev.pampa.mycloudgallery.main.MainScaffold
+import dev.pampa.mycloudgallery.main.ScaffoldSearch
+import dev.pampa.mycloudgallery.feature.search.FindSimilarEffect
+import dev.pampa.mycloudgallery.feature.search.SearchViewModel
+import dev.pampa.mycloudgallery.feature.search.rememberSearchSource
 import dev.pampa.mycloudgallery.main.ViewerHostState
 import dev.pampa.mycloudgallery.root.BlockedScreen
 import dev.pampa.mycloudgallery.root.KeystoreUi
@@ -461,8 +465,8 @@ private fun MainDestination(
   albumsHost: AlbumsHostViewModel? = null,
 ) {
   var tab by rememberSaveable { mutableStateOf(GalleryTab.Library) }
-  // G2: Cerca e' il cerchio accanto alla pillola, aperto sopra la scheda [tab] (Indietro la chiude e torna li'). [searchFocus]: aperta dal
-  // cerchio il campo e' pronto a scrivere; aperta da "Trova simili" no.
+  // H4: la ricerca e' la barra che nasce dal cerchio accanto alla pillola, aperta sopra la scheda [tab] con la Libreria dietro (Indietro la chiude e torna
+  // li'). [searchFocus]: aperta dal cerchio il campo e' pronto a scrivere; aperta da "Trova simili" no.
   var searchOpen by rememberSaveable { mutableStateOf(false) }
   var searchFocus by rememberSaveable { mutableStateOf(false) }
   // Fase 10 (P4, D16): una finestra nuova parte dalla pagina scelta (album, ricordo, mappa), con un evento interno e solo dopo il blocco app.
@@ -477,17 +481,34 @@ private fun MainDestination(
     nasOpener.library = state
     nasOpener.services = libraryViewer
   }
-  // Fase 6 (P11): la scheda Cerca e "Trova simili" dal viewer (la richiesta chiude il viewer e porta a Cerca con il chip "Simili a").
+  // H4: la ricerca dentro la Libreria (il motore, i suggerimenti, i risultati) e "Trova simili" dal viewer o dalla selezione.
   val searchHost: SearchHostViewModel = hiltViewModel()
   val searchActions = rememberSearchActions(nav, viewer, searchHost)
-  // "Trova simili" (dal viewer, TS-2/TS-3, o dalla selezione della Libreria, TS-4) apre Cerca sopra la scheda di adesso, senza tastiera.
-  LaunchedEffect(findSimilar) {
-    if (findSimilar != null) {
+  val searchModel: SearchViewModel = hiltViewModel()
+  val searchController = searchModel.controller
+  val searchSource = rememberSearchSource(searchController)
+  val search = remember(searchSource, searchController, searchHost, searchActions) {
+    ScaffoldSearch(
+      source = searchSource,
+      handlers = searchController,
+      thumbnails = searchHost.thumbnails,
+      actions = searchActions,
+      onResultOpened = searchController::onResultOpened,
+    )
+  }
+  // "Trova simili" (dal viewer, TS-2/TS-3, o dalla selezione della Libreria, TS-4) apre la ricerca sopra la scheda di adesso, senza tastiera, con i simili
+  // gia' cercati. La richiesta si consegna una volta (TS-2).
+  FindSimilarEffect(
+    request = findSimilar,
+    onFind = { media ->
       searchFocus = false
       if (!searchOpen) AvvioTrace.pageOpened(AvvioTrace.PAGE_SEARCH)
       searchOpen = true
-    }
-  }
+      searchController.onOpened()
+      searchController.findSimilar(media)
+    },
+    onHandled = onFindSimilarHandled,
+  )
   // Fase 9 (MO-3): il giro dei ricordi di oggi anche al ritorno in primo piano con Raccolte gia' aperta (l'app viva da giorni, il ripristino dopo la morte del processo).
   if (memoriesHost != null) MemoriesForegroundRound(memoriesHost, collectionsOpen = tab == GalleryTab.Collections && !searchOpen)
 
@@ -512,17 +533,23 @@ private fun MainDestination(
       }
       tab = selected
     },
+    search = search,
     searchOpen = searchOpen,
     onOpenSearch = {
-      // Avvio istantaneo: l'apertura di Cerca si misura dal tocco sul cerchio al primo fotogramma con l'ultimo stato o lo scheletro.
+      // Avvio istantaneo: l'apertura di Cerca si misura dal tocco sul cerchio al primo fotogramma della barra aperta.
       if (!searchOpen) AvvioTrace.pageOpened(AvvioTrace.PAGE_SEARCH)
       searchFocus = true
       searchOpen = true
+      searchController.onOpened()
     },
     onCloseSearch = {
       searchOpen = false
       searchFocus = false
+      // La prossima apertura riparte da capo: il campo vuoto, la Libreria dietro.
+      searchController.clear()
     },
+    searchFocus = searchFocus,
+    onSearchFocused = { searchFocus = false },
     onStatusClick = {
       when (status.action) {
         StatusAction.OPEN_WIREGUARD -> if (!openWireGuard()) nav.navigate(DiagnosticsGraphRoute)
@@ -561,9 +588,6 @@ private fun MainDestination(
         entryDetail = { entry -> CollectionEntryDetail(entry, nav, slot.contentPadding, nasOpener, openViewer, entryPanes) },
         entryHasDetail = { entry -> hasEntryDetail(entry.code, entryPanes) },
       )
-    },
-    search = { slot ->
-      SearchTab(slot, searchActions, searchHost, findSimilar, onFindSimilarHandled, focusField = searchFocus, onFieldFocused = { searchFocus = false })
     },
     // G2 + G2b: la scheda Album (la griglia di copertine di G2b, ospitata da `AlbumsTabHost`).
     albums = if (albumsHost != null) {

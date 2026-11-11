@@ -27,11 +27,11 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Gli screenshot del pacchetto G2 della fase grafica (per l'utente, prima della beta): la pillola **Libreria · Album · Raccolte** su ogni scheda,
- * il cerchio di Cerca chiuso e aperto, la pillola ripiegata dallo scorrimento della Libreria (la scheda scelta e il cerchio) e la Libreria in
+ * il cerchio di Cerca (aperto, dalla fase H, e' la barra di ricerca: i suoi screenshot sono in `H4/`), la pillola ripiegata dallo scorrimento della Libreria (la scheda scelta e il cerchio) e la Libreria in
  * selezione con la barra delle azioni al posto della pillola. Chiaro e scuro, telefono dell'utente (360 dp) e tablet (1280 dp).
  *
  * K3a (GF-4, ORC-1): tutto passa dallo scaffold delle prove ([GalleryScaffold]): le schede sono quelle vere su stati dati, come in produzione. La
- * scheda Album e' la griglia di copertine di G2b (non piu' l'elenco di prima), Cerca e' la schermata vera a riposo (non un segnaposto), le Raccolte
+ * scheda Album e' la griglia di copertine di G2b (non piu' l'elenco di prima), le Raccolte
  * sono quelle alleggerite con la capsula della rete in testa e il fondo della pagina. Le Raccolte alleggerite di G2 (`raccolte-alleggerite`) sono
  * `pillola-raccolte`: erano la stessa schermata. Il foglio "Prima mettilo al sicuro" ha i suoi in feature-backup (`G2SelectionSheet*Shots`), il
  * pannello delle Raccolte in selezione sul tablet in feature-library (`G2Raccolte*`).
@@ -90,13 +90,6 @@ internal abstract class G2ScreenshotBase(private val dark: Boolean, private val 
   fun pillolaRaccolte() {
     val scenes = ScaffoldScenes()
     shoot("pillola-raccolte") { GalleryScaffold(scenes, GalleryTab.Collections) }
-  }
-
-  /** Il cerchio aperto: Cerca vera a riposo (il campo, le ricerche recenti, i luoghi, i tipi) sopra la scheda di prima, il cerchio d'accento. */
-  @Test
-  fun cercaAperta() {
-    val scenes = ScaffoldScenes()
-    shoot("cerca-aperta") { GalleryScaffold(scenes, GalleryTab.Library, searchOpen = true) }
   }
 
   /** La pillola ripiegata dallo scorrimento della Libreria verso i piu' vecchi (il dito che scende): la scheda scelta e, accanto, il cerchio. */

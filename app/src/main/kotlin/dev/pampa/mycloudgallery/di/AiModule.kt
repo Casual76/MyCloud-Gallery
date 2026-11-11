@@ -12,7 +12,6 @@ import dev.pampa.mycloudgallery.ai.AiGraph
 import dev.pampa.mycloudgallery.ai.AiStack
 import dev.pampa.mycloudgallery.ai.AiWiring
 import dev.pampa.mycloudgallery.ai.AppIndexerControl
-import dev.pampa.mycloudgallery.ai.PersonalSearchOrderStore
 import dev.pampa.mycloudgallery.ai.PersonalTextReadingAccepted
 import dev.pampa.mycloudgallery.ai.aiIndexContributor
 import dev.pampa.mycloudgallery.core.ai.contract.DeviceProbe
@@ -26,7 +25,6 @@ import dev.pampa.mycloudgallery.core.search.contract.SearchHistory
 import dev.pampa.mycloudgallery.core.search.contract.Suggestions
 import dev.pampa.mycloudgallery.core.search.contract.Today
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerControl
-import dev.pampa.mycloudgallery.feature.search.contract.SearchOrderStore
 import dev.pampa.mycloudgallery.feature.search.contract.TextReadingAccepted
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.graph.AppGraph
@@ -79,10 +77,6 @@ object AiModule {
   @Provides fun modelManager(stack: AiStack): ModelManager = stack.requestingModels
 
   @Provides fun textReadingSwitch(stack: AiStack): TextReadingSwitch = stack.textSwitch
-
-  @Provides
-  @Singleton
-  fun searchOrderStore(stack: AiStack, graph: AppGraph): SearchOrderStore = PersonalSearchOrderStore(stack.personal, graph.scope)
 
   @Provides
   @Singleton

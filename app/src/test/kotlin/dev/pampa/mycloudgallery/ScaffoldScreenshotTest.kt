@@ -121,13 +121,6 @@ internal abstract class ScaffoldScreenshotBase(private val dark: Boolean, privat
     shoot("main-raccolte-vpn-spenta") { GalleryScaffold(scenes, GalleryTab.Collections, status = GlobalStatus.VPN_OFF) }
   }
 
-  /** G2: Cerca non e' piu' una scheda ma il cerchio accanto alla pillola; aperta, sta sopra la scheda di prima (K3a: la schermata vera, a riposo). */
-  @Test
-  fun cerca() {
-    val scenes = ScaffoldScenes()
-    shoot("main-cerca-password") { GalleryScaffold(scenes, GalleryTab.Library, status = GlobalStatus.NEEDS_PASSWORD, searchOpen = true) }
-  }
-
   @Test
   fun onboarding() = shoot("onboarding") {
     OnboardingScreen(progress = OnboardingProgress.START, onContinue = {})

@@ -156,6 +156,19 @@ class RicercaCablaggioTest {
       }
     }
     compose.waitForIdle()
+    touchMode()
+  }
+
+  /**
+   * La finestra in **modalita' tocco**, come sul telefono. Robolectric non ci entra (i tocchi delle prove arrivano a Compose senza passare dalla finestra)
+   * e fuori dalla modalita' tocco Android, quando un campo lascia il fuoco, lo riassegna alla prima vista dall'alto (`View.clearFocus`, da Android 9): la vista
+   * di Compose lo riprende e lo restituisce al campo. Sul telefono, che e' in modalita' tocco, il campo lasciato resta senza fuoco.
+   */
+  private fun touchMode() = compose.runOnIdle {
+    val decor = compose.activity.window.decorView
+    val attachInfo = android.view.View::class.java.getDeclaredField("mAttachInfo").apply { isAccessible = true }.get(decor)
+    attachInfo.javaClass.getDeclaredField("mInTouchMode").apply { isAccessible = true }.setBoolean(attachInfo, true)
+    check(decor.isInTouchMode) { "La finestra non e' in modalita' tocco." }
   }
 
   private fun field() = compose.onNode(hasSetTextAction())

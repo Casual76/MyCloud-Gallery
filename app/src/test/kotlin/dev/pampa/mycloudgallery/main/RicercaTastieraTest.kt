@@ -19,6 +19,7 @@ import dev.pampa.mycloudgallery.ScaffoldScenes
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GallerySearchBarDefaults
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTab
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
+import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
@@ -73,7 +74,11 @@ class RicercaTastieraTest {
     val barBefore = barBottom()
     val photoBefore = photoTop(probe)
     val rootHeight = compose.onRoot().fetchSemanticsNode().size.height.toFloat()
-    val gap = with(compose.density) { GallerySearchBarDefaults.KeyboardGap.toPx() }
+    // La barra a riposo sta [BottomMargin] + [RestInset] sopra il bordo (qui la barra di sistema non c'e'): con la tastiera sale finche' il suo bordo basso
+    // e' [KeyboardGap] sopra la tastiera.
+    val (gap, rest) = with(compose.density) {
+      GallerySearchBarDefaults.KeyboardGap.toPx() to (FluidFloatingTabBarDefaults.BottomMargin + GallerySearchBarDefaults.RestInset).toPx()
+    }
 
     val ime = (rootHeight * 0.4f).toInt()
     compose.runOnIdle { compose.activity.keyboard(ime) }
@@ -81,7 +86,7 @@ class RicercaTastieraTest {
     val barShift = barBefore - barBottom()
     val photoShift = photoBefore - photoTop(probe)
     // La barra sta sopra la tastiera, a [KeyboardGap]; la Libreria sale della stessa quantita', nello stesso fotogramma.
-    assertThat(abs(barBottom() - (rootHeight - ime - gap))).isAtMost(2f)
+    assertThat(abs(barShift - (ime + gap - rest))).isAtMost(2f)
     assertThat(barShift).isGreaterThan(0f)
     assertThat(abs(photoShift - barShift)).isAtMost(1f)
 

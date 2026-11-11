@@ -34,7 +34,6 @@ import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteScope
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteSheetContent
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
-import dev.pampa.mycloudgallery.core.designsystem.state.phoneTrashText
 import dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationSheet
 import dev.pampa.mycloudgallery.core.nasops.contract.OpPlan
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanWarning
@@ -199,13 +198,14 @@ internal fun NasDeleteSheetContent(
   val nasKind = if (target.scope == NasAreaScope.COMMON) GalleryDeleteLocationKind.NasShared else GalleryDeleteLocationKind.NasPrivate
   val nasTitle = stringResource(if (target.scope == NasAreaScope.COMMON) R.string.viewer_nas_delete_nas_common else R.string.viewer_nas_delete_nas_private)
   val locations = buildList {
-    val phoneDetail = stringResource(phoneTrashText(R.string.viewer_nas_delete_phone_detail, R.string.viewer_nas_delete_phone_detail_gallery))
-    add(GalleryDeleteLocation(stringResource(R.string.viewer_nas_delete_phone), GalleryDeleteLocationKind.Phone, phoneDetail))
+    // I4 (fase I): i 30 giorni nel cestino li dice una volta la nota in fondo al foglio; sulle righe resta solo cio' che cambia (sola lettura,
+    // album protetto).
+    add(GalleryDeleteLocation(stringResource(R.string.viewer_nas_delete_phone), GalleryDeleteLocationKind.Phone))
     add(
       GalleryDeleteLocation(
         title = nasTitle,
         kind = nasKind,
-        detail = stringResource(locationDetail(target.writable, target.albumProtected)),
+        detail = locationDetail(target.writable, target.albumProtected)?.let { stringResource(it) },
         deletable = target.writable && !target.albumProtected,
       ),
     )
@@ -215,7 +215,7 @@ internal fun NasDeleteSheetContent(
         GalleryDeleteLocation(
           title = stringResource(if (other.kind == NasLocationInfo.Kind.NAS_COMMON) R.string.viewer_nas_delete_nas_common else R.string.viewer_nas_delete_nas_private),
           kind = if (other.kind == NasLocationInfo.Kind.NAS_COMMON) GalleryDeleteLocationKind.NasShared else GalleryDeleteLocationKind.NasPrivate,
-          detail = stringResource(locationDetail(other.writable, other.albumProtected)),
+          detail = locationDetail(other.writable, other.albumProtected)?.let { stringResource(it) },
           deletable = other.writable && !other.albumProtected,
         ),
       )
@@ -236,10 +236,10 @@ internal fun NasDeleteSheetContent(
 }
 
 /** Cosa succede a una copia del NAS con "Ovunque": nel cestino, oppure resta (sola lettura; revisione B, R3: elemento protetto di un album condiviso). */
-private fun locationDetail(writable: Boolean, albumProtected: Boolean): Int = when {
+private fun locationDetail(writable: Boolean, albumProtected: Boolean): Int? = when {
   !writable -> R.string.viewer_nas_delete_nas_read_only
   albumProtected -> R.string.viewer_nas_delete_nas_album_protected
-  else -> R.string.viewer_nas_delete_nas_detail
+  else -> null
 }
 
 // --- Rinomina ---------------------------------------------------------------------------------------------------------------

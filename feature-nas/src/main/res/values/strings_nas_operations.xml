@@ -80,6 +80,10 @@
   <string name="nas_ops_status_cancelled">Annullata</string>
 
   <!-- Le righe di dettaglio -->
+  <!-- I4: il conto corto accanto all'anello (le parole intere le dice TalkBack con nas_ops_detail_elements). -->
+  <string name="nas_ops_short">%1$s / %2$s</string>
+  <string name="nas_ops_short_bytes">%1$s / %2$s · %3$s / %4$s</string>
+  <string name="nas_ops_percent">%1$d%%</string>
   <string name="nas_ops_detail_elements">%1$s di %2$s elementi</string>
   <string name="nas_ops_detail_elements_bytes">%1$s di %2$s elementi · %3$s di %4$s</string>
   <string name="nas_ops_detail_planned">%1$s · %2$s, in coda</string>

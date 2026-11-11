@@ -342,7 +342,8 @@ private fun TrashRow(item: NasTrashItem, selecting: Boolean, selected: Boolean, 
   val by = when {
     item.withoutValidRecord -> null
     item.reason == TrashReason.MOVE -> stringResource(R.string.nas_trash_moved)
-    item.deletableNow -> stringResource(R.string.nas_trash_by_me)
+    // I4: «eliminato da questo dispositivo» e' il caso di ogni giorno: non si scrive (lo dice TalkBack); si scrive solo chi altro e' stato.
+    item.deletableNow -> null
     author != null -> stringResource(R.string.nas_trash_by, author)
     else -> null
   }
@@ -354,6 +355,7 @@ private fun TrashRow(item: NasTrashItem, selecting: Boolean, selected: Boolean, 
     if (item.isFolder) stringResource(R.string.nas_trash_desc_folder_word) else null,
     size,
     left,
+    if (item.deletableNow && !item.withoutValidRecord && item.reason != TrashReason.MOVE) stringResource(R.string.nas_trash_by_me) else null,
     if (item.withoutValidRecord) stringResource(R.string.nas_trash_invalid_title) else null,
   ).joinToString(", ")
   val stateText = stringResource(if (selected) R.string.nas_folders_state_selected else R.string.nas_folders_state_not_selected)

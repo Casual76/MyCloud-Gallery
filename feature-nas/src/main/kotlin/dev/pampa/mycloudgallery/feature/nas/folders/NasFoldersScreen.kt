@@ -3,11 +3,6 @@ package dev.pampa.mycloudgallery.feature.nas.folders
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
-import dev.pampa.mycloudgallery.core.designsystem.adaptive.DropTarget
-import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDropTarget
-import dev.pampa.mycloudgallery.core.designsystem.adaptive.GalleryPaneRules
-import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -21,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.DriveFileMove
+import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.Delete
@@ -34,10 +30,9 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
-import androidx.compose.material.icons.rounded.Checklist
-import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -60,14 +55,20 @@ import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.DropTarget
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.GalleryPaneRules
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDropTarget
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarAction
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeActionBar
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeIconButton
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTextButton
-import dev.pampa.mycloudgallery.core.designsystem.design.galleryChromeTag
-import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarAction
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterEntry
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
+import dev.pampa.mycloudgallery.core.designsystem.design.galleryChromeTag
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolderEntry
@@ -94,9 +95,9 @@ import dev.pampa.mycloudgallery.feature.nas.ui.NasNotice
 import dev.pampa.mycloudgallery.feature.nas.ui.NasNoticeLine
 import dev.pampa.mycloudgallery.feature.nas.ui.NasPage
 import dev.pampa.mycloudgallery.feature.nas.ui.NasSectionTitle
-import dev.pampa.mycloudgallery.feature.nas.ui.NasTrailingSlot
 import dev.pampa.mycloudgallery.feature.nas.ui.NasText
 import dev.pampa.mycloudgallery.feature.nas.ui.NasTone
+import dev.pampa.mycloudgallery.feature.nas.ui.NasTrailingSlot
 import dev.pampa.mycloudgallery.feature.nas.ui.countText
 import dev.pampa.mycloudgallery.feature.nas.ui.groupedRows
 
@@ -582,11 +583,12 @@ private fun EntryRow(
     kind == FileKind.VIDEO -> Icons.Rounded.Movie
     else -> Icons.Rounded.InsertDriveFile
   }
-  val tone = when {
-    entry.isFolder -> FluidTone.Primary
-    kind == FileKind.IMAGE -> FluidTone.Info
-    kind == FileKind.VIDEO -> FluidTone.Success
-    else -> FluidTone.Neutral
+  // I4 (fase I): la piastrella colorata dice il tipo a colpo d'occhio (la cartella del NAS, la foto, il video, un documento).
+  val family = when {
+    entry.isFolder -> GalleryIconFamily.Backup
+    kind == FileKind.IMAGE -> GalleryIconFamily.Photos
+    kind == FileKind.VIDEO -> GalleryIconFamily.Memories
+    else -> GalleryIconFamily.System
   }
   val countLine = entry.fileCount?.let { countText(R.plurals.nas_files_count, it) }
   val subtitle = when {
@@ -594,7 +596,8 @@ private fun EntryRow(
     // NA-10: una cartella esclusa lo dice, anche in cima: e' il motivo per cui le sue foto non sono in Libreria.
     excluded -> stringResource(R.string.nas_folders_row_excluded)
     entry.isFolder -> countLine ?: stringResource(R.string.nas_folders_row_folder)
-    else -> stringResource(R.string.nas_folders_row_file, NasText.size(entry.size), NasText.date(entry.modifiedAtNas))
+    // I4: per un file basta il peso; la data la dice TalkBack.
+    else -> NasText.size(entry.size)
   }
   val description = when {
     entry.isFolder && countLine != null -> stringResource(R.string.nas_folders_desc_folder_count, entry.name, countLine)
@@ -607,8 +610,8 @@ private fun EntryRow(
   FluidListRow(
     title = entry.name,
     subtitle = subtitle,
-    tone = tone,
-    leading = { Icon(imageVector = icon, contentDescription = null) },
+    leading = { GalleryIconTile(icon = icon, family = family) },
+    leadingTile = false,
     badge = { NasTrailingSlot(selecting = selecting, selected = selected, opens = entry.isFolder && !blocked) },
     disclosure = false,
     titleMaxLines = 2,

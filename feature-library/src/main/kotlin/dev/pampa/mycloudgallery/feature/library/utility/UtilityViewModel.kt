@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-// Fase 7, P8 (D24): il ViewModel delle pagine-filtro dell'Utility (Screenshot, Video, Modificate, WhatsApp). Come `CollectionsViewModel`: nessuno stato
+// Fase 7, P8 (D24): il ViewModel delle pagine-filtro dell'Utility (oggi Modificate). Come `CollectionsViewModel`: nessuno stato
 // proprio, la vista sta nell'indice (che non contiene mai i nascosti, E-H1) e il filtro EDITED e' lo stesso `LibraryFilter` delle altre.
 
 /** I conteggi vivi delle pagine-filtro dell'Utility, dalla stessa fonte delle Raccolte. */

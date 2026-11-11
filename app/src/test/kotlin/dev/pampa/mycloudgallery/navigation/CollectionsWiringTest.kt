@@ -128,7 +128,7 @@ class CollectionsWiringTest {
     assertThat(EntryTarget.of(AlbumEntryTarget.ALL_TRIPS)).isEqualTo(EntryTarget.Album(AlbumEntryTarget.Trip(null)))
     assertThat(EntryTarget.of("qualcosa/di-una-versione-nuova")).isEqualTo(EntryTarget.Unknown)
     // Sul tablet le pagine dell'Utility, della 4B e "Libera spazio" stanno nel pannello; quelle degli album sono rotte anche li'.
-    assertThat(hasEntryDetail(UtilityPage.SCREENSHOTS.entryCode)).isTrue()
+    assertThat(hasEntryDetail(UtilityPage.EDITED.entryCode)).isTrue()
     assertThat(hasEntryDetail(NasScreen.FOLDERS.route)).isTrue()
     assertThat(hasEntryDetail(BackupScreen.FREE_SPACE.route)).isTrue()
     assertThat(hasEntryDetail(AlbumEntryTarget.ALL_ALBUMS)).isFalse()

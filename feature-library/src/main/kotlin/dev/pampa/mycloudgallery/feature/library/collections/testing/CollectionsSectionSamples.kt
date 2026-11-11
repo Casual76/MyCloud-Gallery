@@ -5,14 +5,13 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Luggage
 import androidx.compose.material.icons.rounded.PhotoAlbum
-import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Sync
-import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material.icons.rounded.WbSunny
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
@@ -108,15 +107,14 @@ object CollectionsSectionSamples {
     ),
   )
 
-  /** Utility (P8): le pagine-filtro, Doppioni, Eliminati di recente, Libera spazio. */
+  /** Utility (P8): Modificate, Doppioni, Eliminati di recente, Libera spazio (H5: senza Screenshot, Video e WhatsApp, che sono nella scheda Album). */
   fun utility(): FixedCollectionsSection = FixedCollectionsSection(
     CollectionSections.UTILITY,
     CollectionEntryGroup(
       title = "Utility",
       entries = listOf(
-        CollectionEntry("utility/duplicates", "Doppioni", "Copie identiche e foto simili", Icons.Rounded.ContentCopy, FluidTone.Warning),
-        CollectionEntry("utility/screenshots", "Screenshot", "109 elementi", Icons.Rounded.Screenshot, FluidTone.Neutral),
-        CollectionEntry("utility/videos", "Video", "82 elementi", Icons.Rounded.Videocam, FluidTone.Info),
+        CollectionEntry("utility/edited", "Modificate", "37 elementi", Icons.Rounded.Edit, FluidTone.Warning),
+        CollectionEntry("utility/duplicates", "Doppioni", "Copie identiche e foto simili", Icons.Rounded.ContentCopy, FluidTone.Neutral),
         CollectionEntry("utility/trash", "Eliminati di recente", "Telefono e NAS insieme", Icons.Rounded.Delete, FluidTone.Danger),
         CollectionEntry("backup/free-space", "Libera spazio", "Liberalo dal telefono, in sicurezza", Icons.Rounded.CleaningServices, FluidTone.Primary),
       ),

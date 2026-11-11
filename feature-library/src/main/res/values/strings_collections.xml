@@ -11,7 +11,6 @@
   <string name="collection_favorites">Preferiti</string>
   <string name="collection_videos">Video</string>
   <string name="collection_screenshots">Screenshot</string>
-  <string name="collection_whatsapp">WhatsApp</string>
   <string name="collection_hidden">Nascosti</string>
   <string name="collection_recently_deleted">Eliminati di recente</string>
 
@@ -32,8 +31,6 @@
   <string name="collection_empty_videos_detail">I video del telefono compaiono qui.</string>
   <string name="collection_empty_screenshots_title">Nessuno screenshot</string>
   <string name="collection_empty_screenshots_detail">Gli screenshot del telefono compaiono qui.</string>
-  <string name="collection_empty_whatsapp_title">Niente da WhatsApp</string>
-  <string name="collection_empty_whatsapp_detail">Le foto e i video ricevuti con WhatsApp compaiono qui.</string>
   <string name="collection_select">Seleziona</string>
   <string name="collection_select_items">Seleziona elementi</string>
   <string name="selection_favorite">Aggiungi ai preferiti</string>

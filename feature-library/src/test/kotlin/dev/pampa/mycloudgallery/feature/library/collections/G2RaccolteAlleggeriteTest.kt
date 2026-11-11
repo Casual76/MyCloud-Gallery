@@ -60,7 +60,7 @@ class G2RaccolteAlleggeriteTest {
       CountingProvider(CollectionSections.MEMORIES, group(CollectionSections.MEMORIES, "memories/all")),
       CountingProvider(CollectionSections.PLACES, group(CollectionSections.PLACES, "places/map")),
       CountingProvider(CollectionSections.NAS, group(CollectionSections.NAS, "nas/folders")),
-      CountingProvider(CollectionSections.UTILITY, group(CollectionSections.UTILITY, "utility/screenshots")),
+      CountingProvider(CollectionSections.UTILITY, group(CollectionSections.UTILITY, "utility/edited")),
     )
 
   @Test

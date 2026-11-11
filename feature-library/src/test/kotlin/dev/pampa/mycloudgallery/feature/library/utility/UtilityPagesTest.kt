@@ -34,9 +34,9 @@ import org.junit.Test
 class UtilityPagesDataTest {
 
   @Test
-  fun leSeiPagineHannoCodiciStabili() {
+  fun lePagineHannoCodiciStabili() {
     assertThat(UtilityPage.entries.map { it.code })
-      .containsExactly("screenshots", "videos", "edited", "whatsapp", "duplicates", "recently_deleted")
+      .containsExactly("edited", "duplicates", "recently_deleted")
       .inOrder()
     assertThat(UtilityPage.entries.map { it.code }.toSet()).hasSize(UtilityPage.entries.size)
   }
@@ -56,14 +56,15 @@ class UtilityPagesDataTest {
   }
 
   @Test
-  fun leQuattroPagineFiltroUsanoIFiltriDellaLibreria_ModificateCompresa() {
-    assertThat(UtilityPage.filters)
-      .containsExactly(UtilityPage.SCREENSHOTS, UtilityPage.VIDEOS, UtilityPage.EDITED, UtilityPage.WHATSAPP)
-      .inOrder()
-    assertThat(UtilityPage.SCREENSHOTS.filter).isEqualTo(LibraryFilter.SCREENSHOTS)
-    assertThat(UtilityPage.VIDEOS.filter).isEqualTo(LibraryFilter.VIDEOS)
+  fun laPaginaFiltroEModificate_GliAltriFiltriStannoNellaSchedaAlbum() {
+    // H5 (11/11): Screenshot, Video e WhatsApp erano doppioni della scheda Album (Screenshot, Video, Messaggistica) e sono usciti.
+    assertThat(UtilityPage.filters).containsExactly(UtilityPage.EDITED)
     assertThat(UtilityPage.EDITED.filter).isEqualTo(LibraryFilter.EDITED)
-    assertThat(UtilityPage.WHATSAPP.filter).isEqualTo(LibraryFilter.WHATSAPP)
+    // Una rotta o una scelta del tablet salvata con il codice di una pagina uscita non apre niente (la rotta torna indietro da sola).
+    for (old in listOf("screenshots", "videos", "whatsapp")) {
+      assertThat(UtilityPage.fromCode(old)).isNull()
+      assertThat(UtilityPage.fromEntryCode("utility/$old")).isNull()
+    }
     // Doppioni ed Eliminati di recente non passano dall'indice.
     assertThat(UtilityPage.DUPLICATES.filter).isNull()
     assertThat(UtilityPage.RECENTLY_DELETED.filter).isNull()
@@ -94,12 +95,13 @@ class UtilityEntriesTest : ComposeScreenTest() {
   }
 
   @Test
-  fun ilGruppoUtilityHaLeSeiVoci_ConIlTitoloGiusto() {
+  fun ilGruppoUtilityHaLeTreVoci_ConIlTitoloGiusto() {
     val entries = compose()
 
     assertThat(group.title).isEqualTo("Utility")
+    // H5: senza i doppioni della scheda Album (Screenshot, Video, WhatsApp).
     assertThat(entries.map { it.title })
-      .containsExactly("Screenshot", "Video", "Modificate", "WhatsApp", "Doppioni", "Eliminati di recente")
+      .containsExactly("Modificate", "Doppioni", "Eliminati di recente")
       .inOrder()
     // I codici sono unici e riportano alla pagina (il pannello salvato di un tablet).
     assertThat(CollectionEntries.codes(listOf(group))).containsNoDuplicates()
@@ -108,14 +110,12 @@ class UtilityEntriesTest : ComposeScreenTest() {
 
   @Test
   fun lePagineFiltroDiconoQuanteSono_DoppioniEEliminatiNo() {
-    val entries = compose(counts = mapOf(UtilityPage.SCREENSHOTS to 12, UtilityPage.VIDEOS to 1, UtilityPage.EDITED to 0))
-
-    val bySubtitle = entries.associate { UtilityPage.fromEntryCode(it.code)!! to it.subtitle }
-    assertThat(bySubtitle.getValue(UtilityPage.SCREENSHOTS)).isEqualTo("12 elementi")
-    assertThat(bySubtitle.getValue(UtilityPage.VIDEOS)).isEqualTo("1 elemento")
-    assertThat(bySubtitle.getValue(UtilityPage.EDITED)).isEqualTo("0 elementi")
+    val bySubtitle = compose(counts = mapOf(UtilityPage.EDITED to 1)).associate { UtilityPage.fromEntryCode(it.code)!! to it.subtitle }
+    assertThat(bySubtitle.getValue(UtilityPage.EDITED)).isEqualTo("1 elemento")
+    assertThat(compose(counts = mapOf(UtilityPage.EDITED to 12)).first { it.code == UtilityPage.EDITED.entryCode }.subtitle).isEqualTo("12 elementi")
     // Un conteggio che non c'e' (il flusso non ha ancora risposto) non finge uno zero.
-    assertThat(bySubtitle.getValue(UtilityPage.WHATSAPP)).isEqualTo("Nessun elemento")
+    assertThat(compose().first { it.code == UtilityPage.EDITED.entryCode }.subtitle).isEqualTo("Nessun elemento")
+    val entries = compose(counts = mapOf(UtilityPage.EDITED to 0))
     // Doppioni ed Eliminati di recente non dicono mai quanti sono: dal di fuori non si deve capire (E-H1).
     assertThat(bySubtitle.getValue(UtilityPage.DUPLICATES)).doesNotContainMatch("\\d")
     assertThat(bySubtitle.getValue(UtilityPage.RECENTLY_DELETED)).doesNotContainMatch("\\d")
@@ -196,14 +196,9 @@ class UtilityFilterScreenTest : ComposeScreenTest() {
   }
 
   @Test
-  fun ognunaDelleQuattroPagineFiltroHaIlSuoVuoto() {
-    val expected = mapOf(
-      UtilityPage.SCREENSHOTS to "Nessuno screenshot",
-      UtilityPage.VIDEOS to "Nessun video",
-      UtilityPage.EDITED to "Nessuna foto modificata",
-      UtilityPage.WHATSAPP to "Niente da WhatsApp",
-    )
-    var current by mutableStateOf(UtilityPage.SCREENSHOTS)
+  fun laPaginaFiltroHaIlSuoVuoto() {
+    val expected = mapOf(UtilityPage.EDITED to "Nessuna foto modificata")
+    var current by mutableStateOf(UtilityPage.EDITED)
     show { UtilityFilterScreen(current, EmptyViewerItems, environment, { _, _ -> }, {}, {}) }
 
     for ((page, title) in expected) {

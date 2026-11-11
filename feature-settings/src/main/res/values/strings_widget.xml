@@ -23,8 +23,8 @@
 
   <string name="widget_section_privacy">Cosa non fa mai</string>
   <string name="widget_privacy_hidden">Mai le foto nascoste né i nomi delle persone.</string>
-  <string name="widget_privacy_lock">Con il blocco dell’app: solo foto del telefono, senza titoli.</string>
-  <string name="widget_privacy_home">Mai sulla schermata di blocco.</string>
+  <string name="widget_privacy_lock">Con il blocco dell’app: solo foto che sono anche sul telefono, senza titoli.</string>
+  <string name="widget_privacy_home">Solo sulla Home, mai sulla schermata di blocco.</string>
 
   <string name="widget_section_add">Come si aggiunge</string>
   <string name="widget_add_how">Tieni premuto sulla schermata Home, scegli Widget e poi MyCloud Gallery. Puoi allargarlo per vedere più foto.</string>

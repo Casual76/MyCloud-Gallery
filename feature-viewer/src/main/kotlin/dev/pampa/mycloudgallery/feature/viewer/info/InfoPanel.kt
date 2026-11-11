@@ -695,6 +695,33 @@ internal fun stripColumns(natural: IntArray, width: Int, rule: Int): Int {
   return 1
 }
 
+/** Le sezioni in piu' (la mappa, le persone, le copie) in colonna: un'intestazione discreta e il loro contenuto. */
+@Composable
+internal fun InfoSections(sections: List<InfoSectionModel>, modifier: Modifier = Modifier) {
+  Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(BlockGap)) {
+    sections.forEach { section ->
+      val custom = section.content
+      Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(CustomSectionGap)) {
+        section.header?.let { SectionTitle(icon = section.icon, title = it) }
+        if (custom == null) GalleryInfoSection(rows = section.rows, header = null) else custom()
+      }
+    }
+  }
+}
+
+/** CU-8: il titolo di una sezione del pannello, come la riga della fotocamera: il segno nell'accento e il nome, senza maiuscolo. */
+@Composable
+private fun SectionTitle(icon: ImageVector?, title: String) {
+  Row(
+    modifier = Modifier.semantics(mergeDescendants = true) { heading() },
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(IconGap),
+  ) {
+    if (icon != null) Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(LineIcon), tint = MaterialTheme.colorScheme.primary)
+    Text(text = title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+  }
+}
+
 /** "Apri in Mappe" (un'altra app, con la sua conferma): un tasto piccolo con il segno di "fuori dall'app", bersaglio da 48 dp. */
 @Composable
 private fun OpenInMapsButton(onClick: () -> Unit) {

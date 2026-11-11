@@ -96,7 +96,7 @@ object CollectionsSectionSamples {
       } else {
         listOf(
           CollectionEntry(
-            "people/enable", "Attiva riconoscimento dei volti", "Nessun familiare vede i nomi",
+            "people/enable", "Attiva riconoscimento dei volti", "Raggruppa le foto per persona",
             Icons.Rounded.Face, FluidTone.Primary,
           ),
         )

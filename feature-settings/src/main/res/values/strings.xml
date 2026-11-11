@@ -16,7 +16,6 @@
   <string name="settings_section_connection">Connessione</string>
   <string name="settings_section_protection">Protezione</string>
   <string name="settings_devices">Dispositivi</string>
-  <string name="settings_devices_none">Nessuna famiglia configurata</string>
   <plurals name="settings_devices_count">
     <item quantity="one">%1$d dispositivo</item>
     <item quantity="other">%1$d dispositivi</item>

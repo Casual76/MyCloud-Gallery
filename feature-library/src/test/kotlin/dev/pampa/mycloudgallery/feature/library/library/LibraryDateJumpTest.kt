@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
@@ -102,7 +103,8 @@ class LibraryDateJumpTest {
     val month = days.months.first()
     composeRule.onNodeWithTag(TitleTag).performClick()
     composeRule.waitForIdle()
-    composeRule.onNodeWithTag(monthTag(month)).performClick()
+    // Un anno vecchio sta in fondo alla scelta rapida, che scorre: prima lo si porta in vista, come col dito.
+    composeRule.onNodeWithTag(monthTag(month)).performScrollTo().performClick()
     composeRule.waitForIdle()
     val day = (1..month.lengthOfMonth()).map(month::atDay).first(days::has)
     composeRule.onNodeWithTag(dayTag(day)).performClick()
@@ -120,7 +122,8 @@ class LibraryDateJumpTest {
     val month = days.months.first()
     composeRule.onNodeWithTag(TitleTag).performClick()
     composeRule.waitForIdle()
-    composeRule.onNodeWithTag(monthTag(month)).performClick()
+    // Un anno vecchio sta in fondo alla scelta rapida, che scorre: prima lo si porta in vista, come col dito.
+    composeRule.onNodeWithTag(monthTag(month)).performScrollTo().performClick()
     composeRule.waitForIdle()
     val day = (1..month.lengthOfMonth()).map(month::atDay).first(days::has)
     composeRule.onNodeWithTag(dayTag(day)).performClick()

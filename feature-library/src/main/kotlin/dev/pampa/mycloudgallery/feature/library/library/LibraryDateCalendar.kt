@@ -31,6 +31,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -40,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -118,44 +119,49 @@ internal fun LibraryDateCalendar(
 private fun CalendarContent(days: GridDays, shown: ShownDate?, today: LocalDate, onPick: (GridDays, LocalDate) -> Unit) {
   val months = days.months
   val start = remember(days) { days.startMonth(shown?.date)?.let(months::indexOf)?.coerceAtLeast(0) ?: months.lastIndex }
-  val pager = rememberPagerState(initialPage = start) { months.size }
+  // Il mese da cui il pager parte: quello dell'etichetta, poi quello scelto nella scelta rapida. Cambiarlo rifa' il pager gia' su quel mese
+  // (nessun fotogramma del mese di prima, e nessuna richiesta a un pager che non e' in scena).
+  var anchor by remember(days) { mutableIntStateOf(start) }
   var picking by remember { mutableStateOf(false) }
-  val scope = rememberCoroutineScope()
   val reduced = LocalFluidMotionPolicy.current.reducedMotion
-  val locale = rememberLocale()
+  val locale = GalleryDates.LOCALE
   val selected = shown?.takeIf { it.exactDay }?.date
+  key(anchor) {
+    val pager = rememberPagerState(initialPage = anchor) { months.size }
+    val scope = rememberCoroutineScope()
 
-  fun go(page: Int) {
-    val target = page.coerceIn(0, months.lastIndex)
-    scope.launch {
-      if (reduced) pager.scrollToPage(target) else pager.animateScrollToPage(target, animationSpec = FluidMotion.pixels(FluidMotion.DampingChrome, FluidMotion.ResponseSnappy))
+    fun go(page: Int) {
+      val target = page.coerceIn(0, months.lastIndex)
+      scope.launch {
+        if (reduced) pager.scrollToPage(target) else pager.animateScrollToPage(target, animationSpec = FluidMotion.pixels(FluidMotion.DampingChrome, FluidMotion.ResponseSnappy))
+      }
     }
-  }
 
-  if (picking) {
-    MonthPicker(
-      days = days,
-      current = months[pager.currentPage.coerceIn(0, months.lastIndex)],
-      locale = locale,
-      onBack = { picking = false },
-      onPick = { month ->
-        val page = months.indexOf(month)
-        if (page >= 0) scope.launch { pager.scrollToPage(page) }
-        picking = false
-      },
-    )
-  } else {
     val month = months[pager.currentPage.coerceIn(0, months.lastIndex)]
-    CalendarHeader(
-      month = month,
-      canPrevious = pager.currentPage > 0,
-      canNext = pager.currentPage < months.lastIndex,
-      onPrevious = { go(pager.currentPage - 1) },
-      onNext = { go(pager.currentPage + 1) },
-      onTitle = { picking = true },
-    )
-    WeekdayRow(locale)
-    MonthPager(pager, months, days, today, selected, locale) { date -> onPick(days, date) }
+    if (picking) {
+      MonthPicker(
+        days = days,
+        current = month,
+        locale = locale,
+        onBack = { picking = false },
+        onPick = { chosen ->
+          val page = months.indexOf(chosen)
+          picking = false
+          if (page >= 0) anchor = page
+        },
+      )
+    } else {
+      CalendarHeader(
+        month = month,
+        canPrevious = pager.currentPage > 0,
+        canNext = pager.currentPage < months.lastIndex,
+        onPrevious = { go(pager.currentPage - 1) },
+        onNext = { go(pager.currentPage + 1) },
+        onTitle = { picking = true },
+      )
+      WeekdayRow(locale)
+      MonthPager(pager, months, days, today, selected, locale) { date -> onPick(days, date) }
+    }
   }
 }
 
@@ -199,10 +205,10 @@ private fun CalendarHeader(month: YearMonth, canPrevious: Boolean, canNext: Bool
   }
 }
 
-/** I nomi dei giorni, dal lunedi' (la settimana italiana), nella lingua del telefono. Per TalkBack non dicono niente: ogni giorno dice la sua data. */
+/** I nomi dei giorni, dal lunedi' (la settimana italiana), nella lingua dell'app (`GalleryDates.LOCALE`, come le date delle intestazioni). Per TalkBack non dicono niente: ogni giorno dice la sua data. */
 @Composable
 private fun WeekdayRow(locale: Locale) {
-  val names = remember(locale) { WeekOrder.map { it.getDisplayName(TextStyle.SHORT, locale) } }
+  val names = remember(locale) { WeekOrder.map { it.getDisplayName(TextStyle.SHORT, locale).replaceFirstChar { c -> c.titlecase(locale) } } }
   Row(modifier = Modifier.fillMaxWidth().padding(vertical = WeekdayPaddingV).clearAndSetSemantics { }) {
     for (name in names) {
       Text(
@@ -362,7 +368,7 @@ private fun MonthPicker(days: GridDays, current: YearMonth, locale: Locale, onBa
       Icon(imageVector = Icons.Rounded.ExpandLess, contentDescription = null, tint = ink, modifier = Modifier.size(TitleGlyph))
     }
   }
-  val names = remember(locale) { Month.values().map { it.getDisplayName(TextStyle.SHORT_STANDALONE, locale) } }
+  val names = remember(locale) { Month.values().map { it.getDisplayName(TextStyle.SHORT_STANDALONE, locale).replaceFirstChar { c -> c.titlecase(locale) } } }
   for (year in days.yearsNewestFirst) {
     val requester = remember { BringIntoViewRequester() }
     if (year == current.year) LaunchedEffect(Unit) { requester.bringIntoView() }
@@ -435,12 +441,6 @@ private fun MonthCell(month: YearMonth, name: String, enabled: Boolean, isCurren
       )
     }
   }
-}
-
-@Composable
-private fun rememberLocale(): Locale {
-  val configuration = LocalConfiguration.current
-  return remember(configuration) { configuration.locales[0] ?: Locale.getDefault() }
 }
 
 /** La settimana dal lunedi'. */

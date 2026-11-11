@@ -65,6 +65,7 @@ import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.pampa.mycloudgallery.core.designsystem.R
 import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeDefaults
+import dev.pampa.mycloudgallery.core.designsystem.design.holdsTouches
 import dev.pampa.mycloudgallery.core.designsystem.design.rememberAnyContentChromeStyle
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import kotlin.math.max
@@ -310,7 +311,8 @@ private fun GallerySearchLine(
               .fluidPressable(onClick = onClick, role = Role.Button, focusShape = FluidCapsuleShape)
               .semantics { if (actionLabel != null) onClick(label = actionLabel) { onClick(); true } }
           } else {
-            Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            // Come ogni pezzo della chrome (fase H, D2): un tocco sulla riga non apre il risultato dietro.
+            Modifier.holdsTouches().semantics { liveRegion = LiveRegionMode.Polite }
           },
         ),
       contentAlignment = Alignment.Center,

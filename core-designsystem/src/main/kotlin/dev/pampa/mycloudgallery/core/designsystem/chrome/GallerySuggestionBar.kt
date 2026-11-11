@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -26,7 +25,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.isTraversalGroup
@@ -57,7 +55,7 @@ import dev.pampa.mycloudgallery.core.designsystem.design.rememberAnyContentChrom
  * si ritira (in dissolvenza, salendo appena: niente pezzo di vetro vuoto). [descriptions]: cio' che TalkBack dice di ogni voce (di serie la voce stessa).
  *
  * Il vetro e' largo quanto la riga (al piu' [GallerySearchBarDefaults.MaxWidth], centrato) e **non cambia mai misura**: quando le voci cambiano mentre si
- * scrive cambia solo il testo, in dissolvenza. Trattiene i tocchi (fra due voci la foto dietro non si apre).
+ * scrive cambia solo il testo, in dissolvenza. Trattiene i tocchi come ogni capsula della chrome (fase H, D2: fra due voci la foto dietro non si apre).
  */
 @Composable
 fun GallerySuggestionBar(
@@ -93,7 +91,6 @@ fun GallerySuggestionBar(
         modifier = Modifier
           .widthIn(max = GallerySearchBarDefaults.MaxWidth)
           .fillMaxWidth()
-          .pointerInput(Unit) { detectTapGestures { } }
           .semantics {
             isTraversalGroup = true
             if (paneTitle != null) this.paneTitle = paneTitle

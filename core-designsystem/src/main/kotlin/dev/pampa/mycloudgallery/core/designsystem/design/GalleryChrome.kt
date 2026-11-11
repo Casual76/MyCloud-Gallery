@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -232,6 +233,12 @@ fun GalleryChromeCapsule(
  *    **isolato** (entrando in selezione il testo diventa "3 selezionati") non aspetta: la capsula si muove insieme al testo (GF-6).
  * Con le animazioni ridotte il testo cambia di colpo e la capsula prende subito la sua misura.
  *
+ * **Mentre il contenuto sotto si muove per un gesto** ([contentMoving]: un pinch fra i livelli, uno scorrimento, lo scrubber) la larghezza
+ * **non si anima**: la capsula prende subito la misura del testo nuovo, e il testo passa lo stesso in dissolvenza (P2, S25, 10/11). Il
+ * vetro sta sul nodo che cambia misura, e ogni fotogramma della molla sono tre superfici nuove sulla GPU, che scacciano le miniature
+ * dalla cache del RenderThread proprio mentre la griglia ne ha bisogno. Da fermi (entrando in selezione, cambiando filtro, e quando la
+ * capsula si stringe a gesto finito) la molla c'e'.
+ *
  * **La data non finisce con i puntini se una forma piu' corta entra** (GF-2, review della beta: sul telefono a 360 dp, con quattro
  * tasti nella capsula, restano 96 dp di testo). [shorterTitles] sono le forme piu' corte di [title], dalla piu' lunga alla piu'
  * stretta («Mer 20 nov 2024», «20 nov 2024»...): l'etichetta mostra la prima che entra nella larghezza che la riga le lascia. La
@@ -254,10 +261,14 @@ fun GalleryChromeLabel(
   modifier: Modifier = Modifier,
   shorterTitles: List<String> = emptyList(),
   shorterSubtitles: List<String>? = null,
+  contentMoving: () -> Boolean = { false },
 ) {
   val lines = remember(title, subtitle, shorterTitles, shorterSubtitles) {
     ChromeLabelLines(forms = listOf(title) + shorterTitles, subtitle = subtitle, subtitleForms = subtitleFormsOf(subtitle, shorterSubtitles))
   }
+  // Una lambda sola per tutta la vita dell'etichetta: il contenuto ricordato ([ChromeLabelSlot]) non cambia se chi chiama ne passa una nuova.
+  val movingNow = rememberUpdatedState(contentMoving)
+  val moving = remember { { movingNow.value() } }
   val shown = rememberChromePaced(lines, GalleryChromeDefaults.LabelPaceMillis)
   val fit = rememberChromeTitleFit(shown.forms, chromeTitleStyle())
   val subtitleFit = shown.subtitleForms?.let { forms -> rememberChromeTitleFit(forms, chromeSubtitleStyle()) }
@@ -275,7 +286,7 @@ fun GalleryChromeLabel(
   ) { constraints ->
     val form = if (constraints.hasBoundedWidth) fit.pick(constraints.maxWidth) else 0
     val subtitleForm = if (constraints.hasBoundedWidth && subtitleFit != null) subtitleFit.pick(constraints.maxWidth) else 0
-    val content = slot.contentFor(ChromeShownLines.of(shown, form, subtitleForm), ink, reduced)
+    val content = slot.contentFor(ChromeShownLines.of(shown, form, subtitleForm), ink, reduced, moving)
     val placeable = subcompose(Unit, content).first().measure(constraints.copy(minWidth = 0, minHeight = 0))
     val width = placeable.width.coerceIn(constraints.minWidth, constraints.maxWidth)
     val height = placeable.height.coerceIn(constraints.minHeight, constraints.maxHeight)
@@ -327,7 +338,8 @@ private class ChromeLabelSlot {
   private var reduced: Boolean = false
   private var content: (@Composable () -> Unit)? = null
 
-  fun contentFor(lines: ChromeShownLines, ink: Color, reduced: Boolean): @Composable () -> Unit {
+  /** [moving] e' la stessa lambda per tutta la vita dell'etichetta ([GalleryChromeLabel] la ricorda): non fa parte della chiave. */
+  fun contentFor(lines: ChromeShownLines, ink: Color, reduced: Boolean, moving: () -> Boolean): @Composable () -> Unit {
     val current = content
     if (current != null && lines == this.lines && ink == this.ink && reduced == this.reduced) return current
     this.lines = lines
@@ -337,7 +349,7 @@ private class ChromeLabelSlot {
       if (reduced) {
         GalleryChromeTitle(title = lines.title, subtitle = lines.subtitle, ink = ink, spoken = lines.spoken)
       } else {
-        MovingChromeTitle(lines, ink)
+        MovingChromeTitle(lines, ink, moving)
       }
     }
     content = next
@@ -398,8 +410,14 @@ private val TitleFitBackSlack = 2.dp
  * porta la capsula sulla misura del testo.
  */
 @Composable
-private fun MovingChromeTitle(lines: ChromeShownLines, ink: Color) {
+private fun MovingChromeTitle(lines: ChromeShownLines, ink: Color, moving: () -> Boolean) {
   val hold = remember { ChromeWidthHold() }
+  // P2 (S25, 10/11): mentre il contenuto sotto si muove per un gesto la larghezza **non** si anima. Il vetro sta sul nodo che cambia misura,
+  // e ogni fotogramma della molla sono tre superfici nuove sulla GPU (il pezzo, la cattura, l'ombra): nel pinch scacciavano le miniature dalla
+  // cache del RenderThread, e ogni cambio di livello le ricaricava (22 cambi di livello in ritardo su 28, contro 8 senza molla). Da fermi la
+  // molla resta. La risposta si legge da un `derivedStateOf`: questa funzione si ricompone quando il gesto comincia e quando finisce, non a
+  // ogni fotogramma. Togliere il modificatore a meta' di una molla porta subito la larghezza a quella del testo.
+  val still by remember(moving) { derivedStateOf { !moving() } }
   LaunchedEffect(lines) {
     // La prima composizione non e' un cambio.
     if (!hold.started) {
@@ -419,7 +437,7 @@ private fun MovingChromeTitle(lines: ChromeShownLines, ink: Color) {
   val target = rememberUpdatedState(lines)
   Box(
     modifier = Modifier
-      .animateContentSize(animationSpec = FluidMotion.intSize(), alignment = Alignment.CenterStart)
+      .then(if (still) Modifier.animateContentSize(animationSpec = FluidMotion.intSize(), alignment = Alignment.CenterStart) else Modifier)
       .widthIn(min = held),
     contentAlignment = Alignment.CenterStart,
   ) {

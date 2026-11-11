@@ -17664,3 +17664,116 @@ nomina sta in `src/main`) e nei **sorgenti di `src/main`** (strumenti solo-debug
 - I test di architettura della Fase 4 (`Phase4ArchitectureTest`) scandiscono `main`, `test` e `androidTest`, non `debug`: il codice spostato
   in `src/debug` resta coperto dalle regole delle fasi 8-10 (che leggono anche `debug`) e dai suoi test di sola lettura.
 - Nessun cambio visivo per l'utente: le schermate della release non cambiano. Nessuno screenshot da riregistrare.
+
+## P2: fluidita' sull'S25 dopo la diagnosi P1 (10/11)
+
+Ramo `perf/p2-fluidita`, da `integra/beta-grafica` `c5c383af` (cioe' `baecdbee` piu' Z1). Non integrato, niente push. La diagnosi e' in
+`MyCloud-Gallery-2-note-agenti\bench-s25-10-11\REPORT-P1.md`; il report di questo pacchetto e i dati in `REPORT-P2.md` e
+`LEGGIMI-DATI.md` nella stessa cartella. Le misure sul telefono sono state fermate dall'utente alle 23:13: il lato nuovo ha **una corsa
+completa e un pinch in piu'**, non due corse complete, e **l'avvio e il viewer con il profilo nuovo non sono misurati**.
+
+### Che cosa e' entrato (un commit per voce, ognuno si puo' tenere o togliere da solo)
+1. **`285f7e35` Lo strumento di accessibilita' acceso si ricorda in memoria** (invisibile). `app/.../describe/DescribeWiring.kt`:
+   `SystemA11yActivity` tiene la risposta di `getEnabledAccessibilityServiceList` finche' il sistema non avvisa che l'elenco dei servizi e'
+   cambiato (`addAccessibilityServicesStateChangeListener`, Android 13+). Senza servizi accesi non chiama niente, come prima; dove
+   l'avviso non c'e' (Android 12) o non si riesce a registrare, legge ogni volta, come prima; niente su disco. Test nuovi:
+   `RememberedA11yToolTest` (8, JVM pura) e `SystemA11yActivityTest` (4, Robolectric): si ricorda (1.500 domande, una lettura); si
+   aggiorna all'avviso; senza servizi niente chiamate e niente ricordato; un avviso arrivato durante la lettura butta la risposta; un
+   errore vale "no" e non si ricorda; niente su disco; le descrizioni delle celle arrivano quando lo screen reader si accende ad app
+   aperta e spariscono quando si spegne.
+2. **`327fd91d` L'etichetta in alto non anima la larghezza mentre la griglia si muove** (**visibile: da confermare con l'utente**).
+   `MovingChromeTitle` in `core-designsystem/.../design/GalleryChrome.kt` applica `animateContentSize` solo quando il contenuto e' fermo;
+   il segnale e' `MediaGridState.inMotion` (pinch in corso o scala diversa da 1, scorrimento, barra di scorrimento trascinata), passato
+   come lambda stabile da `GridTopChrome` e letto dentro un `derivedStateOf`: cambia due volte per gesto, non a ogni fotogramma (nelle
+   tracce le ricomposizioni per iterazione di scorrimento sono le stesse di prima). **Che cosa vede l'utente:** mentre pizzica o scorre,
+   la capsula con la data prende di colpo la larghezza del testo nuovo invece di allargarsi e stringersi con la molla; da ferma (entrare
+   in selezione, cambiare filtro, il rientro dopo la tenuta di 600 ms) la molla c'e' ancora, e il testo sfuma come prima. Tre test nuovi
+   in `GalleryChromeMotionTest`. Nessuno screenshot: e' un cambio di movimento, le immagini ferme sono identiche.
+   **Strada invisibile: non trovata.** Le due del brief le ho scartate a tavolino, senza provarle sul telefono: un vetro a taglia fissa
+   ritagliato da un contenitore animato taglia il bordo luminoso e l'ombra sul lato che si muove (li disegna l'engine sui confini del
+   nodo); una taglia del nodo a scalini o si vede (la capsula scatta a gradini o resta piu' larga del testo) o alloca comunque un layer
+   nuovo a ogni scalino. La correzione invisibile e' nell'engine (sotto).
+3. **`d06a356e` Baseline Profile rigenerato sull'S25** (era del 13/10). 38.341 -> 45.884 regole (galleria 7.280 -> 16.383, engine 2.549
+   -> 3.042). **Fatto a mano, da sapere:** il plugin ne aveva scritte 46.016, 132 delle quali delle classi del dataset di misura
+   (`dev.pampa.mycloudgallery.bench`); il filtro di `app/build.gradle` non le toglie dal profilo di avvio e la copia nei sorgenti le
+   rimette. Le ho tolte dai due file: il risultato e' identico byte per byte al file che il plugin stesso aveva filtrato. Alla prossima
+   generazione va rifatto, o serve un passo che lo faccia. **Effetto misurato: nessuno che si distingua dal rumore** nel pinch e nello
+   scorrimento a giorni (sotto), e nelle tracce il JIT compila ancora circa 40 metodi per iterazione di pinch, come prima. **Effetto
+   sull'avvio: non misurato.** Va misurato prima di tenerlo (una corsa di `coldStart`, `coldStartUsual`, `viewerOpen`: 8 minuti di
+   telefono), oppure si integrano solo le voci 1 e 2.
+- `8155eb8f` (miniature `HARDWARE`) **non e' stato portato**, e non ho riprovato la variante con la decodifica diretta.
+
+### I numeri (Galaxy S25, 10/11, corse alternate fuori da Gradle; jankPercent medio / P95 CPU in ms)
+B = `baecdbee`; M = voci 1+2 (`327fd91d`); N = voci 1+2+3 (`d06a356e`); A = `main` + C1 (da P1).
+
+| Prova | Soglie (`soglie.json`) | B (beta) | A (`main`), 2 corse | M, 1 corsa | N, corse fatte |
+|---|---|---|---|---|---|
+| `pinch` | <= 1%; guardia <= 0,685%; P95 <= 15,49 | 3,38-3,97 / 16,4-18,8 (5 corse) | 1,34-1,36 / 13,2-14,1 | 0,512 / 11,74 | **0,549 / 11,01** e **0,651 / 11,34** |
+| `scroll_days_square` | <= 1%; guardia <= 0,331%; P95 <= 12,85 | 0,77-1,17 / 14,5-15,9 (4 corse) | 0,48-0,76 / 11,5-12,4 | 0,500 / 11,55 | **0,564 / 11,48** (una) |
+| `scroll_all_square` | <= 1%; guardia <= 0,226%; P95 <= 10,41 | 0,43-0,47 / 10,9-11,4 (4 corse) | 0,34-0,40 / 9,7-10,3 | - | **0,406 / 10,49** (una) |
+| `scroll_all_justified` | <= 1%; guardia <= 0,37%; P95 <= 12,21 | 0,54-0,57 / 11,3-11,7 (2 corse) | - | - | **0,447 / 10,79** (una) |
+| `coldStart` (primo disegno utile p90) | < 750 ms | 561 ms (1 corsa) | - | - | **non misurato** |
+| `coldStartUsual` (primo disegno utile p90) | < 400 ms | 553 ms (mediana 341; telefono a 38,9 C) | - | - | **non misurato** |
+| `viewerOpen` (p90 / fotogramma piu' lungo) | < 100 ms; guardia <= 107 ms | 23,0 ms / 50,7 ms | - | - | **non misurato** |
+
+Temperatura della batteria durante le prove: 29-42 C, simile fra i lati (tabella completa nel report).
+
+### Che cosa si puo' dire e che cosa no
+- **Pinch: rientra.** Tre corse dei lati nuovi (M 0,51; N 0,55 e 0,65) contro cinque della beta (3,4-4,0) e due di `main` (1,34-1,36):
+  dentro l'1%, dentro la guardia e al livello del 13/10 (0,535). Lo scarto fra corse dello stesso lato e' 0,1 punti: il risultato e' solido.
+  Nelle tracce i cambi di livello in ritardo scendono da 21,7 a 3-4 su 27: le chiamate a `system_server` da 2,2 ms a zero (voce 1),
+  l'attesa del RenderThread da 10-11 a 1,1 ms e il RenderThread da 20 a 6 ms (voce 2).
+- **Scorrimento a giorni: torna sotto l'1% e al livello di `main`**, con una corsa di N e una di M (0,56 e 0,50) contro quattro della beta
+  (0,77-1,17). Due corse concordi di due lati quasi uguali: indicazione buona, non una prova con due corse dello stesso lato.
+- **"Tutte" quadrata e giustificata: non peggiorano; di piu' non si puo' dire.** Una corsa sola, e la differenza dalla beta (0,06-0,1
+  punti) e' grande quanto quella fra due corse dello stesso lato.
+- **Voce 3 sull'avvio e sul viewer: niente.** Ho solo la corsa della beta. E quella corsa dice che l'avvio abituale balla da solo: con
+  le stesse APK la corsa dell'orchestratore del pomeriggio faceva 320 ms di p90, la mia a telefono caldo 553.
+- L'effetto di ogni voce da sola non l'ho misurato sul telefono (solo 1+2 e 1+2+3); la divisione fra voce 1 e voce 2 viene dalle tracce.
+- N e M partono da `c5c383af`, le APK di B da `baecdbee`: in mezzo c'e' Z1 (residui di sviluppo tolti dalla release), che non tocca
+  la griglia; non l'ho misurato da solo.
+
+### Che cosa resta fuori soglia e perche'
+- **La guardia del 13/10 sui tre scorrimenti** (N: 0,56 / 0,41 / 0,45 contro 0,331 / 0,226 / 0,37) e, per 0,08 ms, il P95 di "Tutte"
+  quadrata. Non e' della fase grafica: `main` e' fuori dalla stessa guardia (0,48-0,76 e 0,34-0,40). La causa (REPORT-P1 §2.2) e' il
+  vetro dell'engine 3.0: la pagina ridisegnata in un layer a schermo intero a ogni fotogramma e i layer di ogni pezzo di vetro occupano
+  la cache GPU, e le miniature si ricaricano migliaia di volte per iterazione. Nell'app non ho trovato una correzione invisibile.
+- **Proposta:** (1) la richiesta all'engine qui sotto; (2) dopo l'integrazione, una corsa intera a telefono fresco e un **riferimento
+  nuovo accettato dall'utente** (`tools\bench\compare.ps1 -Accept`): quello del 13/10 e' di prima dell'engine 3.0 e resta rosso anche a
+  lavoro fatto; (3) la soglia assoluta dell'1% non va toccata: con P2 pinch e scorrimenti ci stanno dentro.
+- Resta un residuo dell'etichetta: il rientro con la molla dopo la tenuta di 600 ms, a griglia ferma, crea ancora un centinaio di
+  larghezze di layer per iterazione di scorrimento a giorni (107 contro le 42 di `main`). L'ho lasciato perche' e' la parte della molla
+  che si vede meglio; farlo scattare quando viene da uno scorrimento sono poche righe, effetto non misurato.
+
+### Richiesta per l'engine (si puo' inoltrare cosi')
+**Fluid Engine 3.0.4 (`2acfb65`), vetro: allocare i layer a taglie arrotondate per eccesso.**
+- *Che cosa succede.* Un pezzo di vetro (`glassSurface`) registra tre layer grandi quanto il nodo: il pezzo (`DrawBackdropModifier.kt`,
+  `recordSize`), la luce (`HighlightModifier.kt`, `highlightLayer.record(safeSize)`) e l'ombra (`ShadowModifier.kt`, `shadowLayer.record(shadowSize)`; `InnerShadowModifier.kt`).
+  Se la misura del nodo si anima (`animateContentSize`, una molla sulla larghezza), a ogni fotogramma i tre layer hanno una misura
+  nuova e hwui alloca tre superfici GPU nuove. La cache GPU del RenderThread ha un tetto (121 MB sul Galaxy S25): le superfici nuove
+  scacciano le texture dell'app, che si ricaricano nei fotogrammi dopo mentre il thread principale aspetta.
+- *Misura (Galaxy S25, Android 17, 120 Hz, capsula alta 139 px che cambia larghezza con `FluidMotion.intSize()` durante un pinch).*
+  Misure diverse dei layer per iterazione: 383 con la molla, 16 senza; allocazioni `vkAllocateMemory`: 1.249 (588 MB) contro 127
+  (57 MB); fotogrammi in ritardo: 3,4-4,0% contro 1,35%.
+- *Richiesta.* Allocare i layer del vetro a una taglia arrotondata per eccesso a un passo fisso (per esempio multipli di 64 px per
+  lato), disegnando e ritagliando alla misura vera, con le uniform degli shader calcolate sulla misura vera: una misura che cambia di
+  pochi pixel per fotogramma riusa le stesse superfici. L'aspetto non deve cambiare di un pixel.
+- *Come si verifica.* Con una capsula di vetro che anima la larghezza sopra una griglia di immagini: le misure diverse dei layer
+  (`drawLayer` nella traccia Perfetto del RenderThread) devono scendere da una per fotogramma a una per scalino, e le allocazioni GPU
+  tornare al livello senza animazione. Nell'app basta togliere il commit `327fd91d` e rifare `pinch`.
+- *Seconda cosa, da valutare insieme.* `glassBackdropSource` ridisegna tutta la pagina in un layer fuori schermo a ogni fotogramma
+  (circa 3.000 disegni da 1080x2340 per iterazione di scorrimento): catturare solo le fasce dietro i pezzi di vetro toglierebbe il
+  grosso del lavoro che oggi tiene gli scorrimenti fuori dalla guardia del 13/10. Di questa non ho una misura del guadagno.
+
+### Da provare sul telefono e decisioni aperte
+- **Per l'utente:** va bene che la capsula in alto scatti alla larghezza nuova mentre si scorre o si pizzica (voce 2)? Se no, il pinch
+  torna a 3,4-4,0% finche' l'engine non cambia.
+- Avvio e viewer con il profilo nuovo (`coldStart`, `coldStartUsual`, `viewerOpen`), a confronto con la beta nella stessa seduta.
+- Una seconda corsa del lato nuovo dei tre scorrimenti, e dopo l'integrazione la corsa intera per il riferimento nuovo.
+- TalkBack acceso e spento ad app aperta: le celle si descrivono e smettono (coperto dai test, mai visto sul telefono).
+
+### Verifiche
+- `p2-1` (APK di misura delle voci 1+2): OK, 5 min 36 s. `p2-2` (test JVM: `core-designsystem` 31, `feature-library` 18, `app` 16;
+  0 falliti): OK, 4 min 52 s. `p2-3` (`:app:generateBaselineProfile` sull'S25): OK, 40 min 9 s. `p2-4` (APK di misura finali): OK,
+  3 min 33 s. Ogni batch chiesto prima, un posto del semaforo, rilasciato. `tools\check.ps1` non lanciato.
+- Telefono alla fine: solo `dev.pampa.mycloudgallery.debug`, nessuna cartella di misura, schermata Home.

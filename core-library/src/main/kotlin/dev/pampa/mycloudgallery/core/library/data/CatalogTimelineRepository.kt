@@ -59,6 +59,8 @@ class CatalogTimelineRepository(
   private val scope: CoroutineScope,
   private val worker: CoroutineDispatcher = Dispatchers.Default,
   writeDelayMs: Long = SnapshotWriter.DEFAULT_DELAY_MS,
+  /** Finestra di accorpamento scelta dall'app; zero = nessuna attesa (secondo piano). */
+  private val publicationWindowMs: () -> Long = { 0L },
 ) : TimelineRepository {
 
   private sealed interface Message {
@@ -265,6 +267,11 @@ class CatalogTimelineRepository(
       firstSnapshot.complete(Unit)
     }
     for (first in inbox) {
+      // HR: accumula i lotti prima di costruire/pubblicare l'indice. Non debounce:
+      // una scansione continua deve avanzare anche senza una pausa fra le scritture.
+      // Fuori dal primo piano la finestra vale zero; forget resta immediato.
+      val window = publicationWindowMs().coerceAtLeast(0L)
+      if (window > 0L) delay(window)
       val batch = ArrayList<Message>()
       batch += first
       while (true) batch += inbox.tryReceive().getOrNull() ?: break

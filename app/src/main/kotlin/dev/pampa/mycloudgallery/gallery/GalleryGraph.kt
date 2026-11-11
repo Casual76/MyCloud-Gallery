@@ -514,7 +514,8 @@ class GalleryGraph(
 
   /** Il repository della timeline: uno per processo. Parte con [startWhenReady]. */
   val repository: CatalogTimelineRepository = AvvioTrace.section("MCG:galleria:repositoryNuovo") {
-    CatalogTimelineRepository(timelineSource, SnapshotStore(parts.replicaDir), galleryScope, dispatchers.default, parts.snapshotDelayMs)
+    CatalogTimelineRepository(timelineSource, SnapshotStore(parts.replicaDir), galleryScope, dispatchers.default, parts.snapshotDelayMs,
+      publicationWindowMs = { if (foreground) 250L else 0L })
   }
 
   /** Preferiti e nascosti sul catalogo (nascondere toglie prima dall'indice e dall'istantanea, E-H1). */
@@ -901,7 +902,8 @@ class GalleryGraph(
 
   /** La sincronizzazione agganciata al primo piano (quella vera o quella ferma della misura). */
   private fun attachSync() {
-    currentSync()?.attach(galleryScope)
+    currentSync()?.attach(CoroutineScope(galleryScope.coroutineContext +
+      dev.pampa.mycloudgallery.core.rules.run.YieldToApp({ foreground })))
   }
 
   /**

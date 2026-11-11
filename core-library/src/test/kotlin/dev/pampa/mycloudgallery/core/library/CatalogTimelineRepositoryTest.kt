@@ -14,6 +14,7 @@ import java.util.UUID
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -68,6 +69,31 @@ class CatalogTimelineRepositoryTest {
     val dispatcher = StandardTestDispatcher(testScheduler)
     val store = SnapshotStore(dir, io = dispatcher)
     return CatalogTimelineRepository(source, store, scope, worker = dispatcher, writeDelayMs = 5_000) to store
+  }
+
+  @Test
+  fun primaLetturaRaggruppaCentoLottiSenzaPerdereMedia() = runTest {
+    val source = model(0)
+    val repo = CatalogTimelineRepository(source, null, backgroundScope,
+      worker = StandardTestDispatcher(testScheduler), publicationWindowMs = { 250L })
+    repo.start()
+    runCurrent()
+    var emissions = 0
+    backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) {
+      repo.snapshot.collect { emissions++ }
+    }
+    repeat(100) { i ->
+      val id = UUID(0, i.toLong()).toString()
+      source.media[id] = ModelSource.Media(indexRow(id, sortTime = i.toLong()))
+      source.commit(listOf(id), structural = true)
+      advanceTimeBy(10)
+      runCurrent()
+    }
+    advanceTimeBy(300)
+    runCurrent()
+    println("HR cento lotti: patch=${repo.patches}, emissioni=${emissions - 1}, seq=${repo.snapshot.value!!.seq}, media=${repo.snapshot.value!!.size}")
+    assertSameIndex(repo.snapshot.value!!, source.expected())
+    assertThat(repo.patches).isAtMost(4)
   }
 
   @Test

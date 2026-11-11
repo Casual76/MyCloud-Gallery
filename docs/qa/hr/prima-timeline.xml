@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.pampa.mycloudgallery.core.library.CatalogTimelineRepositoryTest" tests="1" skipped="0" failures="1" errors="0" timestamp="2026-11-11T11:48:16.907Z" hostname="PC_FISSO" time="0.387">
+  <properties/>
+  <testcase name="primaLetturaRaggruppaCentoLottiSenzaPerdereMedia" classname="dev.pampa.mycloudgallery.core.library.CatalogTimelineRepositoryTest" time="0.387">
+    <failure message="expected to be at most: 4&#10;but was               : 100" type="com.google.common.truth.AssertionErrorWithFacts">expected to be at most: 4
+but was               : 100
+	at app//dev.pampa.mycloudgallery.core.library.CatalogTimelineRepositoryTest$primaLetturaRaggruppaCentoLottiSenzaPerdereMedia$1.invokeSuspend(CatalogTimelineRepositoryTest.kt:96)
+	at app//kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at app//kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at app//kotlinx.coroutines.test.TestDispatcher.processEvent$kotlinx_coroutines_test(TestDispatcher.kt:24)
+	at app//kotlinx.coroutines.test.TestCoroutineScheduler.tryRunNextTaskUnless$kotlinx_coroutines_test(TestCoroutineScheduler.kt:99)
+	at app//kotlinx.coroutines.test.TestBuildersKt__TestBuildersKt$runTest$2$1$workRunner$1.invokeSuspend(TestBuilders.kt:326)
+	at app//kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at app//kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at app//kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at app//kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:94)
+	at app//kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:70)
+	at app//kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source)
+	at app//kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+	at app//kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source)
+	at app//kotlinx.coroutines.test.TestBuildersJvmKt.createTestResult(TestBuildersJvm.kt:10)
+	at app//kotlinx.coroutines.test.TestBuildersKt__TestBuildersKt.runTest-8Mi8wO0(TestBuilders.kt:309)
+	at app//kotlinx.coroutines.test.TestBuildersKt.runTest-8Mi8wO0(Unknown Source)
+	at app//kotlinx.coroutines.test.TestBuildersKt__TestBuildersKt.runTest-8Mi8wO0(TestBuilders.kt:167)
+	at app//kotlinx.coroutines.test.TestBuildersKt.runTest-8Mi8wO0(Unknown Source)
+	at app//kotlinx.coroutines.test.TestBuildersKt__TestBuildersKt.runTest-8Mi8wO0$default(TestBuilders.kt:159)
+	at app//kotlinx.coroutines.test.TestBuildersKt.runTest-8Mi8wO0$default(Unknown Source)
+	at app//dev.pampa.mycloudgallery.core.library.CatalogTimelineRepositoryTest.primaLetturaRaggruppaCentoLottiSenzaPerdereMedia(CatalogTimelineRepositoryTest.kt:75)
+</failure>
+  </testcase>
+  <system-out><![CDATA[HR cento lotti: patch=100, emissioni=100, seq=100, media=100
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -182,7 +182,7 @@ class NasStages(private val graph: AppGraph, private val nas: NasGraph, private 
     var read = false
     val outcome = stage(WorkRequest.Background(BackgroundActivity.INDEX_SYNC), capped = true).run({ scope, _ ->
       val cap = DetectionCap.byteCap(scope.request, scope.run)
-      val reports = nas.scan(mode, SLICE, detectionByteCap = cap) ?: return@run BatchResult(hasMore = false)
+      val reports = graph.quietly { nas.scan(mode, SLICE, detectionByteCap = cap) } ?: return@run BatchResult(hasMore = false)
       scope.record(reports.sumOf { it.bytesRead })
       if (readSomething(reports)) read = true
       BatchResult(hasMore = reports.isEmpty() || reports.any { !it.complete && it.stoppedBy != null && it.stoppedBy !in FINAL_STOPS })
@@ -199,7 +199,7 @@ class NasStages(private val graph: AppGraph, private val nas: NasGraph, private 
     val outcome = stage(WorkRequest.Background(BackgroundActivity.INDEX_SYNC)).run({ scope, _ ->
       // D23 (Q7): sui dati mobili solo metadati e cio' che e' sullo schermo; le miniature aspettano il Wi-Fi.
       val mobile = scope.network == NetworkClass.MOBILE || scope.network == NetworkClass.ROAMING
-      val report = nas.syncIndex(SLICE, visibleOnly = mobile) ?: return@run BatchResult(hasMore = false)
+      val report = graph.quietly { nas.syncIndex(SLICE, visibleOnly = mobile) } ?: return@run BatchResult(hasMore = false)
       scope.record(report.bytesDownloaded)
       BatchResult(hasMore = !report.complete)
     })

@@ -124,4 +124,6 @@
   </plurals>
   <string name="models_probe_failed">Non sono riuscito a misurare.</string>
   <string name="models_probe_retry">Riprova</string>
+  <string name="models_probe_hot">Il telefono è caldo: misuro più tardi.</string>
+  <string name="models_probe_busy">La misura precedente deve ancora finire.</string>
 </resources>

@@ -48,9 +48,11 @@ class VectorChecksAndProbeTest {
     val first = backgroundScope.launch { single.measure() }
     try {
       runCurrent(); first.cancel(); runCurrent()
+      assertThat(single.availability()).isEqualTo(dev.pampa.mycloudgallery.core.ai.contract.ProbeAvailability.BUSY)
       assertThat(runCatching { single.measure() }.isFailure).isTrue()
       assertThat(calls).isEqualTo(1)
       release.complete(Unit); runCurrent()
+      assertThat(single.availability()).isEqualTo(dev.pampa.mycloudgallery.core.ai.contract.ProbeAvailability.READY)
       single.measure()
       assertThat(calls).isEqualTo(2)
     } finally {

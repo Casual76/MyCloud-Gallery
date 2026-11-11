@@ -65,12 +65,14 @@ fun SearchSettingsScreen(
   handlers: SearchSettingsHandlers,
   onBack: () -> Unit,
   probeFailed: Boolean = false,
+  probeHot: Boolean = false,
+  probeBusy: Boolean = false,
 ) {
   val resources = LocalContext.current.resources
   FluidScreen(title = stringResource(R.string.models_title), subtitle = stringResource(R.string.models_subtitle), onBack = onBack) {
     if (hasIndexer) {
       item(key = "indexer-header") { GallerySectionHeader(title = stringResource(R.string.models_section_indexer)) }
-      item(key = "indexer") { IndexerBlock(state, measuring, handlers, probeFailed) }
+      item(key = "indexer") { IndexerBlock(state, measuring, handlers, probeFailed, probeHot, probeBusy) }
     }
     if (hasTextReading) {
       item(key = "reading-header") { GallerySectionHeader(title = stringResource(R.string.models_section_reading)) }
@@ -103,7 +105,7 @@ fun SearchSettingsScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handlers: SearchSettingsHandlers, probeFailed: Boolean) {
+private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handlers: SearchSettingsHandlers, probeFailed: Boolean, probeHot: Boolean, probeBusy: Boolean) {
   val indexer = state.indexer
   val title = stringResource(R.string.models_indexer_title)
   val detail = stringResource(R.string.models_indexer_detail)
@@ -128,7 +130,7 @@ private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handler
       FluidListDivider()
       FluidListRow(title = stringResource(R.string.models_status_title), subtitle = statusText(resources, indexer.status), tone = statusTone(indexer.status), disclosure = false, titleMaxLines = 3)
       FluidListDivider()
-      FluidListRow(title = if (probeFailed) stringResource(R.string.models_probe_failed) else estimateText(resources, indexer.toAnalyze, indexer.nights, measuring), subtitle = if (measuring || probeFailed) "" else probeText(resources, indexer, false), disclosure = false, titleMaxLines = 4)
+      FluidListRow(title = if (probeHot) stringResource(R.string.models_probe_hot) else if (probeBusy) stringResource(R.string.models_probe_busy) else if (probeFailed) stringResource(R.string.models_probe_failed) else estimateText(resources, indexer.toAnalyze, indexer.nights, measuring), subtitle = if (measuring || probeFailed || probeHot || probeBusy) "" else probeText(resources, indexer, false), disclosure = false, titleMaxLines = 4)
     }
   }
   if (state.offerRemoveIndexModel) RemoveIndexModelSheet(handlers)
@@ -140,7 +142,7 @@ private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handler
       horizontalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
       verticalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
     ) {
-      if (probeFailed) FluidButton(text = stringResource(R.string.models_probe_retry), onClick = handlers::onRetryProbe, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
+      if (probeFailed && !probeHot && !probeBusy && state.models.models.any { it.id == dev.pampa.mycloudgallery.core.models.contract.ModelCatalog.INDEX_440M.id && it.state is dev.pampa.mycloudgallery.core.models.contract.ModelState.Ready }) FluidButton(text = stringResource(R.string.models_probe_retry), onClick = handlers::onRetryProbe, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
       FluidButton(text = stringResource(R.string.models_index_now), onClick = handlers::onIndexNow, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
       if (problem != null) {
         for (action in SearchCodes.actions(problem)) {

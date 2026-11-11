@@ -39,18 +39,41 @@ class SearchSettingsControllerTest {
   }
   private val probe = FakeDeviceProbe(ProbeResult(imagesPerSecond = 2.8, backend = AiBackend.GPU, coldStartMs = 3_600))
 
-  private fun TestScope.controller(withIndexer: Boolean = true, withReading: Boolean = true) = SearchSettingsController(
+  private fun TestScope.controller(withIndexer: Boolean = true, withReading: Boolean = true, probePort: dev.pampa.mycloudgallery.core.ai.contract.DeviceProbe = probe) = SearchSettingsController(
     indexer = if (withIndexer) indexer else null,
     models = models,
     engine = engine,
     history = history,
     textReading = if (withReading) reading else null,
     accepted = if (withReading) accepted else null,
-    probe = probe,
+    probe = probePort,
     scope = backgroundScope,
     probeDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
     io = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
   ).also { runCurrent() }
+
+  @Test fun cs13_ilCaldoHaUnMotivoEPoiLaMisuraRiparteDaSola() = runTest {
+    var hot = true
+    val port = object : dev.pampa.mycloudgallery.core.ai.contract.DeviceProbe {
+      override suspend fun availability() = if (hot) dev.pampa.mycloudgallery.core.ai.contract.ProbeAvailability.HOT else dev.pampa.mycloudgallery.core.ai.contract.ProbeAvailability.READY
+      override suspend fun measure(): ProbeResult {
+        if (hot) throw dev.pampa.mycloudgallery.core.ai.contract.ProbeUnavailable(availability())
+        return probe.measure()
+      }
+    }
+    indexer.indexer.value = true
+    models.set(ModelCatalog.INDEX_440M.id, ModelState.Ready(1, ModelSourceKind.HTTPS, 0))
+    val c = controller(probePort = port)
+    runCurrent()
+    assertThat(c.probeHot.value).isTrue()
+    assertThat(c.probeFailed.value).isFalse()
+    assertThat(probe.measures).isEqualTo(0)
+    hot = false
+    testScheduler.advanceTimeBy(2001); runCurrent()
+    assertThat(c.probeHot.value).isFalse()
+    assertThat(probe.measures).isEqualTo(1)
+    assertThat(c.state.value.indexer.probe).isNotNull()
+  }
 
   @Test
   fun ilPrimoStatoUsaIlRuoloGiaNotoSenzaAspettareIlDisco() = runTest {
@@ -90,8 +113,11 @@ class SearchSettingsControllerTest {
       testScheduler.advanceTimeBy(120_001); runCurrent()
       assertThat(c.measuring.value).isFalse()
       assertThat(c.probeFailed.value).isTrue()
+      assertThat(c.probeBusy.value).isTrue()
       c.measure(); runCurrent(); assertThat(calls).isEqualTo(1)
       release.complete(Unit); runCurrent()
+      testScheduler.advanceTimeBy(2001); runCurrent()
+      assertThat(c.probeBusy.value).isFalse()
       c.measure(); runCurrent(); assertThat(calls).isEqualTo(2)
       assertThat(c.probeFailed.value).isTrue()
     } finally {

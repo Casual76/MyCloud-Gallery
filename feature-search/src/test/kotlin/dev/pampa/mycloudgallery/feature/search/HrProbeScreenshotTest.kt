@@ -26,8 +26,20 @@ abstract class HrProbeScreenshotBase(private val dark: Boolean, private val mode
     val handlers = object : SearchSettingsHandlers by NoSearchSettingsHandlers {
       override fun onRetryProbe() { retries++ }
     }
+    val sample = SearchSamples.settingsIndexer
+    val state = if (mode == "normale") sample else sample.copy(
+      indexer = sample.indexer.copy(probe = null, nights = null),
+      models = sample.models.copy(models = sample.models.models.map { row ->
+        if (row.id == dev.pampa.mycloudgallery.core.models.contract.ModelCatalog.INDEX_440M.id)
+          row.copy(state = dev.pampa.mycloudgallery.core.models.contract.ModelState.Ready(row.sizeBytes, dev.pampa.mycloudgallery.core.models.contract.ModelSourceKind.NAS, 0), source = dev.pampa.mycloudgallery.core.models.contract.ModelSourceKind.NAS) else row
+      }),
+    )
     rule.setSearchContent(dark = dark) {
-      SearchSettingsScreen(SearchSamples.settingsIndexer, mode == "misura", true, true, true, handlers, onBack = {}, probeFailed = mode == "errore")
+      SearchSettingsScreen(state, mode == "misura", true, true, true, handlers, onBack = {}, probeFailed = mode == "errore" || mode == "occupato", probeHot = mode == "caldo", probeBusy = mode == "occupato")
+    }
+    if (mode == "caldo" || mode == "occupato") {
+      rule.onNodeWithText(if (mode == "caldo") "Il telefono è caldo: misuro più tardi." else "La misura precedente deve ancora finire.").performScrollTo()
+      assertThat(rule.onAllNodesWithText("Riprova").fetchSemanticsNodes()).isEmpty()
     }
     if (mode == "misura") {
       rule.onNodeWithText("Misuro la velocit\u00e0 del telefono\u2026").performScrollTo()
@@ -42,7 +54,7 @@ abstract class HrProbeScreenshotBase(private val dark: Boolean, private val mode
     rule.onRoot().captureRoboImage("../docs/screenshots/beta-grafica/HR/modelli-$mode-${if (dark) "scuro" else "chiaro"}-$device.png")
   }
   companion object {
-    fun parameters() = listOf("normale", "misura", "errore").flatMap { mode -> listOf(arrayOf<Any>(false, mode), arrayOf<Any>(true, mode)) }
+    fun parameters() = listOf("normale", "misura", "errore", "caldo", "occupato").flatMap { mode -> listOf(arrayOf<Any>(false, mode), arrayOf<Any>(true, mode)) }
   }
 }
 @RunWith(ParameterizedRobolectricTestRunner::class)

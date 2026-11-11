@@ -8,12 +8,22 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 internal suspend fun watchIndexerModels(
   roles: Flow<Boolean>, allowed: () -> Boolean,
   needed: suspend (ModelTrigger) -> Boolean,
+  firstRequestDone: suspend () -> Boolean = { true },
+  markFirstRequestDone: suspend () -> Unit = {},
+  firstRequest: (suspend () -> Unit)? = null,
   request: suspend (ModelTrigger) -> Unit,
 ) {
   var previous: Boolean? = null
   roles.distinctUntilChanged().collect { on ->
+    val initial = previous == null
     val trigger = if (previous == false) ModelTrigger.ROLE_CHANGED else ModelTrigger.RULES
     previous = on
-    if (on && allowed() && needed(trigger)) request(trigger)
+    if (on && allowed()) {
+      if (initial && !firstRequestDone()) {
+        // Non ripristina un modello rimosso prima di aggiornare l'app.
+        if (needed(ModelTrigger.RULES)) { if (firstRequest != null) firstRequest() else request(ModelTrigger.ROLE_CHANGED) }
+        markFirstRequestDone()
+      } else if (needed(trigger)) request(trigger)
+    }
   }
 }

@@ -83,6 +83,16 @@ class AiWorkSchedulingTest {
     )
   }
 
+  @Test fun cr7_ilRiavvioAutomaticoNonSostituisceLaRichiestaEsplicitaInCoda() {
+    AiWorkScheduling.fetchNow(context, ModelTrigger.ROLE_CHANGED)
+    val before = workManager.getWorkInfosForUniqueWork(AiWorkScheduling.FETCH_NOW_WORK).get().single()
+    AiWorkScheduling.fetchNow(context, ModelTrigger.RULES)
+    AiWorkScheduling.fetchNow(context, ModelTrigger.ROLE_CHANGED, automatic = true)
+    val after = workManager.getWorkInfosForUniqueWork(AiWorkScheduling.FETCH_NOW_WORK).get().single()
+    assertThat(after.id).isEqualTo(before.id)
+    assertThat(after.state).isEqualTo(WorkInfo.State.ENQUEUED)
+  }
+
   @Test
   fun ix1_indicizzaOraConLavoroPerTreTappeFaGirareTreTappe() {
     Script.reset(stages = 3)

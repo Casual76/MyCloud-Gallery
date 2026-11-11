@@ -100,7 +100,7 @@ fun SearchResultsGrid(
   val opening = remember(results) { SearchGridEntries.openingView(results) }
   val style = rememberGalleryGridCellStyle(cornerScale = GalleryWall.CornerScale)
   val interaction = remember { GalleryGridInteractionState() }
-  val anchor = remember(results, gridState) { ResultsAnchor(results, entries, gridState) }
+  val anchor = remember(results, gridState, interaction) { ResultsAnchor(results, entries, gridState, interaction) }
   val scope = rememberCoroutineScope()
   val reduced = LocalFluidMotionPolicy.current.reducedMotion
   val haptics = LocalFluidHaptics.current
@@ -337,11 +337,16 @@ private suspend fun followWindow(state: LazyGridState, entries: List<GridEntry>,
  * L'ancora del viewer aperto dai risultati (H4): come quella della Libreria, il viewer parte dalla cella toccata e, chiudendosi, torna sulla cella del
  * media che si stava guardando (portandola in vista se serve). Le posizioni le danno le celle composte ([place]): niente stato, niente lavoro per
  * fotogramma oltre a un riferimento.
+ *
+ * La cella d'origine vuota durante l'apertura e la chiusura del viewer (CU-1, pacchetto H1): le celle dei risultati sono le `GalleryGridCell` della
+ * Libreria con lo stesso stato dell'interazione ([interaction]), quindi il disegno della cella vuota lo ereditano. Con il contratto di H1
+ * (`ViewerAnchor.hide`) l'aggancio e' una riga: `override fun hide(id: MediaId?) { interaction.hiddenKey = id }`, come nella Libreria.
  */
 internal class ResultsAnchor(
   private val results: SearchScreenState.Results,
   private val entries: List<GridEntry>,
   private val gridState: LazyGridState,
+  internal val interaction: GalleryGridInteractionState,
 ) : ViewerAnchor {
   private val byId = HashMap<MediaId, LayoutCoordinates>()
   private val idOf = HashMap<LayoutCoordinates, MediaId>()

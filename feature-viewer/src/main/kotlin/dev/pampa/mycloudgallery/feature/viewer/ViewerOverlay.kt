@@ -1159,7 +1159,11 @@ private fun ViewerOverlays(
   val placeMapPanel = rememberPlaceMapPanel(services.placeMap, currentId, active = infoVisible, secure = request.secure, onOpenMaps = onOpenMaps)
   val placeOpenMaps = if (placeMapPanel.sections.isEmpty()) onOpenMaps else null
   // Gli album dell'elemento (giro di correzione 1): letti solo a pannello aperto, mai dai Nascosti.
-  val albumsPanel = rememberAlbumsPanel(services.mediaAlbums, currentId, active = infoVisible && !request.secure)
+  // CS-22: la capsula chiude il viewer con la sua chiusura (il volo alla cella, o l'allontanarsi dove la cella non c'e') e solo dopo apre l'album.
+  val albumsPanel = rememberAlbumsPanel(services.mediaAlbums, currentId, active = infoVisible && !request.secure) { album ->
+    val source = services.mediaAlbums
+    controller.close(then = { source?.open(album) })
+  }
   // H2: cambiando elemento a pannello aperto le informazioni nuove sostituiscono le vecchie con una dissolvenza breve, senza lampi.
   val infoFade = remember { Animatable(1f) }
   LaunchedEffect(currentId) {

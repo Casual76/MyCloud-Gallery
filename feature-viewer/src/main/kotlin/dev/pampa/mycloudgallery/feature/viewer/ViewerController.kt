@@ -268,16 +268,19 @@ internal class ViewerController(
   var exitingVideo: Boolean by mutableStateOf(false)
     private set
 
-  /** Chiude (tasto, Indietro, swipe o pizzico gia' decisi): il contenuto vola alla cella di cio' che si sta guardando. */
-  fun close(velocity: Offset = Offset.Zero) {
+  /**
+   * Chiude (tasto, Indietro, swipe o pizzico gia' decisi): il contenuto vola alla cella di cio' che si sta guardando. [then] (CS-22) e' quello che si fa
+   * quando il viewer se n'e' andato (aprire l'album toccato nel pannello): dopo il volo, mai al suo posto.
+   */
+  fun close(velocity: Offset = Offset.Zero, then: (() -> Unit)? = null) {
     if (closing) return
     closing = true
     returnJob?.cancel()
     returnJob = null
-    scope.launch { closeNow(velocity) }
+    scope.launch { closeNow(velocity, then) }
   }
 
-  private suspend fun closeNow(velocity: Offset) {
+  private suspend fun closeNow(velocity: Offset, then: (() -> Unit)? = null) {
     // CU-1: la foto vola nella sua cella, che resta vuota fino all'arrivo.
     hideCell(state.currentId)
     motion.stopAll()
@@ -303,6 +306,7 @@ internal class ViewerController(
     // La foto e' nella cella: la cella torna a disegnarsi nello stesso fotogramma in cui il viewer se ne va.
     hideCell(null)
     onClosed()
+    then?.invoke()
   }
 
   /** La cella di [id] nelle coordinate del viewer, o null se non e' sullo schermo o non c'e' una griglia sotto. */

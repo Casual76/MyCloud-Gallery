@@ -11,6 +11,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.FluidChip
@@ -49,15 +50,22 @@ internal class AlbumsPanel(val sections: List<InfoSectionModel>) {
 
 /** La sezione "Album" per [media] mentre il pannello e' aperto ([active]): un tocco su un album lo apre. */
 @Composable
-internal fun rememberAlbumsPanel(source: ViewerMediaAlbums?, media: MediaId, active: Boolean): AlbumsPanel {
+internal fun rememberAlbumsPanel(
+  source: ViewerMediaAlbums?,
+  media: MediaId,
+  active: Boolean,
+  onOpen: ((ViewerAlbumEntry) -> Unit)? = null,
+): AlbumsPanel {
   if (source == null || !active) return AlbumsPanel.NONE
   val albums by remember(source, media) { source.albumsOf(media) }.collectAsState(initial = emptyList())
   val header = stringResource(R.string.viewer_albums_header)
-  val sections = remember(albums, source, header) {
+  // CS-22: nel viewer il tocco chiude prima il viewer (con il suo volo) e poi apre l'album; da solo (le prove del pannello) apre e basta.
+  val open = rememberUpdatedState(onOpen ?: source::open)
+  val sections = remember(albums, header) {
     if (albums.isEmpty()) {
       emptyList()
     } else {
-      listOf(InfoSectionModel(header = header, rows = emptyList(), content = { AlbumEntries(albums, source::open) }, icon = Icons.Rounded.PhotoAlbum))
+      listOf(InfoSectionModel(header = header, rows = emptyList(), content = { AlbumEntries(albums) { open.value(it) } }, icon = Icons.Rounded.PhotoAlbum))
     }
   }
   return AlbumsPanel(sections)

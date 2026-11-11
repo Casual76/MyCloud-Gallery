@@ -55,4 +55,22 @@ class AppMediaAlbumsTest {
     port.open(port.albumsOf(media).first().single())
     assertThat(opened).containsExactly(vacanze)
   }
+
+  @Test
+  fun lAlbumGiaInCimaNonSiApreDiNuovo(): Unit = runBlocking {
+    // CS-22: il viewer aperto dalla pagina di "Vacanze": la sua capsula non apre una seconda copia della pagina; un altro album si apre.
+    val vacanze = manual("Vacanze 2024")
+    val famiglia = manual("Famiglia")
+    val opened = mutableListOf<AlbumId>()
+    val opener = AlbumOpener().apply {
+      onOpen = { opened += it }
+      onTop = { vacanze }
+    }
+    val port = AppMediaAlbums({ albums }, itemsOf = { setOf(vacanze.value, famiglia.value) }, opener = opener)
+    val entries = port.albumsOf(media).first()
+    port.open(entries.single { it.key == vacanze.value })
+    assertThat(opened).isEmpty()
+    port.open(entries.single { it.key == famiglia.value })
+    assertThat(opened).containsExactly(famiglia)
+  }
 }

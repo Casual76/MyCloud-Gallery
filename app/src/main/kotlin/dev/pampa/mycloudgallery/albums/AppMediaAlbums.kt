@@ -52,5 +52,12 @@ class AppMediaAlbums(
 class AlbumOpener {
   @Volatile var onOpen: (AlbumId) -> Unit = {}
 
-  fun open(id: AlbumId) = onOpen(id)
+  /** CS-22: l'album la cui pagina e' in cima alla navigazione (il viewer era aperto da li'), se c'e'. Lo scrive la navigazione. */
+  @Volatile var onTop: () -> AlbumId? = { null }
+
+  /** Apre l'album [id], se non e' gia' la pagina in cima: toccare la capsula dell'album da cui si guarda non ne apre una seconda copia. */
+  fun open(id: AlbumId) {
+    if (onTop() == id) return
+    onOpen(id)
+  }
 }

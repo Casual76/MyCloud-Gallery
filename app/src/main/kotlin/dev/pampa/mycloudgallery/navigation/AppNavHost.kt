@@ -81,6 +81,7 @@ import dev.pampa.mycloudgallery.main.LibraryCommandHostEffect
 import dev.pampa.mycloudgallery.main.LocalViewerHost
 import dev.pampa.mycloudgallery.main.MainScaffold
 import dev.pampa.mycloudgallery.main.ScaffoldSearch
+import dev.pampa.mycloudgallery.main.rememberMainSearch
 import dev.pampa.mycloudgallery.feature.search.FindSimilarEffect
 import dev.pampa.mycloudgallery.feature.search.SearchViewModel
 import dev.pampa.mycloudgallery.feature.search.rememberSearchSource
@@ -465,10 +466,6 @@ private fun MainDestination(
   albumsHost: AlbumsHostViewModel? = null,
 ) {
   var tab by rememberSaveable { mutableStateOf(GalleryTab.Library) }
-  // H4: la ricerca e' la barra che nasce dal cerchio accanto alla pillola, aperta sopra la scheda [tab] con la Libreria dietro (Indietro la chiude e torna
-  // li'). [searchFocus]: aperta dal cerchio il campo e' pronto a scrivere; aperta da "Trova simili" no.
-  var searchOpen by rememberSaveable { mutableStateOf(false) }
-  var searchFocus by rememberSaveable { mutableStateOf(false) }
   // Fase 10 (P4, D16): una finestra nuova parte dalla pagina scelta (album, ricordo, mappa), con un evento interno e solo dopo il blocco app.
   WindowStartEffect(nav)
   val library: LibraryViewModel = hiltViewModel()
@@ -487,28 +484,22 @@ private fun MainDestination(
   val searchModel: SearchViewModel = hiltViewModel()
   val searchController = searchModel.controller
   val searchSource = rememberSearchSource(searchController)
-  val search = remember(searchSource, searchController, searchHost, searchActions) {
+  // H4: la ricerca e' la barra che nasce dal cerchio accanto alla pillola, aperta sopra la scheda [tab] con la Libreria dietro (Indietro la chiude e torna
+  // li'). Il cablaggio (aperta, fuoco, che cosa sa il motore) e' in MainSearch, provato da RicercaCablaggioTest (CS-18).
+  val mainSearch = rememberMainSearch(searchController)
+  val search = remember(searchSource, searchController, searchHost, searchActions, mainSearch) {
     ScaffoldSearch(
       source = searchSource,
       handlers = searchController,
       thumbnails = searchHost.thumbnails,
       actions = searchActions,
-      onResultOpened = searchController::onResultOpened,
+      onResultOpened = mainSearch::resultOpened,
     )
   }
   // "Trova simili" (dal viewer, TS-2/TS-3, o dalla selezione della Libreria, TS-4) apre la ricerca sopra la scheda di adesso, senza tastiera, con i simili
   // gia' cercati. La richiesta si consegna una volta (TS-2).
-  FindSimilarEffect(
-    request = findSimilar,
-    onFind = { media ->
-      searchFocus = false
-      if (!searchOpen) AvvioTrace.pageOpened(AvvioTrace.PAGE_SEARCH)
-      searchOpen = true
-      searchController.onOpened()
-      searchController.findSimilar(media)
-    },
-    onHandled = onFindSimilarHandled,
-  )
+  FindSimilarEffect(request = findSimilar, onFind = mainSearch::findSimilar, onHandled = onFindSimilarHandled)
+  val searchOpen = mainSearch.open
   // Fase 9 (MO-3): il giro dei ricordi di oggi anche al ritorno in primo piano con Raccolte gia' aperta (l'app viva da giorni, il ripristino dopo la morte del processo).
   if (memoriesHost != null) MemoriesForegroundRound(memoriesHost, collectionsOpen = tab == GalleryTab.Collections && !searchOpen)
 
@@ -535,21 +526,10 @@ private fun MainDestination(
     },
     search = search,
     searchOpen = searchOpen,
-    onOpenSearch = {
-      // Avvio istantaneo: l'apertura di Cerca si misura dal tocco sul cerchio al primo fotogramma della barra aperta.
-      if (!searchOpen) AvvioTrace.pageOpened(AvvioTrace.PAGE_SEARCH)
-      searchFocus = true
-      searchOpen = true
-      searchController.onOpened()
-    },
-    onCloseSearch = {
-      searchOpen = false
-      searchFocus = false
-      // La prossima apertura riparte da capo: il campo vuoto, la Libreria dietro.
-      searchController.clear()
-    },
-    searchFocus = searchFocus,
-    onSearchFocused = { searchFocus = false },
+    onOpenSearch = mainSearch::openFromCircle,
+    onCloseSearch = mainSearch::close,
+    searchFocus = mainSearch.focus,
+    onSearchFocused = mainSearch::focused,
     onStatusClick = {
       when (status.action) {
         StatusAction.OPEN_WIREGUARD -> if (!openWireGuard()) nav.navigate(DiagnosticsGraphRoute)

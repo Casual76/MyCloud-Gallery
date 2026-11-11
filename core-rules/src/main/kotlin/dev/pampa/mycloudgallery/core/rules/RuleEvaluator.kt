@@ -306,16 +306,16 @@ class RuleEvaluator(private val config: EvaluatorConfig = EvaluatorConfig()) {
     return if (config.isSevere(power) || cooling) WaitReason.Thermal(power.thermalStatus) else null
   }
 
+  /** La misura richiede un telefono fresco, con le stesse soglie e isteresi dei lavori. */
+  fun canMeasureDevice(power: PowerState): Boolean = thermalBlock(power) == null &&
+    power.thermalStatus < ThermalStatus.LIGHT && (power.thermalHeadroom ?: 0f) < config.headroomReduce
+
   /**
    * Le attivita' a CPU vanno piano con il telefono caldo (LIGHT/MODERATE o headroom alto: [Pace.REDUCED]) e, review generale OB-3, con
    * l'app in primo piano ([Pace.APP_IN_USE]): calcolo AI, volti e preparazione girano nello stesso processo dell'interfaccia e non devono
    * farsi sentire mentre l'utente la usa. Si rallenta, non ci si ferma (chi usa molto l'app deve vedere finire l'indicizzazione), e in
    * secondo piano si torna al ritmo pieno alla prima rivalutazione. Il caldo vince sul motivo: e' quello che l'utente deve leggere.
    */
-  /** La misura richiede un telefono fresco, con le stesse soglie e isteresi dei lavori. */
-  fun canMeasureDevice(power: PowerState): Boolean = thermalBlock(power) == null &&
-    power.thermalStatus < ThermalStatus.LIGHT && (power.thermalHeadroom ?: 0f) < config.headroomReduce
-
   private fun paceFor(activity: BackgroundActivity, power: PowerState, appInForeground: Boolean): Pace {
     if (!activity.cpuIntensive) return Pace.NORMAL
     val warm =

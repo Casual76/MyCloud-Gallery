@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- H4 della fase H (11/11): la barra di ricerca della Libreria (il cerchio di Cerca che diventa campo) e la barra dei suggerimenti in alto. Un file
+       proprio: i pacchetti paralleli non si contendono strings.xml. -->
+  <string name="search_bar_search">Cerca</string>
+  <string name="search_bar_clear">Cancella il testo</string>
+  <string name="search_bar_close">Chiudi la ricerca</string>
+</resources>

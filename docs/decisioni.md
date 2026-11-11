@@ -17900,3 +17900,155 @@ stessa firma), senza toccare la chiusura. Il ritaglio composto e' quello della c
 - Screenshot in `docs/screenshots/beta-grafica/H1/`: `viewer-chiusura-trascinamento-*`, `viewer-chiusura-volo-*`,
   `viewer-chiusura-pizzico-*` (sopra la Libreria vera, da `:app`) e `viewer-video-ingrandito-*` (da `feature-viewer`), chiaro e scuro,
   telefono 360 x 780 dp e tablet.
+
+## H2: il pannello informazioni come nella Galleria di Samsung (meta' schermo, la foto che sale attaccata al bordo, compatto) (11/11)
+
+Dalla descrizione dell'utente del 31/10 e dalla prova dell'11/11 (`fase-H-utente-11-11.md`): il pannello non teneva conto delle proporzioni
+del contenuto (lo rimpiccioliva tenendo le fasce vuote), non era alto meta' schermo, non scorreva portando su la foto, ed era "senza
+personalita'". Stesso ramo di H1 (`fix/h1-viewer-gesti`), da `a0d2c37b`.
+
+### La geometria (`info/InfoGeometry.kt`, funzioni pure, `InfoGeometryTest`)
+- Il pannello aperto e' alto **esattamente meta' scena** (`OpenFraction`): il bordo alto sta a `H/2` qualunque cosa contenga. Il
+  contenuto a riposo e' la foto intera (`fitRect`); `contentLayer(stage, content, panelTop)` dice dove sta per ogni bordo del pannello.
+- **Prima la fascia vuota:** finche' il bordo del pannello non tocca il bordo basso della foto, la foto non si muove (identita').
+- **Poi attaccati:** il bordo basso della foto segue il bordo del pannello, alla stessa misura, senza rimpicciolirsi. Una foto verticale o
+  4:3 a pannello aperto ha il bordo basso a meta' schermo e la parte alta fuori.
+- **Una foto larga** (piu' bassa di meta' schermo: 16:9, panorama) cresce con la corsa, intorno al centro del suo bordo basso, quanto basta
+  a riempire la meta' alta (tagliata ai lati), al piu' 2x (`MaxFillScale`): un panorama 4:1 non diventa un dettaglio irriconoscibile e
+  lascia una fascia sopra. Uno screenshot lunghissimo e' disposto intero (alto quanto lo schermo): sale di meta' schermo e in alto se ne
+  vede la meta' bassa.
+- **Pannello lungo:** solo se le informazioni non stanno in meta' schermo. Il dito in su (dalla foto o dal pannello) **fa crescere il
+  pannello** oltre la meta' fino a sotto la barra di stato piu' 64 dp, e la foto sale con lui (stesso conto, bordo piu' in alto); finita la
+  crescita, le informazioni scorrono dentro. In giu' si ripercorre: prima torna in cima, poi si chiude, in un gesto solo (`InfoScroll`).
+  Al rilascio un pannello scorso continua con l'inerzia delle liste (`splineBasedDecay`).
+- **Le fasi si toccano** nello stesso punto (stessa posizione, stessa scala: provato), nessuna molla durante il gesto; al rilascio
+  `GalleryMotion.settleSpec` (i token di `FluidMotion`) verso aperto o chiuso.
+- La trasformazione e' **per pagina** (`infoPageLayer` in `ViewerOverlay.kt`), con le proporzioni di ogni pagina: passando all'elemento
+  dopo a pannello aperto la geometria e' gia' quella del nuovo contenuto, anche durante lo scorrimento. Sostituisce `infoShift` di H1 (che
+  spostava tutto il pager allo stesso modo); la chiusura di H1 resta sul pager intero, i due non agiscono mai insieme.
+- **Colonna laterale** (`InfoGeometry.side`): da 840 dp come prima, e ora anche nelle finestre basse e larghe (altezza < 480 dp, larghezza
+  >= 600 dp: il telefono in orizzontale), dove meta' altezza sarebbe una striscia. La foto si fa piu' piccola quanto basta a stare a
+  sinistra (`sideLayer`), la colonna (380 dp) entra da destra.
+
+### I gesti (`gesture/ViewerGestures.kt`, `ViewerGestureArbiterTest`)
+- Nell'arbitro di H1, a pannello aperto sul telefono: **in su = `ScrollInfo`** (fa crescere e scorrere un pannello lungo; corto, non fa
+  niente), **in giu' = `CloseInfo`** (chiude il pannello, non il viewer), **di lato = pager** (il pannello resta aperto).
+- **Due dita a pannello aperto = `InfoPinch`:** appena si appoggia il secondo dito il pannello si chiude e il resto del gesto si consuma
+  (lo zoom non vede l'inizio di un pizzico su una foto spostata e tagliata); il pizzico dopo ingrandisce la foto intera. Prima aspettava
+  che le dita si muovessero di mezza soglia, ma lo zoom di telephoto partiva prima (visto nei test): ora la decisione e' al secondo dito. Con la colonna laterale il pizzico resta dello zoom (la foto accanto e' intera). Il doppio tocco
+  a pannello aperto e' spento (la foto e' spostata e tagliata: si ingrandirebbe un punto che non e' dove si e' toccato).
+- **Il tocco sulla meta' alta** (la foto) chiude il pannello invece di nascondere le barre. **Indietro** lo chiude prima del viewer (con
+  l'Indietro predittivo, come prima). Il gesto di sistema dal bordo resta orizzontale e annullato come in H1.
+- Il trascinamento sul pannello stesso usa lo stesso stato (`InfoPanelState.drag`/`endDrag`): da qualunque parte parta il dito, e' un
+  gesto solo. **Al rilascio lo stato dice subito** dove va il pannello (aperto o chiuso), prima della molla: un tocco, un pizzico o uno
+  swipe in giu' fatto nei 300 ms dell'assestamento va al pannello e non al viewer (prima uno swipe in giu' subito dopo l'apertura chiudeva
+  il viewer). Soglie: si apre oltre il 28% della corsa o con un lancio (0,6 corse al secondo, circa 700 px/s sul telefono); da aperto si
+  chiude oltre il 28% di discesa o con un lancio.
+
+### Il pannello (`info/InfoPanel.kt`, `InfoBuilder.kt`, `BackupInfo.kt`, `details/ViewerFormat.kt`)
+- **Il materiale:** il vetro dei fogli dell'engine (`GlassDefaults.panelTint`, `panelOptics`, ruolo `Modal`, angoli
+  `FluidRadius.Sheet` in `ContinuousCornerShape`, la maniglia `FluidGrabber`). Aperto, sotto c'e' lo sfondo del viewer (la foto e' salita):
+  e' un piano su cui si legge; mentre sale lascia intravedere la foto. Il foglio ha **la sua misura piena** (dalla barra in alto al fondo)
+  e **si trasla**: niente cambia misura durante il gesto, nemmeno il vetro (lezione P1/P2). Niente titolo visibile sul telefono (la
+  maniglia basta, come nella Galleria di Samsung); il titolo resta per TalkBack (`paneTitle`) con l'azione "Chiudi le informazioni".
+- **Il contenuto, compatto** (`InfoModel`): in testa la data grande ("Martedi' 12 marzo 2024", `titleLarge`) con "Stimata" se lo e';
+  sotto l'ora con il fuso ("12:41 · ora di Oslo, UTC+1") o da dove viene la stima; il luogo con il segnaposto e la pillola "Apri in
+  Mappe". Poi **il backup in una capsula**: un'icona e due parole con i toni dello stato della Libreria (`GalleryFooterEntry`: "Telefono e
+  NAS", "Sul NAS", "Solo sul telefono", "In coda", "In caricamento" con la barra, "In verifica", "Solo area comune", "Da controllare",
+  "Problema di backup", "Non salvato", "Non è tuo"); il perche' piccolo sotto solo quando serve (un'attesa, un problema), mai quando e'
+  tutto a posto; TalkBack legge "Backup: ...". Poi la fotocamera e **le pillole dello scatto** (obiettivo, f/, tempo, ISO, focale, il
+  flash solo se e' scattato) e **le pillole del file** (misure, MP, peso, formato, durata, Ultra HDR, Panorama, "Modificata"). Poi la
+  mini-mappa con la pillola "Mostra sulla mappa", le persone (le facce), le copie simili. In fondo, piccoli, il nome del file e
+  **l'ultima cartella** (non il percorso).
+- **Solo cio' che si sa:** un dato che non c'e' non occupa posto (nessuna riga vuota). Le coordinate non si scrivono piu' (c'e' la
+  mini-mappa): niente gergo.
+- **Stati:** finche' i dettagli non arrivano la data viene dal giorno della griglia (la testa non salta); l'EXIF si legge solo a pannello
+  aperto (come prima) e le pillole compaiono sotto la testa; senza posizione niente luogo ne' mappa; senza EXIF niente riga dello scatto;
+  solo sul NAS: "Sul NAS"; in coda: "In coda" con il motivo; un problema: "Problema di backup" (allarme) con la frase del codice.
+- **Cambiando elemento a pannello aperto** le informazioni nuove entrano con `FluidMotion.crossFade` (alfa nel disegno), la geometria si
+  adatta da sola (per pagina).
+- **Video:** continua ad andare; la sua barra si disegna sopra il bordo del pannello e sale con lui (compare da meta' corsa in su).
+- Gli album di un media: **non fatti**: il viewer non ha una porta che dica in quali album sta un media (`ViewerAlbumActions` aggiunge,
+  toglie e fa copertina). Servirebbe un `Flow` in `:app` dal catalogo degli album; fuori dal perimetro.
+
+### Prestazioni
+- Durante il gesto nessuna ricomposizione: l'avanzamento e lo scorrimento sono `Animatable` letti nei `graphicsLayer` (il foglio, ogni
+  pagina, la barra del video, la dissolvenza delle informazioni). La misura del pannello si legge una volta (`onSizeChanged`) e scrive solo
+  i limiti dello scorrimento.
+- All'apertura del viewer niente in piu': il blocco del pannello si compone solo quando si apre (`infoVisible`), e cosi' le sue fonti
+  (backup, persone, mappa, copie).
+- Il vetro del foglio e' piu' alto di prima (tutta la scena meno la barra, ~700 dp invece di 560): la parte fuori schermo non si disegna,
+  ma il campionamento del fondale e' su un nodo piu' grande. Da guardare sull'S25 con il pannello aperto su una foto che scorre.
+- Ogni pagina vicina (al massimo tre) ha il suo `graphicsLayer` con la geometria: tre letture per fotogramma, nessun lavoro in piu'.
+
+### Fuori dal perimetro
+- Nessun file fuori da `feature-viewer` (codice, test, risorse) tranne i documenti: `docs/screenshots/beta-grafica/H2/` e l'indice
+  `docs/screenshots/beta-grafica/index.html` (sezioni H1 e H2), questo file.
+
+### Da provare sul telefono (S25, con la Galleria di Samsung aperta sullo **stesso** elemento; dove detto anche Tab S9)
+1. **Foto verticale 3:4 della fotocamera**, swipe in su piano: il pannello sale e prima riempie la fascia vuota sotto la foto (la foto
+   ferma), poi la foto sale attaccata al bordo senza rimpicciolirsi; aperto, il bordo basso della foto e' a meta' schermo e la parte alta
+   e' fuori. Confronto: il punto in cui la foto comincia a muoversi e la posizione finale devono essere quelli di Samsung. *Difetto:* la
+   foto che si rimpicciolisce, una fascia vuota sopra, un salto quando il bordo tocca la foto.
+2. **Foto 16:9 e un video 16:9** (in verticale): riempie la fascia, poi cresce fino a riempire la meta' alta, tagliata ai lati. Confronto
+   con Samsung: quanto ingrandisce (da noi fino a 1,9x su S25 per un 16:9).
+3. **Panorama** molto largo (4:1): cresce al piu' 2x e lascia una fascia sopra. Va bene, o Samsung fa altro?
+4. **Screenshot lungo**: a pannello aperto in alto se ne vede la meta' bassa.
+5. **Soglie**: uno swipe corto torna giu', uno oltre un quarto circa apre, un colpo veloce apre anche se corto; da aperto lo stesso verso il
+   basso. Confronto della sensazione con Samsung.
+6. **Pannello lungo** (una foto con posizione, persone e copie simili): dito in su sul pannello o sulla foto, il pannello cresce fino
+   sotto la barra in alto portando su la foto, poi le informazioni scorrono; lanciato continua con l'inerzia; in giu' torna in cima e poi
+   chiude, senza staccare il dito.
+7. **Di lato a pannello aperto**: passa all'elemento dopo, il pannello resta, le informazioni cambiano in dissolvenza, la geometria si
+   adatta (da una verticale a una larga e viceversa), senza lampi.
+8. **Chiusure**: tocco sulla foto in alto; Indietro (anche predittivo); trascinare in giu' il pannello; trascinare in giu' la foto (chiude il
+   pannello, **non** il viewer, anche subito dopo averlo aperto); due dita (chiude il pannello; il pizzico dopo ingrandisce).
+9. **Video** a pannello aperto: continua ad andare, la barra sta sopra il bordo e si usa (pausa, scorrimento); chiuso il pannello la barra
+   torna giu'.
+10. **Stati**: un media solo sul NAS ("Sul NAS"), uno in coda ("In coda" e il motivo), uno in caricamento (la barra), uno con un problema
+    ("Problema di backup"), uno senza posizione (niente luogo ne' mappa), uno screenshot (niente riga dello scatto). La testa non salta
+    quando arrivano i dettagli e l'EXIF.
+11. **Leggibilita'** in chiaro e in scuro mentre il pannello sale sopra una foto chiarissima e una scurissima.
+12. **Telefono in orizzontale** e **Tab S9**: la colonna laterale dal tasto, la foto si sposta nello spazio a sinistra; si chiude con la
+    X o toccando il tasto.
+13. **Fluidita'**: aprire e chiudere il pannello piu' volte e scorrere gli elementi con il pannello aperto su una foto da 50 MP e su un
+    video 4K; nessuno scatto quando il pannello compare (il vetro e' un foglio alto quasi quanto lo schermo).
+
+### Decisioni aperte per l'utente
+- **Due dita a pannello aperto chiudono il pannello** (il pizzico dopo ingrandisce). L'alternativa: spento.
+- **Il tocco sulla foto a pannello aperto chiude il pannello** (non nasconde le barre); il doppio tocco non fa niente.
+- **Ingrandimento massimo 2x** per riempire la meta' alta: un panorama lascia una fascia sopra.
+- **Soglie del 28%** per aprire e chiudere (piu' un lancio veloce).
+- **Niente titolo "Informazioni"** sul foglio del telefono (la maniglia e la data in testa); la colonna laterale lo tiene, con la X.
+- **Coordinate tolte** (c'e' la mini-mappa) e della cartella solo l'ultimo nome.
+- **Due pillole per la mappa** quando ci sono entrambe: "Apri in Mappe" (un'altra app) e "Mostra sulla mappa" (quella dell'app).
+- Le **parole della capsula** del backup ("Telefono e NAS", "Sul NAS", "Solo sul telefono", "In coda"...).
+- **Colonna laterale sul telefono in orizzontale** (da 600 dp di larghezza con l'altezza sotto i 480).
+- La barra del video compare dalla meta' corsa in su.
+- Gli **album** del media non ci sono (manca la porta, vedi sopra).
+
+### Verifiche
+- Test JVM nuovi: `InfoGeometryTest` (la geometria per verticale, 4:3, 16:9, panorama, screenshot lungo; ogni avanzamento; continuita' fra
+  le fasi; colonna laterale; scorrimento), `InfoPanelStateTest` (7: soglie di apertura e chiusura, lancio, pannello corto che non scorre,
+  pannello lungo che cresce fino alla barra e poi scorre, in giu' prima in cima e poi chiude, chiudendo torna in cima),
+  `ViewerInfoPanelTest` (6, nel viewer vero: tocco sulla meta' alta, in giu' a pannello aperto chiude il pannello e non il viewer, anche
+  subito dopo l'apertura; due dita chiudono il pannello senza ingrandire; passando all'elemento dopo il pannello resta aperto; telefono in
+  orizzontale con la colonna laterale), `ViewerGesturesModifierTest` (2: il modificatore dei gesti da solo, a pannello aperto e chiuso),
+  righe nuove in `ViewerGestureArbiterTest` (`ScrollInfo`, `CloseInfo`, `InfoPinch`, la colonna laterale), e in `ViewerLogicTest` il
+  modello compatto (dati completi, data dal giorno della griglia, data stimata, video, scatto parziale e flash, luogo, foto in movimento).
+- Test aggiornati al pannello nuovo: `ViewerLogicTest` (da `buildInfoSections` a `buildInfoModel`), `ViewerBackupInfoTest` (da
+  `backupInfoRow` a `backupNote`: ogni caso del contratto ha la sua capsula, due parole, "Backup: ..." per TalkBack), `ViewerOverlayTest`
+  (la data in testa, "12:41 · ora di Oslo, UTC+1", le pillole "f/1,8", "1/250 s", "ISO 50"), `ViewerPeopleInfoTest`,
+  `ViewerPlaceMapInfoTest` e `SimilarCopiesPanelTest` (montati nel foglio vero, `OpenInfoSheet`; la mappa senza intestazione; tolti i test
+  di `sectionsWithPeople` e `sectionsWithPlaceMap`, che non esistono piu'), `ViewerGestureArbiterTest` (a pannello aperto in su ora scorre,
+  due dita chiudono il pannello).
+- Batch del semaforo (un posto, rilasciato ogni volta; nessun java chiuso da me, ne' fra le 14:40 e le 14:50 ne' dopo): `H2-1` FAIL in
+  compilazione (una `density` mancante in `ViewerOverlay`), 0,8 min; `H2-2` 11 classi del pannello, 170 test, 4 falliti (due test nuovi e
+  due vecchi che cercavano le intestazioni di prima), 1,8 min; `H2-3` registrazione degli screenshot H2 e test del pannello, 45 test, 1
+  fallito (il pizzico), 2,5 min; `H2-4` interrotto dal riavvio dell'ambiente mentre aspettava il posto (mai preso), rilanciato: 38 test, 1
+  fallito (il pizzico: andava allo zoom; da qui la decisione al secondo dito), screenshot riscritti con le bitmap giuste, 2,2 min; `H2-5`
+  `:feature-viewer:testDebugUnitTest` completo (1103 test, 0 falliti, 18 saltati) e `:app:testDebugUnitTest` sulle 16 classi che toccano
+  il viewer (94 test, 0 falliti), OK, 4,4 min. `tools\check.ps1` non lanciato.
+- Screenshot in `docs/screenshots/beta-grafica/H2/` (28): `viewer-info-foto-verticale-aperto-*`, `viewer-info-foto-orizzontale-aperto-*`,
+  `viewer-info-a-meta-fascia-vuota-*` (solo telefono), `viewer-info-video-*`, `viewer-info-dati-completi-*`, `viewer-info-pochi-dati-*`,
+  `viewer-info-problema-di-backup-*`, `viewer-info-pannello-lungo-scorso-*` (solo telefono); chiaro e scuro, telefono 360 x 780 dp e tablet.

@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.map.contract.MapPoints
 import dev.pampa.mycloudgallery.core.map.contract.MapRegions
 import dev.pampa.mycloudgallery.core.map.contract.MapSettings
 import dev.pampa.mycloudgallery.core.map.contract.PlaceSearch
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionsMapPreview
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsSectionProvider
 import dev.pampa.mycloudgallery.feature.map.contract.MapEngineStarter
 import dev.pampa.mycloudgallery.feature.map.contract.MapMediaPositions
@@ -22,6 +23,7 @@ import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.graph.GalleryStopper
 import dev.pampa.mycloudgallery.map.AppMapEntryStatus
+import dev.pampa.mycloudgallery.map.AppCollectionsMapPreview
 import dev.pampa.mycloudgallery.map.AppViewerPlaceMap
 import dev.pampa.mycloudgallery.map.MapDiagnostics
 import dev.pampa.mycloudgallery.map.MapGraph
@@ -69,6 +71,9 @@ object MapModule {
 
   @Provides fun viewerPlaceMap(gallery: GalleryGraph, map: MapGraph): AppViewerPlaceMap =
     (gallery.viewerPlaceMap as? AppViewerPlaceMap) ?: AppViewerPlaceMap { map.miniMap }
+
+  /** I1 (fase I): la mappa in anteprima dei Luoghi delle Raccolte (stile solo offline; il servizio nasce alla prima richiesta). */
+  @Provides fun collectionsMapPreview(map: MapGraph): CollectionsMapPreview = AppCollectionsMapPreview { map.placesPreview }
 
   @Provides fun mapPoints(map: MapGraph): MapPoints = map.points
 

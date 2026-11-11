@@ -131,7 +131,8 @@ internal class MemoriesScreensTest : MemoriesScreenTest() {
   @Test
   fun tuttiIRicordi_perMese_conIlSegnoNuovo() {
     val set = switching(scenes.listReady) { AllMemoriesScreen(it, thumbs, names, NoAllMemoriesHandlers, Modifier.fillMaxSize()) }
-    assertShows("elenco", "Tutti i ricordi", "NOVEMBRE 2026", "Un anno fa", "Nuovo")
+    // I1 (fase I): "nuovo" e' un punto dell'accento sulla scheda, non piu' una parola; lo dice TalkBack (perTalkBackOgniVoceDeiRicordiHaLaSuaFrase).
+    assertShows("elenco", "Tutti i ricordi", "NOVEMBRE 2026", "Un anno fa")
     set(scenes.listNoCovers)
     assertShows("senza copertine", "Un anno fa")
     set(scenes.listEmpty)

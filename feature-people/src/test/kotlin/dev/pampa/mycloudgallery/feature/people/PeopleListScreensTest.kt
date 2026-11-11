@@ -42,8 +42,9 @@ class PeopleListScreensTest : PeopleScreenTest() {
     val all = PeopleScenes(namedOnly = false)
     try {
       showAll { PeopleListScreen(all.list(), all.crops, NoPeopleListHandlers) }
-      assertShows("elenco q2a", "Anna", "SENZA NOME", "Aggiungi un nome")
-      assertDoesNotShow("elenco q2a", "Altri volti")
+      // I1 (fase I): una persona senza nome e' solo il volto (niente invito scritto sulla scheda: il nome si aggiunge dalla sua pagina); TalkBack la dice.
+      assertShows("elenco q2a", "Anna", "SENZA NOME")
+      assertDoesNotShow("elenco q2a", "Altri volti", "Aggiungi un nome")
       assertThat(spokenControls()).contains("Persona senza nome, 5 foto")
     } finally {
       all.close()
@@ -179,7 +180,7 @@ class PeopleListScreensTest : PeopleScreenTest() {
   @Test
   fun altriVolti_ogniGruppoSenzaNome_conIlSuoConto() {
     showAll { OthersScreen(scenes.others(), scenes.crops, NoOthersHandlers) }
-    assertShows("altri volti", "Altri volti", "Gruppi senza nome")
+    assertShows("altri volti", "Altri volti")
     // Tre gruppi senza nome con almeno 3 foto mostrabili; il gruppo con soli media nascosti non c'e' (E-F38), e nemmeno i nomi.
     assertThat(spokenControls().filter { it.startsWith("Persona senza nome") }).containsExactly(
       "Persona senza nome, 5 foto", "Persona senza nome, 5 foto", "Persona senza nome, 5 foto",

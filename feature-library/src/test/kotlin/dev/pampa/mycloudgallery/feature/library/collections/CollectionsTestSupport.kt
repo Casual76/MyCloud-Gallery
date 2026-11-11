@@ -22,8 +22,9 @@ import androidx.compose.ui.unit.Density
 import androidx.test.core.app.ApplicationProvider
 import dev.antigravity.fluidengine.foundation.EngineSettings
 import dev.antigravity.fluidengine.foundation.ThemeMode
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterEntry
+
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterPill
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.feature.library.collections.testing.CollectionsSectionSamples
@@ -221,7 +222,8 @@ internal fun productionLayoutOf(world: dev.pampa.mycloudgallery.feature.library.
  */
 @Composable
 internal fun ProductionNetworkHeader() {
-  GalleryFooterEntry(
+  // I1 (fase I): in cima alle Raccolte lo stato e' la sola capsula (`NetworkStatusEntry(compact = true)` di MainScaffold); la frase la dice TalkBack.
+  GalleryFooterPill(
     note = GalleryFooterNote(
       tone = GalleryFooterTone.Calm,
       label = "In casa",
@@ -230,7 +232,6 @@ internal fun ProductionNetworkHeader() {
       description = "In casa · NAS collegato",
     ),
     onClick = {},
-    alignment = Alignment.Start,
   )
 }
 

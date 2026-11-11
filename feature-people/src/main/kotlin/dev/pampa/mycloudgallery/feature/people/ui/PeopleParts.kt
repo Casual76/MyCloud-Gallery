@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -24,6 +25,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -44,8 +46,11 @@ import androidx.compose.ui.unit.Dp
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
+import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
+import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
 import dev.pampa.mycloudgallery.core.faces.contract.PersonCard
 import dev.pampa.mycloudgallery.core.model.FaceLocator
 import dev.pampa.mycloudgallery.feature.people.R
@@ -53,8 +58,10 @@ import dev.pampa.mycloudgallery.feature.people.contract.PeopleCrops
 
 // Le PARTI COMUNI delle schermate delle persone (Fase 8, P9): l'avatar rotondo (il volto ritagliato al momento, mai salvato), la tessera di una
 // persona, la nota. Solo componenti dell'engine e del design system (G2); nessun colore, raggio o dimensione di testo scritti a mano
-// (NoHandWrittenStyleTest). **Mai testo sopra la foto**: il nome e il conto stanno sotto l'avatar, su una superficie piena, e i controlli non
-// si sovrappongono (la scelta e' un anello e una spunta accanto al nome, mai un pallino sul volto).
+// (NoHandWrittenStyleTest).
+// I1 (fase I, 11/11): l'utente ha scelto le persone "come Samsung": la tessera e' una **scheda alta con il volto a tutta scheda** e il nome in basso
+// sopra una sfumatura (la coppia di `GalleryOnPhoto`, che si legge anche su una foto chiara); niente conto delle foto (lo dice TalkBack); una persona
+// senza nome mostra solo il volto. La scelta e' un filo dell'accento attorno alla scheda e un segno nell'angolo in alto.
 
 /** Come una tessera sta nella selezione: non si sta scegliendo, si sta scegliendo ed e' fuori, si sta scegliendo ed e' dentro. */
 internal enum class TileSelection { NONE, OFF, ON }
@@ -71,11 +78,6 @@ internal fun PersonAvatar(
   modifier: Modifier = Modifier,
   ring: Boolean = false,
 ) {
-  val density = LocalDensity.current
-  val px = with(density) { cropSize.roundToPx() }.coerceIn(PeopleDimens.CropMinPx, PeopleDimens.CropMaxPx)
-  val image by produceState<ImageBitmap?>(initialValue = null, face, px, crops) {
-    value = if (face == null) null else crops.crop(face, px)?.asImageBitmap()
-  }
   val scheme = MaterialTheme.colorScheme
   Box(
     modifier = modifier
@@ -84,19 +86,38 @@ internal fun PersonAvatar(
       .then(if (ring) Modifier.border(PeopleDimens.Ring, scheme.primary, FluidCapsuleShape) else Modifier),
     contentAlignment = Alignment.Center,
   ) {
-    val bitmap = image
-    if (bitmap != null) {
-      Image(bitmap = bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize())
-    } else {
-      Icon(imageVector = Icons.Rounded.Person, contentDescription = null, modifier = Modifier.size(PeopleDimens.AvatarGlyph), tint = scheme.onSurfaceVariant)
-    }
+    FaceImage(face, crops, cropSize)
   }
 }
 
 /**
- * La tessera di una persona nelle griglie: l'avatar, sotto il nome (o l'invito "Aggiungi un nome") e il conto delle foto. Tutta la tessera si
- * tocca (apre la pagina, o in selezione sceglie); la pressione lunga la sceglie. Per TalkBack e' una cosa sola: "Marco, 120 foto" (e in
- * selezione scelta/non scelta), con l'azione "Seleziona" anche senza pressione lunga.
+ * Il volto ritagliato di [face] (chiesto a [crops] alla taglia di [cropSize], tra [PeopleDimens.CropMinPx] e [PeopleDimens.CropMaxPx]) a tutta la scatola,
+ * o la figura di una persona finche' non c'e' (o se il cancello lo rifiuta).
+ */
+@Composable
+private fun BoxScope.FaceImage(face: FaceLocator?, crops: PeopleCrops, cropSize: Dp) {
+  val density = LocalDensity.current
+  val px = with(density) { cropSize.roundToPx() }.coerceIn(PeopleDimens.CropMinPx, PeopleDimens.CropMaxPx)
+  val image by produceState<ImageBitmap?>(initialValue = null, face, px, crops) {
+    value = if (face == null) null else crops.crop(face, px)?.asImageBitmap()
+  }
+  val bitmap = image
+  if (bitmap != null) {
+    Image(bitmap = bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize())
+  } else {
+    Icon(
+      imageVector = Icons.Rounded.Person,
+      contentDescription = null,
+      modifier = Modifier.align(Alignment.Center).size(PeopleDimens.AvatarGlyph),
+      tint = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+  }
+}
+
+/**
+ * La tessera di una persona nelle griglie (I1: "come Samsung"): una scheda alta con il volto a tutta scheda e il nome in basso sopra la sfumatura; una
+ * persona senza nome, solo il volto. Tutta la scheda si tocca (apre la pagina, o in selezione sceglie); la pressione lunga la sceglie. Per TalkBack e'
+ * una cosa sola: "Marco, 120 foto" (e in selezione scelta/non scelta), con l'azione "Seleziona" anche senza pressione lunga.
  */
 @Composable
 internal fun PersonTile(
@@ -121,9 +142,10 @@ internal fun PersonTile(
   } else {
     emptyList()
   }
-  Column(
+  val shape = ContinuousCornerShape(FluidRadius.Card)
+  Box(
     modifier = modifier
-      .heightIn(min = PeopleDimens.Touch)
+      .aspectRatio(PeopleDimens.CardAspect)
       .fluidPressable(onClick = onClick, onLongClick = onLongClick, role = if (selection == TileSelection.NONE) Role.Button else Role.Checkbox)
       .semantics(mergeDescendants = true) {
         contentDescription = spoken
@@ -132,37 +154,30 @@ internal fun PersonTile(
           selected = selection == TileSelection.ON
           toggleableState = if (selection == TileSelection.ON) ToggleableState.On else ToggleableState.Off
         }
-      },
-    horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(PeopleDimens.TightGap),
-  ) {
-    PersonAvatar(
-      face = card.cover,
-      crops = crops,
-      cropSize = PeopleDimens.AvatarHeader,
-      modifier = Modifier.fillMaxWidth().aspectRatio(1f),
-      ring = selection == TileSelection.ON,
-    )
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(PeopleDimens.TightGap / 2)) {
-      if (selection == TileSelection.ON) {
-        Icon(imageVector = Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(PeopleDimens.CheckGlyph), tint = scheme.primary)
       }
+      .then(if (selection == TileSelection.ON) Modifier.border(PeopleDimens.Ring, scheme.primary, shape) else Modifier)
+      .clip(shape)
+      .background(scheme.surfaceContainerHigh),
+  ) {
+    FaceImage(card.cover, crops, PeopleDimens.CardCrop)
+    card.name?.let { name ->
+      val scrim = GalleryOnPhoto.scrim()
       Text(
-        text = PeopleText.nameOrInvite(resources, card),
+        text = name,
         style = MaterialTheme.typography.titleSmall,
-        color = if (card.name == null) scheme.primary else scheme.onSurface,
-        maxLines = 2,
+        color = GalleryOnPhoto.Content,
+        maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        textAlign = TextAlign.Center,
+        modifier = Modifier
+          .align(Alignment.BottomStart)
+          .fillMaxWidth()
+          .background(Brush.verticalGradient(listOf(scrim.copy(alpha = 0f), scrim)))
+          .padding(start = PeopleDimens.CardInset, end = PeopleDimens.CardInset, bottom = PeopleDimens.CardInset, top = PeopleDimens.CardInset * 2),
       )
     }
-    Text(
-      text = PeopleText.photos(resources, card.photos),
-      style = MaterialTheme.typography.bodySmall,
-      color = scheme.onSurfaceVariant,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-    )
+    if (selection != TileSelection.NONE) {
+      Box(Modifier.align(Alignment.TopEnd).padding(PeopleDimens.CardInset)) { RadioMark(selected = selection == TileSelection.ON, onPhoto = true) }
+    }
   }
 }
 
@@ -183,19 +198,22 @@ internal fun CancelButton(onClick: () -> Unit, label: String = stringResource(R.
   FluidButton(text = label, onClick = onClick, style = FluidButtonStyle.Plain, size = FluidButtonSize.Large, fillWidth = true)
 }
 
-/** Il segno di un'opzione scelta: un pallino dell'accento con la spunta, o un anello vuoto. Lo stesso dei fogli di conferma. */
+/**
+ * Il segno di un'opzione scelta: un pallino dell'accento con la spunta, o un anello vuoto. Lo stesso dei fogli di conferma. [onPhoto]: sopra un volto
+ * l'anello vuoto e' chiaro su un velo scuro, cosi' si vede su qualunque foto.
+ */
 @Composable
-internal fun RadioMark(selected: Boolean) {
+internal fun RadioMark(selected: Boolean, onPhoto: Boolean = false) {
   val scheme = MaterialTheme.colorScheme
   Box(
     modifier = Modifier
       .size(PeopleDimens.Radio)
       .clip(FluidCapsuleShape)
       .then(
-        if (selected) {
-          Modifier.background(scheme.primary)
-        } else {
-          Modifier.border(width = PeopleDimens.RadioRing, color = scheme.outline, shape = FluidCapsuleShape)
+        when {
+          selected -> Modifier.background(scheme.primary)
+          onPhoto -> Modifier.background(GalleryOnPhoto.scrim()).border(width = PeopleDimens.RadioRing, color = GalleryOnPhoto.Content, shape = FluidCapsuleShape)
+          else -> Modifier.border(width = PeopleDimens.RadioRing, color = scheme.outline, shape = FluidCapsuleShape)
         },
       ),
     contentAlignment = Alignment.Center,

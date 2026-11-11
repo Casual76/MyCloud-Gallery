@@ -4,6 +4,8 @@ import android.content.res.Resources
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Event
+import androidx.compose.material.icons.rounded.Flight
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Sync
@@ -18,6 +20,7 @@ import dev.pampa.mycloudgallery.core.personal.contract.PersonalStore
 import dev.pampa.mycloudgallery.core.personal.settings.SyncedCollectionsSettings
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumPeople
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumScreensClock
+import dev.pampa.mycloudgallery.feature.albums.sections.AlbumEntryTarget
 import dev.pampa.mycloudgallery.feature.albums.sections.AlbumsSectionSources
 import dev.pampa.mycloudgallery.feature.albums.sections.SectionData
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
@@ -27,6 +30,7 @@ import dev.pampa.mycloudgallery.feature.library.collections.CollectionItemsSourc
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionSections
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsLayoutStore
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsSectionProvider
+import dev.pampa.mycloudgallery.feature.library.collections.EntryShape
 import dev.pampa.mycloudgallery.feature.library.collections.MemoryCollectionsLayoutStore
 import dev.pampa.mycloudgallery.feature.library.utility.utilityCountsFlow
 import dev.pampa.mycloudgallery.feature.library.utility.utilityEntryGroup
@@ -50,6 +54,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import dev.pampa.mycloudgallery.feature.albums.R as AlbumsR
 import dev.pampa.mycloudgallery.feature.nas.R as NasR
 
 // LE SEZIONI DELLE RACCOLTE COME FORNITORI (Fase 7, P13; D33, §2.7; P11: "un fornitore per sezione", "il ponte extraGroups tolto"). Ogni sezione e' un
@@ -66,6 +71,29 @@ internal fun SectionData.toGroup(): CollectionEntryGroup = CollectionEntryGroup(
   hideable = hideable,
   hint = hint,
 )
+
+/**
+ * I1 (fase I): la sezione Viaggi nella galleria delle Raccolte. Un viaggio o un evento e' una scheda larga con la copertina e, sotto il titolo (che ha gia'
+ * il posto e il mese), una riga piccola sola: "Viaggio" o "Evento" ([tripKind]); "Tutti i viaggi" e' il "tutti" della sezione; la riga "nessun viaggio con
+ * la posizione" un invito. La frase intera ("Viaggio · 640 elementi") resta per TalkBack.
+ */
+internal fun SectionData.toTripsGroup(tripKind: (CollectionEntry) -> String?): CollectionEntryGroup {
+  val base = toGroup()
+  val hasTrips = base.entries.any { AlbumEntryTarget.parse(it.code).let { t -> t is AlbumEntryTarget.Trip && t.id != null } }
+  return base.copy(
+    entries = base.entries.map { entry ->
+      when (val target = AlbumEntryTarget.parse(entry.code)) {
+        is AlbumEntryTarget.Trip -> if (target.id != null) {
+          entry.copy(shape = EntryShape.Card, caption = tripKind(entry))
+        } else {
+          // "Tutti i viaggi" con dei viaggi da mostrare e' il "tutti"; da sola (nessun viaggio con la posizione) e' l'invito.
+          entry.copy(shape = if (hasTrips) EntryShape.More else EntryShape.Notice)
+        }
+        else -> entry.copy(shape = EntryShape.Notice)
+      }
+    },
+  )
+}
 
 /** Un fornitore da un codice e da un flusso. */
 internal class FlowSection(override val code: String, override val group: StateFlow<CollectionEntryGroup?>) : CollectionsSectionProvider
@@ -95,7 +123,14 @@ class AppCollectionsSections(
 
   val smart: CollectionsSectionProvider = FlowSection(CollectionSections.SMART, sources.smart.mapState(scope) { it?.toGroup() })
 
-  val trips: CollectionsSectionProvider = FlowSection(CollectionSections.TRIPS, sources.trips.mapState(scope) { it?.toGroup() })
+  val trips: CollectionsSectionProvider = FlowSection(CollectionSections.TRIPS, sources.trips.mapState(scope) { it?.toTripsGroup(::tripKind) })
+
+  /** I1: "Viaggio" o "Evento", dall'icona della voce (quella che feature-albums da' ai due tipi). */
+  private fun tripKind(entry: CollectionEntry): String? = when (entry.icon) {
+    Icons.Rounded.Flight -> resources.getString(AlbumsR.string.trips_kind_trip)
+    Icons.Rounded.Event -> resources.getString(AlbumsR.string.trips_kind_event)
+    else -> null
+  }
 
   /** Cartelle NAS (D33: "oggi Sul NAS"): le quattro pagine della 4B, solo con il NAS collegato. */
   val nas: CollectionsSectionProvider = FlowSection(

@@ -18733,6 +18733,65 @@ Ramo `fix/h4-ricerca-barra` dopo l'unione di `integra/beta-grafica` (`ad4310a5`,
 
 Build: tolta la protezione riflessiva del layout; in un worktree riusato dopo un cambio di commit, se serve ricostruire core-designsystem usare nel batch autorizzato `.\gradlew.bat --no-daemon --no-watch-fs --max-workers=2 --no-parallel :core-designsystem:compileDebugKotlin --rerun`: provati cambio main/debug e modifica API main con e senza protezione, tutti riusciti, quindi queste prove non spiegano la causa del guasto storico.
 
+### I1, le Raccolte come una galleria (fase I, 11 novembre 2026)
+
+L'utente ha messo a confronto le Raccolte con la Galleria di Samsung e ha scelto «come Samsung». Ramo `fix/i1-raccolte-visive` da `f7d91f7f`.
+
+- **La scheda Raccolte e' a sezioni visive** (`CollectionsGallery.kt`): per ogni sezione un titolo grande (toccabile con la freccia se porta a «tutti»;
+  nei Luoghi apre la Mappa) e sotto un **carosello orizzontale** (`LazyRow` con chiavi stabili, che sporge fino al bordo dello schermo). Le schede:
+  persone alte 116 x 156 dp con il volto a tutta scheda e il nome sopra la sfumatura (senza nome: solo il volto); ricordi e viaggi larghi 264 x 176 dp
+  con il titolo e al piu' una riga piccola (il mese, «Viaggio», «Evento»); luoghi quadrati 136 dp con la foto e il nome; in fondo la scheda «tutti»
+  (la freccia nel colore della famiglia). Gli stati di una sezione sono un **invito** (una scheda colorata con l'icona) se la sezione non ha altro, o
+  **capsule** sotto il carosello (Altri volti, senza posizione). Utility, NAS e Nascosti sono **piastrelle compatte** con l'icona espressiva del
+  componente condiviso di I3 (`GalleryIconTile`), due per riga sul telefono; il numero solo se conta (le operazioni in corso); le frasi di prima le
+  dice TalkBack.
+- **La forma di una voce** e' un dato (`CollectionEntry.shape`: `Card`, `Map`, `More`, `Notice`, `Tile`; piu' `caption` e `showTitle`), che `:app` da'
+  nelle conversioni dei fornitori (`FacesScreenPorts`, `MemoriesScreenPorts`, `MapScreenPorts`, `toTripsGroup` in `CollectionsSectionsWiring`)
+  riconoscendo i codici delle voci; senza, si ricava dai dati. feature-people da' `named`, feature-memories `caption` (il mese, `MemoriesText.caption`).
+- **La mappa dei Luoghi** (`CollectionMapPreview.kt` in feature-library, `PlacesPreview.kt` e `MapLibrePlacesPreview.kt` in feature-map): una carta
+  ferma a tutta larghezza (2:1, al piu' 220 dp) con lo **stesso stile solo offline** della mini-mappa del viewer (nessuna richiesta di rete), le foto dei
+  luoghi piu' fotografati appuntate dove sono (al piu' 5, mai una sopra l'altra) e il credito della carta. L'inquadratura (centro pesato sulle foto,
+  zoom che fa stare tutti i luoghi con un margine, fra 1 e 8) e' una funzione pura (`PlacesPreviewFrames`, provata). La carta si chiede solo quando la
+  scheda e' piazzata sullo schermo **e la pagina e' ferma**, si ricorda in memoria (4 carte) e si butta al blocco, a un «Nascondi» e con poca memoria.
+  La porta `CollectionsMapPreview` la lega `:app` (`AppCollectionsMapPreview` in `MapModule`): MapLibre resta dentro `feature/map/`. Senza la porta o
+  senza carta resta il **mosaico** delle foto dei luoghi, grande.
+- **Privacy, invariata**: i volti passano dai cancelli di prima (`CollectionFaceCrops` -> `AppCollectionFaceCrops` -> `GuardedPeopleCrops`, le revoche,
+  il controllo sulla vista di CU-19); le foto delle schede e quelle appuntate sulla mappa passano da `CollectionCovers.request` (la Libreria visibile:
+  mai un nascosto, nemmeno fra un indice e l'altro); la carta non contiene foto ne' segni (le foto le appunta la scheda, solo per i luoghi con una foto
+  visibile adesso). Nascosti ed Eliminati di recente restano piastrelle senza foto e senza conto.
+- **Prestazioni**: le miniature delle schede si chiedono alla taglia L (la piu' grande della cache: la M a tutta scheda si sgranerebbe), solo per le
+  schede **vicine allo schermo** (ogni carosello dice quali si vedono e le due dopo; `CoverViewport`), in **una** finestra per la scheda (la finestra
+  annulla cio' che non contiene), con la dose dei luoghi (`PassDose`, invariata). Finche' la L non c'e' si disegna una taglia piu' piccola gia' in
+  memoria (`peek`), sopra il colore della famiglia: niente salto. I ritagli dei volti a min(altezza della scheda, 384 px), come gli avatar di
+  feature-people: sul telefono la stessa voce della cache. Nessun `animateContentSize`, nessun vetro nelle schede, la pressione e' una scala
+  (`fluidPressable`), lo stato per fotogramma (scorrimento, posizioni dei segni sulla carta) si legge in lambda o in `snapshotFlow`.
+- **Lo stato in cima** alle Raccolte e' la sola capsula (`NetworkStatusEntry(compact = true)` in `MainScaffold`): la frase intera la dice TalkBack.
+- **Tablet**: a due pannelli i caroselli scorrono nel pannello stretto come sul telefono (stesse schede, il carosello sporge fino al bordo del
+  pannello); la voce scelta ha il filo dell'accento; le miniature si chiedono solo se il pannello accanto e' vuoto (con una griglia aperta la finestra e'
+  sua, e le schede usano cio' che e' in cache). Da 840 dp a un pannello solo la colonna e' larga al piu' 760 dp e i caroselli mostrano piu' schede.
+- **Le pagine «tutti»**: Tutte le persone e' una griglia di schede alte (3:4) con il volto e il nome sopra la sfumatura, tre per riga sul telefono,
+  senza conti (li dice TalkBack); Altri volti senza la frase e senza conti; la pagina di una persona senza la frase di «Forse e' anche…»; Tutti i
+  ricordi e' una griglia di schede (due per riga sul telefono) per mese, con la copertina alla taglia L chiesta solo per le righe sullo schermo e le due
+  dopo.
+- **Non fatto**: una pagina «Tutti i luoghi» (oggi non esiste: il titolo dei Luoghi apre la Mappa) e la pagina «Tutti i viaggi» (sta in feature-albums,
+  pacchetto I4).
+- **Da provare sul telefono** (S25 con la libreria vera, poi Tab S9):
+  1. Raccolte, scorrere su e giu' in fretta 10 volte (traccia Perfetto o il contatore dei fotogrammi): atteso 120 Hz senza scatti quando entra un
+     carosello o la mappa; difetto: un fotogramma lungo all'arrivo dei Luoghi o delle Persone.
+  2. Scorrere di lato Persone, Ricordi, Viaggi, Luoghi: segue il dito, il lancio si ferma morbido, le foto arrivano senza buchi lunghi e senza salti.
+  3. Fermarsi sui Luoghi: entro un secondo la carta (solo la carta di base, anche in aereo) con al piu' 5 foto appuntate **sui posti giusti** (Firenze
+     su Firenze: confrontare con la Mappa aperta); difetto: foto spostate (la scala della carta non torna con i 512 dp del mondo), carta che non arriva,
+     uno scatto la prima volta (MapLibre che parte). Nella Diagnostica: nessun traffico della mappa dovuto alle Raccolte.
+  4. Nascondere la foto piu' recente di un luogo appuntato: la foto sparisce dalla carta e dalla scheda subito; nascondere la foto d'origine del volto
+     di una persona: il volto sparisce (CU-19); tornare alle Raccolte: i volti non lampeggiano.
+  5. Tablet a due pannelli: toccare una persona, un ricordo, la mappa, una piastrella: il dettaglio accanto, il filo dell'accento sulla scelta; aprire
+     Cerca e tornare: la scelta resta.
+  6. TalkBack: ogni scheda dice titolo e frase ("Giulia, 212 foto"; "Toscana, agosto 2025, Viaggio · 640 elementi"); le piastrelle l'etichetta e la
+     frase; i titoli delle sezioni sono intestazioni; i Nascosti non dicono quanti sono.
+  7. Testo grande (1,3x): i nomi sulle schede si troncano con i puntini, le piastrelle vanno a capo su due righe, niente si sovrappone.
+  8. Tutte le persone: tre schede per riga, volti nitidi; selezione (pressione lunga): il filo e il segno nell'angolo. Tutti i ricordi: copertine
+     nitide, scorrimento fluido.
+
 ### I4, il resto dell'app con meno testo (fase I, 11/11 notte)
 
 Il metro dell'utente: «se non sapessi leggere o sentire, potrei usare l'app?». Censimento in `docs/i4-censimento.md`, prima e dopo in

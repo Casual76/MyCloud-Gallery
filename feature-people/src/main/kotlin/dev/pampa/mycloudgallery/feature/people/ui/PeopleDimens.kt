@@ -10,8 +10,17 @@ import androidx.compose.ui.unit.dp
  */
 internal object PeopleDimens {
 
-  /** La tessera piu' stretta di una persona nelle griglie: sul telefono 3 colonne, sul tablet tante quante ne entrano. */
-  val TileMin: Dp = 104.dp
+  /** La tessera piu' stretta di una persona nelle griglie: sul telefono da 360 dp tre colonne (come la Galleria di Samsung), sul tablet tante quante ne entrano. */
+  val TileMin: Dp = 96.dp
+
+  /** I1 (fase I): la scheda di una persona e' alta (3:4), il volto la riempie. */
+  const val CardAspect: Float = 3f / 4f
+
+  /** I1: il lato del ritaglio chiesto per una scheda (il volto riempie l'altezza): sul telefono arriva al tetto [CropMaxPx], come le schede delle Raccolte. */
+  val CardCrop: Dp = 144.dp
+
+  /** I1: il margine del nome sopra la sfumatura in basso, e del segno della scelta in alto. */
+  val CardInset: Dp = 10.dp
 
   /** Il lato dell'avatar grande in testa alla pagina di una persona. */
   val AvatarHeader: Dp = 112.dp

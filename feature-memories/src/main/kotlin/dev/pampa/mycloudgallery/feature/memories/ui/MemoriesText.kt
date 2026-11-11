@@ -62,6 +62,16 @@ internal object MemoriesText {
   fun subtitle(resources: Resources, title: MemoryTitle, placeNames: List<String>): String =
     (listOf(period(resources, title.days)) + placeNames.take(MemoryTitle.MAX_PLACES)).joinToString(" · ")
 
+  /**
+   * I1 (fase I): la riga piccola sotto il titolo di una scheda grande: il mese e l'anno ("agosto 2025"). Niente quando il titolo li dice gia' (il
+   * meglio di un mese, un viaggio con il mese nel nome, una persona in un anno intero).
+   */
+  fun caption(kind: MemoryKind, title: MemoryTitle, titleText: String): String? {
+    if (kind == MemoryKind.MONTH || (kind == MemoryKind.PERSON && isWholeYear(title.days))) return null
+    val month = GalleryDates.monthYear(java.time.YearMonth.from(title.days.from)).lowercase(Locale.ROOT)
+    return month.takeUnless { titleText.lowercase(Locale.ROOT).contains(it) }
+  }
+
   /** La frase di una voce per TalkBack: "Nuovo. Un anno fa, 18 foto" o "Oslo, marzo 2025, 36 foto". Mai solo l'immagine. */
   fun spoken(resources: Resources, card: MemoryCard, titleText: String): String {
     val base = resources.getString(R.string.memorie_spoken_card, titleText, photos(resources, card.count))

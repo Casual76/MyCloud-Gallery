@@ -30,6 +30,8 @@ import dev.pampa.mycloudgallery.core.map.contract.RebuildReason
 import dev.pampa.mycloudgallery.feature.map.map.MapLibreInit
 import dev.pampa.mycloudgallery.feature.map.map.MapNetWiring
 import dev.pampa.mycloudgallery.feature.map.mini.MapLibreMiniMap
+import dev.pampa.mycloudgallery.feature.map.mini.MapLibrePlacesPreview
+import dev.pampa.mycloudgallery.feature.map.places.PlacesPreviewService
 import dev.pampa.mycloudgallery.feature.map.regions.MapLibreRegionEngine
 import dev.pampa.mycloudgallery.feature.map.mini.MiniMapLook
 import dev.pampa.mycloudgallery.feature.map.mini.MiniMapService
@@ -166,6 +168,16 @@ class MapGraph(
 
   private val miniBuilt: MiniMapService? get() = if (miniHolder.isInitialized()) miniHolder.value else null
 
+  private val previewHolder = lazy { PlacesPreviewService(points, MapLibrePlacesPreview(context, starter)) }
+
+  /**
+   * I1 (fase I): la mappa in anteprima dei Luoghi delle Raccolte (lo stesso stile solo offline della mini-mappa: nessuna richiesta). Nasce alla prima
+   * richiesta, cioe' quando la scheda della mappa e' sullo schermo, mai all'avvio.
+   */
+  val placesPreview: PlacesPreviewService get() = previewHolder.value
+
+  private val previewBuilt: PlacesPreviewService? get() = if (previewHolder.isInitialized()) previewHolder.value else null
+
   private suspend fun positionOf(media: MediaId): GeoE6? {
     if (stopped.get()) return null
     return try {
@@ -195,16 +207,21 @@ class MapGraph(
     if (stopped.get()) return
     pointsIfBuilt()?.hiddenChanged()
     miniBuilt?.clear()
+    previewBuilt?.clear()
   }
 
   /** Il blocco dell'app: nessuna mini-mappa resta in memoria. */
   fun onLocked() {
     miniBuilt?.clear()
+    previewBuilt?.clear()
   }
 
   /** `onTrimMemory` (§1.4 "Memoria"): le mini-mappe in memoria si buttano; MapLibre si rilascia con la sua pagina (le `MapView` seguono il ciclo di vita). */
   fun onTrimMemory(level: Int) {
-    if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) miniBuilt?.clear()
+    if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+      miniBuilt?.clear()
+      previewBuilt?.clear()
+    }
   }
 
   /** Per la Diagnostica: lo stato dell'indice se la mappa e' stata aperta in questo processo, altrimenti null (nessuna lettura per la Diagnostica). */
@@ -221,6 +238,7 @@ class MapGraph(
   suspend fun stop() {
     if (!stopped.compareAndSet(false, true)) return
     miniBuilt?.clear()
+    previewBuilt?.clear()
     // P5: le regioni per prime (se sono nate in questo processo): lo scaricamento si ferma, le regioni si tolgono dal database e dallo stato, da qui nessuna scrittura. Poi il database intero e le impostazioni.
     if (regionsHolder.isInitialized() || regionsOverride != null) guarded("regioni offline") { regions.clear() }
     job.cancelAndJoin()

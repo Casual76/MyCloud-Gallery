@@ -5,7 +5,11 @@ import dev.pampa.mycloudgallery.core.map.contract.GeoIndexState
 import dev.pampa.mycloudgallery.core.map.contract.MapPoints
 import dev.pampa.mycloudgallery.core.map.contract.RebuildReason
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionMapImage
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionMapPin
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionsMapPreview
 import dev.pampa.mycloudgallery.feature.map.mini.MiniMapService
+import dev.pampa.mycloudgallery.feature.map.places.PlacesPreviewService
 import dev.pampa.mycloudgallery.feature.map.mini.MiniMapState
 import dev.pampa.mycloudgallery.feature.viewer.place.ViewerMapPlace
 import dev.pampa.mycloudgallery.feature.viewer.place.ViewerPlaceMap
@@ -57,6 +61,20 @@ class WatchedMapPoints(
   }
 
   override fun toString(): String = "WatchedMapPoints"
+}
+
+/**
+ * I1 (fase I): la porta della mappa in anteprima delle Raccolte ([CollectionsMapPreview], feature-library) sopra il servizio di feature-map
+ * ([PlacesPreviewService]): i due moduli non si conoscono. [service] si costruisce alla prima richiesta (la scheda della mappa sullo schermo), mai prima.
+ * Escono solo la carta, l'id dei luoghi e le loro posizioni sulla carta: mai una coordinata.
+ */
+class AppCollectionsMapPreview(private val service: () -> PlacesPreviewService) : CollectionsMapPreview {
+  override fun preview(places: List<Int>, widthDp: Int, heightDp: Int, density: Float, dark: Boolean): Flow<CollectionMapImage?> =
+    service().preview(places, widthDp, heightDp, density, dark).map { ready ->
+      ready?.let { p -> CollectionMapImage(p.bitmap, p.pins.map { CollectionMapPin(it.placeId, it.x, it.y) }, p.attribution) }
+    }
+
+  override fun toString(): String = "AppCollectionsMapPreview"
 }
 
 /**

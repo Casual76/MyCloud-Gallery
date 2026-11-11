@@ -63,4 +63,72 @@ internal object CollectionsDimens {
   val MosaicGap: Dp = 2.dp
   val MapBadge: Dp = 18.dp
   val MapBadgeGlyph: Dp = 12.dp
+
+  // I1 (fase I, 11/11): le Raccolte come una galleria. Le schede si leggono a colpo d'occhio sul telefono da 360 dp: due persone e mezza, un ricordo e
+  // un pezzo del successivo, due luoghi e mezzo per riga (il pezzo che sporge dice "scorri di lato").
+
+  /** Lo spazio fra due schede di un carosello, e fra due piastrelle. */
+  val CarouselGap: Dp = 10.dp
+
+  /** La scheda di una persona: alta, il volto a tutta scheda (3:4 circa). */
+  val PersonCardWidth: Dp = 116.dp
+  val PersonCardHeight: Dp = 156.dp
+
+  /** La scheda larga di un ricordo o di un viaggio (3:2). */
+  val WideCardWidth: Dp = 264.dp
+  val WideCardHeight: Dp = 176.dp
+
+  /** La scheda di un luogo: quadrata, la foto e il nome. */
+  val PlaceCardSide: Dp = 136.dp
+
+  /** Il margine del testo dentro una scheda, sopra la sfumatura. */
+  val CardTextInset: Dp = 12.dp
+
+  /** Il lato dell'icona grande al posto della foto che non c'e' (una persona senza volto pronto, la scheda "tutti"). */
+  val CardGlyph: Dp = 40.dp
+
+  /** Il tondo della freccia della scheda "tutti". */
+  val MoreDisc: Dp = 44.dp
+
+  /** Il filo della scheda scelta sul tablet. */
+  val SelectedRing: Dp = 3.dp
+
+  /** Il punto "nuovo" su un ricordo, e il suo filo. */
+  val NewDot: Dp = 10.dp
+  val NewDotRing: Dp = 2.dp
+
+  /** L'altezza minima del titolo di una sezione (il bersaglio da 48 dp quando porta a "tutti"), e lo spazio fra il nome e la freccia. */
+  val SectionTitleMin: Dp = 48.dp
+  val SectionTitleGap: Dp = 4.dp
+
+  /** La mappa in cima ai Luoghi: larga quanto la pagina, alta la meta' (al piu' [MapCardMaxHeight]). */
+  val MapCardMaxHeight: Dp = 220.dp
+
+  /** Una foto appuntata sulla mappa, il suo filo, e la distanza sotto cui due foto non si appuntano una sull'altra. */
+  val MapPin: Dp = 46.dp
+  val MapPinRing: Dp = 2.5.dp
+  val MapPinMinGap: Dp = 40.dp
+
+  /** Il segno della mappa grande (quando la carta non c'e'), e la capsula "Mappa" in basso a sinistra. */
+  val MapBadgeLarge: Dp = 44.dp
+  val MapChipPadding: Dp = 10.dp
+  val MapChipGlyph: Dp = 18.dp
+  val MapChipHeight: Dp = 32.dp
+
+  /** Le piastrelle compatte (Utility, NAS, Nascosti): la larghezza minima (due per riga sul telefono), l'altezza minima, il margine e l'icona. */
+  val TileMinWidth: Dp = 150.dp
+  val TileMinHeight: Dp = 64.dp
+  val TilePadding: Dp = 10.dp
+
+  /** Il numero su una piastrella (le operazioni in corso): il margine della capsula. */
+  val TileBadgeHorizontal: Dp = 8.dp
+  val TileBadgeVertical: Dp = 2.dp
+
+  /** L'invito di una sezione che non ha ancora niente da mostrare: alto quanto una scheda bassa. */
+  val InviteHeight: Dp = 104.dp
+
+  /** Un segno di stato sotto un carosello (Altri volti, Senza posizione): la capsula, il suo margine e l'icona. */
+  val ChipHeight: Dp = 40.dp
+  val ChipPadding: Dp = 14.dp
+  val ChipGlyph: Dp = 18.dp
 }

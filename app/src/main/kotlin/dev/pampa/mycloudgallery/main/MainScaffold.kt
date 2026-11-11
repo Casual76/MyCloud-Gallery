@@ -72,6 +72,7 @@ import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarSlotVisibi
 import dev.pampa.mycloudgallery.core.designsystem.chrome.LocalGalleryTabBarSlot
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterEntry
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterPill
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
 import dev.pampa.mycloudgallery.feature.library.library.LibraryTab
 import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
@@ -200,8 +201,9 @@ fun MainScaffold(
     CollectionsSlot(
       contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
       backdropOut = { backdrop = it },
-      // Lo stesso stato della rete, nello stesso linguaggio, come prima riga dell'elenco (G2).
-      statusHeader = { NetworkStatusEntry(status = status, onClick = onStatusClick, alignment = Alignment.Start) },
+      // Lo stesso stato della rete, nello stesso linguaggio, come prima riga dell'elenco (G2). I1 (fase I): un segno solo, la capsula; il resto della
+      // frase lo dice TalkBack e lo mostra la pagina che si apre toccandola.
+      statusHeader = { NetworkStatusEntry(status = status, onClick = onStatusClick, alignment = Alignment.Start, compact = true) },
     )
   }
 
@@ -361,7 +363,7 @@ fun MainScaffold(
  * cio' che [GlobalStatus.action] dice.
  */
 @Composable
-private fun NetworkStatusEntry(status: GlobalStatus, onClick: () -> Unit, alignment: Alignment.Horizontal = Alignment.CenterHorizontally) {
+private fun NetworkStatusEntry(status: GlobalStatus, onClick: () -> Unit, alignment: Alignment.Horizontal = Alignment.CenterHorizontally, compact: Boolean = false) {
   val tone = when (status.tone) {
     FluidTone.Success, FluidTone.Primary -> GalleryFooterTone.Calm
     FluidTone.Info -> GalleryFooterTone.Working
@@ -385,18 +387,20 @@ private fun NetworkStatusEntry(status: GlobalStatus, onClick: () -> Unit, alignm
   val sentence = stringResource(status.label)
   val head = sentence.substringBefore(StatusSeparator).trim()
   val rest = sentence.substringAfter(StatusSeparator, missingDelimiterValue = "").trim().ifEmpty { null }
-  GalleryFooterEntry(
-    note = GalleryFooterNote(
-      tone = tone,
-      label = head,
-      glyph = glyph,
-      detail = rest?.replaceFirstChar { it.titlecase() },
-      busy = status == GlobalStatus.WAKING_NAS,
-      description = sentence,
-    ),
-    onClick = onClick,
-    alignment = alignment,
+  val note = GalleryFooterNote(
+    tone = tone,
+    label = head,
+    glyph = glyph,
+    detail = rest?.replaceFirstChar { it.titlecase() },
+    busy = status == GlobalStatus.WAKING_NAS,
+    description = sentence,
   )
+  // I1: in cima alle Raccolte lo stato e' un segno, non due righe: la capsula sola (la sua descrizione e' la frase intera).
+  if (compact) {
+    GalleryFooterPill(note = note, onClick = onClick)
+  } else {
+    GalleryFooterEntry(note = note, onClick = onClick, alignment = alignment)
+  }
 }
 
 /**

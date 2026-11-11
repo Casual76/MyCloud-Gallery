@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 
 /**
  * Il cervello della pagina Impostazioni → Ricerca e modelli (Fase 6, P8, docs/fase6-progetto.md §2.6; D15, D20, D41; Q3, Q13): compone
@@ -56,7 +57,11 @@ class SearchSettingsController(
   accepted: TextReadingAccepted?,
   private val probe: DeviceProbe?,
   private val scope: CoroutineScope,
+  private val probeDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Default,
+  private val io: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO,
 ) {
+  val probeFailed = MutableStateFlow(false)
+  private var attempt: kotlinx.coroutines.Deferred<Result<ProbeResult>>? = null
   private val probeResult = MutableStateFlow<ProbeResult?>(null)
 
   /** La misura breve e' in corso: la pagina dice "Sto misurando il dispositivo…". */
@@ -108,7 +113,13 @@ class SearchSettingsController(
       syncPending = values[11] as Boolean,
       removeOffer = values[12] as Boolean,
     )
-  }.stateIn(scope, SharingStarted.Eagerly, compose(false, AiStatus.Off, IndexerBacklog.NONE, IndexSpace.NONE, null, emptyMap(), SearchCoverage.Complete, 0, TextReadingState.Off, TextReadingSwitch.CURRENT_TEXT_VERSION))
+  }.stateIn(scope, SharingStarted.Eagerly, compose(
+    indexer?.indexer?.value ?: false, indexer?.status?.value ?: AiStatus.Off,
+    indexer?.backlog?.value ?: IndexerBacklog.NONE, indexer?.space?.value ?: IndexSpace.NONE,
+    null, models?.states?.value.orEmpty(), engine.coverage.value, history.entries.value.size,
+    textReading?.state?.value ?: TextReadingState.Off, accepted?.acceptedVersion?.value ?: TextReadingSwitch.CURRENT_TEXT_VERSION,
+    excludedHere = textReading?.excludedHere?.value ?: false, syncPending = textReading?.syncPending?.value ?: false,
+  ))
 
   /** Il ruolo Indicizzatore e la lettura del testo sono collegati? Senza, la pagina nasconde la sezione (nessuna riga che non fa niente). */
   val hasIndexer: Boolean get() = indexer != null
@@ -160,13 +171,16 @@ class SearchSettingsController(
 
   init {
     // IX-3: l'ultima misura si ritrova, e si rifa' quando il modello del calcolo diventa pronto (la prima falliva se mancava).
-    indexer?.savedProbe()?.let { probeResult.value = it }
     val control = indexer
     val manager = models
-    if (control != null && manager != null) {
-      scope.launch {
-        manager.states.map { it[ModelCatalog.INDEX_440M.id] is ModelState.Ready }.distinctUntilChanged().collect { ready ->
-          if (ready && control.indexer.value && probeResult.value == null) measure()
+    scope.launch {
+      val saved = kotlinx.coroutines.withContext(io) { control?.savedProbe() }
+      if (probeResult.value == null) probeResult.value = saved
+      if (control != null && manager != null) {
+        combine(manager.states, control.indexer) { states, on ->
+          on && states[ModelCatalog.INDEX_440M.id] is ModelState.Ready
+        }.distinctUntilChanged().collect { ready ->
+          if (ready && probeResult.value == null && !probeFailed.value) measure()
         }
       }
     }
@@ -206,15 +220,37 @@ class SearchSettingsController(
   /** La misura breve del dispositivo (20 immagini sintetiche dell'APK): una sola alla volta. */
   fun measure() {
     val device = probe ?: return
-    if (measuring.value) return
+    if (indexer?.indexer?.value != true || models?.states?.value?.get(ModelCatalog.INDEX_440M.id) !is ModelState.Ready) return
+    // Una chiamata nativa non cancellabile puo' sopravvivere alla scadenza: mai accodarne altre.
+    if (measuring.value || attempt?.isCompleted == false) return
     measuring.value = true
+    probeFailed.value = false
+    val work = scope.async(probeDispatcher) {
+      try {
+        Result.success(device.measure())
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        // Anche un errore tardivo del driver dopo la cancellazione resta un risultato,
+        // non un'eccezione senza osservatore nel SupervisorJob della pagina.
+        Result.failure(e)
+      }
+    }
+    attempt = work
     scope.launch {
       try {
-        guarded {
-          val result = device.measure()
-          probeResult.value = result
-          indexer?.saveProbe(result)
-        }
+        val result = kotlinx.coroutines.withTimeout(120_000L) { work.await().getOrThrow() }
+        probeResult.value = result
+        measuring.value = false
+        kotlinx.coroutines.withContext(io) { indexer?.saveProbe(result) }
+      } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+        work.cancel()
+        probeFailed.value = true
+      } catch (e: CancellationException) {
+        work.cancel()
+        throw e
+      } catch (e: Exception) {
+        probeFailed.value = true
       } finally {
         measuring.value = false
       }

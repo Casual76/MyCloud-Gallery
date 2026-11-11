@@ -572,11 +572,12 @@ private fun ShotCard(model: InfoModel, accent: Color?) {
       )
       Box(modifier = Modifier.weight(1f)) {
         when {
+          // Con il testo grande il nome della fotocamera va su due righe invece di perdere il modello («Samsung Galaxy …»).
           model.camera != null -> Text(
             text = model.camera,
             style = MaterialTheme.typography.titleMedium,
             color = scheme.onSurface,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
           )
           model.shotPending -> FluidSkeleton(modifier = Modifier.fillMaxWidth(CameraSkeletonFraction), height = TitleSkeletonHeight)

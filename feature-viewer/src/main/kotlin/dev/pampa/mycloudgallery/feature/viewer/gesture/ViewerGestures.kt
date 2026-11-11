@@ -81,8 +81,8 @@ internal data class GestureContext(
  *    bordo e da li' lascia il resto al pager;
  *  - **un dito, verso il basso**: la chiusura (a pannello aperto: la chiusura del pannello);
  *  - **un dito, verso l'alto**: il pannello informazioni sul telefono; a pannello aperto lo fa scorrere (H2); con la colonna laterale
- *    (tablet, telefono in orizzontale) niente ([GestureClaim.Dead]), anche verso il basso: la colonna si chiude con il suo tasto o toccando la
- *    foto;
+ *    (tablet, telefono in orizzontale) niente ([GestureClaim.Dead]), anche verso il basso: la colonna si chiude con il tasto Informazioni o
+ *    con la sua X;
  *  - **due dita che si stringono a zoom minimo**: la chiusura, la stessa del trascinamento (il contenuto segue il punto medio delle dita);
  *  - **due dita a pannello aperto** (telefono): appena si appoggia il secondo dito il pannello si chiude ([GestureClaim.InfoPinch]) e il resto
  *    del gesto non e' di nessuno; lo zoom e' il gesto dopo, sulla foto intera;

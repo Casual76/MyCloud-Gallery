@@ -309,8 +309,8 @@ internal fun BoxScope.InfoSheet(
 
 /**
  * La colonna informazioni (da 840 dp e nelle finestre basse e larghe, [InfoGeometry.side]): a destra, a tutta altezza, con la foto che le fa
- * posto ([InfoGeometry.sideLayer]). Lo stesso materiale e lo stesso contenuto del pannello del telefono; si apre con il tasto e si chiude con
- * il suo, o toccando la foto.
+ * posto ([InfoGeometry.sideLayer]). Lo stesso materiale e lo stesso contenuto del pannello del telefono; si apre e si chiude con il tasto
+ * Informazioni o con la sua X. Il tocco sulla foto accanto resta delle barre (la foto e' intera e si guarda come sempre).
  */
 @Composable
 internal fun BoxScope.InfoSidePanel(

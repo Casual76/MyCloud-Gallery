@@ -10,77 +10,27 @@ import dev.antigravity.fluidengine.foundation.ThemeMode
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.core.imaging.testing.FakePlaceholderCache
 import dev.pampa.mycloudgallery.core.imaging.testing.FakeThumbnailLoader
-import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
 import dev.pampa.mycloudgallery.core.library.testing.SyntheticLibrary
-import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.models.contract.ModelId
-import dev.pampa.mycloudgallery.core.search.contract.HistoryEntry
-import dev.pampa.mycloudgallery.core.search.contract.PersonOption
-import dev.pampa.mycloudgallery.core.search.contract.PlaceOption
-import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
-import dev.pampa.mycloudgallery.core.search.contract.SearchChip
-import dev.pampa.mycloudgallery.core.search.contract.SearchMediaType
 import dev.pampa.mycloudgallery.core.search.contract.Suggestion
 import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
 import dev.pampa.mycloudgallery.feature.search.models.SearchSettingsHandlers
 import dev.pampa.mycloudgallery.feature.search.ui.SearchHost
 
-// Il banco della UI di Cerca (Fase 6, P8): tema chiaro o scuro, testo a 1,3x, un caricatore di miniature finto che registra cosa gli si chiede.
+// Il banco della UI della ricerca (Fase 6, P8; H4): tema chiaro o scuro, testo a 1,3x, un caricatore di miniature finto che registra cosa gli si chiede.
 
-/** Le richieste della schermata Cerca, registrate come testo. */
+/** Le richieste della ricerca dentro la Libreria (H4), registrate come testo. */
 internal class RecordingHandlers : SearchHandlers {
   val calls: MutableList<String> = mutableListOf()
-  var opened: OrderedTimelineView? = null
 
   override fun onQueryChange(text: String) { calls += "query:$text" }
 
   override fun onSubmit() { calls += "submit" }
 
-  override fun onRecent(entry: HistoryEntry) { calls += "recent:${entry.text}" }
-
-  override fun onDeleteRecent(entry: HistoryEntry) { calls += "delete:${entry.text}" }
-
-  override fun onClearRecents() { calls += "clearAll" }
-
-  override fun onPlace(option: PlaceOption) { calls += "place:${option.label}" }
-
-  override fun onType(type: SearchMediaType, label: String) { calls += "type:$label" }
-
-  override fun onCompletion(suggestion: Suggestion) { calls += "completion:${suggestion.label}" }
-
-  override fun onRemoveChip(chip: SearchChip) { calls += "removeChip:${chip.label}" }
-
-  override fun onChooseAlternative(chip: SearchChip.Place, option: PlaceOption) { calls += "alternative:${option.label}" }
-
-  override fun onPlaceAsWord(chip: SearchChip.Place) { calls += "asWord:${chip.word}" }
-
-  override fun onPerson(option: PersonOption) { calls += "person:${option.label}" }
-
-  override fun onSwitchReading(chip: SearchChip, to: SearchChip) { calls += "reading:${chip.label}->${to.label}" }
-
-  override fun onSetOrder(order: ResultOrder) { calls += "order:${order.code}" }
-
-  override fun onShowLikely() { calls += "showLikely" }
-
-  override fun onOpen(view: OrderedTimelineView, media: MediaId) {
-    opened = view
-    calls += "open:${media.value}"
-  }
-
-  override fun onDownloadModel() { calls += "download" }
-
-  override fun onEnableIndexerHere() { calls += "enableIndexer" }
-
-  override fun onWhyCoverage() { calls += "why" }
-
-  override fun onLearnTextReading() { calls += "learn" }
-
-  override fun onAllowAccess() { calls += "allow" }
+  override fun onSuggestion(suggestion: Suggestion) { calls += "suggestion:${suggestion.label}" }
 
   override fun onRetry() { calls += "retry" }
-
-  override fun onDiagnostics() { calls += "diagnostics" }
 }
 
 /** Le richieste della pagina Ricerca e modelli, registrate come testo. */

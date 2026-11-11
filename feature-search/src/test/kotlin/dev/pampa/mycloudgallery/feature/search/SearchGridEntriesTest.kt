@@ -1,91 +1,56 @@
 package dev.pampa.mycloudgallery.feature.search
 
 import com.google.common.truth.Truth.assertThat
-import dev.pampa.mycloudgallery.core.designsystem.media.GalleryTimelineLevel
-import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
-import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
 import dev.pampa.mycloudgallery.core.search.contract.SearchCoverage
 import dev.pampa.mycloudgallery.feature.search.contract.SearchScreenState
-import java.time.LocalDate
 import org.junit.Test
 
-/** Le voci della griglia dei risultati (Fase 6, P8, §2.6, D28, D48): sezioni, intestazioni di periodo e ordine in cui scorre il viewer. */
+/**
+ * Le voci della griglia dei risultati (H4): **solo per pertinenza** e **senza intestazioni di data**; prima i sicuri (il primo e' il piu' adatto: la
+ * griglia lo mette subito sopra la barra di ricerca), poi il separatore leggero e i meno probabili; il viewer scorre i risultati nell'ordine mostrato.
+ */
 class SearchGridEntriesTest {
 
-  private val lib = library(count = 400)
-  private val today = LocalDate.of(2026, 10, 21)
+  private val lib = library(count = 40)
 
-  private fun state(
-    order: ResultOrder,
-    confident: IntRange = 0..9,
-    likely: IntRange = IntRange.EMPTY,
-    showLikely: Boolean = false,
-    likelyCount: Int = likely.count(),
-  ): SearchScreenState.Results {
-    val r = lib.results(confident = confident, likely = likely, order = order)
-    return SearchScreenState.Results(r.chips, order, r.confident, r.likely, likelyCount, showLikely, SearchCoverage.Complete, emptyList())
-  }
-
-  private fun ids(view: OrderedTimelineView) = (0 until view.size).map { view.snapshot.idAt(view.snapshotIndex(it)) }
+  private fun results(confident: IntArray, likely: IntArray = intArrayOf()): SearchScreenState.Results =
+    SearchScreenState.Results(emptyList(), lib.view(*confident), lib.view(*likely), SearchCoverage.Complete, emptyList())
 
   @Test
-  fun inRecentiOgniPeriodoHaLaSuaIntestazioneInOrdineEOgniCellaUna() {
-    val entries = SearchGridEntries.build(state(ResultOrder.RECENT, 0..79), today)
-    assertThat(entries.first()).isEqualTo(GridEntry.Title(ResultSection.CONFIDENT, 80))
-    assertThat(entries.filterIsInstance<GridEntry.Cell>()).hasSize(80)
-    val periods = entries.filterIsInstance<GridEntry.Period>()
-    assertThat(periods).isNotEmpty()
-    // Le intestazioni stanno sempre prima delle loro celle e non si ripetono di seguito.
-    assertThat(entries[1]).isInstanceOf(GridEntry.Period::class.java)
-    assertThat(periods.zipWithNext().all { (a, b) -> a != b }).isTrue()
-    assertThat(entries.map { it.key }.toSet()).hasSize(entries.size)
+  fun iSicuriNellOrdineDelMotoreSenzaDateNeSeparatoriSeNonCiSonoMenoProbabili() {
+    val entries = SearchGridEntries.build(results(intArrayOf(7, 2, 30, 11)))
+    assertThat(entries.map { (it as GridEntry.Cell).media }).containsExactly(lib.id(7), lib.id(2), lib.id(30), lib.id(11)).inOrder()
+    assertThat(entries.filterIsInstance<GridEntry.LikelyDivider>()).isEmpty()
   }
 
   @Test
-  fun inPertinentiNienteIntestazioniDiPeriodo() {
-    val entries = SearchGridEntries.build(state(ResultOrder.RELEVANT, 0..79), today)
-    assertThat(entries.filterIsInstance<GridEntry.Period>()).isEmpty()
-    assertThat(entries.filterIsInstance<GridEntry.Cell>().map { it.viewIndex }).isEqualTo((0..79).toList())
+  fun iMenoProbabiliInCodaDopoIlSeparatoreCheDiceQuantiSono() {
+    val entries = SearchGridEntries.build(results(intArrayOf(3, 1), intArrayOf(20, 21, 22)))
+    assertThat(entries).hasSize(6)
+    assertThat(entries[2]).isEqualTo(GridEntry.LikelyDivider(3))
+    assertThat((entries[0] as GridEntry.Cell).section).isEqualTo(ResultSection.CONFIDENT)
+    assertThat((entries[3] as GridEntry.Cell).section).isEqualTo(ResultSection.LIKELY)
+    assertThat((entries.last() as GridEntry.Cell).media).isEqualTo(lib.id(22))
   }
 
   @Test
-  fun leIntestazioniSonoGiornoMeseAnnoSecondoLEta() {
-    assertThat(SearchGridEntries.levelOf(today.minusDays(3), today)).isEqualTo(GalleryTimelineLevel.Day)
-    assertThat(SearchGridEntries.levelOf(today.minusDays(31), today)).isEqualTo(GalleryTimelineLevel.Day)
-    assertThat(SearchGridEntries.levelOf(today.minusDays(32), today)).isEqualTo(GalleryTimelineLevel.Month)
-    assertThat(SearchGridEntries.levelOf(today.minusDays(730), today)).isEqualTo(GalleryTimelineLevel.Month)
-    assertThat(SearchGridEntries.levelOf(today.minusDays(731), today)).isEqualTo(GalleryTimelineLevel.Year)
-    assertThat(SearchGridEntries.levelOf(null, today)).isEqualTo(GalleryTimelineLevel.All)
+  fun soloMenoProbabiliIlSeparatoreStaInTesta() {
+    val entries = SearchGridEntries.build(results(intArrayOf(), intArrayOf(5, 6)))
+    assertThat(entries.first()).isEqualTo(GridEntry.LikelyDivider(2))
   }
 
   @Test
-  fun iMenoProbabiliSonoUnBottoneFinoAChiNeChiede_E_Q12() {
-    val hidden = SearchGridEntries.build(state(ResultOrder.RELEVANT, 0..4, likely = 10..16), today)
-    assertThat(hidden.last()).isEqualTo(GridEntry.ShowLikely(7))
-    assertThat(hidden.filterIsInstance<GridEntry.Cell>().map { it.section }.toSet()).containsExactly(ResultSection.CONFIDENT)
-
-    val shown = SearchGridEntries.build(state(ResultOrder.RELEVANT, 0..4, likely = 10..16, showLikely = true), today)
-    assertThat(shown.filterIsInstance<GridEntry.ShowLikely>()).isEmpty()
-    val titles = shown.filterIsInstance<GridEntry.Title>()
-    assertThat(titles.map { it.section to it.count }).containsExactly(ResultSection.CONFIDENT to 5, ResultSection.LIKELY to 7).inOrder()
-    // Le celle dei meno probabili stanno dopo quelle dei sicuri.
-    val sections = shown.filterIsInstance<GridEntry.Cell>().map { it.section }
-    assertThat(sections.indexOf(ResultSection.LIKELY)).isEqualTo(5)
+  fun leChiaviSonoUnicheEStabili() {
+    val a = SearchGridEntries.build(results(intArrayOf(3, 1), intArrayOf(20, 21)))
+    val b = SearchGridEntries.build(results(intArrayOf(3, 1), intArrayOf(20, 21)))
+    assertThat(a.map { it.key }).containsNoDuplicates()
+    assertThat(a.map { it.key }).isEqualTo(b.map { it.key })
   }
 
   @Test
-  fun senzaRisultatiSicuriMostratiICMenoProbabiliNonCeIlTitoloDeiSicuri() {
-    val entries = SearchGridEntries.build(state(ResultOrder.RELEVANT, confident = IntRange.EMPTY, likely = 3..5, showLikely = true), today)
-    assertThat(entries.filterIsInstance<GridEntry.Title>().map { it.section }).containsExactly(ResultSection.LIKELY)
-    assertThat(entries.filterIsInstance<GridEntry.Cell>()).hasSize(3)
-  }
-
-  @Test
-  fun ilViewerScorreINRisultatiNellOrdineMostrato() {
-    val closed = state(ResultOrder.RELEVANT, 3..7, likely = 20..22)
-    assertThat(ids(SearchGridEntries.openingView(closed))).isEqualTo(ids(closed.confident))
-
-    val open = state(ResultOrder.RELEVANT, 0..2, likely = 20..22, showLikely = true)
-    assertThat(ids(SearchGridEntries.openingView(open))).isEqualTo(ids(open.confident) + ids(open.likely))
+  fun ilViewerScorreSicuriEPoiMenoProbabiliNellOrdineMostrato() {
+    val view = SearchGridEntries.openingView(results(intArrayOf(9, 4), intArrayOf(15, 12)))
+    val ids = (0 until view.size).map { view.snapshot.idAt(view.snapshotIndex(it)) }
+    assertThat(ids).containsExactly(lib.id(9), lib.id(4), lib.id(15), lib.id(12)).inOrder()
   }
 }

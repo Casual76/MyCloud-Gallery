@@ -25,8 +25,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Fase 10, P8 (D23, D25-D27, §2.7 "Cerca", D28): **ogni** scena del catalogo degli screenshot di Cerca (a riposo, scrivendo, risultati, nessun
- * risultato, avvisi, errore, Ricerca e modelli, attivazione) letta come la legge TalkBack, a testo 1,0 e poi a 2,0 sulla stessa scena: nome e ruolo per
+ * Fase 10, P8 (D23, D25-D27, §2.7 "Cerca", D28): **ogni** scena del catalogo degli screenshot delle pagine della ricerca (Ricerca e modelli,
+ * attivazione; la ricerca dentro la Libreria ha le sue prove in :app, H4) letta come la legge TalkBack, a testo 1,0 e poi a 2,0 sulla stessa scena: nome e ruolo per
  * ogni elemento attivo, bersagli da 48 dp misurati, nessun id o nome di file, testo non tagliato.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)

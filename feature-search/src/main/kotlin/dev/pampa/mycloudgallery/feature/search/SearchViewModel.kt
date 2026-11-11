@@ -19,15 +19,12 @@ import dev.pampa.mycloudgallery.core.search.noop.NoSearchEngine
 import dev.pampa.mycloudgallery.core.search.noop.NoSearchHistory
 import dev.pampa.mycloudgallery.core.search.noop.NoSuggestions
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerControl
-import dev.pampa.mycloudgallery.feature.search.contract.SearchOrderStore
 import dev.pampa.mycloudgallery.feature.search.contract.TextReadingAccepted
-import dev.pampa.mycloudgallery.feature.search.noop.MemorySearchOrderStore
-import java.time.LocalDate
 import java.util.Optional
 import javax.inject.Inject
 
-// Il ViewModel di Cerca (Fase 6, P8; D7 della Fase 2: @HiltViewModel). Tutte le porte sono OPZIONALI per Dagger ([SearchPortsModule]): `:app`
-// (P11) lega il motore, i suggerimenti, la cronologia, le porte di ordine e ruolo; finche' non lo fa, la schermata parte lo stesso con i
+// Il ViewModel della ricerca (Fase 6, P8; D7 della Fase 2: @HiltViewModel; H4: la ricerca dentro la Libreria). Tutte le porte sono OPZIONALI per Dagger
+// ([SearchPortsModule]): `:app` (P11) lega il motore, i suggerimenti, la cronologia, i dati e i modelli; finche' non lo fa, la ricerca parte lo stesso con i
 // null-object (nessun risultato, nessun suggerimento: falliscono chiusi) e il grafo di `:app` compila.
 
 @HiltViewModel
@@ -36,10 +33,7 @@ class SearchViewModel @Inject constructor(
   suggestions: Optional<Suggestions>,
   history: Optional<SearchHistory>,
   data: Optional<SearchData>,
-  today: Optional<Today>,
-  order: Optional<SearchOrderStore>,
   models: Optional<ModelManager>,
-  indexer: Optional<IndexerControl>,
 ) : ViewModel() {
 
   val controller: SearchController = SearchController(
@@ -47,10 +41,7 @@ class SearchViewModel @Inject constructor(
     suggestions = suggestions.orElse(NoSuggestions),
     history = history.orElse(NoSearchHistory),
     data = data.orElse(null),
-    today = today.orElse(Today { LocalDate.of(1970, 1, 1) }),
-    orderStore = order.orElse(MemorySearchOrderStore()),
     models = models.orElse(null),
-    indexer = indexer.orElse(null),
     scope = viewModelScope,
   )
 }
@@ -74,9 +65,6 @@ abstract class SearchPortsModule {
 
   @BindsOptionalOf
   abstract fun today(): Today
-
-  @BindsOptionalOf
-  abstract fun searchOrderStore(): SearchOrderStore
 
   @BindsOptionalOf
   abstract fun modelManager(): ModelManager

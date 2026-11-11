@@ -1,106 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <!-- Fase 6 (P8, docs/fase6-progetto.md §2.6): la schermata Cerca. -->
-  <string name="search_title">Cerca</string>
+  <!-- La ricerca dentro la Libreria (H4 della fase H, 11/11; prima la schermata Cerca della Fase 6, docs/fase6-progetto.md §2.6). Il campo e' la barra in
+       basso, i suggerimenti stanno in alto, i risultati al posto della griglia e una riga sola sopra la barra dice cio' che serve. -->
   <string name="search_field_hint">Foto, luoghi, date, parole…</string>
-  <string name="search_field_clear">Cancella il testo</string>
-  <string name="search_searching">Sto cercando…</string>
 
-  <!-- A riposo -->
-  <string name="search_recents">Ricerche recenti</string>
-  <string name="search_recents_clear_all">Cancella tutte</string>
-  <string name="search_recent_delete">Cancella la ricerca «%1$s»</string>
-  <string name="search_recent_open">Cerca di nuovo «%1$s»</string>
-  <string name="search_places">Luoghi</string>
-  <string name="search_types">Tipi</string>
-  <string name="search_type_photo">Foto</string>
-  <string name="search_type_video">Video</string>
-  <string name="search_type_screenshot">Screenshot</string>
-  <string name="search_type_document">Documenti</string>
-  <string name="search_type_panorama">Panorami</string>
-  <string name="search_type_motion">Foto in movimento</string>
-  <string name="search_type_favorites">Preferiti</string>
-  <string name="search_idle_hint">Scrivi quello che cerchi, per esempio «mare ad agosto» o «scontrino».</string>
+  <!-- La barra dei suggerimenti in alto -->
+  <string name="search_suggestions_title">Suggerimenti di ricerca</string>
+  <string name="search_suggestion_description">Cerca «%1$s»</string>
 
-  <!-- Chip: la lettura di TalkBack dice cosa filtra e che si tocca per modificarlo. -->
-  <string name="search_chips_bar">Filtri della ricerca</string>
-  <string name="search_chip_date">Filtro data: %1$s. Tocca per modificare</string>
-  <string name="search_chip_place">Filtro luogo: %1$s. Tocca per modificare</string>
-  <string name="search_chip_type">Filtro tipo: %1$s. Tocca per modificare</string>
-  <string name="search_chip_source">Filtro provenienza: %1$s. Tocca per modificare</string>
-  <string name="search_chip_presence">Filtro posizione: %1$s. Tocca per modificare</string>
-  <string name="search_chip_flag">Filtro: %1$s. Tocca per modificare</string>
-  <string name="search_chip_word">Parola cercata: %1$s. Tocca per modificare</string>
-  <string name="search_chip_similar">Simili a questa foto. Tocca per modificare</string>
-  <string name="search_chip_similar_label">Simili a questa foto</string>
-  <plurals name="search_chip_similar_many_label">
-    <item quantity="one">Simili a %d foto</item>
-    <item quantity="other">Simili a %d foto</item>
-  </plurals>
-  <plurals name="search_chip_similar_many_description">
-    <item quantity="one">Simili a %d foto scelta. Tocca per modificare</item>
-    <item quantity="other">Simili a %d foto scelte. Tocca per modificare</item>
-  </plurals>
-  <string name="search_notice_title_similar">Simili alla scelta</string>
-  <plurals name="search_similar_without_vectors">
-    <item quantity="one">%d foto della scelta non è ancora stata analizzata: la ricerca usa le altre.</item>
-    <item quantity="other">%d foto della scelta non sono ancora state analizzate: la ricerca usa le altre.</item>
-  </plurals>
-  <string name="search_chip_sheet_title">Modifica il filtro</string>
-  <string name="search_chip_sheet_message">%1$s</string>
-  <string name="search_chip_remove">Togli il filtro</string>
-  <string name="search_chip_as_word">Cerca come parola</string>
-  <string name="search_chip_alternatives">Oppure un altro «%1$s»</string>
-  <string name="search_sheet_close">Chiudi</string>
-
-  <!-- Selettore dell'ordine (D48) -->
-  <string name="search_order_group">Ordine dei risultati</string>
-  <string name="search_order_recent">Recenti</string>
-  <string name="search_order_relevant">Pertinenti</string>
-  <string name="search_order_recent_description">Ordine: Recenti. Le più recenti per prime</string>
-  <string name="search_order_relevant_description">Ordine: Pertinenti. Le più adatte per prime</string>
-
-  <!-- Risultati -->
-  <string name="search_results_title">Risultati</string>
+  <!-- I risultati -->
   <plurals name="search_results_count">
     <item quantity="one">1 risultato</item>
     <item quantity="other">%1$s risultati</item>
   </plurals>
   <string name="search_likely_title">Meno probabili</string>
-  <string name="search_likely_section_hint">Potrebbero non essere quello che cerchi.</string>
-  <string name="search_show_likely">Mostra anche risultati meno probabili (%1$s)</string>
-  <string name="search_period_today">Oggi</string>
-  <string name="search_period_yesterday">Ieri</string>
-  <string name="search_cell_photo">Foto del %1$s</string>
-  <string name="search_cell_video">Video del %1$s</string>
   <string name="search_cell_undated">Foto senza data</string>
   <string name="search_cell_open">Apri</string>
+  <string name="search_cell_choose">Scegli</string>
+  <string name="search_cell_select">Seleziona</string>
 
-  <!-- Avvisi sopra i risultati e stati vuoti o d'errore (§2.6): ognuno con la sua azione -->
-  <string name="search_model_missing">Per cercare per contenuto serve il modello di ricerca (%1$s). Intanto cerco per date, luoghi e testo.</string>
-  <string name="search_model_missing_action">Scarica</string>
+  <!-- La riga sopra la barra: una frase corta (sta in una riga a 360 dp) e, se si tocca, che cosa fa -->
+  <string name="search_line_no_results">Niente per «%1$s»</string>
+  <string name="search_line_no_similar">Niente di simile</string>
+  <string name="search_chip_similar_label">Simili a questa foto</string>
+  <plurals name="search_chip_similar_many_label">
+    <item quantity="one">Simili a %d foto</item>
+    <item quantity="other">Simili a %d foto</item>
+  </plurals>
+  <plurals name="search_similar_without_vectors">
+    <item quantity="one">%d foto della scelta non è ancora analizzata</item>
+    <item quantity="other">%d foto della scelta non sono ancora analizzate</item>
+  </plurals>
+  <string name="search_line_model_missing">Senza il modello cerco solo date, luoghi e testo</string>
   <string name="search_size_mb">%1$s MB</string>
-  <string name="search_notice_title_content">Ricerca per contenuto</string>
-  <string name="search_notice_title_coverage">Copertura della ricerca</string>
-  <string name="search_notice_title_typo">Parola corretta</string>
-  <string name="search_notice_title_text">Parole nelle foto</string>
-  <string name="search_model_fetching">Sto scaricando il modello di ricerca: %1$s di %2$s.</string>
+  <string name="search_model_fetching">Scarico il modello di ricerca: %1$s di %2$s</string>
   <string name="search_preparing">Sto preparando la ricerca per contenuto…</string>
-  <string name="search_no_results">Nessun risultato per «%1$s». Prova a togliere un filtro.</string>
-  <string name="search_no_results_filters">Tocca un filtro per toglierlo.</string>
-  <string name="search_no_confident">Nessun risultato sicuro.</string>
-  <string name="search_coverage_partial">La ricerca per contenuto copre %1$s media su %2$s.</string>
-  <string name="search_coverage_action">Perché?</string>
-  <string name="search_coverage_updating">Aggiornamento della ricerca: %1$d%%.</string>
-  <string name="search_no_indexer_common">Nessun dispositivo analizza l’area comune.</string>
-  <string name="search_no_indexer_private">Nessun dispositivo analizza la tua area privata.</string>
-  <string name="search_no_indexer_action">Attiva su questo dispositivo</string>
-  <string name="search_typo">Ho cercato «%1$s» invece di «%2$s».</string>
-  <string name="search_text_reading_off">Le parole dentro le foto non si cercano: la lettura del testo è spenta.</string>
+  <string name="search_coverage_partial">La ricerca copre %1$s media su %2$s</string>
+  <string name="search_coverage_updating">Aggiornamento della ricerca: %1$d%%</string>
+  <string name="search_no_indexer_common">Nessun dispositivo analizza l’area comune</string>
+  <string name="search_no_indexer_private">Nessun dispositivo analizza la tua area privata</string>
+  <string name="search_typo">Ho cercato «%1$s» invece di «%2$s»</string>
+  <string name="search_line_text_reading_off">Le parole nelle foto non si cercano</string>
+  <string name="search_line_empty_library">Non ci sono ancora foto da cercare</string>
+  <string name="search_line_error">La ricerca non ha funzionato</string>
+  <string name="search_line_open_settings">Apri Ricerca e modelli</string>
   <string name="search_text_reading_off_action">Scopri di più</string>
-  <string name="search_unavailable_empty">Non ci sono ancora foto da cercare.</string>
   <string name="search_unavailable_empty_action">Consenti accesso</string>
-  <string name="search_unavailable_error">La ricerca non ha funzionato.</string>
   <string name="search_unavailable_error_action">Riprova</string>
-  <string name="search_unavailable_error_diagnostics">Apri la Diagnostica</string>
 </resources>

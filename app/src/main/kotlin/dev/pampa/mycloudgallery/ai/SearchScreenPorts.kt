@@ -108,6 +108,12 @@ class AppIndexerControl(
   private val spaceFlow = MutableStateFlow(IndexSpace.NONE)
   override val space: StateFlow<IndexSpace> get() = spaceFlow
 
+  private val spaceCache = IndexSpaceCache(read = {
+    val files = File(stack.search.dir, SearchGraph.INDEX_DIR).walkTopDown().filter { it.isFile }.toList()
+    val vectors = files.filter { it.name.startsWith("vectors-") || it.name.startsWith("coarse-") }.sumOf { it.length() }
+    IndexSpace(vectorBytes = vectors, textBytes = files.sumOf { it.length() } - vectors)
+  })
+
   init {
     refresh()
     // IX-3: il lavoro che resta e lo spazio si rileggono a ogni tappa finita (prima, solo alla nascita e dopo un cambio di ruolo).
@@ -118,16 +124,14 @@ class AppIndexerControl(
 
   /** Rilegge il lavoro che resta e lo spazio (all'apertura della pagina, dopo ogni tappa e dopo un cambio di ruolo). */
   override fun refresh() {
-    scope.launch {
+    scope.launch(kotlinx.coroutines.Dispatchers.IO) {
       val work = runCatching { stack.ai.backlog() }.getOrNull()
       // PR-1 (E-I12): le aree senza indicizzatori, prima l'area comune.
       val areas = runCatching { stack.search.coverageNotices.areasWithoutIndexer() }.getOrDefault(emptyList())
         .distinct().sortedDescending().map { common -> if (common) AreaKind.COMMON_AREA else AreaKind.MY_PRIVATE_AREA }
       backlogFlow.value = IndexerBacklog(((work?.photos ?: 0L) + (work?.videos ?: 0L)).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), areas)
       // Revisione A: il testo letto sta nel registro dell'indice (le righe per chiave di prima non ci sono piu').
-      val files = File(stack.search.dir, SearchGraph.INDEX_DIR).walkTopDown().filter { it.isFile }.toList()
-      val vectors = files.filter { it.name.startsWith("vectors-") || it.name.startsWith("coarse-") }.sumOf { it.length() }
-      spaceFlow.value = IndexSpace(vectorBytes = vectors, textBytes = files.sumOf { it.length() } - vectors)
+      spaceFlow.value = spaceCache.current()
     }
   }
 

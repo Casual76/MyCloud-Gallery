@@ -3,16 +3,61 @@ package dev.pampa.mycloudgallery.core.ai.runtime
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.ai.contract.AiBackend
 import dev.pampa.mycloudgallery.core.ai.contract.ImageEmbedder
+import dev.pampa.mycloudgallery.core.ai.contract.ProbeResult
 import dev.pampa.mycloudgallery.core.ai.contract.ModelImage
 import dev.pampa.mycloudgallery.core.ai.testing.AiTestInputs
 import dev.pampa.mycloudgallery.core.ai.testing.FakeImageEmbedder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.launch
 import org.junit.Test
 
 /** Fase 6 (P4): i controlli sui vettori, le 20 immagini della misura breve (D15) e la misura. Tutto puro, sulla JVM. */
 class VectorChecksAndProbeTest {
+
+  @Test
+  fun preparareLeImmaginiNonOccupaIlThreadDellaPagina() = kotlinx.coroutines.runBlocking {
+    val caller = Thread.currentThread()
+    var preparation: Thread? = null
+    RealDeviceProbe(FakeImageEmbedder(), images = {
+      preparation = Thread.currentThread()
+      twenty
+    }).measure()
+    assertThat(preparation).isNotSameInstanceAs(caller)
+  }
+
+  @Test
+  fun telefonoCaldoNonPreparaNeInferisce() = runTest {
+    var prepared = false
+    val probe = RealDeviceProbe(FakeImageEmbedder(), images = { prepared = true; twenty }, canMeasure = { false })
+    assertThat(runCatching { probe.measure() }.isFailure).isTrue()
+    assertThat(prepared).isFalse()
+  }
+
+  @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+  @Test fun riaprireLaPaginaNonAccodaMisureAlDriverBloccato() = runTest {
+    val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+    var calls = 0
+    val single = SingleFlightDeviceProbe(object : dev.pampa.mycloudgallery.core.ai.contract.DeviceProbe {
+      override suspend fun measure(): ProbeResult = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+        calls++; release.await(); ProbeResult(1.0, AiBackend.CPU, 0)
+      }
+    })
+    val first = backgroundScope.launch { single.measure() }
+    try {
+      runCurrent(); first.cancel(); runCurrent()
+      assertThat(runCatching { single.measure() }.isFailure).isTrue()
+      assertThat(calls).isEqualTo(1)
+      release.complete(Unit); runCurrent()
+      single.measure()
+      assertThat(calls).isEqualTo(2)
+    } finally {
+      release.complete(Unit)
+      runCurrent()
+    }
+  }
 
   // --- Vettori ------------------------------------------------------------------------------------------------------------------
 

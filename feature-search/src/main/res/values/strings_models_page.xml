@@ -10,7 +10,7 @@
   <string name="models_indexer_detail">Un dispositivo che analizza calcola una volta per tutta la famiglia ciò che serve a cercare per contenuto. Lo scegli tu, dispositivo per dispositivo.</string>
   <string name="models_indexer_state_on">Indicizzatore</string>
   <string name="models_indexer_state_off">Non analizza</string>
-  <string name="models_indexer_measuring">Sto misurando il dispositivo…</string>
+  <string name="models_indexer_measuring">Misuro la velocità del telefono…</string>
   <string name="models_indexer_probe">Misura: %1$s immagini al secondo (%2$s)</string>
   <string name="models_backend_gpu">con la GPU</string>
   <string name="models_backend_cpu">con il processore</string>
@@ -122,4 +122,6 @@
     <item quantity="one">Una ricerca, solo su questo telefono.</item>
     <item quantity="other">%1$s ricerche, solo su questo telefono.</item>
   </plurals>
+  <string name="models_probe_failed">Non sono riuscito a misurare.</string>
+  <string name="models_probe_retry">Riprova</string>
 </resources>

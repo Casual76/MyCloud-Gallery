@@ -90,6 +90,8 @@ class SimilarCopiesGraph(
   private val work: suspend (suspend () -> Unit) -> Unit,
   /** Solo per i test d'integrazione: da dove vengono i pixel da firmare (il MediaStore finto non apre `content://`). Di norma null. */
   private val signatures: ((MediaCatalog) -> SignatureSource)? = null,
+  private val foreground: () -> Boolean = { false },
+  private val firstDraw: suspend () -> Unit = {},
 ) : SimilarCopies {
 
   private val progressFlow = MutableStateFlow(SimilarCopiesProgress(pending = UNKNOWN, running = false))
@@ -115,6 +117,7 @@ class SimilarCopiesGraph(
   @Volatile private var signatureSourceBuilt: SignatureSource? = null
   private var relay: Job? = null
   private var running: Job? = null
+  private val runStart = SimilarRunStart(firstDraw)
 
   private suspend fun ensure(): CatalogSimilarCopies? {
     instance?.let { return it }
@@ -168,24 +171,28 @@ class SimilarCopiesGraph(
   suspend fun withSimilarOnNas(ids: Collection<MediaId>): Set<MediaId> = ensure()?.withSimilarOnNas(ids) ?: emptySet()
 
   /**
-   * Un giro del confronto, a tappe da [SLICE] (il costo di una firma e' qualche millisecondo ma i candidati possono essere migliaia):
+   * Un giro del confronto, con fette da 1 s durante l'uso e 30 s a riposo (il costo di una firma e' qualche millisecondo ma i candidati possono essere migliaia):
    * dopo META, una sincronizzazione dei dati personali o dell'indice. Un giro alla volta; chi lo chiede non aspetta. Si ferma quando non
-   * resta altro, quando la tappa non ha fatto progressi o dopo [MAX_SLICES] tappe (il resto al prossimo motivo).
+   * resta altro, quando la tappa non ha fatto progressi o dopo 600 s di budget (il resto al prossimo motivo).
    */
   fun requestRun() {
     synchronized(this) {
       if (running?.isActive == true) return
-      running = scope.launch(Dispatchers.Default) {
+      running = scope.launch(Dispatchers.Default + dev.pampa.mycloudgallery.core.rules.run.YieldToApp(foreground)) {
         try {
           work {
-            val detector = ensure() ?: return@work
-            detector.refreshProgress()
+            var detector: CatalogSimilarCopies? = null
             var lastPending = Int.MAX_VALUE
-            repeat(MAX_SLICES) {
-              val report = detector.run(SLICE)
+            runSimilarSlices(foreground, runStart::await) { budget ->
+              val active = detector ?: (ensure() ?: return@runSimilarSlices false).also {
+                it.refreshProgress()
+                detector = it
+              }
+              val report = active.run(budget)
               GalleryLog.d(TAG) { "tappa: firmati=${report.signed} gruppi=${report.grouped} in attesa=${report.pending}" }
-              if (report.pending == 0 || (report.signed == 0 && report.grouped == 0 && report.pending >= lastPending)) return@work
+              val more = report.pending != 0 && !(report.signed == 0 && report.grouped == 0 && report.pending >= lastPending)
               lastPending = report.pending
+              more
             }
           }
         } catch (e: CancellationException) {
@@ -205,8 +212,6 @@ class SimilarCopiesGraph(
   private companion object {
     const val TAG = "SimilarCopies"
     const val UNKNOWN = 1
-    val SLICE: Duration = 30.seconds
-    const val MAX_SLICES = 20
   }
 }
 

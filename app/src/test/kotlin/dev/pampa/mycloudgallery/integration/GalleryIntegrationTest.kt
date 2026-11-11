@@ -211,12 +211,14 @@ class GalleryIntegrationTest {
     var stopped = true
     val asked = kotlinx.coroutines.channels.Channel<Boolean>(kotlinx.coroutines.channels.Channel.UNLIMITED)
     val attached = java.util.concurrent.atomic.AtomicInteger()
+    val yielding = java.util.concurrent.atomic.AtomicReference<dev.pampa.mycloudgallery.core.rules.run.YieldToApp?>()
     val recorder = object : dev.pampa.mycloudgallery.core.mediastore.contract.PhoneLibrarySync {
       override val status: StateFlow<SyncStatus> = dev.pampa.mycloudgallery.core.mediastore.noop.NoPhoneLibrarySync.status
 
       override suspend fun syncNow(reason: SyncReason) = dev.pampa.mycloudgallery.core.mediastore.noop.NoPhoneLibrarySync.syncNow(reason)
 
       override fun attach(scope: CoroutineScope) {
+        yielding.set(scope.coroutineContext[dev.pampa.mycloudgallery.core.rules.run.YieldToApp])
         attached.incrementAndGet()
       }
 
@@ -252,6 +254,10 @@ class GalleryIntegrationTest {
     assertThat(withTimeout(TIMEOUT_MS) { asked.receive() }).isFalse()
     until("la lettura del telefono agganciata") { attached.get() >= 1 }
     assertThat(attached.get()).isEqualTo(1)
+    dev.pampa.mycloudgallery.work.UiWorkActivity.budget.interacted()
+    assertThat(yielding.get()?.yielding).isTrue()
+    stoppable.onBackground()
+    assertThat(yielding.get()?.yielding).isFalse()
     stoppable.shutdown()
   }
 

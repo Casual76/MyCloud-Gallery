@@ -330,6 +330,8 @@ class GalleryGraph(
       uriOf = intents::uriOf,
       work = { block -> runIfActive { block() } },
       signatures = parts.similarSignatures,
+      foreground = { uiInUse },
+      firstDraw = parts.afterFirstDraw,
     )
   }
 
@@ -514,7 +516,10 @@ class GalleryGraph(
 
   /** Il repository della timeline: uno per processo. Parte con [startWhenReady]. */
   val repository: CatalogTimelineRepository = AvvioTrace.section("MCG:galleria:repositoryNuovo") {
-    CatalogTimelineRepository(timelineSource, SnapshotStore(parts.replicaDir), galleryScope, dispatchers.default, parts.snapshotDelayMs)
+    CatalogTimelineRepository(timelineSource, SnapshotStore(parts.replicaDir),
+      CoroutineScope(galleryScope.coroutineContext + dev.pampa.mycloudgallery.core.rules.run.YieldToApp({ uiInUse })),
+      dispatchers.default, parts.snapshotDelayMs,
+      publicationWindowMs = { if (foreground) 250L else 0L })
   }
 
   /** Preferiti e nascosti sul catalogo (nascondere toglie prima dall'indice e dall'istantanea, E-H1). */
@@ -821,6 +826,8 @@ class GalleryGraph(
   @Volatile
   private var foreground = false
 
+  internal val uiInUse: Boolean get() = foreground && dev.pampa.mycloudgallery.work.UiWorkActivity.budget.busy
+
   /**
    * Dal processo (`ProcessWatcher.start`): appena la famiglia e' pronta costruisce il catalogo, avvia il repository della
    * timeline (che da li' segue ogni scrittura del catalogo) e, se l'app e' in primo piano, aggancia la lettura del
@@ -901,7 +908,8 @@ class GalleryGraph(
 
   /** La sincronizzazione agganciata al primo piano (quella vera o quella ferma della misura). */
   private fun attachSync() {
-    currentSync()?.attach(galleryScope)
+    currentSync()?.attach(CoroutineScope(galleryScope.coroutineContext +
+      dev.pampa.mycloudgallery.core.rules.run.YieldToApp({ uiInUse })))
   }
 
   /**

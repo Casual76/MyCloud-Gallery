@@ -1,0 +1,185 @@
+# HR - primo avvio (11 novembre 2026)
+
+Base: `261a3553`, worktree `mcg-k5`, ramo `fix/hr-primo-avvio`. Nessun dispositivo, adb, push, modifica di engine o lettura di local.properties.
+
+## Esito delle voci
+
+1. **Fatto in parte - crash Album:** riprodotta con Compose la collisione delle chiavi degli avvisi, corretta con tipo + UUID completo e verificata nella suite Album completa (670 test). La causa dell'incidente specifico dell'utente resta non attribuita senza log. Non aggiunti catch alle letture di Album.
+2. **Fatto nelle prove JVM - lavoro di fondo:** raggruppamento delle pubblicazioni della timeline in primo piano e ampliamento della priorita' Linux gia' presente. Resta da verificare sul telefono la fluidita'; il segnale di processo dei tocchi, dello scroll e dell'inerzia raffina YieldToApp e Pace.APP_IN_USE; dopo 800 ms di calma torna il ritmo normale, senza cambiare i fermi termici o di rete.
+3. **Fatto - Ricerca e modelli:** preparazione immagini su Default; lettura/salvataggio misura su IO; errore visibile e Riprova, timer separato di 120 s, modello pronto obbligatorio e cancello termico prima del motore. Scansione spazio indice su IO con cache di un minuto. Perimetro models autorizzato dall'aggiunta dell'utente.
+
+## Cause del crash e ipotesi controllate
+
+| Ipotesi | Evidenza e stato |
+|---|---|
+| `search_history` assente / database bloccato nel seminatore | `app/src/benchmarkRelease/.../bench/BenchDatabaseFiles.kt`: la base ha gia' la separazione building/ready/database attivo. Esclusa come prova di un difetto di produzione: sorgente della sola variante benchmark, non riprodotta qui la vecchia implementazione. |
+| Apertura concorrente della prima istanza Room | `core-database/.../GalleryDatabase.kt`: Room crea lo schema completo, comprese cronologia e tabelle album, prima di restituire la connessione; nessuna creazione manuale differita. Test nuovo su file con 12 coroutine, 240 letture e 20 scritture, risultati sotto. |
+| Due istanze sullo stesso database all'avvio normale | `GalleryGraph.kt`: una sola costruzione della galleria; `SyntheticLibraryStack` e' su file sintetico separato; cancellazione del database reale in `LocalData` solo durante azzeramento, dopo arresto. Esclusa dal percorso normale per lettura statica, non da un trace Android. |
+| Album vuoti / smart senza indice | `AlbumReader.bestOfBusiestDay`: ritorna null se insieme vuoto, fallback protetti. `SpecialSummary.of`: controlla size prima di indice zero; `FilteredTimelineView` mantiene snapshot immutabile e mappa lazy sincronizzata. Nessuna causa riprodotta. |
+| Album cambia mentre si caricano copertine | `AlbumsTabScreen.FollowCoverWindow`: righe vuote saltate; `coverRequestsOfRow` controlla limite superiore quando una vecchia riga visibile scompare. Chiavi di riga generate da indici non negativi. Nessuna causa riprodotta. |
+| Chiavi duplicate degli avvisi | `AlbumsTabScreen.notices`: **riprodotta** in HR-5 con due avvisi validi sintetici di album diversi e stesso hash. Compose cade per chiave duplicata. Correzione: tipo avviso + UUID completo; verifica positiva finale sotto. Il legame con D4 del telefono resta non dimostrato. |
+| first su flusso vuoto | Il first in AlbumsLive e' nel percorso di copia/condivisione, non nell'apertura della scheda; viste speciali con guardia su vuoto e snapshot immutabile. Nessuna causa riprodotta su questo percorso. |
+
+Ulteriore verifica HR: eseguita una regressione Compose con due avvisi Inherited di album diversi, UUID canonici sintetici `fccc5285-938f-1c52-eb45-9818b993dc41` e `88d35679-7ed3-a3cd-703b-bc0cce614d0b`, stesso titolo. Gli hash String coincidono (106731507), quindi coincidono gli hash degli avvisi: il codice precedente genera due chiavi uguali. HR-5 ha riprodotto IllegalArgumentException: Key notice-1562590278 was already used. La correzione usa tipo dell'avviso e UUID completo, senza hash e senza nascondere errori; prova dopo sotto; non e' una ricostruzione dell'incidente sul telefono.
+
+Pressione di memoria/OOM: plausibile non riprodotta. Il motore della misura e' nello stesso processo e il sorgente RealDeviceProbe documenta il costo nativo elevato; avvio di immagini e viste Album puo' coincidere con quel costo. Senza crash log non si attribuisce la chiusura alla memoria. Spostare preparazione e I/O fuori dal main riduce i blocchi, non dimostra un calo del picco di memoria GPU.
+
+Altre pagine: Raccolte legge viste immutabili; Fotocamera e Messaggistica usano `CatalogFilterMembership` su IO con accorpamento 2,5 s. Cerca apre l'indice su Default, serializzato da Mutex, e usa `OffMainSearchEngine`; la cronologia usa DAO Room sospendenti. Impostazioni/Ricerca aveva la preparazione bitmap sul chiamante Main, corretta qui. AppIndexerControl invece riceve gia' lo scope Default da GraphModule: non e' provato il walkTopDown sul main in produzione; restava comunque ripetuto a ogni refresh, ora IO con cache. Viewer usa snapshot e cache dei riferimenti recentemente usciti; nessuna modifica nel perimetro H1. Queste sono ispezioni statiche, non prove di assenza di ogni crash.
+
+## Inventario dei lavori dopo onboarding / primo disegno
+
+Le frequenze sono quelle del codice, non misure sul telefono. Non esiste un tetto unico della concorrenza fra tutti i sottosistemi.
+
+| Lavoro e sorgente | Esecuzione / concorrenza / priorita' | Scritture e notifiche |
+|---|---|---|
+| Telefono, `DefaultPhoneLibrarySync`, META | IO, giri serializzati da Mutex, lotti 500; META a fette 30 s con pausa 5 s fra fette esaurite. Attach ora eredita YieldToApp; anche PhoneSyncWorker eredita lo stesso dosaggio. | Catalogo e cursore per lotto; META esegue updateMetadata + updateWork per successo (due scritture), non accorpati da HR; change_seq dopo commit. Le invalidazioni Room restano per transazione. |
+| NAS, `NasStages.scan`, `DefaultNasScanner` | Tapper WorkManager, regole INDEX_SYNC, lotti catalogo 500, fino a 4 rilevamenti paralleli, scansione entro SLICE; ora YieldToApp anche per scan. | Catalogo per lotto, stato scansione e outbox separati; non una transazione per tutta la libreria. |
+| Replica/pubblicazione indice, `NasStages.sync`, `LocalReplica`, `OutboxIndexPublisher` | Mutex per share/testa, rete IO; ora YieldToApp su sync; refresh catalogo replica a gruppi fino a 2000 chiavi. | Transazioni per testa/segmento; catalogo emette dopo applicazione, miniature su file; politica di flush esistente. |
+| Timeline, `CatalogTimelineRepository` | Default con YieldToApp, consumatore seriale; nuove finestre 250 ms solo in primo piano. | Nessuna scrittura Room aggiuntiva; pubblica snapshot e viste filtrate insieme; file snapshot accorpato 5 s, rimozioni salvate subito. `forget` dei nascosti resta immediato. |
+| Copie simili, `SimilarCopiesGraph`, `CatalogSimilarCopies` | Default + YieldToApp, un job per grafo e Mutex nel rilevatore; prima partenza dopo disegno + 10 s, poi nessuna attesa iniziale; fette 1 s + pausa 1 s durante interazione, 30 s a riposo/background, tetto cumulato 600 s. | Firme per versione e unioni per secondo; decodifiche fuori dalle scritture brevi. Stato pending/awaiting dopo i giri, non per frame. |
+| Miniature / viewer, `ImagingBudget`, `PipelineThumbnailLoader` | Default/IO; 2-4 miniature insieme, viewer massimo 3, priorita' a finestra visibile. | Cache immagini, non un aggiornamento Room per ogni fotogramma; arrivi per richiesta. Nessuna modifica HR. |
+| Indice ricerca / modelli, `SearchGraph`, `LocalModels` | Indice Default + Mutex; modelli IO, refreshOnce per processo; ModelFetchWorker usa ora YieldToApp. Chiavi accorpate tramite canale conflated; documenti con ritardo e conflate. | Indice locale e file; flussi version/stati, non scritture catalogo per immagine sintetica. |
+| Misura dispositivo, `RealDeviceProbe` | 20 scene e 2 giri + avvio; ora preparazione su Default, motore sul suo dispatcher. Un tentativo per processo, timer UI 120 s, rifiuto se caldo, rilascio motore nel finally. La cancellazione non termina una chiamata nativa bloccata. | Un risultato e piccolo file finale; nessuna scrittura catalogo per scena. |
+| IA / OCR, `AiWork`, `AiComputeEngine` | Worker a tappe, YieldToApp gia' presente, Pace.APP_IN_USE per attivita' intensive, buffer locale e lotti secondo control. | Indice e outbox per risultati; non regolati dalla nuova finestra se non producono una modifica timeline. |
+| Volti, `FacesWork` | Worker dedicato; YieldToApp gia' presente, massimo 2 thread inferenza in primo piano; notturno separato. | Archivio volti separato e aggiornamenti a lotti; budget e checkpoint esistenti. |
+| Backup, `SafeUploadEngine` | Parallelismo predefinito 2; lettura in primo piano su executor singolo con Thread.MIN_PRIORITY, regole e semafori di corsia esistenti. | Diario per passaggio di stato, catalogo per copia verificata, outbox; nessun accorpamento nuovo HR sul diario. |
+| Album smart / viaggi, `AlbumsGraph` | ChangeBatcher con quiete 5 s, motori con budget; lavori di ripresa separati. | Proiezione album e smart per gruppo; aggiornamenti stato elenco. Nessuna modifica HR. |
+| Manutenzioni / ricordi / mappa / widget / manifest | LibraryMaintenanceWorker in carica, riconciliazione/hash/luoghi/album/ricordi a budget; ricordi giornalieri dopo apertura Raccolte, mappa su richiesta; widget e manifest dopo primo disegno. | Database e file dei sottosistemi; frequenza governata dai trigger, non dal frame. Nessuna nuova priorita' HR su questi percorsi. |
+
+La nuova finestra agisce sul produttore della timeline, non sulla griglia H3 e non sul flusso completo degli eventi del catalogo: gli altri consumatori conservano tutte le sequenze. Riduce patch e allocazioni, **non** il numero di transazioni Room. Non sono stati aggiunti ritardi alla scansione stessa: tempo totale a telefono fermo da misurare, nessuna promessa numerica senza hardware.
+
+## Aggiunta HA verificata nel codice
+
+- a: confermati avvio immediato e fino a 20 fette da 30 s. Ora anche la prima lettura del rilevatore aspetta primo disegno + 10 s, una volta per processo (delta HR-7); YieldToApp e fette da 1 s con pausa 1 s in primo piano, 30 s senza pause in secondo piano, stesso tetto cumulato di 600 s di budget. Non riduciamo il tetto di lavoro a 20 secondi per errore. Il dosaggio usa il segnale di interazione comune dell'app: a UI ferma riprende il budget pieno dopo 800 ms.
+- b: confermati timeout mancante, errore ingoiato, misura senza modello e duplicazione frase. Correzioni nella sola pagina models, core-ai e adattatore DI; stato di errore esplicito e Riprova, timer 120 s indipendente dal lavoro nativo. Il tentativo cancellato mantiene il posto fino alla fine reale, anche riaprendo la pagina. Con telefono gia' caldo (almeno LIGHT o headroom >= soglia di riduzione delle regole) la misura non inizia. La stima delle notti resta come prima, fuori incarico.
+- c: confermato drop(1) sul ruolo gia' salvato. Il test include il vecchio flusso come controllo negativo (zero richieste) e il nuovo osservatore (una richiesta immediata). Il vincolo non a consumo e KEEP rimangono nel pianificatore esistente.
+- d: confermato walkTopDown a ogni refresh. La catena AiModule -> AppIndexerControl -> graph.scope (GraphModule) usa gia' Default: il passaggio sul main ipotizzato da HA non e' confermato in produzione. Ora IO e cache serializzata di 60 s, condivisa dall'IndexerControl singleton; leggere arretrato non obbliga a ricamminare i file. Il test conta 20 aperture = una lettura, poi una nuova dopo scadenza. Spazio mostrato potenzialmente vecchio di un minuto: scelta deliberata.
+- e: confermato il flag mancante in PreparationWorker. Ora usa lo stesso richiamo gia' esistente per replica/dati personali, anche dopo tappa parziale. Ordine dai piu' recenti valutato e lasciato invariato: similarRuns usa query crescente, completamento del secondo e nextSecond+1; invertirlo significa modificare query, contratto e ripresa, oltre il piccolo trigger sicuro. Resta proposta, non implementazione dichiarata.
+
+Non sono state prese per misure nuove le durate e i consumi storici del report HA. Proposta: processo separato per inferenza/misura soltanto con gestione di binder, morte processo e rilascio GPU dedicata; non e' una piccola modifica sicura per questa beta. Il timeout UI non pretende di poter terminare il driver.
+
+## Numeri e verifiche
+
+I test sintetici misurano lavoro/emissioni, non FPS Android o tempi del NAS.
+
+| Prova JVM | Prima (HR-2) | Dopo (HR-3) |
+|---|---:|---:|
+| Commit simulati (100 media, un lotto ogni 10 ms) | 100 | 100 |
+| Patch costruite | 100 | 4 |
+| Emissioni snapshot, escluso valore iniziale | 100 | 4 |
+| Sequenza finale / media conservati | 100 / 100 | 100 / 100 |
+| Preparazione scene sul thread chiamante | si, regressione fallita | no, regressione passata in HR-4 |
+
+Le 100 scritture sono commit del ModelSource sintetico, non un conteggio strumentato di Room. La modifica non accorpa transazioni del catalogo: cambia il produttore degli snapshot. Le invalidazioni Room restano per commit. Cache spazio indice: 20 richieste consecutive producono una lettura filesystem; dopo 60 s una seconda lettura (test JVM). Non e' una misura di 20 riaperture fisiche della pagina.
+
+Nessun numero di FPS, durata reale della prima scansione o assenza di regressione S25/Tab S9 e' deducibile da questi dati.
+
+## Prove sul telefono (non eseguite)
+
+1. Installazione pulita firmata, onboarding reale; aprire immediatamente Album e alternare Album/Raccolte/Cerca/Impostazioni almeno 20 volte durante la scansione. Atteso: viste vuote o parziali valide, nessuna chiusura. Difetto: eccezioni fatali o stato mai aggiornato.
+2. Durante lettura telefono + NAS scorrere e rilasciare fling nella Libreria, cambiare pagina, aprire/chiudere viewer. Atteso: gesto e inerzia continui; difetto: arresto al rilascio, pause visibili o regressione delle soglie S25/Tab S9. La parte di ricezione/gesto e' di H3.
+3. Ripetere scansione identica a telefono fermo, poi in background: confrontare durata e quantita' importate con base. Difetto: durata raddoppiata a telefono fermo, sequenze ferme o dati persi. Nuovi media in primo piano possono arrivare con ritardo fino alla finestra piu' il tempo di calcolo.
+4. Prima apertura Ricerca e modelli con modello gia' pronto e misura assente. Atteso: pagina disegnata subito, misura successiva, motore rilasciato; controllare main thread / GC / memoria durante preparazione e inferenza. Nessuna deduzione di FPS dalla JVM.
+5. Nascondere e riaprire immediatamente durante import: il media deve sparire subito e non riapparire al riavvio (forget bypassa l'accorpamento).
+6. Recuperare Diagnostica > registro crash e stack completo (caused by, versione, ora); logcat crash/AndroidRuntime/SQLite/Room con contesto prima della chiusura. Cercare no such table, database is locked, indici fuori limite, chiavi duplicate e OOM. Non stampare account, percorsi privati o credenziali nel report pubblico.
+
+7. Con preset Notte di giorno, dopo onboarding con Indicizzatore acceso, verificare nei log di ModelFetch il trigger ROLE_CHANGED e l'accodamento con rete non a consumo, senza dover cambiare ruolo o premere Scarica ora. In rete a consumo il download deve restare in attesa.
+8. Preparare miniature di coppie NAS prima indecidibili: al termine della tappa deve partire un nuovo confronto e i gruppi devono aggiornarsi senza riaprire l'app. L'ordine crescente resta invariato.
+9. Con telefono gia' caldo aprire la pagina modelli: nessuna inferenza deve partire; deve comparire il fallimento con Riprova. Dopo raffreddamento, Riprova deve riuscire. La scadenza del driver bloccato e' provata da finto non cancellabile in JVM, non provocata sul telefono.
+10. Con inerzia della Libreria di oltre 800 ms verificare che il dosaggio resti ridotto fino alla fine dello scroll; dopo la calma deve tornare normale. Con due finestre, chiuderne una mentre l'altra scorre non deve dichiarare la UI ferma.
+
+Scelte da validare: finestra 250 ms in primo piano; calma di 800 ms dopo l'ultima interazione; confronto con fette da 1 s e pausa da 1 s mentre la UI e' usata, attesa iniziale 10 s; cache spazio indice 60 s. Il nested scroll osserva senza consumare; la Libreria usa inoltre il booleano di inerzia (snapshotFlow), non la posizione per fotogramma. Il motore delle tappe rivaluta il ritmo ai suoi controlli ordinari (fino a 5 s), mentre YieldToApp legge il segnale a ogni ripresa della coroutine.
+
+Screenshot: previsti normale/misura/errore, chiaro/scuro, telefono 360x780 e tablet 1280x800. Esito e file sotto.
+
+## Riferimenti puntuali
+
+- `core-database/src/main/kotlin/dev/pampa/mycloudgallery/core/database/GalleryDatabase.kt:311`
+- `app/src/benchmarkRelease/kotlin/dev/pampa/mycloudgallery/bench/BenchDatabaseFiles.kt:26`
+- `feature-albums/src/main/kotlin/dev/pampa/mycloudgallery/feature/albums/tab/AlbumsTabModel.kt:46`
+- `feature-albums/src/main/kotlin/dev/pampa/mycloudgallery/feature/albums/tab/AlbumsTabScreen.kt:236`
+- `core-albums/src/main/kotlin/dev/pampa/mycloudgallery/core/albums/personal/AlbumReader.kt:134`
+- `core-library/src/main/kotlin/dev/pampa/mycloudgallery/core/library/index/FilteredTimelineView.kt:22`
+- `app/src/main/kotlin/dev/pampa/mycloudgallery/ai/SearchScreenPorts.kt:120`
+- `core-ai/src/main/kotlin/dev/pampa/mycloudgallery/core/ai/runtime/RealDeviceProbe.kt:61`
+
+## Batch del semaforo
+
+Tutti con un solo posto, no-daemon/no-watch-fs/max-workers=2/no-parallel, nessun clean, nessun dispositivo, compilatore Kotlin in-process. HR-2 e successivi offline. Heap del progetto 4 GiB + 4 GiB (eccezione dichiarata dal brief H); nessun JAVA_TOOL_OPTIONS. Le durate qui sono dall'acquisizione del posto al rilascio, non includono la coda. Ogni esito e' stato comunicato subito come richiesto.
+
+| Nome | Task / perimetro | Esito | Durata | Rilascio / Java propri |
+|---|---|---|---|---|
+| HR-1 | Due regressioni core-library/core-ai | FAIL prima dei test: opzione -P spezzata da PowerShell, corretta quotatura | 17 s | rilasciato, nessun processo residuo |
+| HR-2 | Due regressioni mirate, continue | FAIL atteso: 100 emissioni e preparazione sul chiamante | 1m37s | rilasciato, nessun processo residuo |
+| HR-3 | Suite core-library/core-database/core-ai + controller Album | 305 + 290 + 5 OK; FAIL compilazione nuovo test IA per import mancante, poi corretto | 11m09s | rilasciato, daemon 15720 e worker 48792 terminati |
+| HR-4 | Suite core-ai + recordRoborazziDebug HR | OK: 350 test IA (anche 2000 giri caos), 12 screenshot; controllo visivo ha poi trovato accenti corrotti nel file stringhe, ripristinato dalla base UTF-8 prima di HR-5 | 8m53s | rilasciato, daemon 38004 e worker 50012 terminati |
+| HR-5 | Suite feature-search, regressione Album, 10 classi app | App compila e 38 test OK; ricerca 277 test/1 FAIL (errore tardivo dopo cancellazione); crash Album riprodotto con chiave duplicata. Entrambi corretti prima di HR-6 | 12m31s | rilasciato, daemon 50440 terminato |
+| HR-6 | Nuovi PNG, suite Album completa, poi suite ricerca completa e test app mirati | OK: 12 PNG, 670 Album, 278 ricerca, 38 app | 8m37s | rilasciato, daemon 46564 e 57232 terminati |
+| HR-7 | Delta avvio copie simili: prima richiesta con attesa, successive immediate | OK: 2 test, compila app e test | 4m01s | rilasciato, daemon 63132 terminato |
+
+La fixture della collisione contiene UUID canonici sintetici: non sono stati letti avvisi, account o dati dell'utente. La prova di apertura Room ha 12 coroutine, 240 letture e 20 scritture su file nuovo; non ha riprodotto search_history assente o database locked. Il confronto prima/dopo della timeline usa la logica precedente con il solo parametro di finestra aggiunto ma ancora inerte nel controllo negativo HR-2.
+
+Test precedenti aggiornati: accensione ruolo e persistenza della misura richiedono ora il modello Ready nella fixture; il tentativo senza modello o dopo cambio ruolo fallito deve fare zero misure, non una misura finta riuscita. La nuova prova del primo stato controlla ruolo e arretrato noti prima di eseguire coroutine o I/O.
+
+## Commit per l'aggiunta HA
+
+- a: `738bf3ed` - precedenza a tocchi/scroll/inerzia, ritorno a ritmo normale a riposo, ritardo confronto iniziale e fette ridotte.
+- c: `e794fe40` - prima emissione del ruolo gia' acceso, controllo negativo drop(1), richiesta dopo primo disegno; ModelFetchWorker con YieldToApp.
+- d: `110c42b7` - cache spazio indice su IO e test del numero di letture.
+- e: `e8eecd11` - trigger del confronto dopo preparazione NAS e test di wiring del worker (non e' una prova end-to-end del NAS vero).
+
+Primo commit HR: `9991e961` (timeline e database nuovo). b: `eac55b8f`; crash Album: `27dd89bf`. La documentazione e' l'ultimo commit del ramo.
+
+## Chiusura delle voci e limiti
+
+| Voce | Stato verificato |
+|---|---|
+| 1 crash Album | **Fatto in parte**: collisione delle chiavi riprodotta e corretta, 670 test Album verdi. Non attribuito l'incidente reale D4; servono crash log e stack del telefono. |
+| 2 lavoro di fondo / emissioni | **Fatto in JVM**: inventario sopra, dosaggio comune sui percorsi modificati, 100 -> 4 emissioni, nessun media perso, ritorno a pieno ritmo a riposo e niente ritardo sulle richieste successive. Fluidita' e durata della scansione reale non verificate. |
+| 3 Ricerca e modelli | **Fatto**: nessuna preparazione bitmap, lettura o salvataggio misura sul main; stato iniziale dai dati noti, I/O e completamento dopo. Test controller, runtime, app e screenshot verdi. |
+| a confronto all'avvio | **Fatto**, commit `738bf3ed`: disegno + 10 s una volta per processo, fette ridotte durante uso, test del riposo e della richiesta successiva immediata. |
+| b misura | **Fatto**, commit `eac55b8f`: 120 s, errore/Riprova, niente modello assente o telefono gia' caldo, frase singola, una misura per processo anche se il driver ignora la cancellazione. Processo separato non implementato: proposta sopra. |
+| c ruolo gia' acceso | **Fatto**, commit `e794fe40`: test negativo del vecchio drop(1), richiesta immediata della prima emissione true dopo il disegno, vincoli di rete mantenuti. |
+| d spazio indice | **Fatto**, commit `110c42b7`: IO e cache 60 s; 20 richieste = una lettura. Il vecchio montaggio era gia' su Default, non dimostrato sul main. |
+| e copie NAS | **Fatto il richiamo**, commit `e8eecd11`, test di wiring positivo. **Non fatto l'ordine dai piu' recenti**: cambiarebbe query e contratto di ripresa crescente; non e' la piccola modifica provabile richiesta. |
+
+Rischi residui: GPU e memoria nativa della misura restano condivise con la UI; il timeout toglie l'attesa visibile ma non puo' terminare un driver bloccato. Le invalidazioni Room e le due scritture META per successo non sono eliminate: si raggruppa il produttore degli snapshot. Le altre manutenzioni conservano i budget e dispatcher esistenti indicati nell'inventario. Soglie S25 e Tab S9 **NV**, nessun benchmark o telefono eseguito. Nessun nuovo layer, animazione o servizio per cella/frame.
+
+## Verifiche finali eseguite
+
+| Modulo | Esecuzione | Fallimenti / saltati |
+|---|---:|---:|
+| core-library | 305 test (HR-3) | 0 / 0 |
+| core-database | 290 test (HR-3) | 0 / 0 |
+| core-ai | 350 test, inclusi 2000 giri caos (HR-4) | 0 / 0 |
+| feature-albums | 670 test completi (HR-6) | 0 / 0 |
+| feature-search | 278 test completi (HR-6, dopo registrazione PNG) | 0 / 0 |
+| app | 38 test in 10 classi (HR-6); poi 2 test sul delta startup (HR-7, uno comune) | 0 / 0 |
+
+Non sommare le ripetizioni come test distinti. L'ultimo delta tocca solo SimilarRunStart/SimilarRunPacing e il relativo montaggio in SimilarCopiesGraph; HR-7 lo ricompila e lo verifica. Gli XML prima/dopo e il riepilogo HR-6 sono in `docs/qa/hr/`. `git diff --check` OK. Dopo consolidamento dei commit, tree dei sorgenti e prove invariato: `467c60f2588034ed1f49830e0eeacbc8773a193d` (prima del solo commit documentale).
+
+## Screenshot finali
+
+12 PNG della pagina di produzione con stati sintetici, telefono 360x780 dp e tablet 1280x800 dp. Controllo visivo di campioni che coprono i tre stati, entrambi i temi e formati; accenti corretti e messaggio singolo, Riprova leggibile. Tutti i 12 test di registrazione e di composizione passano. Nessun dato personale.
+
+- `docs/screenshots/beta-grafica/HR/modelli-errore-chiaro-tablet.png`
+- `docs/screenshots/beta-grafica/HR/modelli-errore-chiaro-telefono.png`
+- `docs/screenshots/beta-grafica/HR/modelli-errore-scuro-tablet.png`
+- `docs/screenshots/beta-grafica/HR/modelli-errore-scuro-telefono.png`
+- `docs/screenshots/beta-grafica/HR/modelli-misura-chiaro-tablet.png`
+- `docs/screenshots/beta-grafica/HR/modelli-misura-chiaro-telefono.png`
+- `docs/screenshots/beta-grafica/HR/modelli-misura-scuro-tablet.png`
+- `docs/screenshots/beta-grafica/HR/modelli-misura-scuro-telefono.png`
+- `docs/screenshots/beta-grafica/HR/modelli-normale-chiaro-tablet.png`
+- `docs/screenshots/beta-grafica/HR/modelli-normale-chiaro-telefono.png`
+- `docs/screenshots/beta-grafica/HR/modelli-normale-scuro-tablet.png`
+- `docs/screenshots/beta-grafica/HR/modelli-normale-scuro-telefono.png`
+
+## Riferimenti del montaggio finale
+
+- `feature-albums/src/main/kotlin/dev/pampa/mycloudgallery/feature/albums/tab/AlbumsTabScreen.kt:250`
+- `app/src/main/kotlin/dev/pampa/mycloudgallery/di/GraphModule.kt:114`
+- `app/src/main/kotlin/dev/pampa/mycloudgallery/work/UiWorkActivity.kt:7`
+- `app/src/main/kotlin/dev/pampa/mycloudgallery/backup/SimilarRunPacing.kt:26`
+- `app/src/main/kotlin/dev/pampa/mycloudgallery/work/NasWork.kt:465`
+- `feature-search/src/main/kotlin/dev/pampa/mycloudgallery/feature/search/models/SearchSettingsController.kt:221`

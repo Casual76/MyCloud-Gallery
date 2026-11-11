@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.async
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -23,6 +24,32 @@ class GalleryDatabaseTest {
   @After
   fun tearDown() {
     database.close()
+  }
+
+  @Test
+  fun primoAvvioSuFileApreCronologiaEAlbumInParallelo() = kotlinx.coroutines.runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val name = "hr-first-" + java.util.UUID.randomUUID() + ".db"
+    val fresh = GalleryDatabase.build(context, name)
+    try {
+      kotlinx.coroutines.coroutineScope {
+        val jobs = (0 until 12).map { i ->
+          async(kotlinx.coroutines.Dispatchers.IO) {
+            repeat(20) {
+              if (i == 0) fresh.searchHistoryDao().deleteAll()
+              val table = listOf("search_history", "album", "media", "media_location")[i % 4]
+              fresh.openHelper.readableDatabase.query("SELECT COUNT(*) FROM " + table).use { c ->
+                check(c.moveToFirst() && c.getInt(0) == 0)
+              }
+            }
+          }
+        }
+        jobs.forEach { it.await() }
+      }
+    } finally {
+      fresh.close()
+      context.deleteDatabase(name)
+    }
   }
 
   @Test

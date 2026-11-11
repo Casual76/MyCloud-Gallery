@@ -100,7 +100,7 @@ class PhoneSyncWorker @AssistedInject constructor(
     // `runIfActive` rispondeva null e il giro andava perso (e, peggio, la catena a trigger di contenuto non si riaccodava).
     gallery.awaitReady(COLD_START_WAIT)
     // `runIfActive` permette all'azzeramento di fermare un giro in corso e di aspettarlo (R7).
-    val outcome = gallery.runIfActive { core -> core.phone.runner.run(BUDGET) }
+    val outcome = gallery.runIfActive { core -> gallery.quietly { core.phone.runner.run(BUDGET) } }
     if (outcome == null) {
       // Famiglia non pronta nemmeno dopo l'attesa (non configurata, in attesa, azzerata) o galleria ferma: niente da leggere adesso, ma il lavoro a trigger di
       // contenuto vale una volta sola: se non si riaccoda, il prossimo cambiamento del MediaStore non trova nessuno fino al prossimo avvio dell'app.

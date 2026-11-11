@@ -14,6 +14,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
@@ -87,6 +88,30 @@ class MainActivity : FragmentActivity() {
   @Inject
   lateinit var windowStarts: WindowStarts
 
+  private val touchWorkLease = dev.pampa.mycloudgallery.work.UiWorkActivity.budget.lease()
+
+  private val workScroll = object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+    override fun onPostScroll(consumed: androidx.compose.ui.geometry.Offset, available: androidx.compose.ui.geometry.Offset,
+      source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
+      if (consumed != androidx.compose.ui.geometry.Offset.Zero) dev.pampa.mycloudgallery.work.UiWorkActivity.budget.interacted()
+      return androidx.compose.ui.geometry.Offset.Zero
+    }
+  }
+
+  override fun onPause() {
+    touchWorkLease.close()
+    super.onPause()
+  }
+
+  override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
+    when (event.actionMasked) {
+      android.view.MotionEvent.ACTION_DOWN -> touchWorkLease.set(true)
+      android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> touchWorkLease.set(false)
+    }
+    dev.pampa.mycloudgallery.work.UiWorkActivity.budget.interacted()
+    return super.dispatchTouchEvent(event)
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     val entry = entryOf(this, intent)
     intent = entry.clean
@@ -132,7 +157,7 @@ class MainActivity : FragmentActivity() {
         ) {
           // I tag di test come id delle risorse (docs/bench/README.md §6-ter): i selettori del collaudo li trovano per tag
           // (`g1-chrome-*`) invece che per testo. Solo semantica: niente cambia nell'aspetto.
-          Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
+          Box(Modifier.fillMaxSize().nestedScroll(workScroll).semantics { testTagsAsResourceId = true }) {
             AppRoot(lockController = lockController, authenticator = authenticator)
           }
         }
@@ -159,6 +184,7 @@ class MainActivity : FragmentActivity() {
    * testo che usa Esc per se' lo tiene. Una sola pressione (non si ripete tenendo premuto) e senza modificatori.
    */
   override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+    dev.pampa.mycloudgallery.work.UiWorkActivity.budget.interacted()
     if (keyCode == KeyEvent.KEYCODE_ESCAPE && event.repeatCount == 0 && event.modifiers == 0) {
       onBackPressedDispatcher.onBackPressed()
       return true
@@ -167,6 +193,7 @@ class MainActivity : FragmentActivity() {
   }
 
   override fun onDestroy() {
+    touchWorkLease.close()
     // Una finestra che finisce libera il suo posto; una che si ricrea (densita', lingua, tema) o che il sistema distrugge in secondo piano resta una finestra.
     if (isFinishing) windows.release(taskId)
     super.onDestroy()

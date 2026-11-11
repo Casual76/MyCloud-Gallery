@@ -1,0 +1,50 @@
+{
+  "core-library": {
+    "tests": 305,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "core-database": {
+    "tests": 290,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "core-ai": {
+    "tests": 350,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "feature-albums": {
+    "tests": 670,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "feature-search": {
+    "tests": 278,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "app": {
+    "tests": 38,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "classes": [
+      "dev.pampa.mycloudgallery.ai.IndexerModelRequestsTest",
+      "dev.pampa.mycloudgallery.ai.IndexSpaceCacheTest",
+      "dev.pampa.mycloudgallery.backup.SimilarRunPacingTest",
+      "dev.pampa.mycloudgallery.integration.AiIndexerPageTest",
+      "dev.pampa.mycloudgallery.integration.GalleryIntegrationTest",
+      "dev.pampa.mycloudgallery.integration.HrPreparationTriggerTest",
+      "dev.pampa.mycloudgallery.nas.VerificaFunzionaleNasAppTest",
+      "dev.pampa.mycloudgallery.work.AiWorkSchedulingTest",
+      "dev.pampa.mycloudgallery.work.InteractionStageRulesTest",
+      "dev.pampa.mycloudgallery.work.UiActivityBudgetTest"
+    ]
+  }
+}

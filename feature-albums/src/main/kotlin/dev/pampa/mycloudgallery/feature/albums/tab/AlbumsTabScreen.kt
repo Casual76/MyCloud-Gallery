@@ -248,7 +248,7 @@ private fun rowKey(row: Int): String = ROW_KEY_PREFIX + row
 private fun rowOfKey(key: Any): Int? = (key as? String)?.takeIf { it.startsWith(ROW_KEY_PREFIX) }?.substring(ROW_KEY_PREFIX.length)?.toIntOrNull()
 
 private fun LazyListScope.notices(notices: List<SharedAlbumNotice>, handlers: AlbumsTabHandlers) {
-  items(notices, key = { notice -> "notice-" + notice.hashCode() }) { notice ->
+  items(notices, key = { notice -> "notice-${notice.javaClass.name}-${notice.album.value}" }) { notice ->
     val closed = notice as? SharedAlbumNotice.Closed
     val message = when {
       closed == null -> notice.title

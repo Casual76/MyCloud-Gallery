@@ -7,6 +7,8 @@ interface SearchSettingsHandlers {
   /** Il ruolo Indicizzatore di questo dispositivo (D15, Q3). */
   fun onSetIndexer(on: Boolean)
 
+  fun onRetryProbe() = Unit
+
   fun onIndexNow()
 
   /** La pagina di attivazione della lettura del testo (D41). */

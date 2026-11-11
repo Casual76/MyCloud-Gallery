@@ -294,7 +294,9 @@ class ModelFetchWorker @AssistedInject constructor(
   private val faces: dev.pampa.mycloudgallery.faces.FacesGraph,
 ) : CoroutineWorker(appContext, params) {
 
-  override suspend fun doWork(): Result {
+  override suspend fun doWork(): Result = graph.quietly { fetchModels() }
+
+  private suspend fun fetchModels(): Result {
     if (!gallery.backgroundWorkAllowed) return Result.success()
     // MO-5: in un processo appena nato la famiglia non e' ancora pronta e `runIfActive` risponderebbe null, consumando il giro.
     gallery.awaitReady(AiComputeWorker.COLD_START_WAIT)

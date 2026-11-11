@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.pampa.mycloudgallery.core.ai.runtime.VectorChecksAndProbeTest" tests="1" skipped="0" failures="1" errors="0" timestamp="2026-11-11T11:48:14.935Z" hostname="PC_FISSO" time="0.279">
+  <properties/>
+  <testcase name="preparareLeImmaginiNonOccupaIlThreadDellaPagina" classname="dev.pampa.mycloudgallery.core.ai.runtime.VectorChecksAndProbeTest" time="0.279">
+    <failure message="expected not to be specific instance: Thread[Test worker @coroutine#1,5,main]" type="com.google.common.truth.AssertionErrorWithFacts">expected not to be specific instance: Thread[Test worker @coroutine#1,5,main]
+	at app//dev.pampa.mycloudgallery.core.ai.runtime.VectorChecksAndProbeTest$preparareLeImmaginiNonOccupaIlThreadDellaPagina$1.invokeSuspend(VectorChecksAndProbeTest.kt:25)
+	at app//kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at app//kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at app//kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at app//kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:94)
+	at app//kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:70)
+	at app//kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source)
+	at app//kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+	at app//kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source)
+	at app//dev.pampa.mycloudgallery.core.ai.runtime.VectorChecksAndProbeTest.preparareLeImmaginiNonOccupaIlThreadDellaPagina(VectorChecksAndProbeTest.kt:18)
+</failure>
+  </testcase>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

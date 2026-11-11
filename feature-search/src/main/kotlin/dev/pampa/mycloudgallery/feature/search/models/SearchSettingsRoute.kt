@@ -62,6 +62,8 @@ internal class ActionSettingsHandlers(
 ) : SearchSettingsHandlers {
   override fun onSetIndexer(on: Boolean) = controller.setIndexer(on)
 
+  override fun onRetryProbe() = controller.measure()
+
   override fun onIndexNow() = controller.indexNow()
 
   override fun onOpenActivation() = actions.openTextReadingActivation()
@@ -92,11 +94,13 @@ fun SearchSettingsRoute(actions: SearchActions, onBack: () -> Unit, viewModel: S
   val controller = viewModel.controller
   val state by controller.state.collectAsStateWithLifecycle()
   val measuring by controller.measuring.collectAsStateWithLifecycle()
+  val probeFailed by controller.probeFailed.collectAsStateWithLifecycle()
   val handlers = remember(controller, actions) { ActionSettingsHandlers(controller, actions) }
   SearchHost {
     SearchSettingsScreen(
       state = state,
       measuring = measuring,
+      probeFailed = probeFailed,
       hasIndexer = controller.hasIndexer,
       hasTextReading = controller.hasTextReading,
       hasModels = controller.hasModels,

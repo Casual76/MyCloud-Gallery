@@ -48,12 +48,63 @@ class SearchSettingsControllerTest {
     accepted = if (withReading) accepted else null,
     probe = probe,
     scope = backgroundScope,
+    probeDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
+    io = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
   ).also { runCurrent() }
+
+  @Test
+  fun ilPrimoStatoUsaIlRuoloGiaNotoSenzaAspettareIlDisco() = runTest {
+    indexer.indexer.value = true
+    val dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
+    val c = SearchSettingsController(indexer, models, engine, history, reading, accepted, probe, backgroundScope, dispatcher, dispatcher)
+    assertThat(c.state.value.indexer.indexer).isTrue()
+    assertThat(c.state.value.indexer.toAnalyze).isEqualTo(13_760)
+    assertThat(probe.measures).isEqualTo(0)
+  }
+
+  @Test
+  fun modelloAssenteNonAvviaLaMisura() = runTest {
+    val c = controller()
+    c.setIndexer(true); runCurrent()
+    assertThat(probe.measures).isEqualTo(0)
+    assertThat(c.measuring.value).isFalse()
+  }
+
+  @Test
+  fun timeoutVisibileAncheSeIlMotoreNonRispondeAllaCancellazione() = runTest {
+    indexer.indexer.value = true
+    models.set(ModelCatalog.INDEX_440M.id, ModelState.Ready(ModelCatalog.INDEX_440M.sizeBytes, ModelSourceKind.NAS, 0))
+    val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+    var calls = 0
+    val blocked = object : dev.pampa.mycloudgallery.core.ai.contract.DeviceProbe {
+      override suspend fun measure(): ProbeResult = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+        calls++
+        release.await()
+        throw IllegalStateException("motore")
+      }
+    }
+    val dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
+    val c = SearchSettingsController(indexer, models, engine, history, reading, accepted, blocked, backgroundScope, dispatcher, dispatcher)
+    try {
+      runCurrent(); assertThat(c.measuring.value).isTrue()
+      testScheduler.advanceTimeBy(120_001); runCurrent()
+      assertThat(c.measuring.value).isFalse()
+      assertThat(c.probeFailed.value).isTrue()
+      c.measure(); runCurrent(); assertThat(calls).isEqualTo(1)
+      release.complete(Unit); runCurrent()
+      c.measure(); runCurrent(); assertThat(calls).isEqualTo(2)
+      assertThat(c.probeFailed.value).isTrue()
+    } finally {
+      release.complete(Unit)
+      runCurrent()
+    }
+  }
 
   @Test
   fun accendereIlRuoloProponeIl440MELanciaLaMisuraConLaStima_D15() = runTest {
     val c = controller()
     assertThat(c.state.value.indexer.indexer).isFalse()
+    models.set(ModelCatalog.INDEX_440M.id, ModelState.Ready(ModelCatalog.INDEX_440M.sizeBytes, ModelSourceKind.NAS, 0))
     c.setIndexer(true)
     runCurrent()
     assertThat(indexer.changes).containsExactly(true)
@@ -91,7 +142,7 @@ class SearchSettingsControllerTest {
     c.measure()
     c.measure()
     runCurrent()
-    assertThat(probe.measures).isAtLeast(1)
+    assertThat(probe.measures).isEqualTo(0)
     assertThat(c.measuring.value).isFalse()
   }
 
@@ -277,6 +328,7 @@ class SearchSettingsControllerTest {
   /** IX-3: la misura si ricorda fra una visita e l'altra (prima la stima delle notti restava "in misura" per sempre). */
   @Test
   fun ix3_laMisuraSiSalvaESiRitrovaAllaVisitaDopoSenzaRifarla() = runTest {
+    models.set(ModelCatalog.INDEX_440M.id, ModelState.Ready(ModelCatalog.INDEX_440M.sizeBytes, ModelSourceKind.NAS, 0))
     val first = controller()
     first.setIndexer(true)
     runCurrent()

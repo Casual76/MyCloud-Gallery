@@ -52,6 +52,7 @@ class RealDeviceProbe(
   private val rounds: Int = 2,
   private val images: () -> List<ModelImage> = { ProbeImageSet.modelImages() },
   private val releaseAfter: Boolean = true,
+  private val canMeasure: () -> Boolean = { true },
 ) : DeviceProbe {
 
   init {
@@ -59,7 +60,10 @@ class RealDeviceProbe(
   }
 
   override suspend fun measure(): ProbeResult {
-    val images = images()
+    check(kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { canMeasure() }) { "Misura rinviata: telefono caldo." }
+    // HR: la pagina chiama measure dal main. Anche le scene sintetiche e la
+    // codifica JPEG sono lavoro CPU, prima della prima sospensione del motore.
+    val images = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { images() }
     require(images.isNotEmpty()) { "Nessuna immagine da misurare." }
     try {
       val coldStart = nanos()

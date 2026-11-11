@@ -64,12 +64,13 @@ fun SearchSettingsScreen(
   hasModels: Boolean,
   handlers: SearchSettingsHandlers,
   onBack: () -> Unit,
+  probeFailed: Boolean = false,
 ) {
   val resources = LocalContext.current.resources
   FluidScreen(title = stringResource(R.string.models_title), subtitle = stringResource(R.string.models_subtitle), onBack = onBack) {
     if (hasIndexer) {
       item(key = "indexer-header") { GallerySectionHeader(title = stringResource(R.string.models_section_indexer)) }
-      item(key = "indexer") { IndexerBlock(state, measuring, handlers) }
+      item(key = "indexer") { IndexerBlock(state, measuring, handlers, probeFailed) }
     }
     if (hasTextReading) {
       item(key = "reading-header") { GallerySectionHeader(title = stringResource(R.string.models_section_reading)) }
@@ -102,7 +103,7 @@ fun SearchSettingsScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handlers: SearchSettingsHandlers) {
+private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handlers: SearchSettingsHandlers, probeFailed: Boolean) {
   val indexer = state.indexer
   val title = stringResource(R.string.models_indexer_title)
   val detail = stringResource(R.string.models_indexer_detail)
@@ -127,7 +128,7 @@ private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handler
       FluidListDivider()
       FluidListRow(title = stringResource(R.string.models_status_title), subtitle = statusText(resources, indexer.status), tone = statusTone(indexer.status), disclosure = false, titleMaxLines = 3)
       FluidListDivider()
-      FluidListRow(title = estimateText(resources, indexer.toAnalyze, indexer.nights, measuring), subtitle = probeText(resources, indexer, measuring), disclosure = false, titleMaxLines = 4)
+      FluidListRow(title = if (probeFailed) stringResource(R.string.models_probe_failed) else estimateText(resources, indexer.toAnalyze, indexer.nights, measuring), subtitle = if (measuring || probeFailed) "" else probeText(resources, indexer, false), disclosure = false, titleMaxLines = 4)
     }
   }
   if (state.offerRemoveIndexModel) RemoveIndexModelSheet(handlers)
@@ -139,6 +140,7 @@ private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handler
       horizontalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
       verticalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
     ) {
+      if (probeFailed) FluidButton(text = stringResource(R.string.models_probe_retry), onClick = handlers::onRetryProbe, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
       FluidButton(text = stringResource(R.string.models_index_now), onClick = handlers::onIndexNow, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
       if (problem != null) {
         for (action in SearchCodes.actions(problem)) {
@@ -212,10 +214,9 @@ private fun statusTone(status: AiStatus): FluidTone = when (status) {
 
 /** "Analizzare N media richiede circa K notti" (D15): dalla misura e dal lavoro vero che resta. */
 internal fun estimateText(resources: Resources, toAnalyze: Int, nights: Int?, measuring: Boolean = false): String = when {
+  measuring -> resources.getString(R.string.models_indexer_measuring)
   toAnalyze <= 0 -> resources.getString(R.string.models_indexer_nothing)
   nights != null -> resources.getQuantityString(R.plurals.models_indexer_estimate, nights, GalleryNumbers.format(toAnalyze), nights)
-  // IX-3: "Sto misurando" solo se la misura e' davvero in corso; altrimenti la stima manca e si dice perche' (manca la misura, di solito il modello).
-  measuring -> resources.getString(R.string.models_indexer_measuring)
   else -> resources.getString(R.string.models_indexer_no_estimate, GalleryNumbers.format(toAnalyze))
 }
 

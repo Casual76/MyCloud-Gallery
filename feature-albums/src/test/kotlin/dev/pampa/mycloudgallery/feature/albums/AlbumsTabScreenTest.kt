@@ -7,6 +7,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
@@ -52,6 +53,18 @@ class AlbumsTabScreenTest : AlbumsComposeTest() {
       val found = A11yAssertions.check(root(), A11yConfig(density = composeRule.density))
       assertWithMessage("$name a testo $value: " + found.joinToString(" | ")).that(found).isEmpty()
     }
+  }
+
+  @Test
+  fun dueAvvisiDistintiConHashUgualeNonChiudonoLaScheda() {
+    // UUID canonici sintetici con la stessa hash String: non sono dati dell'incidente dell'utente.
+    val first = SharedAlbumNotice.Inherited(AlbumId("fccc5285-938f-1c52-eb45-9818b993dc41"), "Album sintetico")
+    val second = SharedAlbumNotice.Inherited(AlbumId("88d35679-7ed3-a3cd-703b-bc0cce614d0b"), "Album sintetico")
+    assertThat(first).isNotEqualTo(second)
+    assertThat(first.hashCode()).isEqualTo(second.hashCode())
+    show { AlbumHost { screen(tab.almostEmpty().copy(notices = listOf(first, second)))() } }
+    composeRule.waitForIdle()
+    assertThat(composeRule.onAllNodesWithText("Album sintetico").fetchSemanticsNodes()).hasSize(2)
   }
 
   @Test fun piena() = clean("scheda piena", screen(tab.full()))

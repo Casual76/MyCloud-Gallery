@@ -284,6 +284,21 @@ class ViewerGesturesTest : ViewerTestBase() {
   }
 
   @Test
+  fun conIlPannelloInformazioniApertoLaXChiudeIlViewerVolandoAllaCella() {
+    // La chiusura porta giu' il pannello e poi vola: prima l'effetto del pannello partiva sulla stessa animazione e la chiusura si fermava a meta'.
+    show()
+    val id = fixture.idAt(4)
+    pager().performTouchInput { swipeUp(startY = height * 0.8f, endY = height * 0.3f) }
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(800)
+    composeRule.waitForIdle()
+    composeRule.onNodeWithContentDescription("Chiudi").performClick()
+    composeRule.waitUntil(TIMEOUT) { closed == 1 }
+    assertThat(fixture.anchor.hiddenHistory.takeLast(2)).containsExactly(id, null).inOrder()
+    assertThat(fixture.anchor.hidden).isNull()
+  }
+
+  @Test
   fun laCapsulaDiUnAlbumChiudeIlViewerVolandoAllaCella_eSoloDopoApreLAlbum() {
     // CS-22: prima il viewer spariva di colpo (l'host toglieva la richiesta); ora si chiude come con la X, poi l'album si apre.
     val vacanze = ViewerAlbumEntry(key = "a", title = "Vacanze 2024", count = 12)

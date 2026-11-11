@@ -369,9 +369,11 @@ private fun ViewerHost(
       state.message = null
     }
   }
-  // Il pannello informazioni segue lo stato (il tasto, il menu); il dito lo guida da solo e poi lo scrive qui.
+  // Il pannello informazioni segue lo stato (il tasto, il menu); il dito lo guida da solo e poi lo scrive qui. Durante la chiusura del viewer
+  // lo porta giu' la chiusura stessa (`closeNow`): due animazioni sullo stesso valore si cancellano, e la chiusura con il pannello aperto (la X,
+  // la capsula di un album) si fermava a meta', con il viewer bloccato e la cella vuota.
   LaunchedEffect(state.infoOpen) {
-    if (!info.dragging) info.settle(state.infoOpen, reducedMotion)
+    if (!info.dragging && !controller.closing) info.settle(state.infoOpen, reducedMotion)
   }
 
   // --- Il lettore ------------------------------------------------------------------------------------------------------

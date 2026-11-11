@@ -114,12 +114,17 @@ abstract class ViewerTestBase {
     subjectCutter: dev.pampa.mycloudgallery.feature.viewer.cutout.ViewerSubjectCutter? = null,
     cutoutSaver: dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutSaver? = null,
     albums: dev.pampa.mycloudgallery.feature.viewer.menu.ViewerAlbumActions = dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerAlbumActions,
+    // H2: le sezioni in piu' del pannello (la mappa, le persone, le copie) e dettagli scelti dal test.
+    people: dev.pampa.mycloudgallery.feature.viewer.people.ViewerPeople? = null,
+    placeMap: dev.pampa.mycloudgallery.feature.viewer.place.ViewerPlaceMap? = null,
+    similarCopies: dev.pampa.mycloudgallery.core.library.similar.SimilarCopies? = null,
+    detailsSource: dev.pampa.mycloudgallery.feature.viewer.details.MediaDetailsSource? = null,
   ): ViewerServices = ViewerServices(
     animated = animatedLoader,
     images = imageSource,
     thumbnails = FakeThumbnailLoader(),
     placeholders = FakePlaceholderCache(),
-    details = if (withDetails) {
+    details = detailsSource ?: if (withDetails) {
       FakeMediaDetailsSource(
         (0 until fixture.library.count).associate { fixture.idAt(it) to sampleDetails(fixture.idAt(it), fixture.library.snapshot.kindAt(it)) },
       )
@@ -154,6 +159,9 @@ abstract class ViewerTestBase {
     subjectCutter = subjectCutter,
     cutoutSaver = cutoutSaver,
     albums = albums,
+    people = people,
+    placeMap = placeMap,
+    similarCopies = similarCopies,
   )
 
   internal fun show(

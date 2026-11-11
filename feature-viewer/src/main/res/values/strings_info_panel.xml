@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- H2: il pannello informazioni compatto (data in testa, il backup in una capsula, i dati di scatto in pillole, il file in fondo). -->
+
+  <!-- La riga sotto la data: "12:41 · ora di Oslo, UTC+1". -->
+  <string name="viewer_info_time_line">%1$s · %2$s</string>
+
+  <!-- Il backup del media in una capsula: un'icona e due parole. Il dettaglio sotto solo quando serve sapere perché. -->
+  <string name="viewer_info_badge_both">Telefono e NAS</string>
+  <string name="viewer_info_badge_nas">Sul NAS</string>
+  <string name="viewer_info_badge_phone_only">Solo sul telefono</string>
+  <string name="viewer_info_badge_queued">In coda</string>
+  <string name="viewer_info_badge_uploading">In caricamento</string>
+  <string name="viewer_info_badge_verifying">In verifica</string>
+  <string name="viewer_info_badge_not_mine">Non è tuo</string>
+  <string name="viewer_info_badge_common">Solo area comune</string>
+  <string name="viewer_info_badge_common_detail">Non è ancora una tua copia privata.</string>
+  <string name="viewer_info_badge_unverified">Da controllare</string>
+  <string name="viewer_info_badge_unverified_detail">Non conta ancora come al sicuro.</string>
+  <string name="viewer_info_badge_problem">Problema di backup</string>
+  <string name="viewer_info_badge_lost">Non salvato</string>
+  <!-- Per TalkBack la capsula si legge con il suo argomento: "Backup: Telefono e NAS". -->
+  <string name="viewer_info_badge_spoken">Backup: %1$s</string>
+
+  <!-- Il piede: il nome del file e, accanto, la cartella sul telefono. -->
+  <string name="viewer_info_file_line">%1$s · %2$s</string>
+</resources>

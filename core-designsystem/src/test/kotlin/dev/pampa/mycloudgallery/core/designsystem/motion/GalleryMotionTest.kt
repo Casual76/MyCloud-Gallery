@@ -25,6 +25,20 @@ class GalleryMotionTest {
     assertThat(half.bottom).isWithin(0.001f).of(435f)
   }
 
+  // --- il chrome che compare (H1, D6) -----------------------------------------------------
+
+  /**
+   * I tasti del viewer non compaiono di scatto: la curva d'entrata parte piano (nel primo decimo del tempo la barra e' ancora quasi
+   * trasparente, proprio quando il suo vetro si compone per la prima volta) e dura quanto l'apertura del viewer.
+   */
+  @Test
+  fun ilChromeCompareConUnaDissolvenzaChepartePiano() {
+    val spec = GalleryMotion.chromeAppearSpec<Float>() as androidx.compose.animation.core.TweenSpec<Float>
+    assertThat(spec.durationMillis).isEqualTo(dev.antigravity.fluidengine.ui.fluid.FluidMotion.DurationExpand)
+    assertThat(spec.easing.transform(0.1f)).isLessThan(0.1f)
+    assertThat(spec.easing.transform(1f)).isWithin(0.001f).of(1f)
+  }
+
   // --- swipe giu' per chiudere ------------------------------------------------------------
 
   @Test

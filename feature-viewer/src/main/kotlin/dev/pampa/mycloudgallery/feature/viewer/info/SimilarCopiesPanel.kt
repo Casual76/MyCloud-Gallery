@@ -49,12 +49,10 @@ internal class SimilarCopiesPanel(
 /**
  * Lo stato e le azioni della sezione "N copie" per il media [id] mentre il pannello e' aperto ([active]).
  *
- * **Come lo aggancia P7**, in tre punti:
- * 1. `ViewerServices` riceve un campo `similarCopies: SimilarCopies?` (null = capacita' assente: nessuna sezione), legato in `:app`
- *    al rilevatore vero (`CatalogSimilarCopies`).
- * 2. In `ViewerOverlay`, dove oggi si chiama `buildInfoSections(...)`, subito dopo:
- *    `val similar = rememberSimilarCopiesPanel(services.similarCopies, currentId, active = infoVisible, refreshKey = snapshot.seq, onView = controller::goToMedia)`
- *    e le sezioni diventano `sections + similar.sections` (la sezione sta dopo "File" e prima di "Telefono").
+ * **Come e' agganciata** (P7; H2 per il posto nel pannello), in tre punti:
+ * 1. `ViewerServices` ha il campo `similarCopies: SimilarCopies?` (null = capacita' assente: nessuna sezione), legato in `:app` al
+ *    rilevatore vero (`CatalogSimilarCopies`).
+ * 2. `ViewerOverlay` la chiede con il pannello aperto e la passa a `InfoContent` fra le sezioni in piu', dopo la mappa e le persone.
  * 3. Dove si montano gli altri fogli (`DeleteSheet`, `MapsSheet`): `similar.confirmSheet()`.
  *
  * @param refreshKey cambia quando il catalogo cambia (di norma il `seq` dell'istantanea): la sezione rilegge il gruppo, cosi' un nascosto

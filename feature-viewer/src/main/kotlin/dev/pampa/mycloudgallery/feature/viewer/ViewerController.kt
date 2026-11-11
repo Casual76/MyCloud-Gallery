@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
+import androidx.compose.animation.splineBasedDecay
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -14,7 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryDismissSpec
+import androidx.compose.ui.unit.Density
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryViewerTransitionState
 import dev.pampa.mycloudgallery.core.imaging.contract.UnavailableReason
 import dev.pampa.mycloudgallery.core.imaging.viewer.NasNetwork
@@ -27,7 +28,11 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.feature.viewer.download.DownloadState
-import dev.pampa.mycloudgallery.feature.viewer.gesture.VerticalIntent
+import dev.pampa.mycloudgallery.feature.viewer.gesture.FlightPlan
+import dev.pampa.mycloudgallery.feature.viewer.gesture.GestureContext
+import dev.pampa.mycloudgallery.feature.viewer.gesture.InfoIntent
+import dev.pampa.mycloudgallery.feature.viewer.gesture.ViewerDismissState
+import dev.pampa.mycloudgallery.feature.viewer.info.InfoGeometry
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoPanelState
 import dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutController
 import dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutHost
@@ -41,7 +46,7 @@ import dev.pampa.mycloudgallery.feature.viewer.page.fitRect
 import dev.pampa.mycloudgallery.feature.viewer.video.PlaybackProblem
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayback
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -77,7 +82,6 @@ internal class ViewerController(
   var reducedMotion: Boolean = false
   var density: Float = 1f
   var sidePanel: Boolean = false
-  var sheetPx: Float = 1f
   var launchSender: (IntentSender) -> Unit = {}
 
   /** Il viewer e' stato posizionato nella finestra: da qui [windowOffset] e' quello vero. */
@@ -221,84 +225,174 @@ internal class ViewerController(
     if (state.restored) transition.progress.snapTo(1f) else transition.open(reducedMotion)
   }
 
-  /** Chiude (tasto, Indietro, swipe giu' gia' deciso): la foto torna alla cella di cio' che si sta guardando. */
-  fun close() {
+  /** L'espansione e' finita: il pager e' quello che si vede (prima si vedeva la foto che cresce dalla cella). */
+  val opened: Boolean get() = transition.progress.value >= FULLY_OPEN && !transition.progress.isRunning
+
+  /**
+   * La chiusura (H1): trascinamento verso il basso, pizzico in chiusura, Indietro predittivo e volo alla cella, in un solo stato. Il
+   * composable lo legge solo nel disegno ([ViewerDismissState.layer], [ViewerDismissState.backdropAlpha]).
+   */
+  val dismiss: ViewerDismissState = ViewerDismissState()
+
+  /** Il ritorno al suo posto del contenuto, in corso: un dito che lo riprende lo ferma. */
+  private var returnJob: Job? = null
+
+  /**
+   * Un video che si chiude **sfumando** (senza cella, [FlightPlan.Away]): la `SurfaceView` non sfuma con il layer, quindi al via del volo
+   * il lettore si ferma e la pagina mostra subito la sua miniatura (senza dissolvenza), che sfuma con il resto. Verso la cella invece il
+   * fotogramma del video vola com'e'.
+   */
+  var exitingVideo: Boolean by mutableStateOf(false)
+    private set
+
+  /** Chiude (tasto, Indietro, swipe o pizzico gia' decisi): il contenuto vola alla cella di cio' che si sta guardando. */
+  fun close(velocity: Offset = Offset.Zero) {
     if (closing) return
     closing = true
-    scope.launch { closeNow() }
+    returnJob?.cancel()
+    returnJob = null
+    scope.launch { closeNow(velocity) }
   }
 
-  private suspend fun closeNow() {
+  private suspend fun closeNow(velocity: Offset) {
     motion.stopAll()
     sheet = null
-    // Il pannello e lo zoom tornano a riposo prima: l'espansione alla rovescia parte dalla foto intera.
+    // Il pannello e lo zoom tornano a riposo prima: il volo parte dalla foto intera.
     if (state.zoomed) state.zoomReset?.invoke()
     if (info.progress.value > INFO_REST) {
       state.infoOpen = false
       info.settle(false, reducedMotion)
     }
     val id = state.currentId
-    // Un elemento sparito dalla vista (E-V6) non ha piu' una cella da portare in vista: si chiude sul rettangolo di ripiego.
+    // La Libreria segue gia' il viewer (la cella di cio' che si guarda e' in vista); se non lo e', la si porta in vista. Un elemento sparito
+    // dalla vista (E-V6), o una pagina senza griglia sotto (album, ricerca, mappa, ricordi), non ha una cella: il contenuto si allontana sfumando.
     if (view.viewIndexOf(id) >= 0 && request.anchor.boundsOf(id) == null) request.anchor.reveal(id)
-    origin = originFor(id)
+    val content = contentRect(id)
+    val plan = ViewerDismissState.planFor(from = dismiss.screenRect(content), content = content, cell = cellOf(id), stage = stage)
+    if (plan is FlightPlan.Away && playback.videoFor == id) {
+      exitingVideo = true
+      playback.clear()
+    }
+    dismiss.fly(plan, ViewerDismissState.velocityToward(plan, velocity), reducedMotion)
     playback.clear()
-    transition.close(reducedMotion)
     onClosed()
   }
 
-  /** Il rilascio di un trascinamento verso il basso: chiude oppure torna a posto, con la stessa soglia dell'espansione. */
-  suspend fun releaseDismiss(velocityY: Float) {
-    val dragProgress = GalleryDismissSpec.dragProgress(transition.drag.value.y, stage.height)
-    if (GalleryDismissSpec.shouldDismiss(dragProgress, velocityY, density)) {
-      closing = true
-      closeNow()
-    } else {
-      transition.release(velocityY, density, stage.height, reducedMotion)
+  /** La cella di [id] nelle coordinate del viewer, o null se non e' sullo schermo o non c'e' una griglia sotto. */
+  fun cellOf(id: MediaId): Rect? {
+    val bounds: PixelRect = request.anchor.boundsOf(id) ?: return null
+    if (bounds.isEmpty) return null
+    return Rect(bounds.left - windowOffset.x, bounds.top - windowOffset.y, bounds.right - windowOffset.x, bounds.bottom - windowOffset.y)
+  }
+
+  /** Dove sta il contenuto di [id] a riposo (coordinate locali): la foto intera nella scena; per il video che va, con le sue proporzioni. */
+  fun contentRect(id: MediaId): Rect {
+    if (playback.videoFor == id) {
+      playback.player?.state?.value?.aspect?.let { return fitRect(stage, it) }
     }
+    return photoFit(id)
   }
 
-  // --- Gesti verticali -----------------------------------------------------------------------------------------------
+  // --- Gesti ---------------------------------------------------------------------------------------------------------
 
-  fun intentFor(dy: Float): VerticalIntent? = when {
-    closing -> null
-    state.infoOpen -> if (dy > 0f) VerticalIntent.CloseInfo else null
-    dy > 0f -> VerticalIntent.Dismiss
-    !sidePanel -> VerticalIntent.OpenInfo
-    else -> null
+  /** Quello che l'arbitro dei gesti deve sapere adesso (vedi `ViewerGestureArbiter`). */
+  fun gestureContext(): GestureContext {
+    val phase = dismiss.phase
+    return GestureContext(
+      enabled = opened && !closing && !liveText.active && !cutout.active &&
+        (phase == ViewerDismissState.Phase.Idle || phase == ViewerDismissState.Phase.Returning),
+      zoomed = state.zoomed,
+      infoOpen = state.infoOpen,
+      sidePanel = sidePanel,
+      returning = phase == ViewerDismissState.Phase.Returning,
+    )
   }
 
-  fun onVerticalDrag(intent: VerticalIntent, delta: Offset) {
-    scope.launch {
-      when (intent) {
-        VerticalIntent.Dismiss -> transition.dragBy(delta, stage.height)
-        VerticalIntent.OpenInfo, VerticalIntent.CloseInfo -> info.dragBy(-delta.y / sheetPx)
-      }
-    }
+  /** Un dito (o due) prende il contenuto per chiudere: se stava tornando al suo posto, lo si ferma dov'e'. */
+  fun onDismissStart() {
+    returnJob?.cancel()
+    returnJob = null
+    dismiss.begin()
   }
 
-  fun onVerticalEnd(intent: VerticalIntent, velocityY: Float) {
-    scope.launch {
-      when (intent) {
-        VerticalIntent.Dismiss -> releaseDismiss(velocityY)
-        VerticalIntent.OpenInfo -> state.infoOpen = info.release(-velocityY / sheetPx, reducedMotion, InfoPanelState.OpenBias)
-        VerticalIntent.CloseInfo -> state.infoOpen = info.release(-velocityY / sheetPx, reducedMotion, InfoPanelState.CloseBias)
-      }
-    }
+  fun onDismissMove(pan: Offset, zoom: Float, centroid: Offset) {
+    dismiss.move(pan, zoom, centroid, stage.height)
   }
 
-  fun onVerticalCancel(intent: VerticalIntent) {
-    scope.launch {
-      when (intent) {
-        VerticalIntent.Dismiss -> transition.release(0f, density, Float.MAX_VALUE, reducedMotion)
-        VerticalIntent.OpenInfo, VerticalIntent.CloseInfo -> info.settle(state.infoOpen, reducedMotion)
-      }
-    }
+  /** Le dita si alzano: chiude (volo alla cella) o torna al suo posto, con la soglia della chiusura ([ViewerDismissSpec.shouldDismiss]). */
+  fun onDismissEnd(velocity: Offset, pinchRate: Float) {
+    val velocityYDp = if (density > 0f) velocity.y / density else velocity.y
+    if (dismiss.releaseDismisses(velocityYDp, pinchRate, stage.height)) close(velocity) else settleDismiss()
   }
+
+  fun onDismissCancel() = settleDismiss()
+
+  private fun settleDismiss() {
+    if (closing) return
+    returnJob?.cancel()
+    returnJob = scope.launch { dismiss.settleBack(reducedMotion) }
+  }
+
+  /** La corsa del pannello informazioni del telefono: meta' scena (H2, [InfoGeometry]). */
+  private val infoTravel: Float get() = InfoGeometry.travel(stage.height)
+
+  /**
+   * Un passo del dito sul pannello informazioni, da qualunque parte arrivi (la foto, il pannello): un gesto solo che apre, fa scorrere un
+   * pannello lungo, torna in cima e chiude ([InfoPanelState.drag]).
+   */
+  fun onInfoDrag(@Suppress("UNUSED_PARAMETER") intent: InfoIntent, dy: Float) = onPanelDrag(dy)
+
+  fun onInfoEnd(@Suppress("UNUSED_PARAMETER") intent: InfoIntent, velocityY: Float) = onPanelDragEnd(velocityY)
+
+  fun onInfoCancel(@Suppress("UNUSED_PARAMETER") intent: InfoIntent) {
+    scope.launch { info.settle(state.infoOpen, reducedMotion) }
+  }
+
+  /** Il dito sul pannello stesso (o sulla foto): [dy] pixel, positivo = verso il basso. */
+  fun onPanelDrag(dy: Float) {
+    scope.launch { info.drag(dy, infoTravel) }
+  }
+
+  /** Il dito si alza dal pannello con [velocityY] pixel al secondo: aperto, chiuso o lasciato scorrere. */
+  fun onPanelDragEnd(velocityY: Float) {
+    // Lo stato dice subito dove va il pannello: un gesto durante la molla (un tocco, un pizzico, uno swipe in giu') va al pannello giusto.
+    scope.launch { info.endDrag(velocityY, infoTravel, reducedMotion, panelDecay) { open -> state.infoOpen = open } }
+  }
+
+  /** H2: due dita a pannello aperto chiudono il pannello. */
+  fun onInfoPinch() {
+    if (!closing) state.infoOpen = false
+  }
+
+  /** Lo scorrimento di un pannello lungo che continua dopo il dito: la stessa decelerazione delle liste. */
+  private val panelDecay by lazy(LazyThreadSafetyMode.NONE) { splineBasedDecay<Float>(Density(density)) }
+
+  // --- Indietro predittivo -------------------------------------------------------------------------------------------
+
+  /** Il gesto Indietro di sistema a [progress] (0..1) dal bordo [fromLeft]: lo stesso stato del dito ([ViewerDismissState.back]). */
+  fun onBackProgress(progress: Float, fromLeft: Boolean) {
+    if (closing) return
+    returnJob?.cancel()
+    returnJob = null
+    dismiss.back(progress, fromLeft, stage)
+  }
+
+  /** Indietro annullato: il contenuto torna al suo posto. */
+  fun onBackCancelled() = settleDismiss()
 
   // --- Barre, informazioni ------------------------------------------------------------------------------------------
 
+  /**
+   * Il tocco sulla foto: mostra o nasconde le barre. H2: con il pannello informazioni del telefono aperto, il tocco sulla meta' alta lo chiude
+   * (la colonna laterale resta: la foto accanto si guarda e si tocca come sempre).
+   */
   fun toggleChrome() {
-    if (!closing) state.chromeVisible = !state.chromeVisible
+    if (closing) return
+    if (state.infoOpen && !sidePanel) {
+      state.infoOpen = false
+      return
+    }
+    state.chromeVisible = !state.chromeVisible
   }
 
   fun toggleInfo() {
@@ -521,12 +615,9 @@ internal class ViewerController(
     return if (index >= 0) view.snapshot.kindAt(index) else null
   }
 
-  /** Ripristina la posizione di un trascinamento senza chiudere, dopo un Indietro predittivo annullato. */
-  suspend fun cancelBack() = coroutineScope {
-    transition.release(0f, density, Float.MAX_VALUE, reducedMotion)
-  }
-
-  private companion object {
+  internal companion object {
+    /** Sopra questo avanzamento l'espansione e' finita (il pager sostituisce la foto che cresce). */
+    const val FULLY_OPEN = 0.999f
     const val FallbackFraction = 0.3f
     const val MILLI = 1000f
     const val INFO_REST = 0.01f

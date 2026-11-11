@@ -29,7 +29,7 @@ import dev.pampa.mycloudgallery.feature.viewer.details.ViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.details.ViewerFormat
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoInputs
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoPanelState
-import dev.pampa.mycloudgallery.feature.viewer.info.buildInfoSections
+import dev.pampa.mycloudgallery.feature.viewer.info.buildInfoModel
 import dev.pampa.mycloudgallery.feature.viewer.page.doubleTapZoomFactor
 import dev.pampa.mycloudgallery.feature.viewer.page.fitRect
 import dev.pampa.mycloudgallery.feature.viewer.page.maxZoomFactor
@@ -206,63 +206,89 @@ class ViewerLogicTest {
 
   // --- Pannello informazioni -------------------------------------------------------------------------------------------
 
-  private fun rows(inputs: InfoInputs, maps: Boolean = true) =
-    buildInfoSections(format, inputs, onOpenMaps = if (maps) ({}) else null)
+  private fun model(inputs: InfoInputs) = buildInfoModel(format, inputs)
 
   @Test
   fun ilPannelloHaSoloCioCheSi() {
+    // H2: il pannello compatto. Senza dettagli e senza giorno dell'indice non c'e' niente da dire.
     val id = MediaId.random()
-    val empty = rows(InfoInputs(kind = MediaKind.PHOTO, details = null))
-    assertThat(empty).isEmpty()
+    val empty = model(InfoInputs(kind = MediaKind.PHOTO, details = null))
+    assertThat(empty.date).isNull()
+    assertThat(empty.timeLine).isNull()
+    assertThat(empty.place).isNull()
+    assertThat(empty.hasShot).isFalse()
+    assertThat(empty.file).isEmpty()
+    assertThat(empty.fileName).isNull()
 
-    val details = sampleDetails(id)
-    val sections = rows(
+    val full = model(
       InfoInputs(
         kind = MediaKind.PHOTO,
-        details = details,
+        details = sampleDetails(id),
         exif = ExifDetails(make = "SAMSUNG", model = "Samsung Galaxy S25", fNumber = 1.8, exposureTime = "1/250", iso = 50),
         place = FakePlaces().place(FakePlaceData.OSLO.place.id),
         placeName = "Oslo",
       ),
     )
-    assertThat(sections.map { it.header }).containsExactly(null, "Luogo", "Fotocamera", "File", "Sul telefono").inOrder()
-    val dateRow = sections[0].rows.single()
-    assertThat(dateRow.title).isEqualTo("martedì 12 marzo 2024, 12:41")
-    assertThat(dateRow.caption).isEqualTo("ora di Oslo, UTC+1")
-    assertThat(dateRow.pill).isNull()
-    val placeRows = sections[1].rows
-    assertThat(placeRows.map { it.title }).containsExactly("Oslo, Norvegia", "Apri in Mappe").inOrder()
-    assertThat(placeRows[0].caption).isEqualTo("59,9127° N, 10,7461° E")
-    assertThat(placeRows[1].onClick).isNotNull()
-    assertThat(sections[2].rows.map { it.title }).containsExactly("Samsung Galaxy S25", "f/1,8 · 1/250 s · ISO 50").inOrder()
-    assertThat(sections[3].rows.single().title).isEqualTo("4000 × 3000 · 12 MP")
-    assertThat(sections[3].rows.single().caption).startsWith("JPEG · ")
-    assertThat(sections[4].rows.single().title).isEqualTo("DCIM/Camera")
-    assertThat(sections[4].rows.single().caption).isEqualTo("IMG_20240312_124100.jpg")
+    // La data grande in testa (il giorno con la maiuscola), l'ora e il fuso sotto, il luogo.
+    assertThat(full.date).isEqualTo("Martedì 12 marzo 2024")
+    assertThat(full.timeLine).isEqualTo("12:41 · ora di Oslo, UTC+1")
+    assertThat(full.estimated).isFalse()
+    assertThat(full.place).isEqualTo("Oslo, Norvegia")
+    // Lo scatto in pillole, una per dato.
+    assertThat(full.camera).isEqualTo("Samsung Galaxy S25")
+    assertThat(full.shot).containsExactly("f/1,8", "1/250 s", "ISO 50").inOrder()
+    // Il file in pillole: misure, megapixel, peso, formato.
+    assertThat(full.file.take(2)).containsExactly("4000 × 3000", "12 MP").inOrder()
+    assertThat(full.file).contains("JPEG")
+    assertThat(full.file.size).isEqualTo(4)
+    // In fondo, piccoli: il nome del file e l'ultima cartella (non il percorso).
+    assertThat(full.fileName).isEqualTo("IMG_20240312_124100.jpg")
+    assertThat(full.folder).isEqualTo("Camera")
+    assertThat(full.note).isNull()
+  }
+
+  @Test
+  fun finCheIDettagliNonArrivanoLaDataVieneDalGiornoDellIndice() {
+    // Il pannello non salta: la testa c'e' gia' dal giorno della griglia, l'ora arriva con i dettagli.
+    val early = model(InfoInputs(kind = MediaKind.PHOTO, details = null, localDay = 20240312))
+    assertThat(early.date).isEqualTo("Martedì 12 marzo 2024")
+    assertThat(early.timeLine).isNull()
   }
 
   @Test
   fun unaDataStimataPortaLaPillolaEUnVideoLaDurata() {
     val id = MediaId.random()
-    val estimated = rows(InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id, estimated = true)))
-    assertThat(estimated[0].rows.single().pill).isEqualTo("Stimata")
-    assertThat(estimated[0].rows.single().caption).isEqualTo("Data ricavata dal nome del file")
-    val video = rows(InfoInputs(kind = MediaKind.VIDEO, details = sampleDetails(id, MediaKind.VIDEO)))
-    val file = video.first { it.header == "File" }
-    assertThat(file.rows.map { it.title }).contains("2:14")
+    val estimated = model(InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id, estimated = true)))
+    assertThat(estimated.estimated).isTrue()
+    assertThat(estimated.timeLine).endsWith("Data ricavata dal nome del file")
+    val video = model(InfoInputs(kind = MediaKind.VIDEO, details = sampleDetails(id, MediaKind.VIDEO)))
+    assertThat(video.file).contains("2:14")
   }
 
   @Test
-  fun senzaLaPosizioneLaRigaPerMappeNonC_E() {
+  fun loScattoMostraSoloIDatiNotiEIlFlashSoloSeScattato() {
     val id = MediaId.random()
-    val noMaps = rows(InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id), placeName = "Oslo"), maps = false)
-    assertThat(noMaps.first { it.header == "Luogo" }.rows.map { it.title }).containsExactly("Oslo")
+    val few = model(InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id), exif = ExifDetails(iso = 400, flashFired = false)))
+    assertThat(few.camera).isNull()
+    assertThat(few.shot).containsExactly("ISO 400")
+    val flash = model(InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id), exif = ExifDetails(focalLengthMm = 6.3, flashFired = true)))
+    assertThat(flash.shot).containsExactly("6,3 mm", "Flash").inOrder()
+    // Senza EXIF (non ancora letto o illeggibile): niente riga dello scatto, nessun posto vuoto.
+    assertThat(model(InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id))).hasShot).isFalse()
+  }
+
+  @Test
+  fun senzaLaPosizioneIlLuogoEIlNomeDelLuogoOppureNiente() {
+    val id = MediaId.random()
+    val named = model(InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id), placeName = "Oslo"))
+    assertThat(named.place).isEqualTo("Oslo")
+    assertThat(model(InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id))).place).isNull()
   }
 
   @Test
   fun unaMotionPhotoDiFormatoSconosciutoLoDiceELeCaratteristicheSiElencano() {
     val id = MediaId.random()
-    val sections = rows(
+    val motion = model(
       InfoInputs(
         kind = MediaKind.MOTION_PHOTO,
         details = sampleDetails(id, MediaKind.MOTION_PHOTO).let {
@@ -274,9 +300,8 @@ class ViewerLogicTest {
         motionUnplayable = true,
       ),
     )
-    val file = sections.first { it.header == "File" }.rows
-    assertThat(file.map { it.title }).contains("Ultra HDR · Panorama · Foto in movimento")
-    assertThat(file.map { it.title }).contains("Parte video non riproducibile")
+    assertThat(motion.file).containsAtLeast("Ultra HDR", "Panorama", "Foto in movimento").inOrder()
+    assertThat(motion.note).startsWith("Il formato di questa foto in movimento")
   }
 
   // --- ViewModel: la cache ---------------------------------------------------------------------------------------------

@@ -4,9 +4,20 @@ import android.app.Application
 import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import dev.pampa.mycloudgallery.feature.viewer.info.InfoPanelState
+import dev.pampa.mycloudgallery.feature.viewer.info.InfoSheet
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.TouchInjectionScope
 import androidx.compose.ui.test.swipeLeft
@@ -122,3 +133,33 @@ internal fun TouchInjectionScope.swipeToNext(durationMillis: Long = 200) = swipe
 
 /** Il gesto contrario di [swipeToNext]: alla foto con la posizione prima (la piu' recente), uno swipe verso sinistra. */
 internal fun TouchInjectionScope.swipeToPrevious(durationMillis: Long = 200) = swipeLeft(durationMillis = durationMillis)
+
+/**
+ * Il pannello informazioni del telefono aperto, per i test delle sezioni (la mappa, le persone, le copie): il foglio vero (H2, [InfoSheet],
+ * aperto a meta' scena) alzato quanto basta perche' se ne vedano [visible] dp, come il foglio alto 560 dp di prima. Cosi' le sezioni sotto la
+ * testa restano a portata di dito senza scorrere; il foglio, il suo materiale e le sue misure sono quelli veri.
+ */
+@Composable
+internal fun OpenInfoSheet(title: String = "Informazioni", visible: Dp = 560.dp, content: @Composable ColumnScope.() -> Unit) {
+  BoxWithConstraints(Modifier.fillMaxSize()) {
+    val stage = with(LocalDensity.current) { maxHeight.toPx() }
+    val state = remember { InfoPanelState(initialOpen = true) }
+    Box(Modifier.fillMaxSize().offset(y = maxHeight / 2 - visible)) {
+      InfoSheet(
+        state = state,
+        stageHeight = stage,
+        topLimit = 0f,
+        title = title,
+        backdrop = null,
+        onDrag = {},
+        onDragEnd = {},
+        onClose = {},
+        contentAlpha = { 1f },
+        content = content,
+      )
+    }
+  }
+}
+
+/** Il pannello informazioni (il foglio o la colonna) c'e': il suo titolo per l'accessibilita'. */
+internal fun infoPane(title: String = "Informazioni"): SemanticsMatcher = SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, title)

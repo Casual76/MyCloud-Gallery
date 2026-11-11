@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Lo sfondo dell'icona dell'app. Quello di base e' lo scuro (scelta dell'utente: se un launcher non segue il tema, si vede la scura);
+    con il tema chiaro del telefono vale values-notnight.
+-->
+<resources>
+  <color name="ic_launcher_background">#15141A</color>
+</resources>

@@ -399,7 +399,7 @@ class CollectionsEditScreenTabletTest : CollectionsEditScreenBase() {
     assertThat(detail.left).isAtLeast(list.right)
   }
 
-  /** La riga "Eliminati di recente" di Da tenere al sicuro (Utility ha una voce con lo stesso nome, "Telefono e NAS insieme"). */
+  /** La riga "Eliminati di recente" di Da tenere al sicuro (negli esempi vecchi anche Utility ha una voce con lo stesso nome; in produzione la sezione Da tenere al sicuro e' vuota). */
   private fun openRecentlyDeleted() {
     composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText(TRASH_ROW, substring = true))
     composeRule.onNodeWithText(TRASH_ROW, substring = true).performClick()

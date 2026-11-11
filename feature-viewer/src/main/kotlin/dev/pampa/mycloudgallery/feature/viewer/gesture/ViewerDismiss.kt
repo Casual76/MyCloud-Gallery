@@ -58,6 +58,15 @@ internal object ViewerDismissSpec {
   const val AwayScale: Float = 0.72f
   const val AwayDropFraction: Float = 0.12f
 
+  /** L'ombra del volo verso la cella sale in questa frazione del volo (niente ombra che compare di colpo al rilascio), poi cala fino all'arrivo. */
+  const val LiftIn: Float = 0.15f
+
+  /** Quanto e' sollevata la foto che vola verso la cella al punto [t] del volo (0..1): sale in [LiftIn], poi cala e all'arrivo e' 0 (posata). */
+  fun flightLift(t: Float): Float {
+    val f = t.coerceIn(0f, 1f)
+    return (f / LiftIn).coerceAtMost(1f) * (1f - f)
+  }
+
   /** La velocita' iniziale del volo (frazioni del viaggio al secondo) non supera questa: un lancio forte non fa rimbalzare sulla cella. */
   const val MaxFlightVelocity: Float = 6f
 
@@ -149,6 +158,7 @@ internal sealed interface FlightPlan {
         scale = scale,
         translation = Offset(screen.left - scale * window.left, screen.top - scale * window.top),
         clip = window,
+        lift = ViewerDismissSpec.flightLift(f),
       )
     }
   }

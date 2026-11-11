@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 
 /**
  * Dove sta il contenuto del viewer (il pager con la foto o il video) in questo fotogramma: **un solo punto** (H1).
@@ -31,6 +32,11 @@ internal data class ContentLayer(
   /** Il ritaglio, in coordinate locali (prima della trasformazione); null = niente ritaglio. */
   val clip: Rect? = null,
   val alpha: Float = 1f,
+  /**
+   * Quanto la foto in volo verso la cella e' sollevata (0 = posata, 1 = ombra piena): l'ombra morbida del volo, disegnata dal layer che c'e' gia'
+   * con la sagoma del ritaglio ([clip]). Senza ritaglio non c'e' una sagoma da far ombreggiare, e l'ombra non c'e'.
+   */
+  val lift: Float = 0f,
 ) {
 
   /** Dove finisce sullo schermo il punto locale [local]. */
@@ -48,9 +54,10 @@ internal data class ContentLayer(
     translation = Offset(outer.scale * translation.x + outer.translation.x, outer.scale * translation.y + outer.translation.y),
     clip = clip ?: outer.clip,
     alpha = alpha * outer.alpha,
+    lift = if (lift > 0f) lift else outer.lift,
   )
 
-  val isIdentity: Boolean get() = scale == 1f && translation == Offset.Zero && clip == null && alpha == 1f
+  val isIdentity: Boolean get() = scale == 1f && translation == Offset.Zero && clip == null && alpha == 1f && lift == 0f
 
   companion object {
     val Identity: ContentLayer = ContentLayer()
@@ -84,8 +91,14 @@ internal fun Modifier.viewerContentLayer(visible: () -> Boolean, layer: () -> Co
   if (window != null) {
     clip = true
     shape = WindowShape(window)
+    // L'ombra del volo: una proprieta' del layer che c'e' gia', con la sagoma del ritaglio (la disegna il RenderThread). Niente layer in piu',
+    // niente misure che cambiano, niente ricomposizioni: e' letta qui, nel disegno, come la scala e lo spostamento.
+    if (current.lift > 0f) shadowElevation = current.lift * FlightShadow.toPx()
   }
 }
+
+/** L'ombra della foto che vola verso la cella, al massimo: morbida, come una foto appena sollevata dalla griglia. */
+private val FlightShadow = 12.dp
 
 /**
  * Il ritaglio del volo: un rettangolo nelle coordinate locali. Le celle della parete sono squadrate (`GalleryWall.CornerScale` = 0), quindi

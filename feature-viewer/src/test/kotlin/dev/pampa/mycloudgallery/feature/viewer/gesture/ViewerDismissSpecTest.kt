@@ -13,6 +13,22 @@ import org.junit.Test
  */
 class ViewerDismissSpecTest {
 
+  @Test
+  fun laFotoCheVolaAllaCellaHaUnOmbraCheSaleEPoiSiPosa() {
+    // Facoltativo del giro 2: niente ombra al rilascio (non compare di colpo) ne' all'arrivo (la miniatura e' posata), un'ombra nel mezzo.
+    assertThat(ViewerDismissSpec.flightLift(0f)).isEqualTo(0f)
+    assertThat(ViewerDismissSpec.flightLift(ViewerDismissSpec.LiftIn)).isWithin(0.001f).of(1f - ViewerDismissSpec.LiftIn)
+    assertThat(ViewerDismissSpec.flightLift(0.5f)).isWithin(0.001f).of(0.5f)
+    assertThat(ViewerDismissSpec.flightLift(1f)).isEqualTo(0f)
+    val plan = FlightPlan.ToCell(from = Rect(0f, 0f, 1000f, 1500f), to = Rect(100f, 900f, 300f, 1100f), content = Rect(0f, 0f, 1000f, 1500f))
+    assertThat(plan.at(0.5f).lift).isGreaterThan(0f)
+    assertThat(plan.at(0.5f).clip).isNotNull()
+    assertThat(plan.at(1f).lift).isEqualTo(0f)
+    // Senza cella il contenuto si allontana sfumando: nessuna sagoma, nessuna ombra.
+    val away = FlightPlan.Away(from = Rect(0f, 0f, 1000f, 1500f), content = Rect(0f, 0f, 1000f, 1500f), drop = 100f)
+    assertThat(away.at(0.5f).lift).isEqualTo(0f)
+  }
+
   private val height = 2000f
 
   @Test

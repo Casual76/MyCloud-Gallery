@@ -35,14 +35,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.graphics.BlurMaskFilter
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.IntSize
+import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
+import kotlin.math.ceil
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInWindow
@@ -263,9 +276,19 @@ fun GallerySearchBar(
       // qui il campo e' sempre aperto, largo quanto la riga, e l'apertura e' una traslazione piu' un ritaglio letti nel disegno ([searchReveal]).
       BoxWithConstraints(modifier = Modifier.fillMaxWidth().onPlaced { rightEdge = it.positionInWindow().x + it.size.width }) {
         val field = backdrop ?: currentGlassBackdrop()
-        val hint = fittingPlaceholder(placeholder ?: labels.search, fallback = labels.search, fieldWidth = maxWidth)
+        val fitted = fittingPlaceholder(placeholder ?: labels.search, fallback = labels.search, fieldWidth = maxWidth)
+        val hint = fitted.text
         // Il campo e la X si spostano insieme, della stessa quantita' (calcolata sulla larghezza del campo, non su quella di chi la legge).
         val fieldWidth = constraints.maxWidth.toFloat()
+        // Da quando il segnaposto della rivelazione non e' piu' tagliato dal capo destro (CG-2 del giro 2).
+        val density = LocalDensity.current
+        val placeholderStart = remember(fieldWidth, fitted, density) {
+          with(density) { revealPlaceholderStart(fieldWidth, FluidSearchFieldDefaults.Height.toPx(), SearchFieldTextStart.toPx() + fitted.width) }
+        }
+        // L'ombra del capo destro mentre la barra cresce: quella del vetro dell'engine, dal ruolo scrim (nero) del tema.
+        val capShadow = MaterialTheme.colorScheme.scrim.copy(alpha = if (GlassDefaults.isDarkSurface()) SearchCapShadowDark else SearchCapShadowLight)
+        // Durante la molla il segnaposto e' il nostro, in dissolvenza; a barra aperta quello del campo (una ricomposizione all'arrivo e alla partenza).
+        val revealed by remember { derivedStateOf { progress.value >= 1f } }
         Box(
           modifier = Modifier
             .fillMaxWidth()
@@ -277,7 +300,7 @@ fun GallerySearchBar(
               val edge = rightEdge
               translationX = if (from != null && edge != null) lerp(from - (edge - FluidSearchFieldDefaults.Height.toPx() / 2f), 0f, p) else 0f
             }
-            .searchReveal(progress = { progress.value }),
+            .searchReveal(progress = { progress.value }, shadow = capShadow),
         ) {
           val slide = Modifier.graphicsLayer { translationX = searchRevealHidden(fieldWidth, FluidSearchFieldDefaults.Height.toPx(), progress.value) }
           FluidSearchField(
@@ -288,7 +311,7 @@ fun GallerySearchBar(
               .then(slide)
               .onFocusChanged { onFocusChanged(it.hasFocus) },
             backdrop = field,
-            placeholder = hint,
+            placeholder = if (revealed) hint else "",
             labels = labels,
             onSearch = {
               onSearch()
@@ -297,6 +320,9 @@ fun GallerySearchBar(
             autoFocus = focus,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
           )
+          if (!revealed && query.isEmpty()) {
+            RevealPlaceholder(text = hint, alpha = { revealPlaceholderAlpha(progress.value, placeholderStart) }, modifier = Modifier.matchParentSize().then(slide))
+          }
           // CU-12 (giro 1): **una X sola**. Con del testo c'e' la crocetta del campo (svuota); a campo vuoto, nello stesso punto, la X che chiude.
           SearchCloseButton(
             visible = query.isEmpty() && open,
@@ -384,57 +410,117 @@ internal fun searchRevealHidden(width: Float, height: Float, progress: Float): F
 
 /**
  * La rivelazione della barra (CG-2): il campo, largo quanto la riga fin dal primo fotogramma e spostato a destra di [searchRevealHidden], si vede solo fino al
- * bordo destro della riga, con il capo destro arrotondato come il vetro. Il ritaglio si rifa' nel disegno (nessuna ricomposizione, nessuna misura
- * nuova): a sinistra c'e' tutto (il capo sinistro e' quello vero, con il suo bordo e la sua ombra), sopra e sotto il capo destro l'ombra si chiude in
- * un arco come quella di un vetro tondo. A barra aperta il ritaglio non c'e'.
+ * bordo destro della riga, con il capo destro arrotondato come il vetro. A sinistra c'e' tutto: il capo sinistro e' quello vero, con il suo bordo e la
+ * sua ombra. Il capo destro e' un ritaglio, e la sua ombra ([shadow], quella dei vetri sospesi dell'engine: sfocata di 20 dp, un sesto piu' in giu') si
+ * disegna qui, cosi' la barra che cresce ha l'ombra tutt'intorno come un vetro intero (CG-2 del giro 2).
+ *
+ * Il ritaglio e l'ombra dipendono solo dalla misura: si fanno una volta per misura (`drawWithCache`), mai a ogni fotogramma della molla, e senza
+ * operazioni di `Path` (due contorni nello stesso verso, l'unione la fa il riempimento). Nel disegno si legge solo [progress]. A barra aperta il ritaglio
+ * e l'ombra disegnata qui non ci sono: c'e' il vetro intero con la sua ombra.
  */
-private fun Modifier.searchReveal(progress: () -> Float): Modifier = drawWithCache {
-  val clip = Path()
-  val left = Path()
-  val cap = Path()
-  val capped = Path()
-  val halo = Path()
-  val band = Path()
-  val haloOut = Path()
-  val haloPx = SearchRevealHalo.toPx()
+private fun Modifier.searchReveal(progress: () -> Float, shadow: Color): Modifier = drawWithCache {
+  val radius = size.height / 2f
+  val capX = size.width - radius
+  val blur = SearchCapShadowBlur.toPx()
+  val drop = SearchCapShadowBlur.toPx() / SearchCapShadowDropFraction
+  val reach = size.height * 4f + blur * 4f
+  // Tutto cio' che sta a sinistra del centro del capo destro, piu' il capo destro.
+  val clip = Path().apply {
+    addRect(Rect(-size.width - reach, -reach, capX, size.height + reach))
+    addOval(Rect(center = Offset(capX, radius), radius = radius))
+  }
+  // L'ombra del capo destro, registrata una volta: un cerchio sfocato un po' in giu', senza l'interno del capo (come il vetro) e senza la meta' sinistra
+  // (li' c'e' quella vera del campo).
+  val pad = blur * 2f
+  val shadowSize = IntSize(ceil(radius * 2f + pad * 2f).toInt(), ceil(size.height + pad * 2f + drop).toInt())
+  val center = Offset(pad + radius, pad + radius)
+  val capShadow = obtainGraphicsLayer().apply {
+    compositingStrategy = CompositingStrategy.Offscreen
+    alpha = SearchCapShadowAlpha
+    record(size = shadowSize) {
+      drawIntoCanvas { canvas ->
+        val paint = Paint().apply {
+          color = shadow
+          asFrameworkPaint().maskFilter = BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL)
+        }
+        canvas.drawCircle(center + Offset(0f, drop), radius, paint)
+      }
+      drawCircle(shadow, radius, center, blendMode = BlendMode.Clear)
+      drawRect(shadow, topLeft = Offset.Zero, size = Size(center.x, shadowSize.height.toFloat()), blendMode = BlendMode.Clear)
+    }
+  }
   onDrawWithContent {
-    val p = progress()
-    if (p >= 1f) {
+    if (progress() >= 1f) {
       drawContent()
       return@onDrawWithContent
     }
-    val radius = size.height / 2f
-    val capX = size.width - radius
-    val reach = size.height * 4f + haloPx
-    left.rewind()
-    left.addRect(Rect(-size.width - reach, -reach, capX, size.height + reach))
-    cap.rewind()
-    cap.addOval(Rect(center = Offset(capX, radius), radius = radius))
-    halo.rewind()
-    halo.addOval(Rect(center = Offset(capX, radius), radius = radius + haloPx))
-    band.rewind()
-    band.addRect(Rect(capX, 0f, capX + radius + haloPx + 1f, size.height))
-    // L'ombra sopra e sotto il capo destro, ma non la fascia del vetro nascosto oltre il capo.
-    haloOut.op(halo, band, PathOperation.Difference)
-    capped.op(left, cap, PathOperation.Union)
-    clip.op(capped, haloOut, PathOperation.Union)
     clipPath(clip) { this@onDrawWithContent.drawContent() }
+    translate(capX - radius - pad, -pad) { drawLayer(capShadow) }
   }
 }
+
+/**
+ * Il segnaposto mentre la barra si apre o si chiude (CG-2 del giro 2): lo stesso testo, nello stesso punto e con lo stesso stile di quello del campo, che
+ * compare in dissolvenza ([alpha], letta nel disegno) quando la barra e' quasi aperta, cosi' non si vede mai tagliato dal capo destro. A barra aperta lo
+ * sostituisce il segnaposto del campo (gli stessi pixel), che TalkBack legge dentro il campo: questo per TalkBack non c'e'.
+ */
+@Composable
+private fun RevealPlaceholder(text: String, alpha: () -> Float, modifier: Modifier = Modifier) {
+  Box(
+    modifier = modifier
+      .graphicsLayer { this.alpha = alpha() }
+      .padding(start = SearchFieldTextStart, end = PlaceholderEndInset)
+      .clearAndSetSemantics { },
+    contentAlignment = Alignment.CenterStart,
+  ) {
+    Text(
+      text = text,
+      style = MaterialTheme.typography.bodyLarge,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
+  }
+}
+
+/**
+ * Da quale frazione dell'apertura il segnaposto, che finisce a [textEnd] pixel dal bordo sinistro del campo largo [width] (il cerchio e' [circle]), non e'
+ * piu' tagliato dal capo destro: la parte nascosta ([searchRevealHidden]) e' diventata piu' piccola dello spazio a destra del testo. Mai prima di
+ * [PlaceholderFadeMin]: anche un segnaposto corto aspetta che la barra sia cresciuta.
+ */
+internal fun revealPlaceholderStart(width: Float, circle: Float, textEnd: Float): Float {
+  val travel = (width - circle).coerceAtLeast(1f)
+  val uncut = 1f - (width - textEnd) / travel
+  return uncut.coerceIn(PlaceholderFadeMin, PlaceholderFadeEnd)
+}
+
+/** Il segnaposto durante la rivelazione: nascosto finche' sarebbe tagliato ([start]), poi in dissolvenza fino a barra quasi aperta. */
+internal fun revealPlaceholderAlpha(progress: Float, start: Float): Float =
+  if (start >= PlaceholderFadeEnd) {
+    if (progress >= 1f) 1f else 0f
+  } else {
+    ((progress - start) / (PlaceholderFadeEnd - start)).coerceIn(0f, 1f)
+  }
+
+/** Il segnaposto scelto e quanto e' largo (in pixel), per sapere da quando la rivelazione non lo taglia piu'. */
+private class FittedPlaceholder(val text: String, val width: Float)
 
 /**
  * Il segnaposto del campo se entra intero fra la lente e la X (a campo vuoto la X sta sopra la fine del campo); altrimenti, col testo grande, [fallback].
  */
 @Composable
-private fun fittingPlaceholder(text: String, fallback: String, fieldWidth: Dp): String {
-  if (text == fallback) return text
+private fun fittingPlaceholder(text: String, fallback: String, fieldWidth: Dp): FittedPlaceholder {
   val measurer = rememberTextMeasurer()
   val style = MaterialTheme.typography.bodyLarge
   val density = LocalDensity.current
   return remember(text, fallback, fieldWidth, style, density) {
-    val available = with(density) { (fieldWidth - SearchFieldTextStart - FluidSearchFieldDefaults.ActionSize - SearchFieldTextGap).toPx() }
-    val width = measurer.measure(text, style, maxLines = 1, softWrap = false).size.width
-    if (width <= available) text else fallback
+    val available = with(density) { (fieldWidth - SearchFieldTextStart - PlaceholderEndInset).toPx() }
+    val width = measurer.measure(text, style, maxLines = 1, softWrap = false).size.width.toFloat()
+    if (width <= available || text == fallback) {
+      FittedPlaceholder(text, width)
+    } else {
+      FittedPlaceholder(fallback, measurer.measure(fallback, style, maxLines = 1, softWrap = false).size.width.toFloat())
+    }
   }
 }
 
@@ -463,8 +549,21 @@ private val SearchFieldTextStart: Dp = FluidSearchFieldDefaults.IconInset + Flui
 /** Fra la fine del segnaposto e la X. */
 private val SearchFieldTextGap: Dp = 4.dp
 
-/** Quanto dell'ombra del vetro resta attorno al capo destro mentre la barra si apre (il raggio dell'ombra dei vetri sospesi e' 20 dp). */
-private val SearchRevealHalo: Dp = 24.dp
+/** L'ombra dei vetri sospesi dell'engine (`GlassRole.Floating`): sfocata di 20 dp, spostata in giu' di un sesto, al 70%. */
+private val SearchCapShadowBlur: Dp = 20.dp
+private const val SearchCapShadowDropFraction = 6f
+private const val SearchCapShadowAlpha = 0.7f
+
+/** Il colore dell'ombra dei vetri dell'engine: nero al 16% su una pagina chiara, al 10% su una scura (`glassShadowColor`). */
+private const val SearchCapShadowLight = 0.16f
+private const val SearchCapShadowDark = 0.10f
+
+/** Il segnaposto della rivelazione non compare prima di questa frazione dell'apertura, e e' del tutto visibile a [PlaceholderFadeEnd]. */
+private const val PlaceholderFadeMin = 0.6f
+private const val PlaceholderFadeEnd = 0.99f
+
+/** Lo spazio a destra del segnaposto, dove non arriva mai (la X, e lo stacco prima di lei: [fittingPlaceholder]). */
+internal val PlaceholderEndInset: Dp get() = FluidSearchFieldDefaults.ActionSize + SearchFieldTextGap
 
 /** Lo scambio fra la crocetta del campo e la X: come la crocetta di `FluidSearchField`. */
 private const val SwapInMillis = 140

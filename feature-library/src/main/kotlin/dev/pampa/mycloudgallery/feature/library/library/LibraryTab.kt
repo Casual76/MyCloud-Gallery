@@ -34,7 +34,8 @@ import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
  *   continua");
  * - [onBackupStatusClick]: "Apri Backup" sotto un problema del backup, e il tocco su un lavoro del backup, nel pop-up (Fase 5A, D16);
  * - [network]: lo stato della rete per la nuvola (B2), ridotto da `:app` dall'indicatore globale; null = la rete non dice niente;
- * - [onNetworkClick]: il tasto sotto un problema della rete (WireGuard, la password, la Diagnostica: cio' che dice `:app`).
+ * - [onNetworkClick]: il tasto sotto un problema della rete (WireGuard, la password, la Diagnostica: cio' che dice `:app`);
+ * - [search]: la ricerca dentro la Libreria (H4): la barra dei suggerimenti al posto dei pezzi in alto, i risultati al posto della griglia; null = mai.
  *
  * Gli stati (§2.4): nessun permesso, accesso parziale (E-P1), foto in attesa (E-P21), prima lettura, Libreria vuota,
  * filtro senza risultati. I pop-up (menu, conferma dell'eliminazione) usano il `FluidGlassModalHost` dello scope; se
@@ -53,6 +54,7 @@ fun LibraryTab(
   onBackupStatusClick: () -> Unit = {},
   network: LibraryNetworkStatus? = null,
   onNetworkClick: () -> Unit = {},
+  search: LibrarySearchLayer? = null,
 ) {
   LibraryModalHost(modifier) {
     LibraryEffects(state)
@@ -67,6 +69,7 @@ fun LibraryTab(
       cloudActions = remember(onNetworkClick, onNasStatusClick, onBackupStatusClick) {
         LibraryCloudActions(onNetwork = onNetworkClick, onNas = onNasStatusClick, onBackup = onBackupStatusClick)
       },
+      search = search,
     )
   }
 }

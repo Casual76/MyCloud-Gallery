@@ -31,4 +31,32 @@ internal object SearchDimens {
   /** Il filo fra i sicuri e i meno probabili: lo spazio che occupa nella griglia e lo spessore della linea (CU-3). */
   val BoundaryHeight: Dp = 16.dp
   val BoundaryLine: Dp = 1.dp
+
+  // --- I2: la pagina Ricerca e modelli con anelli e segni -----------------------------------------------------------------------------------------------
+
+  /** L'anello grande della copertura, in testa alla pagina, e il suo spessore. */
+  val HeroRing: Dp = 96.dp
+  val HeroRingStroke: Dp = 10.dp
+
+  /** Il margine interno della scheda della copertura. */
+  val HeroPadding: Dp = 16.dp
+
+  /** L'anello piccolo di una riga (l'analisi in corso) e il suo spessore. */
+  val RowRing: Dp = 32.dp
+  val RowRingStroke: Dp = 4.dp
+
+  /** L'anello di un modello e il suo spessore. */
+  val ModelRing: Dp = 56.dp
+  val ModelRingStroke: Dp = 5.dp
+
+  /** Il glifo dentro un anello di riga, dentro un anello di modello e accanto a un numero. */
+  val RingGlyph: Dp = 16.dp
+  val ModelGlyph: Dp = 24.dp
+  val InlineGlyph: Dp = 18.dp
+
+  /** Fra due piastrelle affiancate (le aree, i modelli). */
+  val TileGap: Dp = 10.dp
+
+  /** Il margine interno di una piastrella (aree, modelli). */
+  val TilePadding: Dp = 12.dp
 }

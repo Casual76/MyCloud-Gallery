@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.feature.search
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onAllNodesWithText
@@ -37,16 +38,18 @@ abstract class HrProbeScreenshotBase(private val dark: Boolean, private val mode
     rule.setSearchContent(dark = dark) {
       SearchSettingsScreen(state, mode == "misura", true, true, true, handlers, onBack = {}, probeFailed = mode == "errore" || mode == "occupato", probeHot = mode == "caldo", probeBusy = mode == "occupato")
     }
+    // I2: la misura e' un segno con due parole; la frase intera di prima e' quella che dice TalkBack.
+    fun said(sentence: String) = hasContentDescription(sentence, substring = true)
     if (mode == "caldo" || mode == "occupato") {
-      rule.onNodeWithText(if (mode == "caldo") "Il telefono è caldo: misuro più tardi." else "La misura precedente deve ancora finire.").performScrollTo()
+      rule.onNode(said(if (mode == "caldo") "Il telefono è caldo: misuro più tardi." else "La misura precedente deve ancora finire.")).performScrollTo()
       assertThat(rule.onAllNodesWithText("Riprova").fetchSemanticsNodes()).isEmpty()
     }
     if (mode == "misura") {
-      rule.onNodeWithText("Misuro la velocit\u00e0 del telefono\u2026").performScrollTo()
-      assertThat(rule.onAllNodesWithText("Misuro la velocit\u00e0 del telefono\u2026").fetchSemanticsNodes()).hasSize(1)
+      rule.onNode(said("Misuro la velocit\u00e0 del telefono\u2026")).performScrollTo()
+      assertThat(rule.onAllNodes(said("Misuro la velocit\u00e0 del telefono\u2026")).fetchSemanticsNodes()).hasSize(1)
     }
     if (mode == "errore") {
-      rule.onNodeWithText("Non sono riuscito a misurare.").performScrollTo()
+      rule.onNode(said("Non sono riuscito a misurare.")).performScrollTo()
       rule.onNodeWithText("Riprova").performScrollTo().performClick()
       assertThat(retries).isEqualTo(1)
     }

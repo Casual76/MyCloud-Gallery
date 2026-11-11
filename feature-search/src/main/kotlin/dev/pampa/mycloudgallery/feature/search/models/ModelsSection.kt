@@ -2,43 +2,63 @@ package dev.pampa.mycloudgallery.feature.search.models
 
 import android.content.res.Resources
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SdStorage
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
-import dev.antigravity.fluidengine.ui.fluid.FluidPressGrip
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
-import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
+import dev.antigravity.fluidengine.ui.fluid.FluidPressGrip
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
-import dev.antigravity.fluidengine.ui.theme.FluidListRow
-import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagCode
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryStatusMark
+import dev.pampa.mycloudgallery.core.designsystem.icon.galleryStatusMarkSize
+import dev.pampa.mycloudgallery.core.designsystem.icon.rememberGalleryIconColors
+import dev.pampa.mycloudgallery.core.designsystem.icon.rememberGalleryStatusColors
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
-import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.core.models.contract.ModelDiag
 import dev.pampa.mycloudgallery.core.models.contract.ModelFailCode
@@ -53,8 +73,10 @@ import dev.pampa.mycloudgallery.feature.search.contract.ModelsState
 import dev.pampa.mycloudgallery.feature.search.sizeText
 import dev.pampa.mycloudgallery.feature.search.ui.SearchDimens
 
-// I MODELLI (Fase 6, P8, §1.5 `ModelsState`, D20): stato, dimensione, sorgente, "Scarica ora", "Rimuovi" (che dice la conseguenza) e lo spazio
-// dell'indice. Un colore e un glifo per ogni stato (assente, in coda, in scaricamento, in verifica, pronto, errore): da rifinire (§12.12).
+// I MODELLI (Fase 6, P8, §1.5 `ModelsState`, D20; I2 della fase I). Ogni modello e' **un anello** con il suo segno: pieno e con la spunta quando e' pronto,
+// che si riempie mentre arriva, vuoto con la freccia quando manca, con il segno d'attenzione o di problema quando serve qualcosa. Sotto, il nome corto e la
+// misura. Il tocco apre il dettaglio (lo stato per intero, da dove viene, il motivo di un problema) con le sue azioni: "Scarica ora", "Scarica con i dati
+// mobili", "Riprova", "Diagnostica", "Libera spazio", "Rimuovi" (che dice la conseguenza prima di farlo, D20).
 
 /** Il codice stabile di un motivo di fallimento di un modello (§2.6): la pagina ne ricava messaggio e azioni dal catalogo. */
 fun failureCode(code: ModelFailCode): DiagCode = when (code) {
@@ -68,6 +90,16 @@ internal fun modelTone(state: ModelState): FluidTone = when (state) {
   is ModelState.Queued, is ModelState.Fetching, ModelState.Verifying -> FluidTone.Info
   is ModelState.Ready -> FluidTone.Success
   is ModelState.Failed, is ModelState.NeedsConfirmation -> FluidTone.Warning
+}
+
+/** Il segno di stato di un modello sull'anello (null = nessun segno: in arrivo, l'anello stesso dice quanto). */
+internal fun modelMark(state: ModelState): GalleryIconStatus? = when (state) {
+  is ModelState.Ready -> GalleryIconStatus.Done
+  is ModelState.Fetching, ModelState.Verifying -> null
+  is ModelState.Queued -> GalleryIconStatus.Paused
+  ModelState.Absent -> GalleryIconStatus.Stopped
+  is ModelState.NeedsConfirmation -> GalleryIconStatus.Attention
+  is ModelState.Failed -> GalleryIconStatus.Problem
 }
 
 private fun glyphOf(role: ModelRole?): ImageVector = when (role) {
@@ -86,6 +118,16 @@ private fun nameOf(role: ModelRole?): String = stringResource(
     ModelRole.QUERY_TEXT -> R.string.models_model_query
     ModelRole.INDEX_MULTIMODAL, null -> R.string.models_model_index
     ModelRole.CUTOUT -> R.string.models_model_cutout
+    ModelRole.FACE_DETECT, ModelRole.FACE_EMBED -> R.string.models_model_faces
+  },
+)
+
+@Composable
+private fun shortNameOf(role: ModelRole?): String = stringResource(
+  when (role) {
+    ModelRole.QUERY_TEXT -> R.string.models_model_query_short
+    ModelRole.INDEX_MULTIMODAL, null -> R.string.models_model_index_short
+    ModelRole.CUTOUT -> R.string.models_model_cutout_short
     ModelRole.FACE_DETECT, ModelRole.FACE_EMBED -> R.string.models_model_faces
   },
 )
@@ -118,114 +160,165 @@ private fun stateLabel(state: ModelState): String = stringResource(
   },
 )
 
-/** La sezione "Modelli": un gruppo per modello, con il suo avanzamento e le sue azioni, e la riga dello spazio. */
+/** La sezione "Modelli": gli anelli dei modelli affiancati e, sotto, lo spazio dell'indice con il suo segno. */
 fun LazyListScope.modelsSection(models: ModelsState, handlers: SearchSettingsHandlers) {
   item(key = "models-header") { GallerySectionHeader(title = stringResource(R.string.models_section_models)) }
-  models.models.forEach { row -> item(key = "model-${row.id.value}") { ModelBlock(row, handlers) } }
-  item(key = "models-space") { SpaceNote(models) }
+  item(key = "models") { ModelTiles(models.models, handlers) }
+  item(key = "models-space") { SpaceLine(models) }
 }
 
 @Composable
-private fun SpaceNote(models: ModelsState) {
-  FluidSectionFootnote(text = stringResource(R.string.models_space, sizeText(models.vectorBytes), sizeText(models.textBytes)))
+private fun ModelTiles(rows: List<ModelRow>, handlers: SearchSettingsHandlers) {
+  var open by remember { mutableStateOf<ModelId?>(null) }
+  Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(SearchDimens.TileGap)) {
+    rows.forEach { row -> ModelTile(row, onOpen = { open = row.id }, modifier = Modifier.weight(1f)) }
+  }
+  val shown = open?.let { id -> rows.firstOrNull { it.id == id } }
+  if (shown != null) ModelSheet(shown, handlers, onDismiss = { open = null })
 }
 
+/**
+ * Un modello: l'anello (pronto pieno, in arrivo che avanza, assente vuoto) con il glifo del suo ruolo e il segno di stato, il nome corto e la misura.
+ * Un tasto: apre il dettaglio. TalkBack dice nome, stato, misura e sorgente.
+ */
 @Composable
-private fun ModelBlock(row: ModelRow, handlers: SearchSettingsHandlers) {
+private fun ModelTile(row: ModelRow, onOpen: () -> Unit, modifier: Modifier) {
   val spec = ModelCatalog.byId(row.id)
-  val resources = LocalContext.current.resources
-  var removing by remember { mutableStateOf(false) }
+  val resources = LocalResources.current
   val state = row.state
-  val detail = listOfNotNull(sizeText(row.sizeBytes), sourceText(resources, row.source)).joinToString(" · ")
-  Column(
-    modifier = Modifier.padding(bottom = SearchDimens.TightGap),
-    verticalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
-  ) {
-    FluidListGroup {
-      FluidListRow(
-        title = nameOf(spec?.role),
-        subtitle = detail,
-        tone = modelTone(state),
-        leading = { Icon(glyphOf(spec?.role), contentDescription = null) },
-        disclosure = false,
-        titleMaxLines = 3,
-        badge = { FluidStatusBadge(label = stateLabel(state), tone = modelTone(state)) },
-      )
-    }
-    when (state) {
-      is ModelState.Fetching -> {
-        FluidProgressBar(progress = { if (state.total > 0) state.done.toFloat() / state.total else 0f }, modifier = Modifier.padding(horizontal = GalleryDimens.Gutter))
-        FluidSectionFootnote(text = stringResource(R.string.models_state_fetching, sizeText(state.done), sizeText(state.total)))
-      }
-      is ModelState.Failed -> FailureNote(row.id, failureCode(state.code), state.code, row.sizeBytes, handlers)
-      is ModelState.NeedsConfirmation -> {
-        FluidSectionFootnote(text = stringResource(R.string.models_confirm_note, sizeText(state.bytes)))
-        ActionRow {
-          FluidButton(
-            text = stringResource(R.string.models_confirm_action),
-            onClick = { handlers.onConfirmMobileDownload(row.id) },
-            style = FluidButtonStyle.Tinted,
-            grip = FluidPressGrip.YieldsToScroll,
-            size = FluidButtonSize.Large,
-          )
+  val name = nameOf(spec?.role)
+  val label = stateLabel(state)
+  val summary = listOfNotNull(name, label, sizeText(row.sizeBytes), sourceText(resources, row.source)).joinToString(" · ")
+  val openLabel = stringResource(R.string.models_details)
+  val searchHue = rememberGalleryIconColors(GalleryIconFamily.Search).top
+  val readyHue = rememberGalleryStatusColors(GalleryIconStatus.Done).top
+  val (fraction, hue) = when (state) {
+    is ModelState.Ready -> 1f to readyHue
+    is ModelState.Fetching -> (if (state.total > 0) state.done.toFloat() / state.total else 0f) to searchHue
+    else -> 0f to searchHue
+  }
+  FluidListGroup(modifier = modifier) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .clearAndSetSemantics {
+          contentDescription = summary
+          role = Role.Button
+          onClick(label = openLabel) { onOpen(); true }
+        }
+        .fluidPressable(onClick = onOpen, role = Role.Button)
+        .padding(SearchDimens.TilePadding),
+      horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+      Box {
+        SearchRing(
+          fraction = fraction,
+          color = hue,
+          size = SearchDimens.ModelRing,
+          stroke = SearchDimens.ModelRingStroke,
+          busy = state == ModelState.Verifying,
+        ) {
+          Icon(glyphOf(spec?.role), contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(SearchDimens.ModelGlyph))
+        }
+        val mark = modelMark(state)
+        if (mark != null) {
+          val side = galleryStatusMarkSize(SearchDimens.ModelRing)
+          GalleryStatusMark(status = mark, size = side, contentDescription = null, modifier = Modifier.align(Alignment.BottomEnd))
         }
       }
-      ModelState.Absent -> ActionRow { Download(row.id, handlers) }
-      is ModelState.Ready -> if (row.removable) ActionRow { Remove { removing = true } }
-      else -> Unit
+      Spacer(Modifier.height(SearchDimens.TightGap))
+      Text(
+        text = shortNameOf(spec?.role),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = TextAlign.Center,
+      )
+      Text(
+        text = if (state is ModelState.Fetching) stringResource(R.string.models_percent, (fraction * PERCENT).toInt()) else sizeText(row.sizeBytes),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        textAlign = TextAlign.Center,
+      )
     }
-  }
-  if (removing && spec != null) {
-    RemoveSheet(spec.role, onConfirm = { removing = false; handlers.onRemoveModel(row.id) }, onDismiss = { removing = false })
   }
 }
 
+/** Lo spazio dell'indice su questo dispositivo: un segno e il totale; la divisione (vettori, testo) per TalkBack. */
 @Composable
-private fun FailureNote(id: ModelId, code: DiagCode, fail: ModelFailCode, size: Long, handlers: SearchSettingsHandlers) {
-  val resources = LocalContext.current.resources
-  FluidSectionFootnote(text = SearchCodes.message(resources, code, sizeText(size)))
-  ActionRow {
-    for (action in SearchCodes.actions(code)) {
-      FluidButton(
-        text = stringResource(action.label),
-        onClick = {
-          when (action) {
-            CodeAction.DOWNLOAD_NOW, CodeAction.RETRY -> handlers.onDownloadModel(id)
-            CodeAction.DIAGNOSTICS -> handlers.onOpenDiagnostics()
-            CodeAction.FREE_SPACE -> handlers.onFreeSpace()
-            CodeAction.ENABLE_INDEXER -> handlers.onSetIndexer(true)
-          }
-        },
-        style = FluidButtonStyle.Tinted,
-        size = FluidButtonSize.Large,
-        grip = FluidPressGrip.YieldsToScroll,
-      )
-    }
+private fun SpaceLine(models: ModelsState) {
+  val sentence = stringResource(R.string.models_space, sizeText(models.vectorBytes), sizeText(models.textBytes))
+  Row(
+    modifier = Modifier.padding(top = SearchDimens.TightGap, start = SearchDimens.TilePadding).clearAndSetSemantics { contentDescription = sentence },
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Icon(Icons.Rounded.SdStorage, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(SearchDimens.InlineGlyph))
+    Spacer(Modifier.width(SearchDimens.TightGap))
+    Text(
+      text = stringResource(R.string.models_index_space_short, sizeText(models.vectorBytes + models.textBytes)),
+      style = MaterialTheme.typography.labelMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
   }
 }
 
 /**
- * I tasti di una riga di modello, alla loro larghezza naturale: se non entrano affiancati vanno a capo interi (K4, 360 dp: "Riprova" e "Diagnostica"
- * stavano nella stessa riga e a testo grande "Diagnostica" si spezzava in "Diagnostic/a").
+ * Il dettaglio di un modello (dietro il tocco sull'anello): lo stato per intero con la misura e la sorgente, il motivo di un problema o la domanda dei
+ * dati mobili, e le sue azioni. "Rimuovi" apre la sua conferma (D20).
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ActionRow(content: @Composable () -> Unit) {
-  FlowRow(
-    modifier = Modifier.padding(horizontal = GalleryDimens.Gutter),
-    horizontalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
-    verticalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
-  ) { content() }
+private fun ModelSheet(row: ModelRow, handlers: SearchSettingsHandlers, onDismiss: () -> Unit) {
+  val spec = ModelCatalog.byId(row.id)
+  val resources = LocalResources.current
+  val state = row.state
+  var removing by remember { mutableStateOf(false) }
+  val title = nameOf(spec?.role)
+  val detail = listOfNotNull(stateLabel(state), sizeText(row.sizeBytes), sourceText(resources, row.source)).joinToString(" · ")
+  val note = when (state) {
+    is ModelState.Fetching -> stringResource(R.string.models_state_fetching, sizeText(state.done), sizeText(state.total))
+    is ModelState.Failed -> SearchCodes.message(resources, failureCode(state.code), sizeText(row.sizeBytes))
+    is ModelState.NeedsConfirmation -> stringResource(R.string.models_confirm_note, sizeText(state.bytes))
+    else -> null
+  }
+  if (removing && spec != null) {
+    RemoveSheet(spec.role, onConfirm = { removing = false; onDismiss(); handlers.onRemoveModel(row.id) }, onDismiss = { removing = false })
+    return
+  }
+  GalleryConfirmSheet(visible = true, onDismissRequest = onDismiss, paneTitle = title) {
+    GallerySheetScaffold(
+      icon = glyphOf(spec?.role),
+      tone = if (state is ModelState.Failed || state is ModelState.NeedsConfirmation) GallerySheetTone.Caution else GallerySheetTone.Brand,
+      title = title,
+      message = if (note != null) "$detail\n\n$note" else detail,
+      actions = {
+        fun act(block: () -> Unit): () -> Unit = { onDismiss(); block() }
+        when (state) {
+          ModelState.Absent -> SheetButton(R.string.models_download_now, act { handlers.onDownloadModel(row.id) })
+          is ModelState.NeedsConfirmation -> SheetButton(R.string.models_confirm_action, act { handlers.onConfirmMobileDownload(row.id) })
+          is ModelState.Failed -> for (action in SearchCodes.actions(failureCode(state.code))) {
+            SheetButton(action.label, act {
+              when (action) {
+                CodeAction.DOWNLOAD_NOW, CodeAction.RETRY -> handlers.onDownloadModel(row.id)
+                CodeAction.DIAGNOSTICS -> handlers.onOpenDiagnostics()
+                CodeAction.FREE_SPACE -> handlers.onFreeSpace()
+                CodeAction.ENABLE_INDEXER -> handlers.onSetIndexer(true)
+              }
+            })
+          }
+          is ModelState.Ready -> if (row.removable) SheetButton(R.string.models_remove, { removing = true })
+          else -> Unit
+        }
+        FluidButton(text = stringResource(R.string.models_close), onClick = onDismiss, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true)
+      },
+    )
+  }
 }
 
 @Composable
-private fun Download(id: ModelId, handlers: SearchSettingsHandlers) {
-  FluidButton(text = stringResource(R.string.models_download_now), onClick = { handlers.onDownloadModel(id) }, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, grip = FluidPressGrip.YieldsToScroll)
-}
-
-@Composable
-private fun Remove(onClick: () -> Unit) {
-  FluidButton(text = stringResource(R.string.models_remove), onClick = onClick, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, grip = FluidPressGrip.YieldsToScroll)
+private fun SheetButton(label: Int, onClick: () -> Unit) {
+  FluidButton(text = stringResource(label), onClick = onClick, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true, grip = FluidPressGrip.YieldsToScroll)
 }
 
 /** "Rimuovi" dice la conseguenza prima di farlo (D20). */
@@ -245,3 +338,5 @@ private fun RemoveSheet(role: ModelRole, onConfirm: () -> Unit, onDismiss: () ->
     )
   }
 }
+
+private const val PERCENT = 100f

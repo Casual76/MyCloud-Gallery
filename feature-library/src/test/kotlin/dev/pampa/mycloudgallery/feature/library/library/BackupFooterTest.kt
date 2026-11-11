@@ -18,10 +18,11 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
@@ -193,8 +194,13 @@ class BackupFooterTest {
   @Test
   fun inProvaDiceCheSiScriveSoloNelleShareDiProva() {
     show(LibraryBackupStatus.TestOnly)
-    composeRule.onNodeWithText("Backup in prova").assertExists()
-    composeRule.onNodeWithText("Si scrive solo nelle share di prova.").assertExists()
+    // I4: come nella pagina Backup, «In pausa · Il backup vero non e' ancora acceso», detto una volta (nel titolo, il perche' dietro la «i»).
+    composeRule.onNodeWithTag(PauseTitleTag).assertExists()
+    composeRule.onNodeWithContentDescription("In pausa. Il backup vero non è ancora acceso").assertExists()
+    assertThat(composeRule.onAllNodesWithText("Il backup vero non è ancora acceso").fetchSemanticsNodes()).isEmpty()
+    composeRule.onNodeWithTag(PauseTitleTag).performClick()
+    composeRule.onNodeWithText("Il backup vero non è ancora acceso").assertExists()
+    assertThat(composeRule.onAllNodesWithText("Backup in prova").fetchSemanticsNodes()).isEmpty()
   }
 
   @Test

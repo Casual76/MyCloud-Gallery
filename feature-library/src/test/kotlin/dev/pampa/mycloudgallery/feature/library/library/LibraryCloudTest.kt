@@ -62,7 +62,8 @@ class LibraryCloudTest {
   @Test
   fun ogniStatoDelBackupHaIlSuo() {
     val cases = mapOf(
-      LibraryBackupStatus.TestOnly to GalleryCloudState.Waiting,
+      // I4: il backup vero non ancora acceso e' una pausa, come nella pagina Backup.
+      LibraryBackupStatus.TestOnly to GalleryCloudState.Paused,
       LibraryBackupStatus.Comparing(pending = 3) to GalleryCloudState.Syncing,
       allSafe to GalleryCloudState.Saved,
       LibraryBackupStatus.Queued(items = 312, wait = LibraryBackupWait.CHARGING) to GalleryCloudState.Waiting,
@@ -177,10 +178,20 @@ class LibraryCloudTest {
   @Test
   fun senzaProblemiIlPopUpMostraLoSpazioELUltimaSincronizzazione() {
     val scan = LibraryNasStatus.FirstScan(done = 1, total = null, etaMillis = null)
-    val cloud = checkNotNull(libraryCloud(network(LibraryNetworkSeverity.Fine), scan, LibraryBackupStatus.TestOnly))
+    val queued = LibraryBackupStatus.Queued(items = 3, wait = LibraryBackupWait.CHARGING)
+    val cloud = checkNotNull(libraryCloud(network(LibraryNetworkSeverity.Fine), scan, queued))
     assertThat(cloud.showsSpace).isTrue()
     assertThat(cloud.problems).isEmpty()
     assertThat(cloud.activity.map { it.state }).containsExactly(GalleryCloudState.Syncing, GalleryCloudState.Waiting).inOrder()
+
+    // I4: il backup vero non ancora acceso e' una pausa che l'utente non ha chiesto: lo spazio resta, e la pausa la dice il titolo (una volta).
+    val notYet = checkNotNull(libraryCloud(network(LibraryNetworkSeverity.Fine), upToDate, LibraryBackupStatus.TestOnly))
+    assertThat(notYet.state).isEqualTo(GalleryCloudState.Paused)
+    assertThat(notYet.showsSpace).isTrue()
+    assertThat(notYet.pauseInTitle).isEqualTo(CloudItem.Backup(LibraryBackupStatus.TestOnly, GalleryCloudState.Paused))
+    // Con un problema piu' grave la pausa torna una capsula fra le voci (il titolo dice il problema).
+    val withProblem = checkNotNull(libraryCloud(network(LibraryNetworkSeverity.Fine), LibraryNasStatus.Frozen(FreezeReason.CHANGED, 0L), LibraryBackupStatus.TestOnly))
+    assertThat(withProblem.pauseInTitle).isNull()
 
     val saved = checkNotNull(libraryCloud(null, upToDate, allSafe))
     assertThat(saved.state).isEqualTo(GalleryCloudState.Saved)

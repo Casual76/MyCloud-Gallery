@@ -13,8 +13,8 @@
   <string name="integrations_receive_unlock_failed">Non sono riuscito a sbloccare. Riprova.</string>
   <string name="integrations_receive_unlock_no_screen_lock">Il telefono non ha un blocco schermo: impostalo nelle impostazioni del telefono, oppure apri MyCloud Gallery e spegni il suo blocco.</string>
 
-  <string name="integrations_receive_trial_title">Backup in prova</string>
-  <string name="integrations_receive_trial_detail">Il backup è ancora in prova: per ora sul NAS non salvo i file ricevuti. Non ho copiato niente.</string>
+  <string name="integrations_receive_trial_title">Backup in pausa</string>
+  <string name="integrations_receive_trial_detail">Il backup vero non è ancora acceso: i file ricevuti restano sul telefono. Non ho copiato niente.</string>
 
   <!-- CA-2 (Fase 10): la versione fermata o in sola lettura per il manifest firmato. -->
   <string name="integrations_receive_stopped_detail">Aggiorna MyCloud Gallery dal Pampa Store: finché non la aggiorni non ricevo file. Non ho copiato niente.</string>

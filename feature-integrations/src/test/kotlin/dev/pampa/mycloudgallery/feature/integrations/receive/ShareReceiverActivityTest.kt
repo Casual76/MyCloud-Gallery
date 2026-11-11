@@ -270,8 +270,8 @@ class ShareReceiverActivityTest {
     install()
     val scenario = launch(send(shared("a.jpg", ReceiveSamples.jpeg(3_000, 1))))
 
-    waitForText("Backup in prova")
-    compose.onNodeWithText("Il backup è ancora in prova", substring = true).assertExists()
+    waitForText("Backup in pausa")
+    compose.onNodeWithText("Il backup vero non è ancora acceso", substring = true).assertExists()
     assertThat(SharingProvider.opens.get()).isEqualTo(0)
     assertThat(incoming.listFiles().orEmpty().toList()).isEmpty()
     assertThat(compose.onAllNodesWithText("In quella cartella non si può scrivere", substring = true).fetchSemanticsNodes()).isEmpty()

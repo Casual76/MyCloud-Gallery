@@ -18315,6 +18315,73 @@ da queste pagine (album, ricordi, persone, mappa, ricerca, widget) il viewer ric
 danno bordi: l'apertura parte dal rettangolo al centro (`centeredFallback`), anch'esso ad angoli vivi. Resta un limite gia' noto, non di
 H1: da quelle pagine l'apertura non parte dalla cella toccata (e la chiusura si allontana sfumando, `FlightPlan.Away`).
 
+### Giro di correzione 1 di H1 e H2 (11/11)
+Prima di tutto l'unione di `integra/beta-grafica`: avanzamento rapido a `3f686ef9`, nessun conflitto; tenuta la correzione dell'orchestratore a
+`InfoPanel.kt` (il foglio con `galleryGlass` e il parametro `optics`). Un commit per rilievo, con l'ID nel messaggio.
+
+- **CU-1, la foto rientra nel suo buco.** La cella d'origine resta vuota all'apertura, durante il gesto di chiusura (trascinamento, pizzico,
+  indietro predittivo) e per tutto il volo, e torna piena all'arrivo (o se il gesto si annulla). Il contratto `ViewerAnchor` (`:core-library`)
+  ha un metodo nuovo, `hide(id: MediaId?)`, che di serie non fa niente; il viewer lo chiama (`ViewerController.hideCell`/`releaseCell`, e
+  `releaseCell` anche quando il viewer esce dalla composizione). La griglia lo lega scrivendo la chiave in `GalleryGridInteractionState.hiddenKey`
+  (`:core-designsystem`): la cella lo legge **nel disegno** (`observeReads` del suo nodo, poi `invalidateDraw`), quindi niente ricomposizione
+  della griglia e niente misure che cambiano; il disco di presenza disegnato per riga salta la stessa cella. In `feature-library` tre righe
+  (`MediaGridState.viewerAnchor.hide`): Libreria, NAS e Raccolte usano la stessa griglia. Gli album, i ricordi, le persone e la mappa danno al
+  viewer un'ancora senza bordi (`AlbumViewerAnchor` e simili): non c'e' volo da una cella, niente da svuotare. **Cerca non e' agganciata**
+  (la tocca H4 in questo giro): basta che `ResultsAnchor` riceva lo stato `interaction` di `SearchResultsGrid` e faccia
+  `override fun hide(id: MediaId?) { interaction.hiddenKey = id }` (le celle hanno come chiave il `MediaId`); e' scritto nel KDoc di
+  `ViewerAnchor.hide`, nessun file di `feature-search` toccato.
+- **CG-3, il doppio tocco.** Una regola sola per foto e video, `ViewerGestureArbiter.doubleTapZooms`: spento a pannello informazioni aperto sul
+  telefono, acceso con la colonna laterale, spento con il testo selezionato o il ritaglio. Il video la ignorava.
+- **CG-1, lo scorrimento del pannello.** Lo scorrimento e' dell'elemento: cambiando elemento torna in cima (`InfoPanelState.resetScroll`), e
+  quando il contenuto si accorcia si legge sempre dentro i limiti (`scroll` = valore tenuto fra 0 e il massimo nuovo; i limiti dell'animazione
+  si aggiornano a ogni misura, cosi' un'inerzia partita sul pannello lungo si ferma al bordo di quello corto).
+- **CU-5, ogni cosa una volta.** Criterio: la barra in alto riassume finche' il pannello e' chiuso; da meta' apertura in poi la fonte e' il
+  pannello, e la barra tiene solo i suoi tasti (niente data ne' "ora · luogo"). Nel pannello il fuso si dice solo se e' diverso da quello del
+  telefono in quel momento ("12:41 · ora locale, UTC+9"), senza ripetere il luogo; prima c'era sempre "UTC+1".
+- **CU-6, la mappa.** La mini-mappa e' l'unico ingresso alla mappa; "Apri in Mappe" e' un tasto dentro di lei (in alto a destra, 48 dp). Senza
+  mini-mappa (nessuna fonte) il tasto sta in coda al luogo, e non allarga la riga (sporge sopra e sotto, il tocco arriva lo stesso).
+- **CU-7, CU-8.** Sui video niente megapixel: il nome della risoluzione ("4K", "Full HD", "HD", dal lato lungo e da quello corto). La maniglia
+  e' fuori dal contenuto che scorre, quindi resta ferma; il contenuto sfuma sotto di lei (12 dp, un livello fuori schermo solo mentre scorre).
+  I titoli delle sezioni non sono piu' in maiuscolo e hanno il loro segno (Persone, Album, Copie simili).
+- **Album dell'elemento.** Una porta nuova, `ViewerMediaAlbums` (`feature-viewer`), letta solo a pannello aperto e mai per i Nascosti: il nome
+  degli album da `AlbumDao.itemsOfMedia` (album personali e intelligenti) incrociato con l'elenco degli album. Le voci sono capsule che aprono
+  l'album (il viewer si chiude e la navigazione apre la pagina dell'album). In `:app`: `AppMediaAlbums`, `AlbumOpener` (impostato da
+  `AppNavHost`), il cablaggio in `GalleryGraph` e `AlbumsModule`. **Limite**: gli album condivisi tengono i loro elementi in
+  `shared_album_entry` e non compaiono.
+- **Identita' del pannello.** La data e' l'unico titolo (anche nella colonna del tablet, dove sopra resta solo la X; il nome del pannello lo
+  dice `paneTitle` a TalkBack). Sotto, l'ora e il luogo; il backup in una capsula; le facce subito sotto la testa; **una sola scheda dello
+  scatto** (fotocamera o tipo di media, formato, obiettivo, misure e peso in una riga a cifre tabellari, i tratti, e in fondo la striscia
+  ISO · focale · apertura · tempo divisa da filetti), tinta del 14% del colore medio della foto (dal segnaposto gia' in memoria, nessuna lettura
+  in piu'), con il segno nello stesso colore portato verso il testo; poi la mini-mappa (larga come le schede), gli album, le copie simili; in
+  fondo il file. Mentre i dati arrivano, segnaposto della stessa misura (la capsula del backup, il nome della fotocamera, le quattro celle
+  della striscia): niente salti. Gli screenshot sono stati rivisti due volte; nella seconda: X sola nella colonna, mini-mappa allineata alle
+  schede, segno della scheda nel colore della foto, riga del luogo non piu' alta delle altre.
+- **CS-7, CU-13.** Via le 26 stringhe orfane, e dopo il nuovo pannello anche cinque formati rimasti senza chiamanti (`dateTimeLine`,
+  `zoneCaption`, `exposure`, `lensLine`, `dimensions`) con le loro due stringhe; le altre 5 stringhe non usate erano orfane gia' prima di H2 e
+  sono rimaste. Ogni screenshot mostra quello che dice il nome: "dati completi" scorre lento finche' le persone stanno in cima, e nello stesso
+  fotogramma ci sono le facce, la scheda dello scatto intera, la mini-mappa e gli album (sul telefono e sul tablet).
+- **Fuori da `feature-viewer`**: `:core-library` (`ViewerAnchor.hide`, il finto `FakeViewerAnchor` con la cronologia), `:core-designsystem`
+  (`hiddenKey` nella cella e nel disco per riga, un test di pixel), `feature-library` (tre righe in `MediaGridState`), `:app` (la porta degli
+  album e l'apertura dell'album).
+- **Test nuovi** (falliscono sul codice di prima): `ViewerGestureArbiterTest.ilDoppioToccoEUgualePerFotoEVideo_spentoAPannelloApertoSulTelefono`,
+  `ViewerGesturesTest.aPannelloInformazioniApertoIlDoppioToccoNonIngrandisceIlVideo` (CG-3); `InfoPanelStateTest`:
+  `daUnPannelloLungoScorsoAUnoCorto_nienteScorrimentoNonValido`, `lInerziaDiUnPannelloLungoNonLimitaQuelloDopo`,
+  `cambiandoElementoSiRipartedallaTesta` (CG-1); `ViewerGesturesTest.laCellaDOrigineEVuotaMentreLaFotoNeEsceECiRientra`,
+  `anchePizzicandoLaCellaEVuotaFinoAllArrivo`, `GalleryRowPresenceTest.laCellaNascostaNonSiDisegnaNeLeiNeIlSuoDisco_eLeAltreRestanoUguali`
+  (CU-1); `ViewerLogicTest.ilFusoSiDiceSoloSeEDiversoDaQuelloDelTelefono` e in `ViewerOverlayTest` la barra che non ripete data e luogo
+  (CU-5); `ViewerPlaceMapInfoTest.laMiniMappaEUnicoIngressoAllaMappa_conApriInMappeDentro` (CU-6); in `ViewerLogicTest` la qualita' dei video
+  e la scheda dello scatto (CU-7, identita'); `ViewerAlbumsInfoTest` (3) e `AppMediaAlbumsTest` (3) per gli album.
+- **Batch** (semaforo, un posto; nessun java chiuso da me): `H2c-1` EXIT=1, 3,5 min (un import mancante in `AlbumsModule`; il primo test della
+  cella nascosta non poteva passare in Robolectric, riscritto come test di pixel); `H2c-2` OK, 6,8 min: `:core-designsystem` completo
+  (306 test, 0 falliti), `feature-library` griglia + `LibraryTabTest` (93/0), registrazione degli screenshot H1 e H2 di `feature-viewer`
+  (36/0, 4 saltati) e H1 di `:app` (8/0); `H2c-3` EXIT=1, 3,5 min: screenshot H2 dopo la revisione (32/0, 4 saltati), `:app` 18 classi
+  (103 test, 2 falliti: `AppMediaAlbumsTest` con metodi non void, corretto; `DragSourcesScopeTest` cerca `mediaDragSource` in
+  `SearchResultCell.kt` mentre H4 l'ha spostato in `SearchResultsGrid.kt`: fallisce uguale su `integra/beta-grafica`, non e' di questo
+  giro e non l'ho toccato); `H2c-4` OK, 2,4 min: `:feature-viewer:testDebugUnitTest` completo (1114 test, 0 falliti, 18 saltati) e i
+  test degli album di `:app` (5/0). `tools\check.ps1` non lanciato.
+- **Screenshot**: in `docs/screenshots/beta-grafica/H1/` gli 8 della chiusura (volo, trascinamento, pizzico: la cella d'origine e' vuota sotto la
+  foto); in `H2/` tutti i 28 (il pannello e' rifatto). Confrontati pixel per pixel con i precedenti: si committa solo quello che cambia.
+
 ## H5: Raccolte piu' pulite e con carattere; Impostazioni con meno testo (fase H, 11/11)
 
 Ramo `fix/h5-raccolte-impostazioni` da `261a3553`. Fonte: il commento dell'utente dell'11/11 (Raccolte "un po' poche icone fatte un po' piu'

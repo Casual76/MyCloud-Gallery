@@ -7,7 +7,6 @@
   <string name="collections_open_settings">Impostazioni</string>
   <!-- H5: il nome del tasto del menu in alto (Modifica Raccolte, Impostazioni), per TalkBack. -->
   <string name="collections_more">Altre azioni sulle Raccolte</string>
-  <string name="collections_section_phone">Telefono</string>
   <string name="collections_section_protected">Da tenere al sicuro</string>
 
   <string name="collection_favorites">Preferiti</string>

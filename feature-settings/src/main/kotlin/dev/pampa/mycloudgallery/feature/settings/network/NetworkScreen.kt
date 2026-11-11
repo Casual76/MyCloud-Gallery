@@ -42,7 +42,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidRowValue
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -365,7 +364,6 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
         )
       }
     }
-    item { FluidSectionFootnote(text = stringResource(R.string.network_footnote)) }
   }
 
   ConfirmSheet(

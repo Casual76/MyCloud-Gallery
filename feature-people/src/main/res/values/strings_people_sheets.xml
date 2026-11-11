@@ -50,7 +50,7 @@
   <string name="persone_row_enable">Attiva riconoscimento dei volti</string>
   <string name="persone_row_off_elsewhere">Persone è stata disattivata da un altro tuo dispositivo</string>
   <string name="persone_row_off_elsewhere_detail">I volti e i nomi sono stati cancellati anche da qui. Se vuoi, puoi riattivarla.</string>
-  <string name="persone_row_enable_detail">Nessun familiare vede i nomi</string>
+  <string name="persone_row_enable_detail">Raggruppa le foto per persona</string>
   <string name="persone_row_notice">Persone è attiva sul tuo account</string>
   <string name="persone_row_notice_detail">Scegli se usarla su questo dispositivo</string>
   <string name="persone_row_excluded">Non attiva su questo dispositivo</string>

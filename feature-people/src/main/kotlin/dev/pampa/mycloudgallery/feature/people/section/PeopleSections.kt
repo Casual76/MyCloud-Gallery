@@ -19,6 +19,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.People
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleList
 import dev.pampa.mycloudgallery.core.faces.contract.PersonCard
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
+import dev.pampa.mycloudgallery.core.model.FaceLocator
 import dev.pampa.mycloudgallery.feature.people.R
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleSectionState
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleUnavailable
@@ -60,6 +61,8 @@ data class SectionEntry(
   val tone: FluidTone,
   val badge: Int = 0,
   val trailing: String? = null,
+  /** CS-1 (fase H): i volti della voce, che le Raccolte mostrano nella piastrella (ritagliati solo da media mostrabili): la persona, o le prime tre. */
+  val faces: List<FaceLocator> = emptyList(),
 ) {
   /** I4 (correzioni D): mai il titolo o il sottotitolo (possono portare un nome o un conteggio di persone, D37): solo il codice, che non porta mai un nome. */
   override fun toString(): String = "SectionEntry($code)"
@@ -133,6 +136,9 @@ class PeopleSectionSources(
     .stateIn(scope, SharingStarted.Eagerly, resolved.value?.let { r -> sectionOf(resources, r.state, r.list) })
 
   companion object {
+    /** CS-1: quanti volti al piu' nella piastrella di "Tutte le persone". */
+    private const val TRIO = 3
+
     /** Il codice stabile della sezione: lo stesso di `CollectionSections.PEOPLE` (lo prova `PeopleSectionBindingTest`). */
     const val CODE: String = "people"
 
@@ -199,6 +205,7 @@ class PeopleSectionSources(
           subtitle = PeopleText.photos(resources, card.photos),
           icon = Icons.Rounded.Person,
           tone = if (card.name == null) FluidTone.Neutral else FluidTone.Primary,
+          faces = listOfNotNull(card.cover),
         )
       }
       if (total > 0) {
@@ -206,6 +213,7 @@ class PeopleSectionSources(
           PeopleEntryTarget.ALL, resources.getString(R.string.persone_row_all),
           resources.getQuantityString(R.plurals.persone_row_all_detail, total, GalleryNumbers.format(total)),
           Icons.Rounded.Group, FluidTone.Neutral,
+          faces = top.mapNotNull { it.cover }.take(TRIO),
         )
       }
       if (others > 0) {

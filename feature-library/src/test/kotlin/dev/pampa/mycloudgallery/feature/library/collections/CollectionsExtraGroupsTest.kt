@@ -102,16 +102,17 @@ class CollectionsExtraGroupsTabletTest : ComposeScreenTest() {
       )
     }
 
-    composeRule.onNodeWithText("dettaglio favorites").assertExists()
+    // CS-17: senza raccolte-filtro il pannello parte da "Scegli una raccolta".
+    composeRule.onNodeWithText("Scegli una raccolta").assertExists()
     composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText("Cartelle NAS"))
     composeRule.onNodeWithText("Cartelle NAS").performClick()
     composeRule.waitForIdle()
     composeRule.onNodeWithText("pagina nas/folders").assertExists()
     assertThat(opened).isEmpty()
 
-    composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText("Video"))
-    composeRule.onNodeWithText("Video").performClick()
+    composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText("Nascosti"))
+    composeRule.onNodeWithText("Nascosti").performClick()
     composeRule.waitForIdle()
-    composeRule.onNodeWithText("dettaglio videos").assertExists()
+    composeRule.onNodeWithText("dettaglio hidden").assertExists()
   }
 }

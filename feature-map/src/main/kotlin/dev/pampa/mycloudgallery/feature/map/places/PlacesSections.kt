@@ -35,6 +35,8 @@ data class MapSectionEntry(
   val tone: FluidTone,
   val badge: Int = 0,
   val trailing: String? = null,
+  /** CS-1 (fase H): il luogo (id GeoNames) della cui foto piu' recente le Raccolte fanno la copertina; 0 = nessuno. Un id pubblico, mai una coordinata. */
+  val coverPlace: Int = 0,
 ) {
   /** D33: mai il titolo o il sottotitolo (un luogo): solo che tipo di voce e'. Un luogo non e' mai nominato, nemmeno col suo id. */
   override fun toString(): String = "MapSectionEntry(${PlacesEntryTarget.parse(code)})"
@@ -86,6 +88,7 @@ class PlacesSectionSources(
             subtitle = MapText.photos(resources, place.count),
             icon = Icons.Rounded.Place,
             tone = FluidTone.Neutral,
+            coverPlace = place.placeId,
           )
         }
       }
@@ -118,7 +121,9 @@ class PlacesSectionSources(
         is PlacesSectionState.NoGps -> resources.getString(R.string.mappa_row_map_none)
         PlacesSectionState.Failed -> resources.getString(R.string.mappa_row_map_failed)
       }
-      return MapSectionEntry(PlacesEntryTarget.MAP, resources.getString(R.string.mappa_row_map), detail, Icons.Rounded.Map, FluidTone.Info)
+      // CS-1: la Mappa ha la foto del luogo piu' fotografato (il primo dell'elenco), quando c'e'.
+      val cover = (state as? PlacesSectionState.Ready)?.places?.firstOrNull()?.placeId ?: 0
+      return MapSectionEntry(PlacesEntryTarget.MAP, resources.getString(R.string.mappa_row_map), detail, Icons.Rounded.Map, FluidTone.Info, coverPlace = cover)
     }
   }
 }

@@ -65,6 +65,10 @@ abstract class CollectionsPortsModule {
   @BindsOptionalOf
   abstract fun collectionsLayoutStore(): CollectionsLayoutStore
 
+  /** CS-1: i ritagli dei volti per le righe delle persone (feature-people, legati da `:app`); senza, la piastrella della famiglia. */
+  @BindsOptionalOf
+  abstract fun collectionFaceCrops(): CollectionFaceCrops
+
   /** I fornitori delle sezioni: l'insieme esiste anche vuoto (nessun pacchetto ne ha ancora registrato uno). */
   @Multibinds
   abstract fun collectionsSectionProviders(): Set<CollectionsSectionProvider>

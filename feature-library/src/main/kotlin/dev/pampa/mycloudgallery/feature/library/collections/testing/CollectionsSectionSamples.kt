@@ -1,11 +1,25 @@
 package dev.pampa.mycloudgallery.feature.library.collections.testing
 
+import android.content.res.Resources
+import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Event
+import androidx.compose.material.icons.rounded.Flight
+import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Map
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.PhotoLibrary
+import androidx.compose.material.icons.rounded.Place
+import dev.pampa.mycloudgallery.core.model.FaceLocator
+import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.feature.library.utility.UtilityPage
+import dev.pampa.mycloudgallery.feature.library.utility.utilityEntryGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CleaningServices
-import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.BurstMode
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Luggage
@@ -82,7 +96,7 @@ object CollectionsSectionSamples {
       } else {
         listOf(
           CollectionEntry(
-            "people/enable", "Attiva riconoscimento dei volti", "Nessun familiare vede i nomi",
+            "people/enable", "Attiva riconoscimento dei volti", "Raggruppa le foto per persona",
             Icons.Rounded.Face, FluidTone.Primary,
           ),
         )
@@ -113,14 +127,114 @@ object CollectionsSectionSamples {
     CollectionEntryGroup(
       title = "Utility",
       entries = listOf(
-        CollectionEntry("utility/edited", "Modificate", "37 elementi", Icons.Rounded.Edit, FluidTone.Warning),
-        CollectionEntry("utility/duplicates", "Doppioni", "Copie identiche e foto simili", Icons.Rounded.ContentCopy, FluidTone.Neutral),
-        CollectionEntry("utility/trash", "Eliminati di recente", "Telefono e NAS insieme", Icons.Rounded.Delete, FluidTone.Danger),
-        CollectionEntry("backup/free-space", "Libera spazio", "Liberalo dal telefono, in sicurezza", Icons.Rounded.CleaningServices, FluidTone.Primary),
+        CollectionEntry("utility/edited", "Modificate", "37 elementi", Icons.Rounded.AutoFixHigh, FluidTone.Warning),
+        CollectionEntry("utility/duplicates", "Doppioni", "Copie e scatti quasi uguali", Icons.Rounded.BurstMode, FluidTone.Neutral),
+        CollectionEntry("utility/recently_deleted", "Eliminati di recente", "Telefono e NAS, dietro lo sblocco", Icons.Rounded.Delete, FluidTone.Warning),
+        CollectionEntry("backup/free-space", "Libera spazio", "Togli dal telefono le foto e i video già al sicuro sul NAS", Icons.Rounded.CleaningServices, FluidTone.Primary),
       ),
     ),
   )
 
   /** Tutte, nell'ordine in cui le registrerebbe `:app`: serve a vedere la scheda piena. */
   fun all(): List<FixedCollectionsSection> = listOf(albums(), smart(), trips(), people(), nas(), utility())
+
+  // --- CU-9 (fase H): le sezioni COME IN PRODUZIONE --------------------------------------------------------------------------------------------------
+  // Gli screenshot per l'utente devono mostrare cio' che c'e' nell'app. Qui le sezioni hanno le righe che scrivono i fornitori veri: l'Utility dal
+  // costruttore di produzione (`utilityEntryGroup`, con "Libera spazio" di `:app`), le Cartelle NAS con le quattro voci e i testi di feature-nas, e la
+  // sezione "Da tenere al sicuro" **vuota**, come la lega `:app` (`AppCollectionsSections.safe`): toglie quella della scheda, cosi' "Eliminati di
+  // recente" compare una volta sola (nell'Utility). Persone, Ricordi, Viaggi e Luoghi con la forma delle righe dei loro moduli (che qui non si
+  // vedono) e con le copertine, i volti e i luoghi che i test passano.
+
+  /** I due luoghi della Libreria di prova (id GeoNames di `FakePlaceData`): Firenze e Milano. */
+  val PRODUCTION_PLACES: List<Pair<Int, String>> = listOf(3176959 to "Firenze", 3173435 to "Milano")
+
+  /**
+   * Le sezioni come le consegna `:app` in produzione. [photos] le foto per le copertine dei ricordi e dei viaggi (dalla Libreria visibile di prova),
+   * [faces] i volti delle persone, [fresh] = la libreria appena installata (nessun ricordo, nessuna persona, nessun viaggio, nessuna posizione).
+   */
+  fun production(resources: Resources, photos: List<MediaId>, faces: List<FaceLocator>, fresh: Boolean = false): List<FixedCollectionsSection> {
+    fun photo(n: Int): MediaId = photos[(n * 37) % photos.size]
+    val trips = FixedCollectionsSection(
+      CollectionSections.TRIPS,
+      if (fresh) null else CollectionEntryGroup(
+        title = "Viaggi",
+        code = CollectionSections.TRIPS,
+        entries = listOf(
+          CollectionEntry("trip/t1", "Toscana, agosto 2025", "Viaggio · 640 elementi", Icons.Rounded.Flight, FluidTone.Info, cover = photo(3)),
+          CollectionEntry("trip/t2", "Sabato 12 aprile 2025", "Evento · 96 elementi", Icons.Rounded.Event, FluidTone.Info, cover = photo(11)),
+        ),
+      ),
+    )
+    val people = if (fresh) {
+      people(recognitionOn = false)
+    } else {
+      FixedCollectionsSection(
+        CollectionSections.PEOPLE,
+        CollectionEntryGroup(
+          title = "Persone",
+          code = CollectionSections.PEOPLE,
+          entries = listOf(
+            CollectionEntry("person/p1", "Giulia", "212 foto", Icons.Rounded.Person, FluidTone.Primary, faces = faces.take(1)),
+            CollectionEntry("person/p2", "Marco", "148 foto", Icons.Rounded.Person, FluidTone.Primary, faces = faces.drop(1).take(1)),
+            CollectionEntry("people/all", "Tutte le persone", "5 persone", Icons.Rounded.Group, FluidTone.Neutral, faces = faces.take(3)),
+          ),
+        ),
+      )
+    }
+    val memories = FixedCollectionsSection(
+      CollectionSections.MEMORIES,
+      CollectionEntryGroup(
+        title = "Ricordi",
+        code = CollectionSections.MEMORIES,
+        entries = if (fresh) {
+          listOf(CollectionEntry("memories/empty", "Ancora nessun ricordo", "Arrivano quando ci sono abbastanza foto", Icons.Rounded.AutoAwesome, FluidTone.Neutral))
+        } else {
+          listOf(
+            CollectionEntry("m_1", "Un anno fa", "18 foto · ottobre 2025", Icons.Rounded.History, FluidTone.Primary, trailing = "Nuovo", cover = photo(5)),
+            CollectionEntry("m_2", "Estate al mare", "42 foto · agosto 2025", Icons.Rounded.Flight, FluidTone.Neutral, cover = photo(17)),
+            CollectionEntry("m_3", "Il meglio di ottobre 2026", "60 foto", Icons.Rounded.CalendarMonth, FluidTone.Neutral, cover = photo(23)),
+            CollectionEntry("memories/all", "Tutti i ricordi", "3 ricordi", Icons.Rounded.PhotoLibrary, FluidTone.Neutral),
+          )
+        },
+      ),
+    )
+    val places = FixedCollectionsSection(
+      CollectionSections.PLACES,
+      CollectionEntryGroup(
+        title = "Luoghi",
+        code = CollectionSections.PLACES,
+        entries = if (fresh) {
+          listOf(CollectionEntry("map", "Mappa", "Nessuna foto con la posizione", Icons.Rounded.Map, FluidTone.Info))
+        } else {
+          listOf(CollectionEntry("map", "Mappa", "1.240 foto con la posizione", Icons.Rounded.Map, FluidTone.Info, coverPlace = PRODUCTION_PLACES[0].first)) +
+            PRODUCTION_PLACES.mapIndexed { i, (id, name) ->
+              CollectionEntry("place_$id", name, listOf("320 foto", "88 foto")[i], Icons.Rounded.Place, FluidTone.Neutral, coverPlace = id)
+            }
+        },
+      ),
+    )
+    val nas = FixedCollectionsSection(
+      CollectionSections.NAS,
+      CollectionEntryGroup(
+        title = "Cartelle NAS",
+        code = CollectionSections.NAS,
+        entries = listOf(
+          CollectionEntry("nas/folders", "Cartelle NAS", "Sfoglia, crea, rinomina, sposta ed elimina", Icons.Rounded.Folder, FluidTone.Primary),
+          CollectionEntry("nas/space", "Spazio NAS", "Spazio libero, quota e file più grandi", Icons.Rounded.Storage, FluidTone.Info),
+          CollectionEntry("nas/trash", "Eliminati di recente del NAS", "Il cestino del NAS: 30 giorni per ripensarci", Icons.Rounded.Delete, FluidTone.Danger),
+          CollectionEntry("nas/operations", "Operazioni in corso", "Quello che sta facendo il NAS per te", Icons.Rounded.Sync, FluidTone.Success),
+        ),
+      ),
+    )
+    val freeSpace = CollectionEntry(
+      "backup/free-space", "Libera spazio", "Togli dal telefono le foto e i video già al sicuro sul NAS", Icons.Rounded.CleaningServices, FluidTone.Primary,
+    )
+    val utility = FixedCollectionsSection(
+      CollectionSections.UTILITY,
+      utilityEntryGroup(resources, mapOf(UtilityPage.EDITED to if (fresh) 0 else 37), canTrash = true, extra = listOf(freeSpace)),
+    )
+    // Come `AppCollectionsSections.safe`: la sezione c'e' ma senza voci, e toglie quella della scheda.
+    val safe = FixedCollectionsSection(CollectionSections.SAFE, CollectionEntryGroup("", emptyList(), code = CollectionSections.SAFE))
+    return listOf(albums(), smart(), trips, people, memories, places, nas, utility, safe)
+  }
 }

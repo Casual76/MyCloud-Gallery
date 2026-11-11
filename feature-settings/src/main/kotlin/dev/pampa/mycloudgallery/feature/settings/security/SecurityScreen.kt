@@ -231,7 +231,8 @@ internal fun SecurityScreen(state: SecurityUiState, actions: SecurityActions) {
         value = stringResource(if (enabled) R.string.security_value_on else R.string.security_value_off),
         title = stringResource(if (enabled) R.string.security_hero_on_title else R.string.security_hero_off_title),
         description = if (enabled) {
-          stringResource(R.string.security_hero_on_detail, stringResource(state.settings.timeout.labelRes()))
+          // CU-14: il tempo entra a meta' frase, con la minuscola (le scelte hanno la maiuscola perche' sono righe a se').
+          stringResource(R.string.security_hero_on_detail, stringResource(state.settings.timeout.labelRes()).replaceFirstChar { it.lowercase() })
         } else {
           stringResource(R.string.security_hero_off_detail)
         },

@@ -25,34 +25,45 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.robolectric.annotation.Config
 
-/** L'elenco delle Raccolte sul telefono: sei voci, nessun numero per i Nascosti, un tocco apre la raccolta. */
+/**
+ * Le righe delle Raccolte come in produzione (CS-17): l'Utility dal costruttore vero e i Nascosti che la scheda fa da sola. Le raccolte-filtro del
+ * vecchio "Telefono" stanno nella scheda Album dalla G2 e qui non ci sono.
+ */
+private fun utilitySection(canTrash: Boolean = true, counts: Map<dev.pampa.mycloudgallery.feature.library.utility.UtilityPage, Int> = emptyMap()): CollectionsSection {
+  val resources = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.app.Application>().resources
+  return CollectionsLayout.sectionOf(CollectionSections.UTILITY, dev.pampa.mycloudgallery.feature.library.utility.utilityEntryGroup(resources, counts, canTrash))!!
+}
+
+/** Senza il cestino della scheda (in produzione lo toglie il fornitore vuoto di `:app`): gli Eliminati di recente stanno nell'Utility. */
+private fun productionRows(canTrash: Boolean = true, counts: Map<dev.pampa.mycloudgallery.feature.library.utility.UtilityPage, Int> = emptyMap()) =
+  layoutOf(canTrash = false, providers = listOf(utilitySection(canTrash, counts)))
+
+/** L'elenco delle Raccolte sul telefono: le voci di produzione, nessun numero per i Nascosti, un tocco apre la pagina giusta. */
 class CollectionsListPhoneTest : ComposeScreenTest() {
 
-  private val world = FakeCollectionsWorld()
+  private val openedKinds = mutableListOf<CollectionKind>()
+  private val openedEntries = mutableListOf<String>()
 
-  private fun showList(
-    canTrash: Boolean = true,
-    onOpen: (CollectionKind) -> Unit = {},
-  ) = show {
+  private fun showList(state: CollectionsLayoutState = productionRows()) = show {
     CollectionsScreen(
-      state = layoutOf(world, canTrash),
+      state = state,
       contentPadding = PaddingValues(),
       backdropOut = {},
-      onOpenCollection = onOpen,
+      onOpenCollection = { openedKinds += it },
       onOpenSettings = {},
       statusHeader = { Text("Stato globale") },
       detail = { kind -> Text("dettaglio ${kind.code}") },
+      onOpenEntry = { openedEntries += it.code },
     )
   }
 
   @Test
-  fun mostraLeRaccolteEIlLoroNome() {
+  fun mostraLeVociEIlLoroNome_SenzaIDoppioniDellaSchedaAlbum() {
     showList()
 
-    // G2b: "WhatsApp" e' diventata "Messaggistica" (WhatsApp, Telegram e Signal); la Fotocamera e' nuova.
-    listOf("Preferiti", "Fotocamera", "Video", "Screenshot", "Messaggistica", "Nascosti", "Eliminati di recente").forEach {
-      composeRule.onNodeWithText(it).assertExists()
-    }
+    listOf("Modificate", "Doppioni", "Eliminati di recente", "Nascosti").forEach { composeRule.onNodeWithText(it).assertExists() }
+    // CS-17: Preferiti, Fotocamera, Video, Screenshot e Messaggistica sono della scheda Album.
+    listOf("Preferiti", "Fotocamera", "Video", "Screenshot", "Messaggistica").forEach { composeRule.onAllNodesWithText(it).assertCountEquals(0) }
     composeRule.onNodeWithText("Stato globale").assertExists()
   }
 
@@ -64,89 +75,79 @@ class CollectionsListPhoneTest : ComposeScreenTest() {
   }
 
   @Test
-  fun leRaccolteFiltroDiconoQuantiElementiHannoEINascostiNo() {
+  fun lePagineFiltroDiconoQuantiElementiHannoEINascostiNo() {
+    showList(productionRows(counts = mapOf(dev.pampa.mycloudgallery.feature.library.utility.UtilityPage.EDITED to 37)))
+
+    composeRule.onNodeWithText("37 elementi").assertExists()
+    composeRule.onNodeWithText("Protetti dallo sblocco del telefono").assertExists()
+  }
+
+  @Test
+  fun unaPaginaSenzaConteggioDiceNessunElemento() {
     showList()
 
-    val videos = world.repository.view(LibraryFilter.VIDEOS).value.size
-    composeRule.onNodeWithText("$videos elementi").assertExists()
-    composeRule.onNodeWithText("Protetti dallo sblocco del telefono").assertExists()
-    composeRule.onNodeWithText("Il cestino di Android, protetto dallo sblocco").assertExists()
+    composeRule.onAllNodesWithText("Nessun elemento").assertCountEquals(1)
   }
 
   @Test
-  fun unaRaccoltaSenzaElementiDiceNessunElemento() {
-    show {
-      CollectionsScreen(
-        state = layoutOf(emptyMap(), canTrash = true),
-        contentPadding = PaddingValues(),
-        backdropOut = {},
-        onOpenCollection = {},
-        onOpenSettings = {},
-        statusHeader = {},
-        detail = {},
-      )
-    }
-
-    // G2b: cinque raccolte-filtro (la Fotocamera e' nuova).
-    composeRule.onAllNodesWithText("Nessun elemento").assertCountEquals(5)
-  }
-
-  @Test
-  fun senzaIlCestinoDiSistemaLaVoceNonCe() {
-    showList(canTrash = false)
+  fun senzaUnCestinoLaVoceNonCe() {
+    showList(productionRows(canTrash = false))
 
     composeRule.onAllNodesWithText("Eliminati di recente").assertCountEquals(0)
     composeRule.onNodeWithText("Nascosti").assertExists()
   }
 
   @Test
-  fun unTocco_apreLaRaccoltaGiusta() {
-    val opened = mutableListOf<CollectionKind>()
-    showList(onOpen = { opened += it })
+  fun unTocco_apreLaPaginaGiusta() {
+    showList()
 
-    composeRule.onNodeWithText("Video").performClick()
+    composeRule.onNodeWithText("Modificate").performClick()
     composeRule.onNodeWithText("Nascosti").performClick()
-    composeRule.onNodeWithText("Eliminati di recente").performClick()
 
-    assertThat(opened).containsExactly(CollectionKind.VIDEOS, CollectionKind.HIDDEN, CollectionKind.RECENTLY_DELETED).inOrder()
+    assertThat(openedEntries).containsExactly("utility/edited")
+    assertThat(openedKinds).containsExactly(CollectionKind.HIDDEN)
   }
 }
 
-/** Sul tablet l'elenco ha il dettaglio accanto (D17): le voci scelgono, non navigano, e i Nascosti non si aprono da soli. */
+/** Sul tablet l'elenco ha il dettaglio accanto (D17): le voci scelgono, non navigano, e niente si apre da solo. */
 @Config(qualifiers = TABLET_QUALIFIERS)
 class CollectionsListTabletTest : ComposeScreenTest() {
 
-  private val world = FakeCollectionsWorld()
-  private val opened = mutableListOf<CollectionKind>()
+  private val opened = mutableListOf<String>()
 
   private fun showList() = show {
     CollectionsScreen(
-      state = layoutOf(world),
+      state = productionRows(),
       contentPadding = PaddingValues(),
       backdropOut = {},
-      onOpenCollection = { opened += it },
+      onOpenCollection = { opened += it.code },
       onOpenSettings = {},
       statusHeader = {},
       detail = { kind -> Text("dettaglio ${kind.code}") },
+      onOpenEntry = { opened += it.code },
+      entryDetail = { entry -> Text("voce ${entry.code}") },
     )
   }
 
   @Test
-  fun duePannelliConLaPrimaRaccoltaScelta() {
+  fun duePannelli_SenzaUnaSceltaIlDettaglioDiceDiSceglierne() {
     showList()
 
-    composeRule.onNodeWithText("dettaglio favorites").assertExists()
-    composeRule.onNodeWithText("Video").assertExists()
+    composeRule.onNodeWithText("Scegli una raccolta").assertExists()
+    composeRule.onNodeWithText("Modificate").assertExists()
   }
 
   @Test
   fun scegliereUnaVoceCambiaIlDettaglioENonNavigaNiente() {
     showList()
 
-    composeRule.onNodeWithText("Screenshot").performClick()
+    composeRule.onNodeWithText("Modificate").performClick()
     composeRule.waitForIdle()
+    composeRule.onNodeWithText("voce utility/edited").assertExists()
 
-    composeRule.onNodeWithText("dettaglio screenshots").assertExists()
+    composeRule.onNodeWithText("Nascosti").performClick()
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("dettaglio hidden").assertExists()
     assertThat(opened).isEmpty()
   }
 

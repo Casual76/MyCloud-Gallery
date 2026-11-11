@@ -60,11 +60,12 @@ class CollectionsPanesTest : ComposeScreenTest() {
     start(360)
     for (dp in listOf(360, 600, 839)) {
       resizeTo(dp)
-      composeRule.onAllNodesWithText("dettaglio favorites").assertCountEquals(0)
+      composeRule.onAllNodesWithText("Scegli una raccolta").assertCountEquals(0)
     }
-    composeRule.onNodeWithText("Video").performClick()
+    // CS-17: le righe che si scelgono sono quelle di produzione (i Nascosti), non piu' le raccolte-filtro del vecchio "Telefono".
+    composeRule.onNodeWithText("Nascosti").performClick()
     composeRule.waitForIdle()
-    assertThat(opened).containsExactly(CollectionKind.VIDEOS)
+    assertThat(opened).containsExactly(CollectionKind.HIDDEN)
   }
 
   @Test
@@ -72,28 +73,28 @@ class CollectionsPanesTest : ComposeScreenTest() {
     start(840)
     for (dp in listOf(840, 1280)) {
       resizeTo(dp)
-      composeRule.onNodeWithText("dettaglio favorites").assertExists()
-      val list = composeRule.onNodeWithText("Video").getUnclippedBoundsInRoot()
-      val detail = composeRule.onNodeWithText("dettaglio favorites").getUnclippedBoundsInRoot()
+      composeRule.onNodeWithText("Scegli una raccolta").assertExists()
+      val list = composeRule.onNodeWithText("Nascosti").getUnclippedBoundsInRoot()
+      val detail = composeRule.onNodeWithText("Scegli una raccolta").getUnclippedBoundsInRoot()
       // L'elenco sta a sinistra e il dettaglio comincia dopo di lui.
       assertThat(list.right).isAtMost(detail.left)
     }
-    composeRule.onNodeWithText("Screenshot").performClick()
+    composeRule.onNodeWithText("Nascosti").performClick()
     composeRule.waitForIdle()
-    composeRule.onNodeWithText("dettaglio screenshots").assertExists()
+    composeRule.onNodeWithText("dettaglio hidden").assertExists()
     assertThat(opened).isEmpty()
   }
 
   @Test
   fun attraversareLaSogliaNonPerdeLaRaccoltaScelta() {
     start(1280)
-    composeRule.onNodeWithText("Screenshot").performClick()
+    composeRule.onNodeWithText("Nascosti").performClick()
     composeRule.waitForIdle()
-    composeRule.onNodeWithText("dettaglio screenshots").assertExists()
+    composeRule.onNodeWithText("dettaglio hidden").assertExists()
     // Una finestra libera che si stringe (E-T2): una pagina sola, la scelta non e' persa; poi si riallarga e il dettaglio e' quello di prima.
     for (dp in listOf(700, 1280, 360, 900)) {
       resizeTo(dp)
-      if (dp >= 840) composeRule.onNodeWithText("dettaglio screenshots").assertExists() else composeRule.onAllNodesWithText("dettaglio screenshots").assertCountEquals(0)
+      if (dp >= 840) composeRule.onNodeWithText("dettaglio hidden").assertExists() else composeRule.onAllNodesWithText("dettaglio hidden").assertCountEquals(0)
     }
     assertThat(opened).isEmpty()
   }

@@ -13,22 +13,16 @@ import org.junit.Test
 class CollectionsStateTest {
 
   @Test
-  fun leRaccolteSonoCinqueFiltriPoiINascostiEGliEliminatiDiRecente() {
-    val state = collectionsUiState(mapOf(CollectionKind.FAVORITES to 3, CollectionKind.VIDEOS to 12), canTrash = true)
-
-    // G2b: la Fotocamera dopo i Preferiti (come nella scheda Album); WHATSAPP e' la Messaggistica.
-    assertThat(state.media.map { it.kind }).containsExactly(
-      CollectionKind.FAVORITES, CollectionKind.CAMERA, CollectionKind.VIDEOS, CollectionKind.SCREENSHOTS, CollectionKind.WHATSAPP,
-    ).inOrder()
+  fun laSchedaFaDaSolaSoloIPostiProtetti() {
+    // CS-17: le raccolte-filtro del vecchio "Telefono" stanno nella scheda Album (G2): la scheda fa da sola i Nascosti e gli Eliminati di recente.
+    val state = collectionsUiState(canTrash = true)
     assertThat(state.protectedRows.map { it.kind }).containsExactly(CollectionKind.HIDDEN, CollectionKind.RECENTLY_DELETED).inOrder()
-    // Un conteggio mancante e' zero, non un errore.
-    assertThat(state.media.first { it.kind == CollectionKind.SCREENSHOTS }.count).isEqualTo(0)
-    assertThat(state.media.first { it.kind == CollectionKind.VIDEOS }.count).isEqualTo(12)
+    assertThat(builtinSections(state).map { it.code }).containsExactly(CollectionSections.SAFE, CollectionSections.HIDDEN).inOrder()
   }
 
   @Test
   fun iNascostiNonDiconoMaiQuantiSono() {
-    val state = collectionsUiState(emptyMap(), canTrash = true)
+    val state = collectionsUiState(canTrash = true)
     // E-H1: dall'esterno non si deve nemmeno capire se ce ne sono.
     assertThat(state.protectedRows.first { it.kind == CollectionKind.HIDDEN }.count).isNull()
     assertThat(state.protectedRows.first { it.kind == CollectionKind.RECENTLY_DELETED }.count).isNull()
@@ -36,7 +30,7 @@ class CollectionsStateTest {
 
   @Test
   fun senzaIlCestinoDiSistemaNonCeLaVoceMorta() {
-    val state = collectionsUiState(emptyMap(), canTrash = false)
+    val state = collectionsUiState(canTrash = false)
 
     assertThat(CollectionKind.RECENTLY_DELETED in state).isFalse()
     assertThat(CollectionKind.HIDDEN in state).isTrue()
@@ -62,26 +56,6 @@ class CollectionsStateTest {
     assertThat(CollectionKind.fromCode("camera")).isEqualTo(CollectionKind.CAMERA)
     assertThat(CollectionKind.fromCode("album")).isNull()
     assertThat(CollectionKind.fromCode(null)).isNull()
-  }
-
-  @Test
-  fun iConteggiVengonoDallIndiceVisibileEUnaModificaLiAggiorna() = runTest {
-    val world = FakeCollectionsWorld()
-    val before = world.source.countsNow()
-    assertThat(before.keys).containsExactlyElementsIn(CollectionKind.filters)
-    CollectionKind.filters.forEach { kind ->
-      assertThat(before[kind]).isEqualTo(world.repository.view(kind.filter!!).value.size)
-    }
-
-    // Un video diventa preferito: i Preferiti crescono di uno, gli altri non si muovono.
-    val video = idsOf(world.repository.view(LibraryFilter.VIDEOS).value).first { id ->
-      val v = world.repository.view(LibraryFilter.FAVORITES).value
-      v.viewIndexOf(id) < 0
-    }
-    world.actions.setFavorite(setOf(video), true)
-    val after = world.source.counts().first()
-    assertThat(after[CollectionKind.FAVORITES]).isEqualTo(before.getValue(CollectionKind.FAVORITES) + 1)
-    assertThat(after[CollectionKind.VIDEOS]).isEqualTo(before[CollectionKind.VIDEOS])
   }
 
   @Test

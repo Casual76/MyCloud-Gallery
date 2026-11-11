@@ -479,10 +479,13 @@ private fun staleDetail(reason: StaleReason): Int = when (reason) {
 @Composable
 private fun deviceCountText(count: Int): String = pluralStringResource(R.plurals.settings_devices_count, count, count)
 
+/**
+ * CS-6 (fase H): la riga dice solo cio' che la testata sopra non dice gia'. Il numero dei dispositivi (e "Nessuna famiglia") sta grande nella testata
+ * "La tua famiglia": ripeterlo una riga sotto era rumore. Resta il conto delle richieste da approvare, che e' una cosa da fare.
+ */
 @Composable
 private fun devicesSubtitle(state: SettingsUiState): String = when {
-  state.trust is TrustStatus.NotConfigured -> stringResource(R.string.settings_devices_none)
   state.pendingRequests > 0 && state.isAdmin ->
     pluralStringResource(R.plurals.settings_devices_pending, state.pendingRequests, state.pendingRequests)
-  else -> pluralStringResource(R.plurals.settings_devices_count, state.deviceCount, state.deviceCount)
+  else -> NO_SUBTITLE
 }

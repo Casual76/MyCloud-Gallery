@@ -192,7 +192,7 @@ class AppActivationPorts(
 /** La trasformazione campo per campo dei dati di feature-people nel gruppo delle Raccolte (i due moduli non si conoscono). */
 internal fun SectionData.toGroup(): CollectionEntryGroup = CollectionEntryGroup(
   title = title,
-  entries = entries.map { CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing) },
+  entries = entries.map { CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing, faces = it.faces) },
   code = code,
   hideable = hideable,
   hint = hint,

@@ -112,11 +112,18 @@ internal class ScaffoldScenes(
   /** Le miniature delle copertine: il caricatore della Libreria (come in produzione) con sorgenti sintetiche. */
   val albumThumbnails: AlbumThumbnails = AlbumThumbnails(library.grid.loader, library.grid.placeholders, SyntheticCovers)
 
-  /** Le Raccolte come le compone il controllore vero: tutte le sezioni di prova, senza quelle della scheda Album (che toglie lui). */
+  /**
+   * Le Raccolte come le compone il controllore vero, con le sezioni **come in produzione** (CU-9: l'Utility vera, le Cartelle NAS vere, "Da tenere al
+   * sicuro" vuota come la lega `:app`) e le copertine dalla cache delle miniature (qui quella finta).
+   */
   val collections: CollectionsLayoutViewModel = collections ?: run {
     val world = FakeCollectionsWorld()
-    val providers: Set<CollectionsSectionProvider> = CollectionsSectionSamples.all().toSet()
-    CollectionsLayoutViewModel(world.source, FakePhoneMediaIntents(), providers, Optional.empty())
+    val resources = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.app.Application>().resources
+    val providers: Set<CollectionsSectionProvider> = CollectionsSectionSamples.production(resources, world.visibleIds.toList(), emptyList()).toSet()
+    CollectionsLayoutViewModel(
+      world.source, FakePhoneMediaIntents(), providers, Optional.empty(),
+      dev.pampa.mycloudgallery.feature.library.collections.testing.fakeThumbnailLoader(), Optional.empty(),
+    )
   }
 
   /** La ricerca aperta dal cerchio, a campo vuoto: dietro la Libreria, in alto i tre suggerimenti migliori (una ricerca recente, un luogo, un tipo). */

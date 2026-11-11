@@ -29,7 +29,7 @@ sealed interface SectionRow {
   /** Il nome stabile della riga dentro la scheda (non e' mai un dato dell'utente). */
   val key: String
 
-  /** Preferiti, Video, Screenshot, WhatsApp, Nascosti, Eliminati di recente: si aprono con `onOpenCollection(kind)`. */
+  /** Nascosti ed Eliminati di recente: si aprono con `onOpenCollection(kind)`. */
   data class Kind(val row: CollectionRow) : SectionRow {
     override val key: String get() = "kind:${row.kind.code}"
   }
@@ -76,13 +76,6 @@ data class CollectionsLayoutState(
 
   /** Se [kind] e' una riga che si vede (una sezione nascosta, o un cestino che non c'e', no). */
   operator fun contains(kind: CollectionKind): Boolean = visibleRows.any { it is SectionRow.Kind && it.row.kind == kind }
-
-  /**
-   * La prima raccolta-filtro che si vede: su due pannelli e' quella aperta quando non se ne e' scelta una. Mai i Nascosti o gli Eliminati di
-   * recente (chiederebbero la credenziale senza che nessuno l'abbia toccato); null se non se ne vede nessuna.
-   */
-  val firstFilter: CollectionKind?
-    get() = visibleRows.firstNotNullOfOrNull { (it as? SectionRow.Kind)?.row?.kind?.takeIf(CollectionKind::isFilter) }
 
   /** La voce di un fornitore con [code], se si vede. */
   fun findEntry(code: String?): CollectionEntry? =

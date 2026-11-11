@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.library.collections
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.model.FaceLocator
 import dev.pampa.mycloudgallery.core.model.MediaId
 
 // Le voci in piu' dell'elenco delle Raccolte che arrivano da `:app` (Fase 4, docs/fase4-progetto.md §1.3, §1.5, riga P14 del §4.4):
@@ -27,6 +28,10 @@ import dev.pampa.mycloudgallery.core.model.MediaId
  * @property cover H5: la foto che rappresenta la voce (l'ultimo ricordo, un viaggio): la piastrella la mostra al posto dell'icona quando la miniatura
  *   c'e' ([CollectionRowArt]). Null = l'icona. Mai per i Nascosti, gli Eliminati di recente o un comando; e se la foto e' stata nascosta la Libreria
  *   visibile non la trova e resta l'icona.
+ * @property faces CS-1: i volti della voce (una persona, o fino a tre per "Tutte le persone"), ritagliati da feature-people solo da media mostrabili;
+ *   vuoto = niente volti (Persone spenta, o una voce che non e' una persona).
+ * @property coverPlace CS-1: l'id GeoNames di un luogo: la piastrella mostra la foto piu' recente scattata li' (cercata nella Libreria visibile);
+ *   0 = nessuno.
  */
 @Immutable
 data class CollectionEntry(
@@ -38,6 +43,8 @@ data class CollectionEntry(
   val badge: Int = 0,
   val trailing: String? = null,
   val cover: MediaId? = null,
+  val faces: List<FaceLocator> = emptyList(),
+  val coverPlace: Int = 0,
 ) {
   init {
     require(code.isNotBlank()) { "Una voce ha un codice." }

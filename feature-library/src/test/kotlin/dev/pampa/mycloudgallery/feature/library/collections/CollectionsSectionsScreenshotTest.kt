@@ -61,7 +61,7 @@ abstract class CollectionsSectionsShotsBase(private val dark: Boolean, private v
   private fun controller(
     store: CollectionsLayoutStore = MemoryCollectionsLayoutStore(),
     providers: List<CollectionsSectionProvider> = CollectionsSectionSamples.all(),
-  ) = CollectionsLayoutController(world.source, true, providers, store, scope, SharingStarted.Eagerly)
+  ) = CollectionsLayoutController(true, providers, store, scope, SharingStarted.Eagerly)
 
   @Composable
   private fun Host(c: CollectionsLayoutController) {

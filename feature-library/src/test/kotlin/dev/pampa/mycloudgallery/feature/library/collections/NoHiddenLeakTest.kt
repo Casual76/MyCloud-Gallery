@@ -119,14 +119,9 @@ class NoHiddenLeakTest : ComposeScreenTest() {
   }
 
   @Test
-  fun iConteggiDelleRaccolteNonContanoINascostiENonDiconoQuantiSono() {
-    val state = collectionsUiState(world.source.countsNow(), canTrash = true)
-
-    for (row in state.media) {
-      val visibleCount = idsOf(world.source.items(row.kind.filter!!).view.value).size
-      assertWithMessage(row.kind.code).that(row.count).isEqualTo(visibleCount)
-    }
-    // I Nascosti non hanno un numero: da fuori non si capisce se ce ne sono.
+  fun iNascostiDelleRaccolteNonDiconoQuantiSono() {
+    // E-H1: da fuori non si capisce se ce ne sono. (CS-17: le raccolte-filtro con i loro conteggi stanno nella scheda Album.)
+    val state = collectionsUiState(canTrash = true)
     assertThat(state.protectedRows.first { it.kind == CollectionKind.HIDDEN }.count).isNull()
   }
 

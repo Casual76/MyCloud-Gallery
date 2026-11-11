@@ -18405,3 +18405,27 @@ Raccolte" e, dopo una banda, "Impostazioni" come ultima voce (lo stesso posto de
   Impostazioni principale, rete, sicurezza, copia esterna prima e dopo); rifatti `7-P11`, `7-P8` (utility-voci, modificate-vuote; tolto
   `screenshot-*`), `G2/raccolte-pannello-selezione`, `G2/pillola-raccolte`, e le pagine delle Impostazioni in `10-P3`, `10-P5`, `5-P12`, `6-P14`,
   `7-P9`, `8-P7`, `RG-D`. `doppioni-notturno` era cambiato solo per un interruttore a meta' animazione: non committato.
+
+### H5, giro di correzione 1 (11/11, sera)
+Unione: `integra/beta-grafica` (`3f686ef9`) era gia' figlia del ramo H5: avanzamento veloce, nessun conflitto.
+- **CS-1 (copertine a meta').** Persone con i **volti veri**: porta opzionale `CollectionFaceCrops` (feature-library) legata in `FacesModule` alla
+  facciata dei ritagli che `:app` gia' aveva (`FacesCropsFacade`: cancello dei media mostrabili, cache in memoria di 8 MB); la persona e' un tondo
+  pieno, "Tutte le persone" tre tondi a triangolo. Riconoscimento spento: nessun volto. **Luoghi e Mappa** con la foto piu' recente del luogo (la Mappa:
+  il luogo piu' fotografato), cercata con **un passaggio** sull'indice visibile (`placeAt`), fuori dal thread principale, una volta per elenco e
+  per indice (`CollectionCovers.newestByPlace`). **Voci senza foto**: piastrella in sfumatura con il colore del tema della **famiglia** della sezione
+  (persone e viaggi primario, ricordi e utilita' terziario, luoghi e NAS secondario, Nascosti e cestino scuri, `inverseSurface`). Allo scorrimento
+  le righe leggono soltanto: foto, volti e luoghi si preparano in `CollectionCovers.refresh`, una volta.
+- **CS-5.** `GalleryMenuButton` con i tre puntini orizzontali della Libreria (Raccolte, scheda Album, le altre pagine). I due tasti del menu del
+  viewer (`GalleryGlassButtons`) restano verticali: sono del viewer, in mano a un altro pacchetto in questo giro.
+- **CS-6.** Persone spenta: "Raggruppa le foto per persona". Impostazioni: la riga Dispositivi non ripete il numero della testata (resta il conto
+  delle richieste da approvare). "il backup la rifà" non cambia: e' corretto (rifà, come sopraffà) ed e' di feature-backup.
+- **CS-17.** Via la sezione "Telefono" della scheda (raccolte-filtro, conteggi, `firstFilter`, `collections_section_phone`); i test del tablet e
+  dei pannelli scelgono i Nascosti e le voci dell'Utility vera.
+- **CU-9.** Gli screenshot (H5 e la pillola di `:app`) partono da `CollectionsSectionSamples.production`: l'Utility dal costruttore vero, le Cartelle
+  NAS vere, "Da tenere al sicuro" vuota come la lega `:app`. Il doppio "Eliminati di recente" era solo degli esempi: in produzione il fornitore vuoto
+  di `:app` toglie sempre la sezione della scheda, sul telefono e sul tablet (`CollectionsProductionSamplesTest` lo prova sullo stato composto).
+- **CU-14.** Rete e VPN senza "impronta" e "tunnel" ("Casa salvata", "Casa raggiungibile da fuori", "Accendi la VPN"), via la nota su accesa e spenta;
+  Sicurezza "Si richiude: dopo 1 minuto.". Righe prima -> dopo in `docs/h5-testi-impostazioni.md`.
+- **Da provare sul telefono:** le facce compaiono nelle righe Persone (e mai quelle di una persona nascosta o di una foto nascosta un attimo prima);
+  le foto dei Luoghi corrispondono al luogo (l'id del luogo della sezione e quello dell'indice sono entrambi GeoNames: verificato solo sui dati di
+  prova); scorrere le Raccolte resta fluido con volti e luoghi.

@@ -17777,3 +17777,121 @@ Temperatura della batteria durante le prove: 29-42 C, simile fra i lati (tabella
   0 falliti): OK, 4 min 52 s. `p2-3` (`:app:generateBaselineProfile` sull'S25): OK, 40 min 9 s. `p2-4` (APK di misura finali): OK,
   3 min 33 s. Ogni batch chiesto prima, un posto del semaforo, rilasciato. `tools\check.ps1` non lanciato.
 - Telefono alla fine: solo `dev.pampa.mycloudgallery.debug`, nessuna cartella di misura, schermata Home.
+
+## Pacchetto H3 (fase H, 11/11): i gesti della Libreria
+
+Base `261a3553`, ramo `fix/h3-libreria-gesti`. Le cause sono state trovate nel codice prima di correggere; dove serviva le ho verificate sul
+bytecode delle librerie usate (Compose ui e foundation 1.10.5, BOM 2026.03.00).
+
+### D1: l'Indietro dal bordo sopra una foto la apriva
+- **Causa.** Quando il sistema si prende il gesto (l'Indietro dal bordo, anche predittivo) la finestra riceve `ACTION_CANCEL`. Compose lo
+  consegna ai `pointerInput` come un evento sintetico con il dito **alzato ma gia' consumato** (`SuspendingPointerInputModifierNodeImpl.
+  onCancelPointerInput`: `pressed = false`, `isInitiallyConsumed = true`). Il sistema decide prima che il dito superi lo slop della griglia
+  (la soglia dell'Indietro e' tre quarti dello slop), quindi il gesto della griglia era ancora "indeciso", e `gridGestures` guardava solo
+  `pressed`: il rilascio finto diventava un tocco e apriva la foto.
+- **Correzione** (`GridGestures.kt`): un tocco vale solo per un rilascio vero (`isRealRelease`: non premuto e non consumato). Vale per tocco,
+  pressione lunga (l'annullamento arriva prima del timeout e chiude il gesto) e selezione a trascinamento. Inoltre un dito partito nella
+  fascia laterale dei gesti di sistema (`WindowInsets.systemGestures`) che va di lato non comincia una selezione a trascinamento.
+- **Scelta mia:** un tocco **fermo** nella fascia resta un tocco (la cella al bordo si apre, come nelle gallerie di sistema): cio' che
+  protegge e' l'annullamento, che il sistema manda sempre quando si prende il gesto. Il brief diceva di scartare anche i tocchi nella fascia:
+  con la navigazione a gesti sarebbero circa 20 dp morti su ogni cella al bordo. Si cambia in una riga se l'utente lo preferisce.
+- **Le altre griglie:** Cerca (`SearchResultCell`), le pagine degli album (`AlbumGrid`), Ricordi e Persone usano `detectTapGestures`, la scheda
+  Album e le Raccolte `fluidPressable` (cioe' `clickable`): scartano gia' l'annullamento. Le griglie delle Raccolte, i Nascosti e gli
+  Eliminati usano `MediaGrid` e sono corrette con la Libreria. Nessuna griglia fuori perimetro da correggere.
+
+### D2: toccare la data in alto apriva la foto dietro
+- **Causa.** L'etichetta con la data non aveva nessun gestore di tocco: l'hit test di Compose si ferma al primo fratello colpito **che ne ha
+  uno**, quindi saltava l'etichetta e il tocco arrivava alla griglia. Lo stesso per il bordo della capsula dei comandi fuori dai tasti (2 dp ai
+  lati, la striscia sopra e sotto i tasti da 48 dp).
+- **Correzione** (`GalleryChrome.kt`): etichetta e capsula trattengono i tocchi (`holdsTouches`, come gia' la barra delle azioni). La pillola
+  in basso e la barra della selezione li trattenevano gia'. L'aspetto del vetro non cambia.
+
+### R2: il salto a una data (scelta dell'utente dell'11/11: il calendario con i giorni)
+- Toccando la data si apre un **calendario mese per mese** nel pop-up della chrome (`GalleryChromePopoverAnchor`, lo stesso della nuvola),
+  ancorato all'etichetta: composto solo dalla prima apertura, chiuso non costa niente. Si apre sul mese che l'etichetta dice; se dice un
+  giorno, quel giorno ha il disco d'accento.
+- I giorni con foto hanno il numero pieno e un punto discreto sotto, e sono gli unici toccabili; gli altri sono spenti (38%, come un tasto
+  disattivato). Oggi ha il numero nel colore d'accento. Settimana dal lunedi', nomi dalla lingua del telefono (`TextStyle.SHORT`).
+- I mesi si scorrono di lato (`HorizontalPager`) e con le due frecce; le pagine sono **solo i mesi con foto** (i mesi vuoti si saltano). Il
+  titolo («Ottobre 2026») apre la scelta rapida: gli anni con foto dal piu' recente, sotto ognuno i dodici mesi, quelli senza foto spenti;
+  l'anno del mese mostrato si porta in vista. Ogni pagina ha sempre sei settimane: il pannello non cambia altezza scorrendo.
+- I giorni vengono dalla vista della griglia (`TimelineSnapshot.localDayAt`, lo stesso giorno delle intestazioni): una passata sulla vista
+  all'apertura, su `Dispatchers.Default` (`GridDays.of`), poi ricerche binarie. Nessuna query.
+- **Scelta mia sul livello:** da **Anni** o **Mesi** il tocco su un giorno scende a **Giorni** (e lo ricorda, come il menu); a Giorni e a
+  Tutte si resta. Motivo: il calendario sceglie un giorno, e a Anni e Mesi un giorno non ha una riga sua: restare al livello porterebbe a un
+  mese, cioe' non dove si e' toccato.
+- Il giorno scelto finisce **subito sotto la chrome**: la sua prima riga di celle in cima all'area dei contenuti, l'intestazione appena sopra,
+  sotto l'etichetta, che quindi dice proprio quel giorno. I giorni piu' recenti, che non possono salire fin li', restano dove la lista si
+  ferma (in fondo).
+- In selezione la data dice «N selezionati» e non apre niente. Il passaggio fra calendario e scelta rapida e' istantaneo (senza animazione
+  della misura: il pannello e' vetro).
+
+### D10: aggiornare tirando oltre il fondo
+- La Libreria ha i piu' recenti in fondo: il gesto e' continuare a tirare quando si e' gia' sul fondo. Le altre griglie (Raccolte, Nascosti,
+  Eliminati) hanno lo stesso ordine; il gesto c'e' solo dove chi ospita la griglia sa aggiornare (la Libreria): le altre restano come prima.
+- L'engine ha il tira-per-aggiornare solo dal bordo alto (`FluidEdgeOverscrollState`). Ho rifatto in `GridPullRefresh.kt` lo stesso bordo per
+  il fondo, con gli stessi numeri: la gomma di UIKit (`c = 0,55`, asintoto al 24% dell'altezza), soglia 76 dp di spostamento visivo, 56 dp
+  aperti mentre lavora, la molla `FluidMotion.pixels(DampingChrome, ResponseStandard)` al rilascio, lo spinner dell'engine (`FluidSpinner`)
+  che si rivela col dito nello spazio aperto. Segue il dito senza molla nel mezzo; aptica `Threshold` al superamento, una volta.
+- Al rilascio oltre la soglia: `LibraryCommands.refresh()`, che in `app` (`main/LibraryRefresh.kt`) usa **i comandi di sempre**: la verifica
+  del NAS di quando si apre l'app (`NasWorkScheduling.scanNow`, lavori unici `KEEP` con i vincoli di rete e le regole delle attivita'), un giro
+  della lettura del telefono (`syncNow(SyncReason.MANUAL)`, se non ne gira gia' uno) e i lavori del backup (`BackupGraph.afterPhoneRead`, lo
+  stesso che la lettura di primo piano chiede a ogni giro). L'esito lo dice la nuvola; un aggiornamento alla volta. Lo spazio resta aperto da
+  0,6 a 2,5 s (finche' finisce la lettura del telefono), poi si richiude.
+- Costo a riposo: niente. Lo spostamento si legge nel blocco del layer della lista; l'indicatore si compone solo mentre si tira o si aggiorna.
+  Mentre lo spazio e' aperto l'hit test e i bordi per il viewer tengono conto dello spostamento.
+- Il bordo alto e i resti di un lancio al fondo restano quelli di prima (lo stiramento della piattaforma).
+
+### D3: lo scorrimento che si fermava al primo avvio (la parte della griglia)
+- **Causa.** Ogni vista nuova del catalogo entrava nella griglia con l'ancora di `onLayoutShown`, cioe' con `requestScrollToItem`; in foundation
+  1.10.5 `requestScrollToItem` **ferma lo scorrimento in corso** (lancia `stopScroll()` se `isScrollInProgress`). Durante la prima lettura le
+  viste arrivano a raffica: ogni slancio moriva al primo arrivo; lo stesso faceva il piede che cresceva (un `requestScrollToItem` verso il fondo).
+- **Correzione.** Un cambio dei dati **aspetta la griglia ferma** (`MediaGridState.holdsDataChange`): mentre si scorre si mostra ancora il
+  layout di prima con la sua vista, e appena la lista si ferma il nuovo entra ancorato come sempre. Il piede decide a lista ferma. Pinch e
+  livelli non aspettano. Le viste si **dosano** (`followViews`): a griglia ferma entrano subito, mentre si scorre al piu' una al secondo (l'ultima
+  arrivata), cosi' i quattro layout da 100 mila righe non si ricalcolano a ogni emissione. Chi produce i dati (HR) non e' toccato.
+
+### File fuori dal perimetro stretto
+- `app/.../gallery/LibraryStates.kt`: una proprieta' in piu' di `AppLibraryCommands` (`refresher`) e la riga che la imposta (serve a
+  collegare l'aggiornamento; `main/LibraryRefresh.kt` e' nuovo). Niente in `GalleryGraph`, niente nei `core-*` tranne i due file della chrome.
+- `GalleryTabBar` e `MainScaffold`: non toccati.
+- Test vecchi aggiornati: `LibraryTabTest` e `LibraryStubTest` toccavano la prima cella della lista, che sta sotto l'etichetta in alto;
+  con D2 quel tocco resta alla chrome, ora toccano una cella fuori dalla chrome (`cellBelowChrome`).
+
+### Prove sul telefono (S25, poi Tab S9)
+1. **Indietro dal bordo sopra una foto** (navigazione a gesti): parti dal bordo sinistro sopra una cella e fai Indietro, lento e veloce, anche
+   a meta' e annullato. Atteso: nessuna foto si apre. Difetto: si apre il viewer. Poi un tocco normale sulla stessa cella: si apre.
+2. Stessa prova dal bordo destro, in selezione (atteso: la selezione non cambia, l'Indietro esce dalla selezione) e sulle griglie delle Raccolte.
+3. **Toccare la data in alto**: si apre il calendario, nessuna foto dietro. Tocca il bordo della capsula dei comandi fuori dai tasti: niente.
+4. **Calendario**: si apre sul mese della data mostrata, il giorno segnato; scorri i mesi col dito e con le frecce; tocca il titolo e scegli
+   un anno vecchio; tocca un giorno: la Libreria va li' e il giorno e' nell'etichetta. Prova da Anni e da Mesi (scende a Giorni) e a Tutte.
+   Con il testo grande e sul tablet. Difetto: un giorno spento che si tocca, una data sbagliata, il pannello che salta di altezza.
+5. **Tirare oltre il fondo**: in fondo alla Libreria tira in su: lo spinner si rivela, alla soglia un colpo d'aptica, al rilascio lo spazio
+   resta aperto un attimo e la nuvola mostra la sincronizzazione. Tira poco e rilascia: torna senza aggiornare. Il gesto non deve disturbare
+   lo scorrimento normale, il pinch, lo scrubber, la selezione. Difetto: scatti, una molla nel mezzo del dito, un doppio aggiornamento.
+6. **Primo avvio** (app appena installata o dati cancellati, mentre la prima lettura lavora): lanci veloci in su e in giu'. Atteso: lo slancio
+   continua dopo aver alzato il dito; le foto nuove compaiono quando la griglia si ferma, senza salti. Difetto: lo slancio che si ferma.
+7. Benchmark: `scroll`, `pinch`, `coldStart` sull'S25 e sul Tab S9 (soglie di `benchmark/soglie.json` e `docs/bench/riferimento-tab-s9.json`).
+
+### Rischi per le prestazioni
+- La griglia della Libreria ha un `nestedScroll` in piu' e il layer della lista legge uno stato in piu' nel blocco di disegno: nessuna
+  ricomposizione. A riposo e scorrendo l'indicatore non e' composto.
+- L'etichetta in alto sta sempre dentro l'ancora del pop-up (un `Box` con `onGloballyPositioned` che scrive un rettangolo che nessuno legge
+  finche' il pop-up non si apre): un nodo in piu' nella riga in alto, nessuna ricomposizione.
+- D3 rimanda lo scambio del layout a fine scorrimento: la griglia si ricompone una volta alla fine di uno scorrimento **solo** se un layout
+  nuovo aspettava.
+
+### Verifiche (un posto del semaforo per batch, rilasciato, nessun java vivo alla fine)
+- `H3-1` test di D1 e D2: OK. `H3-2` compilazione di `app` + screenshot e test nuovi: FAIL (2 test del calendario; e `app` non compilava per
+  un problema del worktree, sotto). `H3-3` `:core-designsystem:compileDebugKotlin --rerun` + `app` + calendario: `app` compila, gli stessi 2
+  test (il test toccava un mese fuori dalla parte visibile del pop-up: corretto il test). `H3-4` screenshot H3 e calendario: OK (5/5, 20 PNG).
+  `H3-5` tutti i test di `feature-library` (1273): 2 falliti, test vecchi aggiornati (sopra). `H3-6` quei due + `core-designsystem` (294, 0
+  falliti, `GalleryChromeMotionTest` compreso): verdi; i test di `app` non compilavano per un mio costruttore, corretto. `H3-7` test di `app`
+  (`LibreriaAlRitornoTest` 10, `SchedeCheRicordanoTest` 3, `DragSourcesScopeTest` 4, `AppLibraryCommandsTest` 18,
+  `CondividiSenzaPosizioneAppTest` 6): OK. `tools\check.ps1` non lanciato; `LibraryScaffold*ScreenshotTest` di `app` non girato.
+- Il worktree `mcg-k2` veniva dal ramo K2, dove `core-designsystem/src/debug/.../catalog/` non esisteva: dopo il cambio di ramo la
+  compilazione incrementale ha lasciato quei file fuori dal jar di debug e `:app:compileDebugKotlin` non trovava `ComponentCatalogPlaceholder`.
+  Risolto ricompilando quel solo task (`--rerun`), senza `clean`. Non e' un difetto del codice.
+- Screenshot in `docs/screenshots/beta-grafica/H3/`: `calendario-giorni`, `calendario-scelta-mese`, `calendario-testo-grande`,
+  `aggiorna-a-meta`, `aggiorna-oltre-soglia`, ognuno chiaro e scuro, telefono (360 x 780 dp) e tablet (1280 x 800 dp).
+

@@ -129,8 +129,8 @@ object CollectionsSectionSamples {
       entries = listOf(
         CollectionEntry("utility/edited", "Modificate", "37 elementi", Icons.Rounded.AutoFixHigh, FluidTone.Warning),
         CollectionEntry("utility/duplicates", "Doppioni", "Copie e scatti quasi uguali", Icons.Rounded.BurstMode, FluidTone.Neutral),
-        CollectionEntry("utility/recently_deleted", "Eliminati di recente", "Telefono e NAS, dietro lo sblocco", Icons.Rounded.Delete, FluidTone.Warning),
-        CollectionEntry("backup/free-space", "Libera spazio", "Togli dal telefono le foto e i video già al sicuro sul NAS", Icons.Rounded.CleaningServices, FluidTone.Primary),
+        CollectionEntry("utility/recently_deleted", "Eliminati di recente", "Telefono e NAS", Icons.Rounded.Delete, FluidTone.Warning),
+        CollectionEntry("backup/free-space", "Libera spazio", "Già al sicuro sul NAS", Icons.Rounded.CleaningServices, FluidTone.Primary),
       ),
     ),
   )
@@ -145,8 +145,8 @@ object CollectionsSectionSamples {
   // recente" compare una volta sola (nell'Utility). Persone, Ricordi, Viaggi e Luoghi con la forma delle righe dei loro moduli (che qui non si
   // vedono) e con le copertine, i volti e i luoghi che i test passano.
 
-  /** I due luoghi della Libreria di prova (id GeoNames di `FakePlaceData`): Firenze e Milano. */
-  val PRODUCTION_PLACES: List<Pair<Int, String>> = listOf(3176959 to "Firenze", 3173435 to "Milano")
+  /** I luoghi della Libreria di prova (id GeoNames di `FakePlaceData`), dal piu' fotografato: Firenze, Milano, Roma, Lisbona. */
+  val PRODUCTION_PLACES: List<Pair<Int, String>> = listOf(3176959 to "Firenze", 3173435 to "Milano", 3169070 to "Roma", 2267057 to "Lisbona")
 
   /**
    * Le sezioni come le consegna `:app` in produzione. [photos] le foto per le copertine dei ricordi e dei viaggi (dalla Libreria visibile di prova),
@@ -206,9 +206,9 @@ object CollectionsSectionSamples {
         entries = if (fresh) {
           listOf(CollectionEntry("map", "Mappa", "Nessuna foto con la posizione", Icons.Rounded.Map, FluidTone.Info))
         } else {
-          listOf(CollectionEntry("map", "Mappa", "1.240 foto con la posizione", Icons.Rounded.Map, FluidTone.Info, coverPlace = PRODUCTION_PLACES[0].first)) +
+          listOf(CollectionEntry("map", "Mappa", "1.240 foto con la posizione", Icons.Rounded.Map, FluidTone.Info, coverPlaces = PRODUCTION_PLACES.take(4).map { it.first })) +
             PRODUCTION_PLACES.mapIndexed { i, (id, name) ->
-              CollectionEntry("place_$id", name, listOf("320 foto", "88 foto")[i], Icons.Rounded.Place, FluidTone.Neutral, coverPlace = id)
+              CollectionEntry("place_$id", name, listOf("320 foto", "88 foto", "61 foto", "24 foto")[i], Icons.Rounded.Place, FluidTone.Neutral, coverPlace = id)
             }
         },
       ),
@@ -227,7 +227,7 @@ object CollectionsSectionSamples {
       ),
     )
     val freeSpace = CollectionEntry(
-      "backup/free-space", "Libera spazio", "Togli dal telefono le foto e i video già al sicuro sul NAS", Icons.Rounded.CleaningServices, FluidTone.Primary,
+      "backup/free-space", "Libera spazio", "Già al sicuro sul NAS", Icons.Rounded.CleaningServices, FluidTone.Primary,
     )
     val utility = FixedCollectionsSection(
       CollectionSections.UTILITY,

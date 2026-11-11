@@ -126,6 +126,18 @@ class PlacesSectionTest {
     assertThat(section.toString()).doesNotContain("Luogo")
   }
 
+  /** CU-15 (fase H, giro 2): la Mappa e' un mosaico dei quattro luoghi piu' fotografati, non la foto del primo (che e' la riga sotto). */
+  @Test
+  fun laMappaHaIlMosaicoDeiLuoghiPiuFotografatiENonLaFotoDelPrimo() {
+    val section = PlacesSectionSources.sectionOf(resources, readyState)
+    val map = section.entries.first()
+    assertThat(map.coverPlace).isEqualTo(0)
+    assertThat(map.coverPlaces).containsExactlyElementsIn(readyState.places.take(PlacesSectionSources.MAP_MOSAIC).map { it.placeId }).inOrder()
+    // Senza luoghi (prima lettura, nessun GPS) nessun mosaico: la piastrella della famiglia con la mappa.
+    assertThat(PlacesSectionSources.sectionOf(resources, null).entries.first().coverPlaces).isEmpty()
+    assertThat(PlacesSectionSources.sectionOf(resources, PlacesSectionState.NoGps(320)).entries.first().coverPlaces).isEmpty()
+  }
+
   @Test
   fun nessunaVoceDirraMaiLaParolaCasa() {
     val names = TestPlaceNames(special = mapOf(PLACE_BASE + 1 to "Casa"))

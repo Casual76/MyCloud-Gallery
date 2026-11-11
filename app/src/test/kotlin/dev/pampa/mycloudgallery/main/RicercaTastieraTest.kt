@@ -97,6 +97,45 @@ class RicercaTastieraTest {
   }
 
   /**
+   * CS-21 (H1 x H4): il viewer aperto dalla Libreria **sollevata** (ricerca a campo vuoto, tastiera su) parte dalla cella che si vede. La Libreria sale con
+   * un `translationY` nel disegno di un antenato, che non rifa' il layout: i bordi dell'ancora (`grid.viewerAnchor`, quella che `LibraryScreen` mette nella
+   * richiesta del viewer) devono salire con la cella disegnata. Prima si leggevano da una posizione in cache e restavano dove la cella era a tastiera chiusa.
+   */
+  @Test
+  fun conLaLibreriaSollevata_ilViewerParteDallaCellaCheSiVede() {
+    val scenes = ScaffoldScenes()
+    compose.setContent { MyCloudGalleryTheme { GalleryScaffold(scenes, GalleryTab.Library, searchOpen = true, search = scenes.searchIdle) } }
+    compose.waitForIdle()
+    val grid = scenes.library.grid
+    val anchor = grid.viewerAnchor
+    val photos = compose.onAllNodesWithContentDescription("Foto, ", substring = true).fetchSemanticsNodes()
+    // Una foto in basso, quella che la tastiera coprirebbe, e il suo media: quello i cui bordi (a tastiera chiusa) contengono il centro della cella.
+    val probe = photos.indices.maxBy { photos[it].boundsInWindow.top }
+    val cellBefore = photos[probe].boundsInWindow
+    val id = compose.runOnIdle {
+      val snapshot = grid.view.snapshot
+      (snapshot.size - 1 downTo 0).asSequence().map { snapshot.idAt(it) }.first { anchor.boundsOf(it)?.holds(cellBefore.center.x, cellBefore.center.y) == true }
+    }
+    val before = compose.runOnIdle { anchor.boundsOf(id) }!!
+
+    val rootHeight = compose.onRoot().fetchSemanticsNode().size.height.toFloat()
+    compose.runOnIdle { compose.activity.keyboard((rootHeight * 0.4f).toInt()) }
+    compose.waitForIdle()
+    val cellAfter = compose.onAllNodesWithContentDescription("Foto, ", substring = true).fetchSemanticsNodes()[probe].boundsInWindow
+    val after = compose.runOnIdle { anchor.boundsOf(id) }!!
+
+    // La cella e' salita davvero, e i bordi del viewer sono saliti con lei, della stessa quantita', alla stessa cella.
+    val lifted = cellBefore.top - cellAfter.top
+    assertThat(lifted).isGreaterThan(50f)
+    assertThat(abs((before.top - after.top) - lifted)).isAtMost(1f)
+    assertThat(abs((before.bottom - after.bottom) - lifted)).isAtMost(1f)
+    assertThat(abs(after.left - before.left)).isAtMost(1f)
+    assertThat(after.holds(cellAfter.center.x, cellAfter.center.y)).isTrue()
+  }
+
+  private fun dev.pampa.mycloudgallery.core.library.contract.PixelRect.holds(x: Float, y: Float): Boolean = x in left..right && y in top..bottom
+
+  /**
    * La tastiera aperta (o chiusa con 0), per le prove: Robolectric non disegna una tastiera ne' manda gli inset da solo, e la finestra della decorazione
    * non li passa ai figli: si consegnano alla vista di Compose (come in `feature-settings`, `ImeTestSupport`).
    */

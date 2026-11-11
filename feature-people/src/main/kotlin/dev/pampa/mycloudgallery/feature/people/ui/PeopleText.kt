@@ -21,9 +21,6 @@ internal object PeopleText {
   /** Il titolo di una riga: il nome, o "Persona senza nome". */
   fun title(resources: Resources, card: PersonCard): String = card.name ?: resources.getString(R.string.persone_unnamed_spoken)
 
-  /** Il nome che si vede sotto un avatar: quello della persona, o l'invito "Aggiungi un nome". */
-  fun nameOrInvite(resources: Resources, card: PersonCard): String = card.name ?: resources.getString(R.string.persone_add_name)
-
   /** Il nome per una frase ("Anna", o "una persona senza nome"). */
   fun nameInSentence(resources: Resources, card: PersonCard): String = card.name ?: resources.getString(R.string.persone_unnamed_in_sentence)
 }

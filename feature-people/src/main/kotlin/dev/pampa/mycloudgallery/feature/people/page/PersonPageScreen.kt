@@ -251,7 +251,8 @@ private fun LazyListScope.header(page: PersonPageState.Ready, crops: PeopleCrops
 /** "Forse e' anche…": una riga per proposta, con il volto dell'altra persona; un tocco apre il foglio con i due volti e "Si'" / "No". */
 private fun LazyListScope.proposals(list: List<MergeProposal>, crops: PeopleCrops, handlers: PersonPageHandlers) {
   if (list.isEmpty()) return
-  item(key = "header-maybe") { GallerySectionHeader(title = stringResource(R.string.persone_maybe_header), detail = stringResource(R.string.persone_maybe_detail)) }
+  // I1 (fase I): il titolo basta ("Forse e' anche…"), i volti dicono chi; la regola la dice il foglio che si apre.
+  item(key = "header-maybe") { GallerySectionHeader(title = stringResource(R.string.persone_maybe_header)) }
   item(key = "maybe") {
     FluidListGroup {
       list.forEachIndexed { index, proposal ->
@@ -259,7 +260,8 @@ private fun LazyListScope.proposals(list: List<MergeProposal>, crops: PeopleCrop
         val other = proposal.second
         FluidListRow(
           title = PeopleText.title(LocalContext.current.resources, other),
-          subtitle = stringResource(R.string.persone_maybe_row, PeopleText.photos(LocalContext.current.resources, other.photos)),
+          // I1: il nome e il volto; quante foto ha lo dice la sua pagina.
+          subtitle = "",
           onClick = { handlers.onOpenProposal(proposal) },
           leading = { PersonAvatar(other.cover, crops, PeopleDimens.AvatarRow, Modifier.size(PeopleDimens.AvatarRow)) },
         )

@@ -155,7 +155,7 @@ abstract class PeopleShots(private val dark: Boolean, private val device: String
 
   // --- Altri volti ---------------------------------------------------------------------------------------------------------------------
 
-  @Test fun altriVolti() = shoot("altri-volti", "Altri volti", "Gruppi senza nome") { OthersScreen(scenes.others(), scenes.crops, NoOthersHandlers) }
+  @Test fun altriVolti() = shoot("altri-volti", "Altri volti") { OthersScreen(scenes.others(), scenes.crops, NoOthersHandlers) }
 
   @Test fun altriVoltiTestoGrande() = shoot("altri-volti", "Altri volti", fontScale = LARGE_TEXT) { OthersScreen(scenes.others(), scenes.crops, NoOthersHandlers) }
 

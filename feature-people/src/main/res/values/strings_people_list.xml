@@ -21,17 +21,13 @@
   <string name="persone_working_percent">Fatto il %1$d%%. Va avanti da sola, di notte e in carica.</string>
   <string name="persone_working_waiting">Aspetto il momento giusto: Wi-Fi di casa, carica o le regole del risparmio.</string>
 
-  <string name="persone_proposals_header">È la stessa persona?</string>
-  <string name="persone_proposals_detail">Volti che si somigliano. Decidi tu: non unisco mai niente da solo con due nomi.</string>
   <string name="persone_proposal_title">È la stessa persona?</string>
   <string name="persone_proposal_names">%1$s e %2$s</string>
   <string name="persone_others_row">Altri volti (%1$d)</string>
   <string name="persone_others_row_detail">Dai un nome a chi riconosci, o falli dimenticare</string>
   <string name="persone_hidden_row">Persone nascoste (%1$d)</string>
-  <string name="persone_hidden_row_detail">Le foto restano in Libreria</string>
 
   <string name="persone_others_title">Altri volti</string>
-  <string name="persone_others_subtitle">Gruppi senza nome, dal più fotografato. Tocca per aprirli.</string>
   <string name="persone_others_empty_title">Nessun gruppo senza nome</string>
   <string name="persone_others_empty_detail">I gruppi di volti senza nome compariranno qui quando avranno almeno tre foto.</string>
 

@@ -23,6 +23,12 @@ import dev.pampa.mycloudgallery.feature.library.grid.showThemed
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
 import java.time.LocalDate
 import java.time.YearMonth
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
+import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
+import java.util.concurrent.Executor
+import kotlinx.coroutines.asCoroutineDispatcher
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
@@ -51,12 +57,24 @@ class LibraryDateJumpTest {
       LibraryTab(contentPadding = PaddingValues(bottom = 96.dp), backdropOut = {}, onOpenViewer = {}, onOpenSettings = {}, state = state)
     }
     composeRule.waitForIdle()
+    shownState = state
     return state
   }
 
-  private fun openCalendar() {
+  private var shownState: LibraryTabState? = null
+
+  /**
+   * Tocca la data. Con [waitReady] aspetta anche i giorni con foto della vista (si contano su `Default`, che l'attesa di Compose non vede) e la
+   * dissolvenza che li accende; senza, il calendario si guarda com'e' appena aperto.
+   */
+  private fun openCalendar(waitReady: Boolean = true) {
     composeRule.onNodeWithTag(GalleryChromeTagPrefix + "titolo").performClick()
     composeRule.waitForIdle()
+    if (waitReady) {
+      val grid = shownState!!.grid
+      composeRule.waitUntil(5_000) { grid.days.current(grid.view) != null }
+      composeRule.waitForIdle()
+    }
     composeRule.onNodeWithTag(CalendarTag).assertExists()
   }
 
@@ -168,5 +186,70 @@ class LibraryDateJumpTest {
     composeRule.onNodeWithTag(GalleryChromeTagPrefix + "titolo").performClick()
     composeRule.waitForIdle()
     composeRule.onNodeWithTag(CalendarTag).assertDoesNotExist()
+  }
+
+  // --- H3, giro 1 (CU-10, CG-4): il calendario si apre gia' disegnato e non ricalcola i giorni a ogni apertura --------------------------
+
+  /** Il primo giorno con foto del mese [month] secondo [days]. */
+  private fun firstDayWithPhotos(days: GridDays, month: YearMonth): LocalDate = (1..month.lengthOfMonth()).map(month::atDay).first(days::has)
+
+  @Test
+  fun laSecondaAperturaNonRicontaIGiorni() {
+    val state = show()
+    openCalendar()
+    composeRule.waitUntil(5_000) { state.grid.days.current(state.grid.view) != null }
+    val days = state.grid.days.current(state.grid.view)!!
+    assertThat(state.grid.days.computations).isEqualTo(1)
+    // Si sceglie un giorno (il calendario si chiude) e si riapre: i giorni sono gia' pronti, il giorno si tocca subito.
+    composeRule.onNodeWithTag(dayTag(firstDayWithPhotos(days, days.months.last()))).performClick()
+    composeRule.waitForIdle()
+    composeRule.onNodeWithTag(CalendarTag).assertDoesNotExist()
+    openCalendar()
+    val newest = days.months.last()
+    composeRule.onNodeWithTag(dayTag(firstDayWithPhotos(days, newest))).assertHasClickAction()
+    assertThat(state.grid.days.computations).isEqualTo(1)
+  }
+
+  @Test
+  fun conIlCatalogoCambiatoSiApreConIGiorniNuovi() {
+    val state = show()
+    openCalendar()
+    composeRule.waitUntil(5_000) { state.grid.days.current(state.grid.view) != null }
+    val before = state.grid.days.current(state.grid.view)!!
+    composeRule.onNodeWithTag(dayTag(firstDayWithPhotos(before, before.months.last()))).performClick()
+    composeRule.waitForIdle()
+    // Il catalogo cambia (qui: un'altra vista della stessa Libreria, come dopo una lettura del telefono).
+    val newer = state.timeline!!.view(LibraryFilter.VIDEOS).value
+    composeRule.runOnIdle { state.grid.view = newer }
+    composeRule.waitForIdle()
+    openCalendar()
+    composeRule.waitUntil(5_000) { state.grid.days.current(newer) != null }
+    composeRule.waitForIdle()
+    val after = state.grid.days.current(newer)!!
+    assertThat(state.grid.days.computations).isEqualTo(2)
+    // Il calendario (aperto sul mese che l'etichetta dice adesso) mostra i giorni della vista nuova: ogni giorno che si tocca ha dei video, e
+    // almeno uno si tocca.
+    val clickable = composeRule.onAllNodes(SemanticsMatcher("giorno del calendario") { node ->
+      node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("calendario-giorno-") == true && SemanticsActions.OnClick in node.config
+    }).fetchSemanticsNodes().map { LocalDate.parse(it.config[SemanticsProperties.TestTag].removePrefix("calendario-giorno-")) }
+    assertThat(clickable).isNotEmpty()
+    assertThat(clickable.all(after::has)).isTrue()
+  }
+
+  @Test
+  fun senzaGiorniProntiSiDisegnaSubitoIlMeseNessunaRotella() {
+    val state = show()
+    // I giorni non arrivano mai: il conteggio aspetta su un esecutore che non esegue niente.
+    state.grid.days.openDispatcher = Executor { }.asCoroutineDispatcher()
+    openCalendar(waitReady = false)
+    assertThat(state.grid.days.latest).isNull()
+    // Il mese c'e' gia': titolo, frecce e la griglia dei giorni (almeno 28), tutti spenti e non toccabili.
+    composeRule.onNodeWithTag(TitleTag).assertExists()
+    composeRule.onNodeWithTag(PreviousTag).assertExists()
+    val dayNodes = composeRule.onAllNodes(SemanticsMatcher("giorno del calendario") { node ->
+      node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("calendario-giorno-") == true
+    }).fetchSemanticsNodes()
+    assertThat(dayNodes.size).isAtLeast(28)
+    assertThat(dayNodes.none { SemanticsActions.OnClick in it.config }).isTrue()
   }
 }

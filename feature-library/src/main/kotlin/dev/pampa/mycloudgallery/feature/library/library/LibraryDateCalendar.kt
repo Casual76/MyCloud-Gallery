@@ -1,5 +1,8 @@
 package dev.pampa.mycloudgallery.feature.library.library
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.snap
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -9,7 +12,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,7 +36,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -58,7 +59,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
-import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeIconButton
@@ -75,18 +75,21 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.util.Locale
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 // Fase H (R2, scelta dell'utente dell'11/11): toccando la data in alto si apre un calendario vero, mese per mese, ancorato all'etichetta
 // (il pop-up della chrome, composto solo dalla prima apertura). I giorni con foto sono pieni e gli unici toccabili; un tocco porta la
 // Libreria a quel giorno. Il titolo del mese apre la scelta rapida di anno e mese (una libreria copre molti anni).
 
 /**
- * Il calendario del salto a una data. I giorni con foto ([GridDays]) si contano **all'apertura**, fuori dal thread principale, dalla vista
- * della griglia; finche' non ci sono si vede il posto del calendario con l'indicatore dell'engine (pochi millisecondi). [shown] e' cio' che
- * l'etichetta diceva al tocco: il calendario parte dal suo mese, e se era un giorno quel giorno e' segnato. [onPick] riceve il giorno scelto.
+ * Il calendario del salto a una data. [shown] e' cio' che l'etichetta diceva al tocco: il calendario parte dal suo mese, e se era un giorno quel
+ * giorno e' segnato. [onPick] riceve il giorno scelto.
+ *
+ * **Si apre gia' disegnato** (H3, giro 1, CU-10 e CG-4; regola dell'utente: ogni superficie si disegna subito con cio' che ha e si completa dopo).
+ * I giorni con foto stanno nello stato della griglia ([GridDaysCache], per vista del catalogo): di solito sono gia' pronti (preparati a griglia
+ * ferma), e la seconda apertura non rifa' niente. Se la vista e' cambiata si mostrano quelli di prima e si completano appena pronti. Alla prima
+ * apertura in assoluto si vede subito il mese dell'etichetta, con la sua griglia dei giorni ([PendingMonth], stessa geometria): i giorni con
+ * foto si accendono appena contati, in una dissolvenza breve, senza che niente si sposti. Nessuna rotella.
  */
 @Composable
 internal fun LibraryDateCalendar(
@@ -96,7 +99,12 @@ internal fun LibraryDateCalendar(
   onPick: (GridDays, LocalDate) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  val days by produceState<GridDays?>(null, grid) { value = withContext(Dispatchers.Default) { GridDays.of(grid.view) } }
+  val cache = grid.days
+  val view = grid.view
+  // Calendario aperto: i giorni di questa vista servono adesso (se ci sono gia', non costa niente).
+  LaunchedEffect(cache, view) { cache.prepare(view) }
+  val days = cache.latest?.takeIf { !it.isEmpty }
+  val reduced = LocalFluidMotionPolicy.current.reducedMotion
   Column(
     modifier = modifier
       .widthIn(min = CalendarMinWidth, max = CalendarMaxWidth)
@@ -104,31 +112,53 @@ internal fun LibraryDateCalendar(
       .padding(horizontal = CalendarPaddingH, vertical = CalendarPaddingV)
       .testTag(CalendarTag),
   ) {
-    val ready = days
-    if (ready == null || ready.isEmpty) {
-      Box(modifier = Modifier.fillMaxWidth().height(LoadingHeight), contentAlignment = Alignment.Center) {
-        if (ready == null) FluidSpinner()
+    Crossfade(
+      targetState = days != null,
+      animationSpec = if (reduced) snap() else FluidMotion.crossFade(),
+      label = "calendario",
+    ) { ready ->
+      // Una colonna: dentro la dissolvenza i pezzi (titolo, giorni della settimana, griglia) restano uno sotto l'altro.
+      Column(modifier = Modifier.fillMaxWidth()) {
+        val shownDays = days
+        if (ready && shownDays != null) {
+          CalendarContent(shownDays, shown, today, onPick)
+        } else {
+          PendingMonth(month = YearMonth.from(shown?.date ?: today), today = today, selected = shown?.takeIf { it.exactDay }?.date)
+        }
       }
-    } else {
-      CalendarContent(ready, shown, today, onPick)
     }
   }
+}
+
+/**
+ * Il mese dell'etichetta prima che i giorni con foto siano contati (la prima apertura in assoluto, per qualche millisecondo): titolo, nomi dei
+ * giorni e la griglia del mese, **con la stessa geometria** del calendario pronto, cosi' quando i giorni pieni compaiono niente si sposta. I giorni
+ * sono tutti spenti e non si toccano; il giorno dell'etichetta ha gia' il suo disco.
+ */
+@Composable
+private fun PendingMonth(month: YearMonth, today: LocalDate, selected: LocalDate?) {
+  val locale = GalleryDates.LOCALE
+  CalendarHeader(month = month, canPrevious = false, canNext = false, onPrevious = {}, onNext = {}, onTitle = null)
+  WeekdayRow(locale)
+  MonthGrid(month = month, days = null, today = today, selected = selected, locale = locale, onPick = {})
 }
 
 @Composable
 private fun CalendarContent(days: GridDays, shown: ShownDate?, today: LocalDate, onPick: (GridDays, LocalDate) -> Unit) {
   val months = days.months
-  val start = remember(days) { days.startMonth(shown?.date)?.let(months::indexOf)?.coerceAtLeast(0) ?: months.lastIndex }
-  // Il mese da cui il pager parte: quello dell'etichetta, poi quello scelto nella scelta rapida. Cambiarlo rifa' il pager gia' su quel mese
-  // (nessun fotogramma del mese di prima, e nessuna richiesta a un pager che non e' in scena).
-  var anchor by remember(days) { mutableIntStateOf(start) }
+  // Il mese che si sta guardando, ricordato fuori dal pager: il pager si rifa' gia' su quel mese quando arrivano i giorni di una vista nuova
+  // (il catalogo e' cambiato mentre il calendario e' aperto) o quando si sceglie un mese nella scelta rapida. Non e' uno stato: cambiare pagina
+  // non ricompone niente qui.
+  val seen = remember { SeenMonth(days.startMonth(shown?.date) ?: months.last()) }
+  var chosen by remember { mutableIntStateOf(0) }
   var picking by remember { mutableStateOf(false) }
   val reduced = LocalFluidMotionPolicy.current.reducedMotion
   val locale = GalleryDates.LOCALE
   val selected = shown?.takeIf { it.exactDay }?.date
-  key(anchor) {
-    val pager = rememberPagerState(initialPage = anchor) { months.size }
+  key(days, chosen) {
+    val pager = rememberPagerState(initialPage = nearestPage(months, seen.month)) { months.size }
     val scope = rememberCoroutineScope()
+    LaunchedEffect(pager) { snapshotFlow { pager.currentPage }.collect { page -> months.getOrNull(page)?.let { seen.month = it } } }
 
     fun go(page: Int) {
       val target = page.coerceIn(0, months.lastIndex)
@@ -144,10 +174,10 @@ private fun CalendarContent(days: GridDays, shown: ShownDate?, today: LocalDate,
         current = month,
         locale = locale,
         onBack = { picking = false },
-        onPick = { chosen ->
-          val page = months.indexOf(chosen)
+        onPick = { picked ->
+          seen.month = picked
           picking = false
-          if (page >= 0) anchor = page
+          chosen++
         },
       )
     } else {
@@ -165,9 +195,20 @@ private fun CalendarContent(days: GridDays, shown: ShownDate?, today: LocalDate,
   }
 }
 
+/** Il mese che il calendario sta mostrando, tenuto senza ricomporre (vedi [CalendarContent]). */
+private class SeenMonth(var month: YearMonth)
+
+/** La pagina di [month] fra i mesi con foto; se non c'e' (il catalogo e' cambiato), quella del mese con foto piu' vicino che non lo supera. */
+internal fun nearestPage(months: List<YearMonth>, month: YearMonth): Int {
+  if (months.isEmpty()) return 0
+  val exact = months.indexOf(month)
+  if (exact >= 0) return exact
+  return months.indexOfLast { it <= month }.coerceAtLeast(0)
+}
+
 /** Il titolo del mese (tocco: scelta rapida di anno e mese) fra le due frecce. Un mese senza foto non c'e': le frecce saltano ai mesi con foto. */
 @Composable
-private fun CalendarHeader(month: YearMonth, canPrevious: Boolean, canNext: Boolean, onPrevious: () -> Unit, onNext: () -> Unit, onTitle: () -> Unit) {
+private fun CalendarHeader(month: YearMonth, canPrevious: Boolean, canNext: Boolean, onPrevious: () -> Unit, onNext: () -> Unit, onTitle: (() -> Unit)?) {
   val ink = MaterialTheme.colorScheme.onSurface
   Row(modifier = Modifier.fillMaxWidth().heightIn(min = HeaderHeight), verticalAlignment = Alignment.CenterVertically) {
     GalleryChromeIconButton(
@@ -184,8 +225,9 @@ private fun CalendarHeader(month: YearMonth, canPrevious: Boolean, canNext: Bool
       modifier = Modifier
         .weight(1f)
         .heightIn(min = HeaderHeight)
-        .semantics(mergeDescendants = true) { contentDescription = "$title. $choose" }
-        .fluidPressable(onClick = onTitle, role = Role.Button, focusShape = FluidCapsuleShape)
+        .semantics(mergeDescendants = true) { contentDescription = if (onTitle != null) "$title. $choose" else title }
+        // Senza [onTitle] (il mese prima che i giorni siano contati) il titolo non si tocca: nessun effetto di pressione a vuoto.
+        .then(if (onTitle != null) Modifier.fluidPressable(onClick = onTitle, role = Role.Button, focusShape = FluidCapsuleShape) else Modifier)
         .testTag(TitleTag),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.Center,
@@ -240,7 +282,7 @@ private fun MonthPager(
 }
 
 @Composable
-private fun MonthGrid(month: YearMonth, days: GridDays, today: LocalDate, selected: LocalDate?, locale: Locale, onPick: (LocalDate) -> Unit) {
+private fun MonthGrid(month: YearMonth, days: GridDays?, today: LocalDate, selected: LocalDate?, locale: Locale, onPick: (LocalDate) -> Unit) {
   val lead = month.atDay(1).dayOfWeek.value - DayOfWeek.MONDAY.value
   val length = month.lengthOfMonth()
   val full = remember(locale) { DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(locale) }
@@ -253,7 +295,8 @@ private fun MonthGrid(month: YearMonth, days: GridDays, today: LocalDate, select
             val date = month.atDay(day)
             DayCell(
               date = date,
-              hasPhotos = days.has(date),
+              hasPhotos = days?.has(date) == true,
+              known = days != null,
               isToday = date == today,
               isSelected = date == selected,
               description = date.format(full),
@@ -282,6 +325,8 @@ private fun DayCell(
   description: String,
   onPick: (LocalDate) -> Unit,
   modifier: Modifier = Modifier,
+  /** Falso prima che i giorni con foto siano contati ([PendingMonth]): il giorno si vede spento ma TalkBack non dice "nessuna foto". */
+  known: Boolean = true,
 ) {
   val scheme = MaterialTheme.colorScheme
   val photos = stringResource(R.string.library_calendar_day_photos, description)
@@ -308,7 +353,7 @@ private fun DayCell(
             .fluidPressable(onClick = { onPick(date) }, role = Role.Button, focusShape = FluidCapsuleShape)
         } else {
           Modifier.clearAndSetSemantics {
-            contentDescription = empty
+            contentDescription = if (known) empty else description
             if (isToday) stateDescription = todayWord
             disabled()
           }
@@ -484,4 +529,3 @@ private val YearTitlePaddingH: Dp = 8.dp
 private val YearTitlePaddingV: Dp = 4.dp
 private val MonthChipMinWidth: Dp = 44.dp
 private val MonthChipPaddingH: Dp = 6.dp
-private val LoadingHeight: Dp = HeaderHeight + CellHeight * (Weeks + 1)

@@ -37,11 +37,18 @@ import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBar
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarDefaults
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTagPrefix
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
-import dev.pampa.mycloudgallery.core.library.contract.GridLevel
 import dev.pampa.mycloudgallery.feature.library.grid.GridPullState
 import dev.pampa.mycloudgallery.feature.library.grid.RegisterComponentActivity
 import androidx.compose.ui.test.performTouchInput
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
+import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
+import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.MutableStateFlow
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
@@ -69,16 +76,21 @@ internal abstract class LibraryH3ScreenshotBase(private val dark: Boolean, priva
 
   private val look: String get() = if (dark) "scuro" else "chiaro"
 
-  protected fun library(level: GridLevel = GridLevel.DAYS, commands: LibraryCommands = NoLibraryCommands): LibraryTabState =
-    syntheticLibraryState(level = level, commands = commands)
+  /**
+   * La Libreria per gli screenshot del calendario (H3, giro 1, voce 3): 12.000 elementi sugli stessi 15 anni della sintetica, circa due al giorno
+   * come in una libreria vera. Con i 2.000 di serie un mese aveva uno o tre giorni con foto e il calendario sembrava vuoto.
+   */
+  protected fun denseLibrary(): LibraryTabState = syntheticLibraryState(count = CalendarLibrarySize)
 
-  protected fun show(state: LibraryTabState, fontScale: Float = 1f) {
+  protected fun show(state: LibraryTabState, fontScale: Float = 1f, network: LibraryNetworkStatus? = null) {
     composeRule.setContent {
       MyCloudGalleryTheme(settings = EngineSettings(themeMode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT)) {
         val density = LocalDensity.current
-        CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) { Scaffolded(state) }
+        CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) { Scaffolded(state, network) }
       }
     }
+    // Oltre 6.000 elementi il layout si impagina su Default, che l'attesa di Compose non vede: si aspetta che ci sia.
+    composeRule.waitUntil(CalendarReadyMillis) { (state.grid.layout?.rowCount ?: 0) > 0 }
     settle()
   }
 
@@ -89,7 +101,7 @@ internal abstract class LibraryH3ScreenshotBase(private val dark: Boolean, priva
   }
 
   @Composable
-  private fun Scaffolded(state: LibraryTabState) {
+  private fun Scaffolded(state: LibraryTabState, network: LibraryNetworkStatus?) {
     var backdrop by remember { mutableStateOf<GlassBackdropState?>(null) }
     val modal = rememberFluidGlassModalHostState()
     val rootBackdrop = rememberGlassBackdrop()
@@ -103,6 +115,7 @@ internal abstract class LibraryH3ScreenshotBase(private val dark: Boolean, priva
             onOpenViewer = {},
             onOpenSettings = {},
             state = state,
+            network = network,
           )
           if (!state.selectionActive) {
             GalleryTabBar(
@@ -133,9 +146,19 @@ internal abstract class LibraryH3ScreenshotBase(private val dark: Boolean, priva
     settle()
   }
 
-  private fun openCalendar() {
+  /**
+   * Tocca la data e aspetta il calendario **pronto** (H3, giro 1, CG-4: il PNG scuro col testo grande aveva fotografato lo stato di prima): i
+   * giorni della vista contati e un giorno con foto del mese mostrato che si tocca. Solo allora lo screenshot.
+   */
+  private fun openCalendar(state: LibraryTabState) {
     composeRule.onNodeWithTag(GalleryChromeTagPrefix + "titolo").performClick()
+    composeRule.waitUntil(CalendarReadyMillis) { state.grid.days.current(state.grid.view) != null }
     settle()
+    val dayNodes = composeRule.onAllNodes(SemanticsMatcher("giorno del calendario") { node ->
+      node.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("calendario-giorno-") == true
+    }).fetchSemanticsNodes()
+    check(dayNodes.size >= 28) { "Il mese del calendario non c'e'." }
+    check(dayNodes.any { SemanticsActions.OnClick in it.config }) { "Nessun giorno con foto pronto nel mese mostrato." }
   }
 
   // --- R2: il salto a una data ---------------------------------------------------------------------------------------------
@@ -143,41 +166,62 @@ internal abstract class LibraryH3ScreenshotBase(private val dark: Boolean, priva
   /** A meta' Libreria, la data in alto toccata: il calendario sul mese di quel giorno, il giorno segnato, i giorni con foto pieni e gli altri spenti. */
   @Test
   fun calendarioAperto() {
-    val state = library()
+    val state = denseLibrary()
     show(state)
     scrollTo(state, 0.5f)
-    openCalendar()
+    openCalendar(state)
     shootRoot("calendario-giorni")
   }
 
   /** Il titolo del mese toccato: la scelta rapida di anno e mese, con i mesi senza foto spenti. */
   @Test
   fun sceltaRapidaDiAnnoEMese() {
-    val state = library()
+    val state = denseLibrary()
     show(state)
     scrollTo(state, 0.5f)
-    openCalendar()
+    openCalendar(state)
     composeRule.onNodeWithTag(TitleTag).performClick()
     settle()
     shootRoot("calendario-scelta-mese")
   }
 
-  /** Il calendario con il testo di sistema a 1,3x: le celle crescono, niente si taglia. */
+  /**
+   * Il calendario con il testo di sistema a 1,3x: le celle crescono, niente si taglia. In fondo alla Libreria, cioe' sul mese di oggi: si vede
+   * anche il segno di oggi.
+   */
   @Test
   fun calendarioConIlTestoGrande() {
-    val state = library()
+    val state = denseLibrary()
     show(state, fontScale = LargeText)
-    scrollTo(state, 0.5f)
-    openCalendar()
+    openCalendar(state)
     shootRoot("calendario-testo-grande")
   }
 
   // --- D10: aggiornare tirando oltre il fondo ------------------------------------------------------------------------------
 
-  /** Il comando dell'aggiornamento c'e' (come nell'app): il gesto e' attivo. */
-  private object RefreshCommands : LibraryCommands {
+  /**
+   * Il comando dell'aggiornamento c'e' (come nell'app): il gesto e' attivo. Come in produzione, l'aggiornamento fa partire un giro e la nuvola in
+   * alto lo dice (H3, giro 1, CU-13): qui il backup passa a "in corso" e la lettura del telefono resta aperta per tutta la scena.
+   */
+  private class RefreshCommands(private val backup: MutableStateFlow<LibraryBackupStatus>) : LibraryCommands {
     override val canRefresh: Boolean get() = true
-    override suspend fun refresh() = Unit
+    override suspend fun refresh() {
+      backup.value = LibraryBackupStatus.Running(done = 12, total = 40, etaMillis = 4 * 60_000L)
+      awaitCancellation()
+    }
+  }
+
+  /** La Libreria con la nuvola come in produzione: in casa, NAS aggiornato, tutto al sicuro; e il comando dell'aggiornamento. */
+  private fun refreshable(): LibraryTabState {
+    val base = syntheticLibraryState()
+    val backup = MutableStateFlow<LibraryBackupStatus>(LibraryBackupStatus.AllSafe(atNasMillis = System.currentTimeMillis()))
+    return LibraryTabState(
+      grid = base.grid, viewerItems = base.viewerItems, viewerImages = base.viewerImages, photoCount = 0, videoCount = 0,
+      timeline = base.timeline, preferences = base.preferences, actions = base.actions, phone = base.phone,
+      commands = RefreshCommands(backup),
+      nas = MutableStateFlow(LibraryNasStatus.UpToDate(atNasMillis = System.currentTimeMillis())),
+      backup = backup,
+    )
   }
 
   /**
@@ -202,23 +246,42 @@ internal abstract class LibraryH3ScreenshotBase(private val dark: Boolean, priva
   /** A meta' strada verso la soglia: i raggi dello spinner si rivelano col dito. */
   @Test
   fun aggiornaAMeta() {
-    show(library(commands = RefreshCommands))
+    show(refreshable(), network = HomeNetwork)
     pullAndHold(visualDp = 40f)
     shootRoot("aggiorna-a-meta")
   }
 
-  /** Oltre la soglia (76 dp): lo spinner e' intero; al rilascio la Libreria si aggiorna. */
+  /** Oltre la soglia (76 dp): lo spinner e' intero; al rilascio la Libreria si aggiorna. La nuvola dice ancora "tutto al sicuro". */
   @Test
   fun aggiornaOltreLaSoglia() {
-    show(library(commands = RefreshCommands))
+    show(refreshable(), network = HomeNetwork)
     pullAndHold(visualDp = 96f)
     shootRoot("aggiorna-oltre-soglia")
+  }
+
+  /** Il dito si alza oltre la soglia: lo spazio resta aperto con lo spinner che gira, e l'esito si legge nella nuvola, che sincronizza (CU-13). */
+  @Test
+  fun aggiornaRilasciato() {
+    show(refreshable(), network = HomeNetwork)
+    pullAndHold(visualDp = 96f)
+    composeRule.onRoot().performTouchInput { up() }
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(ReleasedMillis)
+    composeRule.waitForIdle()
+    shootRoot("aggiorna-rilasciato")
   }
 
   companion object {
     const val DIR = "../docs/screenshots/beta-grafica/H3"
     const val SettleMillis = 1_500L
     const val LargeText = 1.3f
+    const val CalendarReadyMillis = 5_000L
+    const val CalendarLibrarySize = 12_000
+
+    /** Dopo il rilascio: la molla ha portato lo spazio a 56 dp, e il tetto di 2,5 s non e' ancora passato. */
+    const val ReleasedMillis = 700L
+
+    val HomeNetwork = LibraryNetworkStatus(severity = LibraryNetworkSeverity.Fine, label = "In casa", detail = "NAS collegato")
 
     fun looks(): List<Array<Any>> = listOf(arrayOf<Any>(false), arrayOf<Any>(true))
   }

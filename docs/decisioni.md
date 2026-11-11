@@ -18457,3 +18457,29 @@ Unione: `integra/beta-grafica` (`3f686ef9`) era gia' figlia del ramo H5: avanzam
 - **Da provare sul telefono:** le facce compaiono nelle righe Persone (e mai quelle di una persona nascosta o di una foto nascosta un attimo prima);
   le foto dei Luoghi corrispondono al luogo (l'id del luogo della sezione e quello dell'indice sono entrambi GeoNames: verificato solo sui dati di
   prova); scorrere le Raccolte resta fluido con volti e luoghi.
+
+### H3, giro di correzione 1 (CU-10 = CG-4, CU-13, aspetto del calendario)
+- **CU-10 / CG-4, il calendario passava da una rotella e ricontava i giorni a ogni apertura.** Ora i giorni con foto stanno nello stato della
+  griglia (`GridDaysCache` in `MediaGridDays.kt`), **per vista del catalogo**: si ricontano solo quando la vista cambia. Si preparano al primo
+  tocco sulla data (su `Default`) o da soli a griglia ferma da 3 s (`keepWarm`): mai prima del primo disegno utile (`AfterFirstDraw`), mai
+  mentre la griglia scorre, una volta per vista, su un thread suo a priorita' minima creato al primo uso. A calendario chiuso e catalogo fermo
+  costano una coroutine che aspetta. Il calendario **si apre sempre disegnato**: con i giorni gia' pronti (il caso normale); con quelli della
+  vista di prima, completati appena pronti (il catalogo e' cambiato: il pager resta sul mese che si guardava); alla prima apertura in assoluto
+  con il mese dell'etichetta gia' impaginato (`PendingMonth`, stessa geometria) e i giorni pieni che compaiono in una dissolvenza breve
+  (`FluidMotion.crossFade`, `snap` con le animazioni ridotte). La rotella non c'e' piu'.
+- **CG-4, lo screenshot fotografava lo stato di caricamento.** Il test degli screenshot aspetta i giorni contati e asserisce che il mese c'e'
+  e che almeno un giorno con foto si tocca, poi scatta. Nuovi test: la seconda apertura non riconta (`computations` resta 1), con il catalogo
+  cambiato si apre con i giorni nuovi (ogni giorno toccabile ha foto nella vista nuova), e con i giorni che non arrivano mai il mese si vede
+  subito (titolo, frecce, almeno 28 giorni, nessuno toccabile): nessuno stato «solo rotella».
+- **CU-13.** Le scene di «aggiorna» hanno la nuvola come in produzione (in casa, NAS aggiornato, tutto al sicuro), e c'e' una terza scena,
+  `aggiorna-rilasciato`, dopo il rilascio: lo spazio aperto con lo spinner che gira e la nuvola che dice il backup in corso.
+- **Aspetto (rivisto con l'occhio di chi sceglie le immagini per uno store).** Con la Libreria sintetica di serie (2.000 elementi su 15 anni)
+  il mese mostrato aveva uno o tre giorni con foto e il calendario sembrava vuoto: gli screenshot del calendario usano ora 12.000 elementi
+  (circa due al giorno), e quello col testo grande e' aperto sul mese di oggi, dove si vedono i giorni passati pieni e i futuri spenti. Ho
+  trovato e corretto anche un mio errore del giro: dentro la dissolvenza i pezzi del calendario si impilavano (un `Box`); ora stanno in una
+  colonna. Resta una scelta: le **sei settimane fisse** lasciano spazio vuoto sotto i mesi di quattro o cinque settimane (febbraio), in cambio
+  di un pannello che non cambia altezza scorrendo i mesi.
+- **Non coperto da un test:** la preparazione a griglia ferma (`keepWarm`) dipende dal cancello del primo disegno, che nei test della Libreria
+  sintetica non si apre; e' da guardare sul telefono (prova 4 qui sopra: alla prima apertura dopo qualche secondo di griglia ferma il calendario
+  deve essere gia' pieno).
+

@@ -426,6 +426,8 @@ private fun rememberDateJump(state: LibraryTabState, topChrome: Dp): GalleryChro
   val scope = rememberCoroutineScope()
   val linePx = with(LocalDensity.current) { handOverLine(topChrome).roundToPx() }
   val label = stringResource(R.string.library_date_jump)
+  // H3, giro 1 (CU-10): i giorni con foto pronti prima del tocco, a griglia ferma da un po' e a priorita' minima; mai all'avvio ne' scorrendo.
+  LaunchedEffect(grid) { grid.days.keepWarm(grid) }
   return remember(state, linePx, label) {
     GalleryChromeTitleAction(label = label, paneTitle = label) { close ->
       val shown = remember { grid.shownDateUnder(linePx) }

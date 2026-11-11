@@ -8,9 +8,11 @@
   <string name="utility_recently_deleted">Eliminati di recente</string>
 
   <string name="utility_duplicates_subtitle">Copie e scatti quasi uguali</string>
-  <string name="utility_recently_deleted_subtitle">Telefono e NAS, dietro lo sblocco</string>
-  <string name="utility_recently_deleted_subtitle_gallery">Eliminati da qui, dietro lo sblocco</string>
+  <string name="utility_recently_deleted_subtitle">Telefono e NAS</string>
+  <string name="utility_recently_deleted_subtitle_gallery">Eliminati da qui</string>
 
+  <!-- CU-18 (giro 2): "Modificate" senza foto modificate (la libreria appena installata): una parola, non "0 elementi". -->
+  <string name="utility_edited_none">Nessuna</string>
   <string name="utility_edited_empty_title">Nessuna foto modificata</string>
   <string name="utility_edited_empty_detail">Le foto che modifichi, qui o con un altro editor, compaiono qui con l\'originale al sicuro.</string>
 </resources>

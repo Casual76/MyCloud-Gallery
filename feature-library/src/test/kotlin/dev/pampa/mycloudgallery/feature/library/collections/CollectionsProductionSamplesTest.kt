@@ -54,6 +54,17 @@ class CollectionsProductionSamplesTest {
     }
   }
 
+  /** CU-18 (giro 2): "Modificate" senza foto modificate dice "Nessuna", non "0 elementi"; con delle foto, il conto. Sottotitoli corti, una riga. */
+  @Test
+  fun modificateSenzaFotoDiceNessuna() {
+    fun edited(count: Int) = utilityEntryGroup(resources, mapOf(UtilityPage.EDITED to count), canTrash = true).entries
+      .first { it.code == UtilityPage.EDITED.entryCode }.subtitle
+    assertThat(edited(0)).isEqualTo("Nessuna")
+    assertThat(edited(37)).isEqualTo("37 elementi")
+    val deleted = utilityEntryGroup(resources, emptyMap(), canTrash = true).entries.first { it.code == UtilityPage.RECENTLY_DELETED.entryCode }
+    assertThat(deleted.subtitle).isEqualTo("Telefono e NAS")
+  }
+
   @Test
   fun inProduzioneNessunaVoceCompareDueVolte() {
     for (fresh in listOf(false, true)) {

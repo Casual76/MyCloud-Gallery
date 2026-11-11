@@ -79,7 +79,7 @@ class CollectionsListPhoneTest : ComposeScreenTest() {
     showList(productionRows(counts = mapOf(dev.pampa.mycloudgallery.feature.library.utility.UtilityPage.EDITED to 37)))
 
     composeRule.onNodeWithText("37 elementi").assertExists()
-    composeRule.onNodeWithText("Protetti dallo sblocco del telefono").assertExists()
+    composeRule.onNodeWithText("Dietro lo sblocco").assertExists()
   }
 
   @Test

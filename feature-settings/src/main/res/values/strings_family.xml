@@ -5,7 +5,7 @@
   <!-- Hub -->
   <string name="family_title">Famiglia</string>
   <string name="family_none_title">Nessuna famiglia</string>
-  <string name="family_none_detail">Questa pagina serve quando il dispositivo è approvato. Finisci la configurazione o aspetta l’approvazione dell’admin.</string>
+  <string name="family_none_detail">Serve un dispositivo approvato.</string>
   <string name="family_hero_eyebrow">Famiglia</string>
   <plurals name="family_hero_value">
     <item quantity="one">%1$d dispositivo</item>
@@ -23,7 +23,7 @@
   </plurals>
   <string name="family_section_invite">Invita</string>
   <string name="family_invite">Configura un familiare</string>
-  <string name="family_invite_detail">Mostra un QR sullo schermo: lui inserisce solo la sua password</string>
+  <string name="family_invite_detail">Con un QR sullo schermo</string>
   <string name="family_section_protect">Protezione</string>
   <string name="family_kit">Kit di recupero</string>
   <string name="family_kit_detail">Cos’è, dove sta e quando serve</string>

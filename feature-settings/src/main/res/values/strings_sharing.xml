@@ -4,14 +4,14 @@
   <string name="sharing_title">Condivisioni</string>
   <string name="sharing_section_location">Quando condividi foto e video</string>
   <string name="sharing_remove_location">Rimuovi la posizione</string>
-  <string name="sharing_remove_location_detail">Quando condividi con un’altra app mando una copia senza il luogo in cui è stata scattata.</string>
+  <string name="sharing_remove_location_detail">Le altre app ricevono una copia senza il luogo.</string>
   <string name="sharing_state_on">Acceso</string>
-  <string name="sharing_state_on_detail">Ogni foto o video che condividi parte senza posizione, dopo che l’ho controllato. Quando condividi, il menu dice «Condividi senza posizione».</string>
+  <string name="sharing_state_on_detail">Ogni foto e video parte senza posizione.</string>
   <string name="sharing_state_off">Spento</string>
-  <string name="sharing_state_off_detail">Foto e video si condividono come sono, con il luogo dentro se c’è. Accendi l’interruttore per toglierlo.</string>
-  <string name="sharing_footnote_check">Il controllo è serio: se non riesco a togliere la posizione, la condivisione si ferma e ti dico perché. Il file che hai sul telefono e sul NAS non cambia mai.</string>
-  <string name="sharing_footnote_formats">Si può togliere la posizione da JPEG, PNG, WebP, MP4, MOV e HEIC (che diventa JPEG). Gli altri formati non si condividono senza posizione: scegli se condividerli con la posizione o annullare.</string>
+  <string name="sharing_state_off_detail">Foto e video partono con il luogo, se c’è.</string>
+  <string name="sharing_footnote_check">Se la posizione non si toglie, la condivisione si ferma. Il file sul telefono e sul NAS non cambia.</string>
+  <string name="sharing_footnote_formats">Funziona con quasi tutte le foto e i video; per gli altri formati scegli tu se condividerli con la posizione.</string>
 
-  <string name="sharing_entry_on">La posizione si toglie quando condividi</string>
-  <string name="sharing_entry_off">Foto e video si condividono come sono</string>
+  <string name="sharing_entry_on">Senza posizione</string>
+  <string name="sharing_entry_off">Con la posizione</string>
 </resources>

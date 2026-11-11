@@ -2,10 +2,10 @@
 <resources>
   <!-- Fase 8 (P7, docs/fase8-progetto.md §2.1): la voce "Persone" delle Impostazioni. Solo lo stato di questo dispositivo (D37), nessuna parola sulla famiglia (Q3). -->
   <string name="settings_people">Persone</string>
-  <string name="settings_people_detail">Raggruppa le foto per volto. Si attiva per il tuo account, dopo una pagina che spiega cosa fa.</string>
-  <string name="settings_people_on">Attiva sul tuo account e su questo dispositivo</string>
-  <string name="settings_people_local">Attiva, ma ogni dispositivo ha le sue persone</string>
-  <string name="settings_people_awaiting">Attiva sul tuo account: qui non lavora finché non confermi</string>
+  <string name="settings_people_detail">Spenta</string>
+  <string name="settings_people_on">Attiva</string>
+  <string name="settings_people_local">Attiva, solo su questo dispositivo</string>
+  <string name="settings_people_awaiting">Da confermare su questo dispositivo</string>
   <string name="settings_people_excluded">Non attiva su questo dispositivo</string>
   <string name="settings_people_erasing">Cancellazione in corso</string>
   <string name="settings_people_update">Serve aggiornare l’app</string>

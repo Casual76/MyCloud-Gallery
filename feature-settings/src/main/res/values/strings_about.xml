@@ -4,7 +4,6 @@
        Gli indirizzi sono testo semplice, mai un collegamento: la Fase 3 non fa traffico di rete (D18, D24). -->
 
   <string name="settings_about">Informazioni e licenze</string>
-  <string name="settings_about_detail">Versione, luoghi offline e licenze delle librerie</string>
 
   <string name="about_title">Informazioni e licenze</string>
 

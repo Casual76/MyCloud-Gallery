@@ -37,14 +37,14 @@ class MemoriesEntryTest {
 
   @Test
   fun senzaLegaturaLaFraseDiceATantoServe() {
-    assertThat(MemoriesEntryTexts.subtitleOf(context, null)).isEqualTo("Ricordi di un anno fa, viaggi e persone, con una notifica discreta quando ce n’è uno bello.")
+    assertThat(MemoriesEntryTexts.subtitleOf(context, null)).isEqualTo("Quando arrivano le notifiche")
   }
 
   @Test
   fun ogniStatoHaLaSuaFrase() {
     assertThat(subtitle(MemoriesEntryState.FEW_PER_WEEK)).isEqualTo("Poche notifiche a settimana")
-    assertThat(subtitle(MemoriesEntryState.DAILY)).isEqualTo("Una notifica al giorno, quando c’è un bel ricordo")
-    assertThat(subtitle(MemoriesEntryState.ANNIVERSARIES)).isEqualTo("Solo gli anniversari dei viaggi e degli eventi")
+    assertThat(subtitle(MemoriesEntryState.DAILY)).isEqualTo("Al massimo una al giorno")
+    assertThat(subtitle(MemoriesEntryState.ANNIVERSARIES)).isEqualTo("Solo gli anniversari")
     assertThat(subtitle(MemoriesEntryState.OFF)).isEqualTo("Notifiche spente")
     assertThat(MemoriesEntryState.entries.map { subtitle(it) }).containsNoDuplicates()
   }

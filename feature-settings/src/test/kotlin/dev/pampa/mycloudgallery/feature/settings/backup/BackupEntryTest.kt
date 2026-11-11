@@ -130,7 +130,7 @@ class BackupEntryTest {
     val texts = allCases.map { BackupEntryTexts.subtitleOf(rule.activity, it) }
     assertThat(texts).containsAtLeast(
       "Non ancora pronto: manca qualcosa",
-      "In prova: si scrive solo nelle share di prova",
+      "In prova: scrive solo nelle cartelle di prova",
       "Sto preparando il primo backup",
       "Pronto per il primo backup",
       "Tutto al sicuro: 6.658 media",

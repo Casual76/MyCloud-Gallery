@@ -22,17 +22,17 @@
   <string name="place_offline_value">Offline</string>
   <string name="place_offline_title">Nessuna rete</string>
   <string name="network_route_home">Il NAS si raggiunge direttamente.</string>
-  <string name="network_route_home_vpn">La VPN è accesa anche a casa: il NAS passa dal tunnel, più lento.</string>
+  <string name="network_route_home_vpn">VPN accesa anche a casa: più lento.</string>
   <string name="network_route_vpn">Il NAS si raggiunge attraverso la VPN di casa.</string>
 
   <!-- Avvisi -->
   <string name="network_local_denied_title">Rete locale non consentita</string>
-  <string name="network_ipv4_title">Rete solo IPv4</string>
-  <string name="network_ipv4_message">Questa rete non ha IPv6: il FRITZ!Box dietro CGNAT si raggiunge da fuori solo in IPv6. Prova con i dati mobili o un’altra rete.</string>
+  <string name="network_ipv4_title">Da qui casa non si raggiunge</string>
+  <string name="network_ipv4_message">Questa rete non arriva al router di casa. Prova con i dati mobili o un’altra rete.</string>
 
   <!-- Impronta di casa -->
   <string name="network_section_home">Rete di casa</string>
-  <string name="network_section_home_detail">L’app riconosce casa dall’indirizzo IPv6 locale del tuo router, non dal nome del Wi-Fi.</string>
+  <string name="network_section_home_detail">Casa si riconosce dal router, non dal nome del Wi-Fi.</string>
   <string name="network_fingerprint">Impronta di casa</string>
   <string name="network_fingerprint_none">Non ancora raccolta</string>
   <string name="network_fingerprint_detail">%1$s · raccolta il %2$s</string>
@@ -47,11 +47,11 @@
   <string name="match_weak">Somiglia a casa ma non basta</string>
   <string name="match_none">Non è la rete di casa</string>
   <string name="match_unknown">Non so dirlo</string>
-  <string name="network_ipv6">IPv6 globale</string>
-  <string name="network_ipv6_detail">Serve fuori casa per raggiungere il router</string>
+  <string name="network_ipv6">Strada verso casa</string>
+  <string name="network_ipv6_detail">Serve fuori casa</string>
   <string name="network_recapture">Raccogli di nuovo l’impronta</string>
-  <string name="network_recapture_detail">Dopo un reset del router: solo dal Wi-Fi di casa. Cambia solo questo telefono</string>
-  <string name="network_recapture_detail_admin">Dopo un reset del router: solo dal Wi-Fi di casa. Vale anche per i nuovi inviti</string>
+  <string name="network_recapture_detail">Dopo un reset del router, dal Wi-Fi di casa</string>
+  <string name="network_recapture_detail_admin">Dopo un reset del router, dal Wi-Fi di casa. Vale per i nuovi inviti</string>
 
   <!-- Nuova raccolta -->
   <string name="capture_reading">Leggo la rete Wi-Fi attuale…</string>
@@ -79,7 +79,7 @@
 
   <!-- WireGuard -->
   <string name="network_section_vpn">VPN di casa</string>
-  <string name="network_section_vpn_detail">Fuori casa il NAS si raggiunge solo con WireGuard. Il controllo è facoltativo.</string>
+  <string name="network_section_vpn_detail">Fuori casa il NAS si raggiunge solo con la VPN.</string>
   <string name="network_wg">WireGuard</string>
   <string name="wg_pill_ready">Controllo attivo</string>
   <string name="wg_pill_missing">Non installato</string>
@@ -90,8 +90,8 @@
   <string name="wg_permission">Manca il permesso di comandare i tunnel di WireGuard: toccando «Consenti il controllo» Android te lo chiede.</string>
   <string name="wg_not_configured">Il permesso c’è, ma manca il nome del tunnel di casa.</string>
   <string name="network_automation">Controllo automatico</string>
-  <string name="auto_off">Spento: la VPN la accendi e spegni tu</string>
-  <string name="auto_idle">Tutto a posto: spenta a casa, accesa fuori (se porta tutto il traffico, a casa resta accesa)</string>
+  <string name="auto_off">Spento: la VPN la gestisci tu</string>
+  <string name="auto_idle">Spenta a casa, accesa fuori</string>
   <string name="auto_waiting">A casa con la VPN accesa: aspetto che il NAS sia libero</string>
   <string name="auto_commanding_up">Sto accendendo la VPN…</string>
   <string name="auto_commanding_down">Sto spegnendo la VPN…</string>
@@ -125,7 +125,7 @@
   <string name="network_reactivate_message">Si è fermato da solo per non toglierti la rete. Se hai sistemato WireGuard riattivalo: riparto da zero e mi fermo di nuovo se non risponde.</string>
   <string name="network_reactivate">Riattiva il controllo</string>
   <string name="network_configure">Configura il controllo</string>
-  <string name="network_footnote">«Accesa» o «spenta» le dico solo dopo averlo visto sulla rete: un comando inviato non basta. Ogni profilo del tablet ha il suo WireGuard.</string>
+  <string name="network_footnote">«Accesa» e «spenta» si leggono dalla rete, non dal comando inviato.</string>
 
   <!-- Esito della prova -->
   <string name="cmd_ok_title">Confermato</string>

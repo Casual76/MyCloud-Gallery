@@ -63,7 +63,6 @@ class SettingsHiddenEntryTest {
     scrollToHidden()
 
     rule.onNodeWithText("Nascosti").assertIsDisplayed()
-    rule.onNodeWithText("Foto e video nascosti, dietro lo sblocco del telefono").assertIsDisplayed()
     rule.onNodeWithText("Nascosti").performClick()
 
     assertThat(opened).isEqualTo(1)
@@ -74,7 +73,6 @@ class SettingsHiddenEntryTest {
     show(SettingsLinks.None)
 
     rule.onAllNodesWithText("Nascosti").assertCountEquals(0)
-    rule.onAllNodesWithText("Foto e video nascosti, dietro lo sblocco del telefono").assertCountEquals(0)
   }
 
   /** Il bersaglio e' una riga intera (48 dp almeno, come tutte le righe delle Impostazioni). */

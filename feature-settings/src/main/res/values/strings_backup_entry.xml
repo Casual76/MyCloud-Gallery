@@ -4,7 +4,7 @@
   <string name="settings_backup">Backup</string>
   <string name="settings_backup_detail">Metti al sicuro foto e video sul NAS</string>
   <string name="settings_backup_not_configured">Non ancora pronto: manca qualcosa</string>
-  <string name="settings_backup_test_only">In prova: si scrive solo nelle share di prova</string>
+  <string name="settings_backup_test_only">In prova: scrive solo nelle cartelle di prova</string>
   <string name="settings_backup_first_comparing">Sto preparando il primo backup</string>
   <string name="settings_backup_first_ready">Pronto per il primo backup</string>
   <plurals name="settings_backup_up_to_date">

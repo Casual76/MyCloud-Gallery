@@ -2,5 +2,4 @@
 <resources>
   <!-- Fase 7 (P9, D33): la voce "Nascosti" delle Impostazioni, sempre raggiungibile anche se la sezione delle Raccolte e' nascosta. -->
   <string name="settings_hidden">Nascosti</string>
-  <string name="settings_hidden_detail">Foto e video nascosti, dietro lo sblocco del telefono</string>
 </resources>

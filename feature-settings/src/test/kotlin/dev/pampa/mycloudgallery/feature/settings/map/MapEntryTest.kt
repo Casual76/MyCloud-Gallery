@@ -36,13 +36,13 @@ class MapEntryTest {
 
   @Test
   fun senzaLegaturaLaFraseDiceATantoServe() {
-    assertThat(MapEntryTexts.subtitleOf(context, null)).isEqualTo("La mappa dettagliata, la nota su cosa esce e le zone senza Internet.")
+    assertThat(MapEntryTexts.subtitleOf(context, null)).isEqualTo("Mappa dettagliata e zone senza Internet")
   }
 
   @Test
   fun ogniStatoHaLaSuaFrase() {
     assertThat(subtitle(MapEntryState.ON)).isEqualTo("Mappa dettagliata accesa")
-    assertThat(subtitle(MapEntryState.OFF)).isEqualTo("Mappa dettagliata spenta: la carta semplice dentro l’app")
+    assertThat(subtitle(MapEntryState.OFF)).isEqualTo("Mappa dettagliata spenta")
     assertThat(subtitle(MapEntryState.UNAVAILABLE)).isEqualTo("Solo la carta semplice dentro l’app")
     assertThat(MapEntryState.entries.map { subtitle(it) }).containsNoDuplicates()
   }

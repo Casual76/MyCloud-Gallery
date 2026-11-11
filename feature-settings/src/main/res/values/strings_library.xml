@@ -3,6 +3,6 @@
 <resources>
   <string name="settings_section_library">Libreria</string>
   <string name="library_motion_animation">Animazione delle foto in movimento</string>
-  <string name="library_motion_animation_detail">Aprendo una foto in movimento, si muove per un istante e poi si ferma sulla foto. Il tasto Movimento resta sempre.</string>
-  <string name="library_motion_animation_footnote">Vale su tutti i tuoi dispositivi. Si ferma da sola con Rimuovi animazioni e con il risparmio energetico.</string>
+  <string name="library_motion_animation_detail">Si muove per un istante quando la apri</string>
+  <string name="library_motion_animation_footnote">Vale su tutti i tuoi dispositivi.</string>
 </resources>

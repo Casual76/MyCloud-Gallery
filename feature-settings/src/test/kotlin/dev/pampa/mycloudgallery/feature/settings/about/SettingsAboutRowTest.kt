@@ -75,7 +75,6 @@ class SettingsAboutRowTest {
     val diagnosticsTop = rule.onNodeWithText("Diagnostica").fetchSemanticsNode().boundsInRoot.top
     val aboutTop = rule.onNodeWithText("Informazioni e licenze").fetchSemanticsNode().boundsInRoot.top
     assertThat(aboutTop).isGreaterThan(diagnosticsTop)
-    rule.onNodeWithText("Versione, luoghi offline e licenze delle librerie").assertIsDisplayed()
 
     // Le due righe sono indipendenti: toccare Diagnostica non apre le Informazioni.
     rule.onNodeWithText("Diagnostica").performClick()

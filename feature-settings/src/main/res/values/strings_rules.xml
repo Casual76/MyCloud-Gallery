@@ -3,14 +3,13 @@
   <!-- Quando lavora l'app: preset, tetto dei dati mobili, roaming (verifica funzionale, RE-8). -->
 
   <string name="settings_rules">Quando lavora l’app</string>
-  <string name="settings_rules_detail">Notte o sempre, dati mobili e roaming</string>
 
   <string name="rules_title">Quando lavora l’app</string>
   <string name="rules_section_preset">Quando parte il lavoro</string>
-  <string name="rules_section_preset_detail">Backup, sincronizzazione e preparazione delle anteprime. Con l’app aperta le miniature si caricano comunque.</string>
+  <string name="rules_section_preset_detail">Backup, sincronizzazione e anteprime.</string>
 
   <string name="rules_section_mobile">Dati mobili</string>
-  <string name="rules_section_mobile_detail">Quanti dati mobili al mese può usare l’app, in tutto.</string>
+  <string name="rules_section_mobile_detail">Al mese, in tutto.</string>
   <string name="rules_cap_preset">Come il preset</string>
   <string name="rules_cap_preset_detail">%1$s al mese</string>
   <string name="rules_cap_limit_detail">Al mese, backup e miniature insieme</string>
@@ -20,12 +19,12 @@
 
   <string name="rules_section_roaming">Roaming</string>
   <string name="rules_roaming">Consenti il roaming</string>
-  <string name="rules_roaming_detail">All’estero i dati possono costare molto. Spento, ogni attività in background resta ferma.</string>
+  <string name="rules_roaming_detail">All’estero i dati costano. Spento, in roaming l’app non lavora in background.</string>
 
   <!-- FAB-4: l'interruttore `pauseOnPowerSaver`, che la pagina non mostrava. -->
   <string name="rules_section_power_saver">Risparmio energetico</string>
   <string name="rules_power_saver">Metti in pausa con il risparmio energetico</string>
-  <string name="rules_power_saver_detail">Con il risparmio energetico di Android acceso il lavoro in background aspetta, anche in carica. Spento, lavora lo stesso.</string>
+  <string name="rules_power_saver_detail">Il lavoro in background aspetta, anche in carica.</string>
 
-  <string name="rules_footnote">Le scelte valgono subito, senza riavviare niente. Il lavoro pesante, come i video, resta sul Wi-Fi di casa con ogni preset tranne «Massimo».</string>
+  <string name="rules_footnote">I video si caricano solo dal Wi-Fi di casa, tranne con «Massimo».</string>
 </resources>

@@ -254,6 +254,7 @@ class GalleryIntegrationTest {
     assertThat(withTimeout(TIMEOUT_MS) { asked.receive() }).isFalse()
     until("la lettura del telefono agganciata") { attached.get() >= 1 }
     assertThat(attached.get()).isEqualTo(1)
+    dev.pampa.mycloudgallery.work.UiWorkActivity.budget.interacted()
     assertThat(yielding.get()?.yielding).isTrue()
     stoppable.onBackground()
     assertThat(yielding.get()?.yielding).isFalse()

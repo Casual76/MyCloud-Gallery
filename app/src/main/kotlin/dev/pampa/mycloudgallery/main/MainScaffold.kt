@@ -120,6 +120,13 @@ fun MainScaffold(
   onOpenSearch: () -> Unit = {},
   onCloseSearch: () -> Unit = {},
 ) {
+  // HR: osserviamo solo inizio/fine dello scorrimento, compresa l'inerzia, senza ricomporre la griglia.
+  val workLease = remember { dev.pampa.mycloudgallery.work.UiWorkActivity.budget.lease() }
+  LaunchedEffect(libraryState.grid, workLease) {
+    androidx.compose.runtime.snapshotFlow { libraryState.grid.listState.isScrollInProgress }.collect { workLease.set(it) }
+  }
+  LaunchedEffect(selectedTab, searchOpen) { dev.pampa.mycloudgallery.work.UiWorkActivity.budget.interacted() }
+  DisposableEffect(workLease) { onDispose { workLease.close() } }
   var backdrop by remember { mutableStateOf<GlassBackdropState?>(null) }
   val rootViewer = LocalViewerHost.current
   val ownViewer = if (rootViewer == null) remember { ViewerHostState(null) } else null

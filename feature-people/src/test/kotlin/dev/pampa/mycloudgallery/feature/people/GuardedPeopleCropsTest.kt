@@ -107,8 +107,11 @@ class GuardedPeopleCropsTest {
     for (face in faces) for (size in 256..259) crops.crop(face, size)
     assertThat(crops.cachedBytes).isAtMost(GuardedPeopleCrops.CACHE_BYTES)
     assertThat(crops.cachedBytes).isGreaterThan(0)
+    val before = crops.clears.value
     crops.clear()
     assertThat(crops.cachedBytes).isEqualTo(0)
+    // CU-19 (fase H, giro 3): chi tiene una copia dei ritagli (le Raccolte) lo sa e la butta.
+    assertThat(crops.clears.value).isEqualTo(before + 1)
   }
 
   @Test

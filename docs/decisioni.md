@@ -18622,6 +18622,29 @@ Unione: `integra/beta-grafica` (`ad4310a5`) conteneva gia' il ramo H5: avanzamen
   deve comparire nemmeno per un attimo; (2) all'avvio a freddo con le Raccolte aperte, mentre il catalogo si legge, i volti non devono lampeggiare
   (se lampeggiano, la riconferma e' piu' lenta di un fotogramma: dirlo); (3) la Mappa con il mosaico dei propri luoghi, in chiaro e in scuro.
 
+### H5, giro di correzione 3 (CU-19: i volti senza lampo, con la garanzia di CG-5)
+Unione: `integra/beta-grafica` (`691e78a9`).
+- **Il difetto.** La correzione di CG-5 (giro 2) toglieva tutti i volti a ogni vista nuova finche' il cancello non li riconfermava. La vista cambia
+  a ogni lotto del backup (lo stato del backup sta nei flag delle celle): i volti avrebbero tremolato di continuo. Avevo dichiarato "solo all'avvio
+  a freddo": era sbagliato.
+- **La correzione.** Ogni ritaglio tenuto dalle Raccolte porta le sue **foto d'origine**: le celle visibili che contengono il volto, quelle che il
+  cancello ha appena controllato (`ArchivePeople.shownCellsOf`, la stessa domanda di `mayShow`; in `:app` `AppCollectionFaceCrops`). Un volto si
+  disegna solo se almeno una foto d'origine e' nella vista di adesso: la domanda e' una ricerca per id sulla vista gia' pronta (`viewIndexOf`,
+  logaritmica), fatta **mentre si disegna**, quindi una foto nascosta, eliminata o uscita dal filtro toglie il suo volto al primo disegno con la vista
+  nuova, prima ancora che la raccolta delle viste giri. Gli altri volti restano disegnati mentre il cancello riconferma (fuori dal thread principale)
+  e se ne vanno se rifiuta.
+- **I segnali che non passano dalla vista.** Cancellazione locale (svuota la cache dei ritagli), Persone spenta o azzerata (le persone si smontano o si
+  rimontano), poca memoria con l'app nascosta (cache svuotata): `GuardedPeopleCrops.clears` e l'identita' delle persone montate formano il segno delle
+  revoche (`CollectionFaceCrops.revocations`); a ogni segno nuovo le Raccolte buttano tutti i volti, con la stessa vista. Una persona nascosta,
+  unita o dimenticata cambia l'elenco delle voci: la riga non chiede piu' quel volto nella stessa composizione.
+- **Prove:** `CollectionCoversGiro2Test` (foto d'origine nascosta: il volto sparisce gia' prima che la raccolta giri e resta via col cancello sospeso;
+  vista nuova con la foto d'origine dentro e cancello sospeso: il volto resta, anche per venti lotti di fila; cancello che rifiuta: sparisce; revoca
+  con la stessa vista: sparisce subito); `GuardedPeopleCropsTest` (svuotare la cache cambia il segno).
+- **Da provare sul telefono:** (1) con un backup in corso e le Raccolte aperte su Persone, guardare i volti per un minuto: non devono mai lampeggiare;
+  (2) aprire la foto da cui e' ritagliato il volto di una persona, nasconderla, tornare alle Raccolte: quel volto non deve comparire nemmeno per un
+  attimo (se la persona ha altre foto, dopo un momento compare un altro volto o resta la piastrella); (3) Impostazioni -> Persone, spegnere e tornare
+  alle Raccolte: nessun volto.
+
 ### H3, giro di correzione 1 (CU-10 = CG-4, CU-13, aspetto del calendario)
 - **CU-10 / CG-4, il calendario passava da una rotella e ricontava i giorni a ogni apertura.** Ora i giorni con foto stanno nello stato della
   griglia (`GridDaysCache` in `MediaGridDays.kt`), **per vista del catalogo**: si ricontano solo quando la vista cambia. Si preparano al primo

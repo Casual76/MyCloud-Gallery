@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import dev.pampa.mycloudgallery.core.faces.contract.FaceCropGate
 import dev.pampa.mycloudgallery.core.model.FaceLocator
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleCrops
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Le copertine e i ritagli come li vuole la Fase 8 (docs/fase8-progetto.md D25, D28, §2.6 "Copertine e ritagli"): [source] ritaglia **al
@@ -36,7 +38,18 @@ class GuardedPeopleCrops(
   }
 
   /** Svuota la cache (Persone spenta, cancellazione, poca memoria). */
-  fun clear() = cache.clear()
+  fun clear() {
+    cache.clear()
+    clearsFlow.value = clearsFlow.value + 1
+  }
+
+  private val clearsFlow = MutableStateFlow(0L)
+
+  /**
+   * CU-19 (fase H, giro 3): quante volte la cache e' stata svuotata. Chi tiene una copia dei ritagli fuori da qui (le righe delle Raccolte) la butta
+   * quando cambia: una cancellazione o Persone spenta non passano dalla vista del catalogo.
+   */
+  val clears: StateFlow<Long> get() = clearsFlow
 
   /** Quanti byte di ritagli tiene in memoria adesso (per le prove: mai oltre il tetto). */
   val cachedBytes: Long get() = cache.weight

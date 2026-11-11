@@ -27,6 +27,8 @@ import dev.pampa.mycloudgallery.core.faces.contract.PersonView
 import dev.pampa.mycloudgallery.core.faces.contract.ReconcileOutcome
 import dev.pampa.mycloudgallery.core.faces.contract.SplitOutcome
 import dev.pampa.mycloudgallery.core.model.FaceLocator
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionFaceCrop
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionFaceCrops
 import dev.pampa.mycloudgallery.core.model.FacesSetting
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.PersonId
@@ -46,6 +48,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 // LE FACCIATE DELLE PERSONE (Fase 8, P13; la stessa idea di `AppAlbums` per gli album): le schermate di feature-people, feature-settings e feature-viewer
@@ -127,6 +130,35 @@ class FacesCropsFacade(private val graph: FacesGraph) : PeopleCrops {
   override suspend fun crop(face: FaceLocator, sizePx: Int): Bitmap? = graph.live.value?.crops?.crop(face, sizePx)
 
   override fun toString(): String = "FacesCropsFacade"
+}
+
+/**
+ * CU-19 (fase H, giro 3): i volti delle righe delle Raccolte. Come [FacesCropsFacade] (stesso cancello, stessa cache in memoria), ma ogni ritaglio porta
+ * le sue **foto d'origine**, le celle visibili che contengono il volto: le Raccolte tolgono subito un volto la cui foto esce dalla vista del catalogo e
+ * tengono gli altri mentre il cancello li riconferma (nessun lampo a ogni lotto del backup). [revocations] cambia quando i ritagli gia' dati non valgono
+ * piu' per ragioni che la vista non dice: Persone montata, spenta o rimontata (azzeramento), cache dei ritagli svuotata (cancellazione locale, poca
+ * memoria).
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class AppCollectionFaceCrops(private val graph: FacesGraph) : CollectionFaceCrops {
+  override suspend fun crop(face: FaceLocator, sizePx: Int): CollectionFaceCrop? {
+    val live = graph.live.value ?: return null
+    val origins = live.people.shownCellsOf(face)
+    if (origins.isEmpty()) return null
+    val bitmap = live.crops.crop(face, sizePx) ?: return null
+    return CollectionFaceCrop(bitmap, origins)
+  }
+
+  override val revocations: Flow<Any?> = graph.live.flatMapLatest { live -> live?.crops?.clears?.map { cleared -> Revocation(live, cleared) } ?: flowOf(null) }
+
+  /** Il segno: le persone montate (per identita') e quante volte la loro cache dei ritagli e' stata svuotata. */
+  private class Revocation(val live: FacesLive, val cleared: Long) {
+    override fun equals(other: Any?): Boolean = other is Revocation && other.live === live && other.cleared == cleared
+    override fun hashCode(): Int = System.identityHashCode(live) * 31 + cleared.hashCode()
+    override fun toString(): String = "Revocation"
+  }
+
+  override fun toString(): String = "AppCollectionFaceCrops"
 }
 
 /**

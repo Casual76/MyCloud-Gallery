@@ -264,8 +264,14 @@ class ArchivePeople(
     }.toMap()
   }
 
-  override suspend fun mayShow(face: FaceLocator): Boolean =
-    visibility.shown(cells.cellsWith(listOf(face.contentKey))[face.contentKey].orEmpty()).isNotEmpty()
+  override suspend fun mayShow(face: FaceLocator): Boolean = shownCellsOf(face).isNotEmpty()
+
+  /**
+   * CU-19 (fase H, giro 3): le celle della Libreria visibile che contengono [face] e che si possono mostrare adesso (vuoto = il cancello rifiuta, come
+   * [mayShow]). Le Raccolte le tengono accanto al ritaglio: a una vista nuova del catalogo tolgono subito solo i volti la cui foto d'origine non c'e' piu'.
+   */
+  suspend fun shownCellsOf(face: FaceLocator): Set<MediaId> =
+    visibility.shown(cells.cellsWith(listOf(face.contentKey))[face.contentKey].orEmpty())
 
   // --- Proposte "E' la stessa persona?" ---------------------------------------------------------------------------------------------
 

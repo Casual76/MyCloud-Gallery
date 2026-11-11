@@ -27,7 +27,7 @@ class AppMediaAlbumsTest {
   private suspend fun manual(title: String): AlbumId = (albums.create(title, AlbumKind.MANUAL) as CreateOutcome.Created).id
 
   @Test
-  fun gliAlbumDelMediaConINomiDellElenco() = runBlocking {
+  fun gliAlbumDelMediaConINomiDellElenco(): Unit = runBlocking {
     val vacanze = manual("Vacanze 2024")
     manual("Lavoro")
     val famiglia = manual("Famiglia")
@@ -40,14 +40,14 @@ class AppMediaAlbumsTest {
   }
 
   @Test
-  fun inNessunAlbumOConUnErroreNienteSezione() = runBlocking {
+  fun inNessunAlbumOConUnErroreNienteSezione(): Unit = runBlocking {
     manual("Vacanze 2024")
     assertThat(AppMediaAlbums({ albums }, itemsOf = { emptySet() }, opener = AlbumOpener()).albumsOf(media).first()).isEmpty()
     assertThat(AppMediaAlbums({ albums }, itemsOf = { error("catalogo chiuso") }, opener = AlbumOpener()).albumsOf(media).first()).isEmpty()
   }
 
   @Test
-  fun ilToccoApreLAlbum() = runBlocking {
+  fun ilToccoApreLAlbum(): Unit = runBlocking {
     val vacanze = manual("Vacanze 2024")
     val opened = mutableListOf<AlbumId>()
     val opener = AlbumOpener().apply { onOpen = { opened += it } }

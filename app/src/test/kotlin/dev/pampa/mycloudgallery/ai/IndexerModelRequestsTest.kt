@@ -9,6 +9,40 @@ import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class IndexerModelRequestsTest {
+  @Test fun scadenzaLocaleNonChiudeLOsservatore_eIlCambioRuoloRiprova() = runTest {
+    val roles = MutableStateFlow(true)
+    var marked = false
+    var firstAttempts = 0
+    val requests = mutableListOf<ModelTrigger>()
+    val observer = backgroundScope.launch {
+      watchIndexerModels(roles, { true }, { true }, firstRequestDone = { marked },
+        markFirstRequestDone = { marked = true }, firstRequest = {
+          firstAttempts++
+          kotlinx.coroutines.withTimeout(10_000) { kotlinx.coroutines.delay(20_000) }
+        }, request = { requests += it })
+    }
+    runCurrent(); advanceTimeBy(10_001); runCurrent()
+    assertThat(observer.isActive).isTrue()
+    assertThat(marked).isFalse()
+    assertThat(firstAttempts).isEqualTo(1)
+    advanceTimeBy(60_000); runCurrent()
+    assertThat(firstAttempts).isEqualTo(1) // nessun ciclo di retry
+    roles.value = false; runCurrent(); roles.value = true; runCurrent()
+    assertThat(requests).containsExactly(ModelTrigger.ROLE_CHANGED)
+    assertThat(observer.isActive).isTrue()
+  }
+
+  @Test fun cancellareIlChiamanteFermaDavveroLOsservatore() = runTest {
+    val observer = backgroundScope.launch {
+      kotlinx.coroutines.withTimeout(50) {
+        watchIndexerModels(MutableStateFlow(true), { true }, { true }, firstRequestDone = { false },
+          firstRequest = { kotlinx.coroutines.delay(20_000) }, request = {})
+      }
+    }
+    runCurrent(); advanceTimeBy(51); runCurrent()
+    assertThat(observer.isCancelled).isTrue()
+  }
+
   @Test fun onboardingRichiedeUnaVoltaPoiIlSegnoDuraFraProcessi() = runTest {
     val file = java.io.File(java.nio.file.Files.createTempDirectory("hr-first").toFile(), "done")
     val triggers = mutableListOf<ModelTrigger>()

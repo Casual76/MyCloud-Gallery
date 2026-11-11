@@ -1,6 +1,9 @@
 package dev.pampa.mycloudgallery.ai
 
 import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 
@@ -18,12 +21,19 @@ internal suspend fun watchIndexerModels(
     val initial = previous == null
     val trigger = if (previous == false) ModelTrigger.ROLE_CHANGED else ModelTrigger.RULES
     previous = on
-    if (on && allowed()) {
-      if (initial && !firstRequestDone()) {
-        // Non ripristina un modello rimosso prima di aggiornare l'app.
-        if (needed(ModelTrigger.RULES)) { if (firstRequest != null) firstRequest() else request(ModelTrigger.ROLE_CHANGED) }
-        markFirstRequestDone()
-      } else if (needed(trigger)) request(trigger)
+    try {
+      if (on && allowed()) {
+        if (initial && !firstRequestDone()) {
+          // Non ripristina un modello rimosso prima di aggiornare l'app.
+          if (needed(ModelTrigger.RULES)) { if (firstRequest != null) firstRequest() else request(ModelTrigger.ROLE_CHANGED) }
+          markFirstRequestDone()
+        } else if (needed(trigger)) request(trigger)
+      }
+    } catch (e: TimeoutCancellationException) {
+      // Solo la scadenza locale dell'accodamento: il segno resta assente e il
+      // prossimo valore utile del ruolo (o il prossimo processo) puo riprovare.
+      // La cancellazione del chiamante, invece, deve continuare a propagarsi.
+      currentCoroutineContext().ensureActive()
     }
   }
 }

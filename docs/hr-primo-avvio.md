@@ -230,3 +230,9 @@ Dettaglio aggiornato: [hr-primo-avvio-giro2.md](hr-primo-avvio-giro2.md). Unione
 CR-7, CS-9, CS-13 e CR-KDOC corretti nelle prove previste. BUILD-INC corretto in parte: layout ora incluso negli input di compilazione e accettazione main/API senza rerun verde, ma errore storico Unresolved reference non riprodotto e causa specifica non dimostrata.
 
 Aggiornamento inventario: la prima richiesta del modello conserva un segno locale, scritto dopo l'accodamento accettato da WorkManager; richieste automatiche KEEP, esplicite REPLACE. Il confronto puo cedere tra due media anche durante una fetta lunga, conservando le firme e il secondo da riprendere. La pagina ricontrolla la disponibilita del probe ogni 2 s solo mentre attende caldo o liberazione; misura sempre fuori da YieldToApp. Screenshot nuovi caldo/occupato in HR, nessuna misura fisica o dispositivo usato. I dettagli del giro 1 sulla prima emissione RULES sono superati dal segno di onboarding: prima richiesta accelerata una volta, poi regole CR-2.
+
+## Giro di correzione 3: chiusura prima della prova sul telefono
+
+Dettaglio e prove: [hr-primo-avvio-giro3.md](hr-primo-avvio-giro3.md). Unione fast-forward a `ad4310a5` senza conflitti. Il ciclo di disponibilita della misura ora appartiene soltanto alla pagina STARTED, con timer da 2 s soltanto in HOT/BUSY: costo periodico nullo a pagina coperta, app in secondo piano o misura gia' conclusa. Anche l'arrivo del modello pronto aspetta la pagina visibile; un tentativo nativo gia' iniziato puo' completarsi.
+
+La scadenza locale dell'accodamento non termina piu' l'osservatore del ruolo: niente retry stretto, nuova occasione con spento/acceso o processo successivo; cancellazione del chiamante ancora rispettata. Rimossa la protezione riflessiva del layout Gradle del giro 2: resta soltanto la procedura mirata documentata in `decisioni.md`. Nessuna causa dimostrata per il vecchio guasto incrementale, nessun cambiamento al contenuto release.

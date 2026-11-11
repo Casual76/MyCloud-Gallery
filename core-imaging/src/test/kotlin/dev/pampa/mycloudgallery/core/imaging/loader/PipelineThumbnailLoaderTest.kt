@@ -238,6 +238,34 @@ class PipelineThumbnailLoaderTest {
     loader.close()
   }
 
+  /**
+   * I2: le anteprime dei suggerimenti della ricerca si tengono **accanto** alla finestra della griglia: non la sostituiscono (le celle in volo non si
+   * annullano), restano a ogni finestra nuova e se ne vanno quando chi le ha date ne da' una lista vuota.
+   */
+  @Test
+  fun leRichiesteTenuteStannoAccantoAllaFinestraENonLaAnnullano_I2() = runTest {
+    val source = FakeSource(latencyMs = 10_000)
+    val loader = loader(source)
+    loader.window(visible = (0 until 2).map { request(it) }, ahead = emptyList())
+    runCurrent()
+    loader.keep("ricerca", listOf(request(20)))
+    runCurrent()
+    // Le due celle della griglia sono ancora in volo, e l'anteprima tenuta e' partita anche lei.
+    assertThat(source.signals.take(2).none { it.isCanceled }).isTrue()
+    assertThat(source.calls.map { (it.first as MediaRef.Synthetic).seed }).containsExactly(0L, 1L, 20L)
+
+    // La griglia scorre: la sua finestra cambia, l'anteprima tenuta resta in volo.
+    loader.window(visible = (5 until 7).map { request(it) }, ahead = emptyList())
+    runCurrent()
+    assertThat(source.signals[2].isCanceled).isFalse()
+
+    // Chi l'ha data la toglie: solo allora si annulla.
+    loader.keep("ricerca", emptyList())
+    runCurrent()
+    assertThat(source.signals[2].isCanceled).isTrue()
+    loader.close()
+  }
+
   @Test
   fun unaSorgenteCheNonDaNienteLasciaLaCellaSulSegnapostoERiprova() = runTest {
     var attempts = 0

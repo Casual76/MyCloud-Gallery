@@ -62,6 +62,12 @@ object GalleryMotion {
     animation = tween(durationMillis = ShimmerMillis, easing = FluidMotion.EaseInOut),
   )
 
+  /**
+   * I2: un passaggio del riflesso sulla barra che avanza (la copertura della ricerca che cresce): una corsa sola, lenta e simmetrica, con il periodo del
+   * luccichio. Chi la usa ne fa poche, quando la barra cambia: non un'animazione infinita che terrebbe acceso ogni fotogramma.
+   */
+  fun sweepSpec(): FiniteAnimationSpec<Float> = tween(durationMillis = ShimmerMillis, easing = FluidMotion.EaseInOut)
+
   /** Apertura: la miniatura cresce fino al viewer. Durata ed easing sono quelli delle pagine gerarchiche. */
   fun <T> expandOpenSpec(): FiniteAnimationSpec<T> =
     tween(durationMillis = FluidMotion.DurationExpand, easing = FluidMotion.EaseEmphasized)

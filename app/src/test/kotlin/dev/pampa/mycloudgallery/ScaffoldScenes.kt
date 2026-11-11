@@ -46,7 +46,13 @@ import dev.pampa.mycloudgallery.feature.library.collections.testing.FakeCollecti
 import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
 import dev.pampa.mycloudgallery.feature.library.library.testing.M1SyntheticSizes
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
+import androidx.compose.ui.graphics.asImageBitmap
+import dev.pampa.mycloudgallery.core.model.PeopleMode
+import dev.pampa.mycloudgallery.core.model.PersonId
+import dev.pampa.mycloudgallery.core.search.contract.PersonOption
 import dev.pampa.mycloudgallery.feature.search.FixedSearchSource
+import dev.pampa.mycloudgallery.feature.search.SuggestionArt
+import dev.pampa.mycloudgallery.feature.search.SuggestionItem
 import dev.pampa.mycloudgallery.feature.search.NoSearchHandlers
 import dev.pampa.mycloudgallery.feature.search.SearchHandlers
 import dev.pampa.mycloudgallery.feature.search.SearchSource
@@ -126,56 +132,121 @@ internal class ScaffoldScenes(
     )
   }
 
-  /** La ricerca aperta dal cerchio, a campo vuoto: dietro la Libreria, in alto i tre suggerimenti migliori (una ricerca recente, un luogo, un tipo). */
+  /** L'istantanea della Libreria delle scene: le anteprime dei suggerimenti si disegnano solo se il loro media c'e' (D29). */
+  private val shown get() = library.grid.view.snapshot
+
+  /** I2: la foto del media alla posizione [index] dell'istantanea (il primo risultato di un suggerimento). */
+  // Con la Libreria vuota (scena `libreria-vuota`) non c'e' nessun media da mostrare: il suggerimento resta senza anteprima.
+  private fun photo(index: Int): SuggestionArt? = if (shown.size == 0) null else SuggestionArt.Photo(shown.idAt(index % shown.size))
+
+  /** I2: un volto sintetico (pixel finti, nessun volto vero) con la sua foto d'origine nella Libreria. */
+  private fun face(seed: Long, origin: Int): SuggestionArt? = if (shown.size == 0) null else SuggestionArt.Face(
+    PersonId("00000000-0000-4000-8000-0000000000%02d".format(seed)),
+    dev.pampa.mycloudgallery.core.imaging.testing.SyntheticPixels.bitmap(seed, 96, 96).asImageBitmap(),
+    setOf(shown.idAt(origin % shown.size)),
+  )
+
+  private fun person(seed: Long, name: String) = Suggestion.PersonSuggestion(
+    PersonOption(listOf(PersonId("00000000-0000-4000-8000-0000000000%02d".format(seed))), PeopleMode.ANY, name),
+  )
+
+  /**
+   * La ricerca aperta dal cerchio, a campo vuoto (I2): in alto due esempi con la foto del primo risultato e la ricerca recente piu' nuova; gli esempi, scelti fra
+   * quelli con tanti risultati e a rotazione (qui: un luogo e un mese pieno).
+   */
   val searchIdle: SearchSource = FixedSearchSource(
-    suggestions = listOf(
-      Suggestion.Recent(HistoryEntry(1, "mare ad agosto", listOf("Agosto"))),
-      Suggestion.PlaceSuggestion(PlaceOption(setOf(1), "Roma", PlaceLevel.PLACE)),
-      Suggestion.Type(SearchMediaType.VIDEO, "Video"),
+    items = listOf(
+      SuggestionItem(Suggestion.PlaceSuggestion(PlaceOption(setOf(1), "Roma", PlaceLevel.PLACE)), photo(11)),
+      SuggestionItem(Suggestion.Term("Agosto 2025"), photo(17)),
+      SuggestionItem(Suggestion.Recent(HistoryEntry(1, "mare ad agosto", listOf("Agosto"))), photo(3)),
     ),
+    library = shown,
+  )
+
+  /** I2: la stessa barra all'apertura successiva: la terna e' girata (una persona con il suo volto e un tipo che c'e' davvero). */
+  val searchIdleRotated: SearchSource = FixedSearchSource(
+    items = listOf(
+      SuggestionItem(person(7, "Anna"), face(7, 5)),
+      SuggestionItem(Suggestion.Type(SearchMediaType.VIDEO, "Video"), photo(2)),
+      SuggestionItem(Suggestion.Recent(HistoryEntry(1, "mare ad agosto", listOf("Agosto"))), photo(3)),
+    ),
+    library = shown,
+  )
+
+  /** I2: un esempio solo (la libreria di chi ha appena cominciato): una capsula con il suo tondo, non un titolo. */
+  val searchIdleSingle: SearchSource = FixedSearchSource(
+    items = listOf(SuggestionItem(Suggestion.Term("Mare"), photo(9))),
+    library = shown,
   )
 
   /** Mentre si scrive «mare»: i tre completamenti migliori in alto, i risultati per pertinenza al posto della griglia, i meno probabili in coda. */
   val searchTyping: SearchSource = FixedSearchSource(
     query = "mare",
-    suggestions = listOf(
-      Suggestion.Recent(HistoryEntry(1, "mare ad agosto", listOf("Agosto"))),
-      Suggestion.PlaceSuggestion(PlaceOption(setOf(6), "Marettimo", PlaceLevel.PLACE)),
-      Suggestion.Term("Marzo"),
+    items = listOf(
+      SuggestionItem(Suggestion.Recent(HistoryEntry(1, "mare ad agosto", listOf("Agosto"))), photo(3)),
+      SuggestionItem(Suggestion.PlaceSuggestion(PlaceOption(setOf(6), "Marettimo", PlaceLevel.PLACE)), photo(23)),
+      SuggestionItem(Suggestion.Term("Marzo"), photo(29)),
     ),
     state = results(confident = (0 until 34).toList(), likely = (120 until 128).toList()),
+    library = shown,
   )
 
   /**
-   * Nessun risultato per «zebre in montagna»: la Libreria attenuata dietro (CU-11), una riga sola sopra la barra e, in alto, le ultime ricerche da cui
-   * ripartire (CS-12 del giro 2).
+   * Nessun risultato per «zebre in montagna»: la Libreria attenuata dietro (CU-11), la riga con il segno e cio' che si e' cercato (I2) e, in alto, le
+   * ultime ricerche da cui ripartire con la loro foto (CS-12 del giro 2; I2).
    */
   val searchNothing: SearchSource = FixedSearchSource(
     query = "zebre in montagna",
-    suggestions = listOf(
-      Suggestion.Recent(HistoryEntry(1, "mare ad agosto", listOf("Agosto"))),
-      Suggestion.Recent(HistoryEntry(2, "Natale", emptyList())),
-      Suggestion.Recent(HistoryEntry(3, "cane", emptyList())),
+    items = listOf(
+      SuggestionItem(Suggestion.Recent(HistoryEntry(1, "mare ad agosto", listOf("Agosto"))), photo(3)),
+      SuggestionItem(Suggestion.Recent(HistoryEntry(2, "Natale", emptyList())), photo(31)),
+      SuggestionItem(Suggestion.Recent(HistoryEntry(3, "cane", emptyList())), photo(37)),
     ),
     state = SearchScreenState.NoResults("zebre in montagna", emptyList()),
+    library = shown,
   )
 
-  /** "Trova simili" da una foto: il campo vuoto, i simili per pertinenza, la riga che dice da dove vengono. */
+  /** "Trova simili" da una foto: il campo vuoto, i simili per pertinenza, la riga con la foto da cui vengono (I2). */
   val searchSimilar: SearchSource = FixedSearchSource(
-    suggestions = (searchIdle as FixedSearchSource).suggestions,
-    state = results(confident = (40 until 61).toList(), likely = emptyList(), similar = 1),
+    items = (searchIdle as FixedSearchSource).items,
+    state = results(confident = (40 until 61).toList(), likely = emptyList(), similar = 1, similarTo = if (shown.size > 40) listOf(shown.idAt(40)) else emptyList()),
+    library = shown,
+  )
+
+  /**
+   * I2: la ricerca non conosce ancora tutte le foto (nessun dispositivo analizza l'area comune, la copertura sotto il 98%): **una riga sola** con il segno,
+   * la barra che avanza e la percentuale. Niente piu' schede «Nessun dispositivo analizza…» (stanno in Impostazioni).
+   */
+  val searchCoverage: SearchSource = FixedSearchSource(
+    query = "cibo",
+    items = listOf(SuggestionItem(Suggestion.Recent(HistoryEntry(4, "cibo a Napoli", emptyList())), photo(43))),
+    state = results(
+      confident = (60 until 84).toList(),
+      likely = emptyList(),
+      coverage = SearchCoverage.Partial(covered = 5_029, total = 13_608, reasons = mapOf(dev.pampa.mycloudgallery.core.search.contract.CoverageReason.NO_INDEXER_FOR_AREA to 8_579)),
+      notices = listOf(dev.pampa.mycloudgallery.core.search.contract.SearchNotice.NoIndexerForArea(true), dev.pampa.mycloudgallery.core.search.contract.SearchNotice.NoIndexerForArea(false)),
+    ),
+    library = shown,
   )
 
   /** I risultati come li da' il motore: posizioni dell'istantanea della Libreria, nell'ordine di pertinenza. */
-  fun results(confident: List<Int>, likely: List<Int>, similar: Int? = null): SearchScreenState.Results {
+  fun results(
+    confident: List<Int>,
+    likely: List<Int>,
+    similar: Int? = null,
+    coverage: SearchCoverage = SearchCoverage.Complete,
+    notices: List<dev.pampa.mycloudgallery.core.search.contract.SearchNotice> = emptyList(),
+    similarTo: List<dev.pampa.mycloudgallery.core.model.MediaId> = emptyList(),
+  ): SearchScreenState.Results {
     val snapshot = library.grid.view.snapshot
     return SearchScreenState.Results(
       chips = emptyList(),
       confident = IndexOrderedTimelineView(snapshot, confident.filter { it < snapshot.size }.toIntArray()),
       likely = IndexOrderedTimelineView(snapshot, likely.filter { it < snapshot.size }.toIntArray()),
-      coverage = SearchCoverage.Complete,
-      notices = emptyList(),
+      coverage = coverage,
+      notices = notices,
       similar = similar,
+      similarTo = similarTo,
     )
   }
 

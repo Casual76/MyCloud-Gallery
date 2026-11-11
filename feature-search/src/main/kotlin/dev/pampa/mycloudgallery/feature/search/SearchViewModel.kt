@@ -19,6 +19,7 @@ import dev.pampa.mycloudgallery.core.search.noop.NoSearchEngine
 import dev.pampa.mycloudgallery.core.search.noop.NoSearchHistory
 import dev.pampa.mycloudgallery.core.search.noop.NoSuggestions
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerControl
+import dev.pampa.mycloudgallery.feature.search.contract.SearchFaces
 import dev.pampa.mycloudgallery.feature.search.contract.TextReadingAccepted
 import java.util.Optional
 import javax.inject.Inject
@@ -34,6 +35,7 @@ class SearchViewModel @Inject constructor(
   history: Optional<SearchHistory>,
   data: Optional<SearchData>,
   models: Optional<ModelManager>,
+  faces: Optional<SearchFaces>,
 ) : ViewModel() {
 
   val controller: SearchController = SearchController(
@@ -43,6 +45,8 @@ class SearchViewModel @Inject constructor(
     data = data.orElse(null),
     models = models.orElse(null),
     scope = viewModelScope,
+    // I2: gli esempi con la foto a rotazione, preparati fuori dal thread principale (SearchExamples).
+    examples = SearchExamples(engine.orElse(NoSearchEngine), data.orElse(null), faces.orElse(null), viewModelScope),
   )
 }
 
@@ -80,4 +84,8 @@ abstract class SearchPortsModule {
 
   @BindsOptionalOf
   abstract fun deviceProbe(): DeviceProbe
+
+  /** I2: i volti delle persone per le anteprime dei suggerimenti (con il cancello dei volti delle Raccolte). */
+  @BindsOptionalOf
+  abstract fun searchFaces(): SearchFaces
 }

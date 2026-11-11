@@ -1,6 +1,12 @@
 package dev.pampa.mycloudgallery.core.designsystem.chrome
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -33,16 +39,41 @@ class GallerySuggestionBarTest {
   private val labels = listOf("compleanno della nonna", "Castiglione della Pescaia", "compleanno di Anna al mare")
   private val picked = ArrayList<Int>()
 
-  private fun show(fontScale: Float, words: List<String> = labels) {
+  private fun show(fontScale: Float, words: List<String> = labels, discs: Boolean = false) {
     composeRule.setContent {
       MyCloudGalleryTheme {
         val density = LocalDensity.current
+        val leading: (@Composable (Int) -> Unit)? = if (discs) ({ index -> Box(Modifier.fillMaxSize().testTag("tondo-$index")) }) else null
         CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-          GallerySuggestionBar(labels = words, onPick = { picked += it }, backdrop = null, descriptions = words.map { "Cerca «$it»" })
+          GallerySuggestionBar(
+            labels = words,
+            onPick = { picked += it },
+            backdrop = null,
+            descriptions = words.map { "Cerca «$it»" },
+            leading = leading,
+          )
         }
       }
     }
     composeRule.waitForIdle()
+  }
+
+  /** I2: con il tondo davanti ogni voce ha meno posto, e il conto lo sa: tre voci corte restano intere a 360 dp, ognuna con il suo tondo. */
+  @Test
+  fun conIlTondo_treVociCorteRestanoIntere_I2() {
+    show(fontScale = 1f, words = listOf("mare ad agosto", "Roma", "Video"), discs = true)
+    assertThat(shownTexts()).containsExactly("mare ad agosto", "Roma", "Video").inOrder()
+    for (index in 0..2) composeRule.onNodeWithTag("tondo-$index", useUnmergedTree = true).assertExists()
+  }
+
+  /** I2: con il tondo e le voci lunghe, al testo grande, ancora voci intere (meno voci), mai puntini in testa; il tocco arriva alla voce giusta. */
+  @Test
+  fun conIlTondo_vociLungheAlTestoGrande_intereEToccabili_I2() {
+    show(fontScale = 1.3f, discs = true)
+    assertWholeOrSingle(shownTexts())
+    composeRule.onNodeWithContentDescription("Cerca «compleanno della nonna»").performClick()
+    composeRule.waitForIdle()
+    assertThat(picked).containsExactly(0)
   }
 
   private fun shownTexts(): List<String> =

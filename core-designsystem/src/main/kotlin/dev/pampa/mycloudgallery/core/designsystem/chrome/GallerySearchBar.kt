@@ -11,6 +11,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.foundation.layout.WindowInsets
@@ -128,6 +135,9 @@ object GallerySearchBarDefaults {
 
   /** Lo spazio in piu' quando c'e' la riga sopra la barra. */
   val LineInset: Dp = GalleryDimens.MinTouchTarget + LineGap - (GalleryDimens.MinTouchTarget - LineHeight) / 2
+
+  /** I2: quanto e' lunga la barra che avanza nella riga (la copertura che cresce, lo scaricamento del modello, i volti). */
+  val LineBarWidth: Dp = 96.dp
 }
 
 /**
@@ -201,7 +211,8 @@ class GallerySearchCircle {
  * - **Tastiera**: sale con lei ([lift], letto nel layout).
  * - **Chiusura**: **una X sola** (CU-12): con del testo la crocetta lo svuota, a campo vuoto la X chiama [onClose]; «indietro» la chiude sempre (lo
  *   scaffold). Il campo torna cerchio verso la pillola e la tastiera scende subito.
- * - [message]: la riga sopra la barra (una sola, piccola); [onMessageClick] la rende un tasto, detto da [messageActionLabel].
+ * - [line]: la riga sopra la barra (una sola, piccola: un segno, un'etichetta corta, una barra che avanza); [onLineClick] la rende un tasto, detto da
+ *   [lineActionLabel].
  */
 @Composable
 fun GallerySearchBar(
@@ -220,9 +231,9 @@ fun GallerySearchBar(
   focus: Boolean = false,
   onFocused: () -> Unit = {},
   onFocusChanged: (Boolean) -> Unit = {},
-  message: String? = null,
-  onMessageClick: (() -> Unit)? = null,
-  messageActionLabel: String? = null,
+  line: GallerySearchLineSpec? = null,
+  onLineClick: (() -> Unit)? = null,
+  lineActionLabel: String? = null,
 ) {
   val reduced = LocalFluidMotionPolicy.current.reducedMotion
   val keyboard = LocalSoftwareKeyboardController.current
@@ -270,7 +281,7 @@ fun GallerySearchBar(
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.spacedBy(GallerySearchBarDefaults.LineGap - (GalleryDimens.MinTouchTarget - GallerySearchBarDefaults.LineHeight) / 2),
     ) {
-      GallerySearchLine(message = message, onClick = onMessageClick, actionLabel = messageActionLabel, backdrop = backdrop, visible = { progress.value > 0.5f })
+      GallerySearchLine(line = line, onClick = onLineClick, actionLabel = lineActionLabel, backdrop = backdrop, visible = { progress.value > 0.5f })
       // CG-2 (giro 1): il vetro del campo ha la sua misura finale **dal primo fotogramma**. Il campo dell'engine richiudibile si allargava rimisurando
       // il nodo di vetro a ogni fotogramma (una cattura dello sfondo di misura nuova per fotogramma, la stessa classe di costo del pinch al 3,4-4%):
       // qui il campo e' sempre aperto, largo quanto la riga, e l'apertura e' una traslazione piu' un ritaglio letti nel disegno ([searchReveal]).
@@ -346,25 +357,27 @@ fun GallerySearchBar(
 }
 
 /**
- * La riga sopra la barra: una frase sola, piccola, su un pezzo di vetro della chrome (pellicola e inchiostro che reggono 4,5:1 su qualunque foto). Se si
- * tocca e' un tasto da 48 dp (il vetro visibile e' piu' basso). Entra ed esce in dissolvenza, mai cambiando misura mentre si anima.
+ * La riga sopra la barra (I2: «parla troppo» → un segno e al piu' due parole): su un pezzo di vetro della chrome (pellicola e inchiostro che reggono
+ * 4,5:1 su qualunque foto) un segno o un'anteprima ([GallerySearchLineSpec.icon], [GallerySearchLineSpec.art]), un'etichetta corta e, se c'e' qualcosa
+ * che avanza, la barra viva ([GallerySearchProgress]). TalkBack dice la frase intera ([GallerySearchLineSpec.description]). Se si tocca e' un tasto da
+ * 48 dp (il vetro visibile e' piu' basso). Entra ed esce in dissolvenza, mai cambiando misura mentre si anima.
  */
 @Composable
 private fun GallerySearchLine(
-  message: String?,
+  line: GallerySearchLineSpec?,
   onClick: (() -> Unit)?,
   actionLabel: String?,
   backdrop: GlassBackdropState?,
   visible: () -> Boolean,
 ) {
-  val shown = remember { mutableStateOf(message) }
-  if (message != null && message != shown.value) shown.value = message
+  val shown = remember { mutableStateOf(line) }
+  if (line != null && line != shown.value) shown.value = line
   AnimatedVisibility(
-    visible = message != null,
+    visible = line != null,
     enter = fadeIn(FluidMotion.fadeIn()),
     exit = fadeOut(FluidMotion.fadeOut()),
   ) {
-    val text = shown.value ?: return@AnimatedVisibility
+    val spec = shown.value ?: return@AnimatedVisibility
     val style = rememberAnyContentChromeStyle()
     val glass = backdrop ?: currentGlassBackdrop()
     Box(
@@ -375,32 +388,65 @@ private fun GallerySearchLine(
           if (onClick != null) {
             Modifier
               .fluidPressable(onClick = onClick, role = Role.Button, focusShape = FluidCapsuleShape)
-              .semantics { if (actionLabel != null) onClick(label = actionLabel) { onClick(); true } }
+              .clearAndSetSemantics {
+                contentDescription = spec.description
+                role = Role.Button
+                if (actionLabel != null) onClick(label = actionLabel) { onClick(); true }
+              }
           } else {
             // Come ogni pezzo della chrome (fase H, D2): un tocco sulla riga non apre il risultato dietro.
-            Modifier.holdsTouches().semantics { liveRegion = LiveRegionMode.Polite }
+            Modifier.holdsTouches().clearAndSetSemantics {
+              contentDescription = spec.description
+              liveRegion = LiveRegionMode.Polite
+            }
           },
         ),
       contentAlignment = Alignment.Center,
     ) {
-      Box(
+      Row(
         modifier = Modifier
           .heightIn(min = GallerySearchBarDefaults.LineHeight)
           .galleryGlass(state = glass, tint = style.tint, shape = FluidCapsuleShape, role = GlassRole.Floating)
-          .padding(horizontal = GalleryChromeDefaults.TextButtonPadding),
-        contentAlignment = Alignment.Center,
+          .padding(start = if (spec.art != null) LineArtInset else GalleryChromeDefaults.TextButtonPadding, end = GalleryChromeDefaults.TextButtonPadding),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(LineItemGap),
       ) {
-        Text(
-          text = text,
-          style = MaterialTheme.typography.labelLarge,
-          color = style.ink,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
+        val art = spec.art
+        val icon = spec.icon
+        if (art != null) {
+          Box(Modifier.size(LineArtSize).clip(FluidCapsuleShape)) { art() }
+        } else if (icon != null) {
+          Icon(imageVector = icon, contentDescription = null, tint = style.ink, modifier = Modifier.size(LineIconSize))
+        }
+        if (spec.progress != null || spec.busy) {
+          GallerySearchProgress(progress = spec.progress, ink = style.ink, modifier = Modifier.width(GallerySearchBarDefaults.LineBarWidth))
+        }
+        val text = spec.text
+        if (text != null) {
+          Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            color = style.ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+        }
       }
     }
   }
 }
+
+/** Il tondo dell'anteprima nella riga sopra la barra (la foto di "Trova simili"). */
+private val LineArtSize: Dp = 28.dp
+
+/** Fra il bordo sinistro della riga e il tondo dell'anteprima. */
+private val LineArtInset: Dp = 4.dp
+
+/** Il segno della riga. */
+private val LineIconSize: Dp = 18.dp
+
+/** Fra il segno, la barra e l'etichetta. */
+private val LineItemGap: Dp = 8.dp
 
 /**
  * Di quanto il campo e' spostato a destra durante l'apertura ([progress] da 0 a 1), in pixel: il suo capo sinistro (la lente, il bordo e l'ombra veri del

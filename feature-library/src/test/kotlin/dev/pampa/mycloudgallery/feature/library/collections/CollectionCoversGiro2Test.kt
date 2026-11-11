@@ -95,7 +95,7 @@ class CollectionCoversGiro2Test {
   private fun TestScope.permitted(gate: Gate): CollectionCovers {
     val covers = covers(gate.crops)
     gate.next.complete(permit())
-    backgroundScope.launch { covers.refresh(listOf(person), requestThumbs = false, facePx = PX) }
+    backgroundScope.launch { covers.refresh(listOf(person), facePx = PX) }
     runCurrent()
     assertWithMessage("permesso per la vista di adesso").that(covers.faceImage(face, PX)).isNotNull()
     return covers
@@ -183,7 +183,7 @@ class CollectionCoversGiro2Test {
     val covers = permitted(gate)
     // I fornitori danno un elenco nuovo (cambia solo un conto): la vista e' la stessa, il volto resta mentre il cancello riconferma.
     gate.suspend()
-    backgroundScope.launch { covers.refresh(listOf(person.copy(subtitle = "321 foto")), requestThumbs = false, facePx = PX) }
+    backgroundScope.launch { covers.refresh(listOf(person.copy(subtitle = "321 foto")), facePx = PX) }
     runCurrent()
     assertThat(covers.faceImage(face, PX)).isNotNull()
   }
@@ -191,7 +191,7 @@ class CollectionCoversGiro2Test {
   @Test
   fun mentreIlCatalogoCresceILuoghiSiPassanoConLaDoseEArrivaLUltimaVista() = runTest {
     val covers = covers()
-    backgroundScope.launch { covers.refresh(listOf(mapRow), requestThumbs = false, facePx = PX) }
+    backgroundScope.launch { covers.refresh(listOf(mapRow), facePx = PX) }
     runCurrent()
     assertWithMessage("la prima vista passa subito").that(covers.placePasses).isEqualTo(1)
 
@@ -222,12 +222,12 @@ class CollectionCoversGiro2Test {
   @Test
   fun laStessaVistaConGliStessiLuoghiNonSiRipassa() = runTest {
     val covers = covers()
-    val first = backgroundScope.launch { covers.refresh(listOf(mapRow), requestThumbs = false, facePx = PX) }
+    val first = backgroundScope.launch { covers.refresh(listOf(mapRow), facePx = PX) }
     runCurrent()
     first.cancel()
     assertThat(covers.placePasses).isEqualTo(1)
     // Un elenco nuovo dei fornitori, stessi luoghi, stessa vista: nessun passaggio nuovo.
-    backgroundScope.launch { covers.refresh(listOf(mapRow.copy(subtitle = "1.241 foto con la posizione")), requestThumbs = false, facePx = PX) }
+    backgroundScope.launch { covers.refresh(listOf(mapRow.copy(subtitle = "1.241 foto con la posizione")), facePx = PX) }
     advanceTimeBy(PassDose.PERIOD_MS * 3)
     runCurrent()
     assertThat(covers.placePasses).isEqualTo(1)

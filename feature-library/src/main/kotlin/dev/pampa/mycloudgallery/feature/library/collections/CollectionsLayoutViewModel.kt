@@ -198,9 +198,10 @@ class CollectionsLayoutViewModel private constructor(
   store: Optional<CollectionsLayoutStore>,
   loader: Optional<ThumbnailLoader>,
   faces: Optional<CollectionFaceCrops>,
+  map: Optional<CollectionsMapPreview>,
 ) : ViewModel() {
 
-  /** H5: con il caricatore delle miniature le voci delle Raccolte mostrano le loro copertine ([CollectionCovers]). */
+  /** H5: con il caricatore delle miniature le voci delle Raccolte mostrano le loro copertine ([CollectionCovers]). I1: e la mappa dei Luoghi. */
   @Inject constructor(
     source: CollectionItemsSource,
     intents: PhoneMediaIntents,
@@ -208,7 +209,8 @@ class CollectionsLayoutViewModel private constructor(
     store: Optional<CollectionsLayoutStore>,
     loader: ThumbnailLoader,
     faces: Optional<CollectionFaceCrops>,
-  ) : this(source, intents, providers, store, Optional.of(loader), faces)
+    map: Optional<CollectionsMapPreview>,
+  ) : this(source, intents, providers, store, Optional.of(loader), faces, map)
 
   /** Senza caricatore (le prove di `:app` che costruiscono la scheda a mano): solo icone. */
   constructor(
@@ -216,7 +218,10 @@ class CollectionsLayoutViewModel private constructor(
     intents: PhoneMediaIntents,
     providers: Set<CollectionsSectionProvider>,
     store: Optional<CollectionsLayoutStore>,
-  ) : this(source, intents, providers, store, Optional.empty(), Optional.empty())
+  ) : this(source, intents, providers, store, Optional.empty(), Optional.empty(), Optional.empty())
+
+  /** I1: la mappa in anteprima dei Luoghi (feature-map, legata da `:app`); null = il mosaico delle foto dei luoghi. */
+  internal val mapPreview: CollectionsMapPreview? = map.orElse(null)
 
   /** Le copertine delle voci: la stessa cache delle miniature e la Libreria visibile (mai un nascosto). Null = solo icone. */
   internal val covers: CollectionCovers? = loader.map { CollectionCovers(it, source.items(LibraryFilter.ALL), faces.orElse(null)) }.orElse(null)

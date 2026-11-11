@@ -6,6 +6,7 @@ import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Flight
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.LocationOff
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PhotoLibrary
@@ -31,6 +32,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntryGroup
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionSections
+import dev.pampa.mycloudgallery.feature.library.collections.EntryShape
 import dev.pampa.mycloudgallery.feature.library.collections.FixedCollectionsSection
 
 // Le sezioni degli altri pacchetti "come se ci fossero" (D33): per i test, gli screenshot e per chi sviluppa una sezione senza aspettare
@@ -97,7 +99,7 @@ object CollectionsSectionSamples {
         listOf(
           CollectionEntry(
             "people/enable", "Attiva riconoscimento dei volti", "Raggruppa le foto per persona",
-            Icons.Rounded.Face, FluidTone.Primary,
+            Icons.Rounded.Face, FluidTone.Primary, shape = EntryShape.Notice,
           ),
         )
       },
@@ -154,14 +156,18 @@ object CollectionsSectionSamples {
    */
   fun production(resources: Resources, photos: List<MediaId>, faces: List<FaceLocator>, fresh: Boolean = false): List<FixedCollectionsSection> {
     fun photo(n: Int): MediaId = photos[(n * 37) % photos.size]
+    fun face(n: Int): List<FaceLocator> = if (faces.isEmpty()) emptyList() else listOf(faces[n % faces.size])
     val trips = FixedCollectionsSection(
       CollectionSections.TRIPS,
       if (fresh) null else CollectionEntryGroup(
         title = "Viaggi",
         code = CollectionSections.TRIPS,
         entries = listOf(
-          CollectionEntry("trip/t1", "Toscana, agosto 2025", "Viaggio · 640 elementi", Icons.Rounded.Flight, FluidTone.Info, cover = photo(3)),
-          CollectionEntry("trip/t2", "Sabato 12 aprile 2025", "Evento · 96 elementi", Icons.Rounded.Event, FluidTone.Info, cover = photo(11)),
+          // I1: come le consegna `:app` (`toTripsGroup`): schede larghe con "Viaggio" o "Evento", e "Tutti i viaggi" come "tutti".
+          CollectionEntry("trip/t1", "Toscana, agosto 2025", "Viaggio · 640 elementi", Icons.Rounded.Flight, FluidTone.Info, cover = photo(3), shape = EntryShape.Card, caption = "Viaggio"),
+          CollectionEntry("trip/t2", "Sabato 12 aprile 2025", "Evento · 96 elementi", Icons.Rounded.Event, FluidTone.Info, cover = photo(11), shape = EntryShape.Card, caption = "Evento"),
+          CollectionEntry("trip/t3", "Lisbona, maggio 2025", "Viaggio · 212 elementi", Icons.Rounded.Flight, FluidTone.Info, cover = photo(29), shape = EntryShape.Card, caption = "Viaggio"),
+          CollectionEntry("trips/all", "Tutti i viaggi", "", Icons.Rounded.PhotoLibrary, FluidTone.Neutral, shape = EntryShape.More),
         ),
       ),
     )
@@ -173,10 +179,16 @@ object CollectionsSectionSamples {
         CollectionEntryGroup(
           title = "Persone",
           code = CollectionSections.PEOPLE,
+          // I1: come le consegna `:app` (`FacesScreenPorts.toGroup`): una scheda con il volto per persona (senza nome: solo il volto), "Tutte le
+          // persone" come "tutti", "Altri volti" come segno sotto il carosello.
           entries = listOf(
-            CollectionEntry("person/p1", "Giulia", "212 foto", Icons.Rounded.Person, FluidTone.Primary, faces = faces.take(1)),
-            CollectionEntry("person/p2", "Marco", "148 foto", Icons.Rounded.Person, FluidTone.Primary, faces = faces.drop(1).take(1)),
-            CollectionEntry("people/all", "Tutte le persone", "5 persone", Icons.Rounded.Group, FluidTone.Neutral, faces = faces.take(3)),
+            CollectionEntry("people/person/p1", "Giulia", "212 foto", Icons.Rounded.Person, FluidTone.Primary, faces = face(0), shape = EntryShape.Card),
+            CollectionEntry("people/person/p2", "Marco", "148 foto", Icons.Rounded.Person, FluidTone.Primary, faces = face(1), shape = EntryShape.Card),
+            CollectionEntry("people/person/p3", "Anna", "96 foto", Icons.Rounded.Person, FluidTone.Primary, faces = face(2), shape = EntryShape.Card),
+            CollectionEntry("people/person/p4", "Persona senza nome", "41 foto", Icons.Rounded.Person, FluidTone.Neutral, faces = face(3), shape = EntryShape.Card, showTitle = false),
+            CollectionEntry("people/person/p5", "Luca", "33 foto", Icons.Rounded.Person, FluidTone.Primary, faces = face(4), shape = EntryShape.Card),
+            CollectionEntry("people/all", "Tutte le persone", "7 persone", Icons.Rounded.Group, FluidTone.Neutral, faces = faces.take(3), shape = EntryShape.More),
+            CollectionEntry("people/others", "Altri volti (3)", "Dai un nome a chi riconosci, o falli dimenticare", Icons.Rounded.Face, FluidTone.Info, shape = EntryShape.Notice),
           ),
         ),
       )
@@ -187,13 +199,14 @@ object CollectionsSectionSamples {
         title = "Ricordi",
         code = CollectionSections.MEMORIES,
         entries = if (fresh) {
-          listOf(CollectionEntry("memories/empty", "Ancora nessun ricordo", "Arrivano quando ci sono abbastanza foto", Icons.Rounded.AutoAwesome, FluidTone.Neutral))
+          listOf(CollectionEntry("memories/empty", "Ancora nessun ricordo", "Arrivano quando ci sono abbastanza foto", Icons.Rounded.AutoAwesome, FluidTone.Neutral, shape = EntryShape.Notice))
         } else {
+          // I1: come le consegna `:app` (`MemoriesScreenPorts.toGroup`): schede larghe con il mese, "Tutti i ricordi" come "tutti".
           listOf(
-            CollectionEntry("m_1", "Un anno fa", "18 foto · ottobre 2025", Icons.Rounded.History, FluidTone.Primary, trailing = "Nuovo", cover = photo(5)),
-            CollectionEntry("m_2", "Estate al mare", "42 foto · agosto 2025", Icons.Rounded.Flight, FluidTone.Neutral, cover = photo(17)),
-            CollectionEntry("m_3", "Il meglio di ottobre 2026", "60 foto", Icons.Rounded.CalendarMonth, FluidTone.Neutral, cover = photo(23)),
-            CollectionEntry("memories/all", "Tutti i ricordi", "3 ricordi", Icons.Rounded.PhotoLibrary, FluidTone.Neutral),
+            CollectionEntry("m_1", "Un anno fa", "18 foto · ottobre 2025", Icons.Rounded.History, FluidTone.Primary, trailing = "Nuovo", cover = photo(5), shape = EntryShape.Card, caption = "ottobre 2025"),
+            CollectionEntry("m_2", "Estate al mare", "42 foto · agosto 2025", Icons.Rounded.Flight, FluidTone.Neutral, cover = photo(17), shape = EntryShape.Card, caption = "agosto 2025"),
+            CollectionEntry("m_3", "Il meglio di ottobre 2026", "60 foto", Icons.Rounded.CalendarMonth, FluidTone.Neutral, cover = photo(23), shape = EntryShape.Card),
+            CollectionEntry("memories/all", "Tutti i ricordi", "3 ricordi", Icons.Rounded.PhotoLibrary, FluidTone.Neutral, shape = EntryShape.More),
           )
         },
       ),
@@ -204,12 +217,16 @@ object CollectionsSectionSamples {
         title = "Luoghi",
         code = CollectionSections.PLACES,
         entries = if (fresh) {
-          listOf(CollectionEntry("map", "Mappa", "Nessuna foto con la posizione", Icons.Rounded.Map, FluidTone.Info))
+          listOf(
+            CollectionEntry("map", "Mappa", "Nessuna foto con la posizione", Icons.Rounded.Map, FluidTone.Info, shape = EntryShape.Map),
+            CollectionEntry("places_nogps", "2.310 senza posizione", "Foto senza posizione", Icons.Rounded.LocationOff, FluidTone.Neutral, shape = EntryShape.Notice),
+          )
         } else {
-          listOf(CollectionEntry("map", "Mappa", "1.240 foto con la posizione", Icons.Rounded.Map, FluidTone.Info, coverPlaces = PRODUCTION_PLACES.take(4).map { it.first })) +
+          // I1: come le consegna `:app` (`MapScreenPorts.toGroup`): la mappa in anteprima, una scheda per luogo, i senza posizione come segno.
+          listOf(CollectionEntry("map", "Mappa", "1.240 foto con la posizione", Icons.Rounded.Map, FluidTone.Info, coverPlaces = PRODUCTION_PLACES.take(4).map { it.first }, shape = EntryShape.Map)) +
             PRODUCTION_PLACES.mapIndexed { i, (id, name) ->
-              CollectionEntry("place_$id", name, listOf("320 foto", "88 foto", "61 foto", "24 foto")[i], Icons.Rounded.Place, FluidTone.Neutral, coverPlace = id)
-            }
+              CollectionEntry("place_$id", name, listOf("320 foto", "88 foto", "61 foto", "24 foto")[i], Icons.Rounded.Place, FluidTone.Neutral, coverPlace = id, shape = EntryShape.Card)
+            } + CollectionEntry("places_nogps", "312 senza posizione", "Foto senza posizione", Icons.Rounded.LocationOff, FluidTone.Neutral, shape = EntryShape.Notice)
         },
       ),
     )

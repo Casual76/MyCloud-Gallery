@@ -69,6 +69,10 @@ abstract class CollectionsPortsModule {
   @BindsOptionalOf
   abstract fun collectionFaceCrops(): CollectionFaceCrops
 
+  /** I1: la mappa in anteprima dei Luoghi (feature-map, legata da `:app`); senza, il mosaico delle foto dei luoghi. */
+  @BindsOptionalOf
+  abstract fun collectionsMapPreview(): CollectionsMapPreview
+
   /** I fornitori delle sezioni: l'insieme esiste anche vuoto (nessun pacchetto ne ha ancora registrato uno). */
   @Multibinds
   abstract fun collectionsSectionProviders(): Set<CollectionsSectionProvider>

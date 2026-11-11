@@ -34,6 +34,10 @@ import dev.pampa.mycloudgallery.core.model.MediaId
  *   0 = nessuno.
  * @property coverPlaces CU-15 (giro 2): i luoghi (id GeoNames) di un mosaico: la piastrella della "Mappa" mostra fino a quattro foto, una per luogo,
  *   come i quadrati di una carta, con il segno della mappa nell'angolo; vuoto = nessun mosaico.
+ * @property shape I1 (fase I): come la voce si mostra nella scheda Raccolte ([EntryShape]); null = si ricava dai dati ([resolvedShape]).
+ * @property caption I1: la riga piccola sotto il titolo di una scheda grande (il mese di un ricordo, "Viaggio"); null = solo il titolo. La frase
+ *   intera ([subtitle]) resta per TalkBack.
+ * @property showTitle I1: falso = la scheda non scrive il titolo (una persona senza nome: solo il volto); TalkBack lo dice comunque.
  */
 @Immutable
 data class CollectionEntry(
@@ -48,6 +52,9 @@ data class CollectionEntry(
   val faces: List<FaceLocator> = emptyList(),
   val coverPlace: Int = 0,
   val coverPlaces: List<Int> = emptyList(),
+  val shape: EntryShape? = null,
+  val caption: String? = null,
+  val showTitle: Boolean = true,
 ) {
   init {
     require(code.isNotBlank()) { "Una voce ha un codice." }
@@ -55,7 +62,28 @@ data class CollectionEntry(
   }
 
   override fun toString(): String = "CollectionEntry($code, badge=$badge)"
+
+  /** La forma di adesso: quella dichiarata, o quella che i dati dicono (la mappa, una foto o dei volti, altrimenti una piastrella). */
+  val resolvedShape: EntryShape
+    get() = shape ?: when {
+      coverPlaces.isNotEmpty() -> EntryShape.Map
+      cover != null || faces.isNotEmpty() || coverPlace > 0 -> EntryShape.Card
+      else -> EntryShape.Tile
+    }
 }
+
+/**
+ * I1 (fase I, 11/11: "le Raccolte come una galleria, non come un elenco"). Come una voce sta nella sua sezione, che non e' piu' una lista di righe:
+ *
+ * - [Card]: una scheda grande con la foto (un ricordo, un viaggio, un luogo) o con il volto (una persona), nel carosello orizzontale della sezione;
+ * - [Map]: la mappa in anteprima in cima alla sezione (i Luoghi);
+ * - [More]: "tutti": il titolo della sezione diventa toccabile, con la freccia, e il carosello finisce con una scheda che porta li';
+ * - [Notice]: lo stato della sezione (Persone spenta, i ricordi in preparazione, le foto senza posizione): un invito con un'icona, non una frase;
+ * - [Tile]: una piastrella compatta con l'icona (Utility, NAS, Nascosti): niente foto dell'utente da mostrare.
+ *
+ * Chi consegna la sezione la dichiara ([CollectionEntry.shape]); senza, si ricava dai dati ([CollectionEntry.resolvedShape]).
+ */
+enum class EntryShape { Card, Map, More, Notice, Tile }
 
 /**
  * Una **sezione** delle Raccolte come dato (D33, §2.7): un'intestazione e le sue righe, costruita da chi la possiede (Album: P3 e P10,

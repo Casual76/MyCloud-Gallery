@@ -78,15 +78,17 @@ class CollectionsListPhoneTest : ComposeScreenTest() {
   fun lePagineFiltroDiconoQuantiElementiHannoEINascostiNo() {
     showList(productionRows(counts = mapOf(dev.pampa.mycloudgallery.feature.library.utility.UtilityPage.EDITED to 37)))
 
-    composeRule.onNodeWithText("37 elementi").assertExists()
-    composeRule.onNodeWithText("Dietro lo sblocco").assertExists()
+    // I1 (fase I): sulle piastrelle si vede l'etichetta; il conto e la frase li dice TalkBack. I Nascosti non dicono mai quanti sono (E-H1).
+    composeRule.onNode(hasContentDescription("Modificate, 37 elementi")).assertExists()
+    composeRule.onNode(hasContentDescription("Nascosti, Dietro lo sblocco")).assertExists()
+    composeRule.onAllNodesWithText("37 elementi").assertCountEquals(0)
   }
 
   @Test
   fun unaPaginaSenzaConteggioDiceNessunElemento() {
     showList()
 
-    composeRule.onAllNodesWithText("Nessun elemento").assertCountEquals(1)
+    composeRule.onAllNodes(hasContentDescription("Nessun elemento", substring = true)).assertCountEquals(1)
   }
 
   @Test

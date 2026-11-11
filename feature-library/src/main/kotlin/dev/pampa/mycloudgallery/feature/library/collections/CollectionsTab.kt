@@ -2,7 +2,9 @@ package dev.pampa.mycloudgallery.feature.library.collections
 
 import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import dev.pampa.mycloudgallery.core.designsystem.instant.onFirstDraw
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Collections
@@ -26,7 +28,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidDetailContent
 import dev.antigravity.fluidengine.ui.fluid.FluidDetailPlaceholder
 import dev.antigravity.fluidengine.ui.fluid.FluidListDetailScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.antigravity.fluidengine.ui.fluid.FluidScreenDefaults
+import dev.antigravity.fluidengine.ui.fluid.fluidScreenPadding
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.FluidPaneSizes
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
@@ -89,8 +92,8 @@ fun CollectionsTab(
   val state = remember(inputs, extraGroups) {
     CollectionsLayout.state(inputs.present, extraGroups, inputs.saved, inputs.hidden, inputs.editing, inputs.saveFailed)
   }
-  // H5: le copertine delle voci (l'ultimo ricordo, i viaggi) dalla stessa cache delle miniature.
-  CompositionLocalProvider(LocalCollectionCovers provides viewModel.covers) {
+  // H5: le copertine delle voci (l'ultimo ricordo, i viaggi) dalla stessa cache delle miniature. I1: e la mappa in anteprima dei Luoghi (feature-map, da :app).
+  CompositionLocalProvider(LocalCollectionCovers provides viewModel.covers, LocalCollectionsMapPreview provides viewModel.mapPreview) {
   CollectionsScreen(
     state = state,
     contentPadding = contentPadding,
@@ -250,16 +253,23 @@ private fun CollectionsList(
   onReorder: (List<String>) -> Unit,
   onSetShown: (String, Boolean) -> Unit,
 ) {
-  // H5: le miniature delle copertine si chiedono qui, una volta per elenco (non a ogni scorrimento). Sul tablet no: il pannello accanto puo' essere
-  // una griglia con la sua finestra di richieste, e le copertine li' compaiono se sono gia' in cache.
+  // H5: le copertine si preparano qui, una volta per elenco (non a ogni scorrimento). I1: le miniature si chiedono per le sole schede vicine allo
+  // schermo ([CoverViewport]), alla taglia delle schede. Sul tablet con un pannello aperto accanto no: puo' essere una griglia con la sua finestra di
+  // richieste, e le copertine li' compaiono se sono gia' in cache.
   val covers = LocalCollectionCovers.current
+  val viewport = remember { CoverViewport() }
   if (covers != null && !state.editing) {
-    val entries = remember(state) {
-      state.visibleRows.mapNotNull { (it as? SectionRow.Entry)?.entry?.takeIf { e -> e.cover != null || e.faces.isNotEmpty() || e.coverPlace > 0 || e.coverPlaces.isNotEmpty() } }
-    }
-    CollectionCoverWindow(covers, entries, requestThumbs = !twoPane)
+    val entries = remember(state) { state.visible.flatMap { it.coverEntries() } }
+    CollectionCoverWindow(covers, entries, viewport, requestThumbs = !twoPane || (selectedKind == null && selectedEntry == null))
   }
+  val listState = rememberLazyListState()
+  val scrolling = remember(listState) { { listState.isScrollInProgress } }
+  BoxWithConstraints {
+  // I1: i caroselli sporgono fino al bordo: il margine e' quello che FluidScreen da' alla colonna in questo pannello.
+  val gutter = fluidScreenPadding(maxWidth, FluidScreenDefaults.HorizontalPadding, FluidScreenDefaults.ContentMaxWidth)
+  CompositionLocalProvider(LocalCollectionsGutter provides gutter, LocalCoverViewport provides viewport, LocalCollectionsScrolling provides scrolling) {
   FluidScreen(
+    listState = listState,
     title = stringResource(if (state.editing) R.string.collections_edit_title else R.string.collections_title),
     actions = {
       // Un solo gruppo di tasti per volta: in modifica c'e' "Fine" e basta, cosi' nessun comando sta accanto a un altro che non c'entra.
@@ -303,11 +313,9 @@ private fun CollectionsList(
         )
       }
     }
-    for (section in state.visible) {
-      item(key = "header-${section.code}") { GallerySectionHeader(title = section.title.resolve()) }
-      item(key = "section-${section.code}") {
-        SectionGroup(section, selectedKind, selectedEntry, twoPane, onSelectKind, onSelectEntry)
-      }
-    }
+    // I1: ogni sezione e' un titolo e un carosello di schede grandi (o la mappa, o le piastrelle): CollectionsGallery.kt.
+    collectionsGallery(state, selectedKind, selectedEntry, onSelectKind, onSelectEntry)
+  }
+  }
   }
 }

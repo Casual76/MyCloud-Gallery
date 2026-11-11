@@ -6,8 +6,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -17,23 +18,24 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
-import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.theme.FluidTone
-import dev.antigravity.fluidengine.ui.theme.FluidToneTileSize
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconColors
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
+import dev.pampa.mycloudgallery.core.designsystem.icon.rememberGalleryIconColors
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbKey
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbRequest
@@ -56,6 +58,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -165,22 +168,39 @@ class CollectionCovers(
 
   private fun inView(view: TimelineView, origins: Set<MediaId>): Boolean = origins.any { view.viewIndexOf(it) >= 0 }
 
-  /** La richiesta della miniatura di [media] in [view], o null se il media non e' nella Libreria visibile (un nascosto, un eliminato). */
-  fun request(view: TimelineView, media: MediaId): ThumbRequest? {
+  /**
+   * La richiesta della miniatura di [media] in [view] alla taglia [bucket], o null se il media non e' nella Libreria visibile (un nascosto, un
+   * eliminato). I1: le schede grandi chiedono la taglia che copre il loro lato ([CollectionCardBucket]), le righe la M di sempre.
+   */
+  fun request(view: TimelineView, media: MediaId, bucket: ThumbBucket = ThumbBucket.M): ThumbRequest? {
     val viewIndex = view.viewIndexOf(media)
     if (viewIndex < 0) return null
     val ref = library.refOrNull(media) ?: return null
     val index = view.snapshotIndex(viewIndex)
     val version = (view.snapshot as? ColumnarTimelineSnapshot)?.versionKeyAt(index) ?: MediaGridState.DefaultVersionKey
-    return ThumbRequest(ThumbKey(media, version, ThumbBucket.M), ref)
+    return ThumbRequest(ThumbKey(media, version, bucket), ref)
+  }
+
+  /** I1: la foto di una voce: la sua copertina, o quella del suo luogo; null se non ce n'e' (o non ancora cercata). Legge lo stato dei luoghi. */
+  fun mediaOf(entry: CollectionEntry): MediaId? = entry.cover ?: placeCover(entry.coverPlace)
+
+  /**
+   * I1: la finestra delle miniature delle schede vicine allo schermo ([visible] sullo schermo, [ahead] subito dopo nei caroselli), alla taglia
+   * [bucket], sulla vista [view]: **una** chiamata per tutta la scheda (la finestra annulla cio' che non contiene, quindi non si chiama da ogni
+   * carosello). Le voci senza foto o con una foto fuori dalla Libreria visibile non chiedono niente.
+   */
+  fun window(view: TimelineView, visible: List<MediaId>, ahead: List<MediaId>, bucket: ThumbBucket) {
+    val now = visible.distinct().mapNotNull { request(view, it, bucket) }
+    val next = (ahead.distinct() - visible.toSet()).mapNotNull { request(view, it, bucket) }
+    if (now.isNotEmpty() || next.isNotEmpty()) loader.window(now, next)
   }
 
   /**
    * Prepara le copertine di [entries] per l'indice di adesso e per ogni suo cambiamento: cerca le foto dei luoghi (un passaggio, fuori dal thread
-   * principale), chiede le miniature una volta sola ([requestThumbs]: falso sul tablet, dove la finestra e' della griglia accanto) e ritaglia i
-   * volti a [facePx]. Gira finche' la scheda e' composta; una nuova chiamata (elenco cambiato) sostituisce la precedente.
+   * principale) e ritaglia i volti a [facePx]. Le miniature NON si chiedono qui (I1): le chiede la finestra delle schede vicine allo schermo
+   * ([window], da [CollectionCoverWindow]). Gira finche' la scheda e' composta; una nuova chiamata (elenco cambiato) sostituisce la precedente.
    */
-  suspend fun refresh(entries: List<CollectionEntry>, requestThumbs: Boolean, facePx: Int): Unit = coroutineScope {
+  suspend fun refresh(entries: List<CollectionEntry>, facePx: Int): Unit = coroutineScope {
     val places = entries.flatMapTo(HashSet()) { e -> (e.coverPlaces + e.coverPlace).filter { it > 0 } }
     val faces = entries.flatMap { it.faces }.distinct()
     val wanted = faces.mapTo(HashSet()) { faceKey(it, facePx) }
@@ -194,11 +214,11 @@ class CollectionCovers(
     }
     // La dose (giro 2): il passaggio dei luoghi e le richieste delle miniature al piu' una volta al secondo mentre il catalogo cresce, e sempre
     // sull'ultimo indice. In fila, senza interrompere un passaggio a meta' (un passaggio interrotto e' lavoro buttato).
-    dose.apply(view).collect { current -> placesPass(current, entries, places, requestThumbs) }
+    dose.apply(view).collect { current -> placesPass(current, places) }
   }
 
-  /** Il passaggio dei luoghi e le richieste delle miniature per [current]; un indice gia' passato con gli stessi luoghi non si ripassa. */
-  private suspend fun placesPass(current: TimelineView, entries: List<CollectionEntry>, places: Set<Int>, requestThumbs: Boolean) {
+  /** Il passaggio dei luoghi per [current]; un indice gia' passato con gli stessi luoghi non si ripassa. */
+  private suspend fun placesPass(current: TimelineView, places: Set<Int>) {
     val previous = lastPass
     val found = when {
       places.isEmpty() -> emptyMap()
@@ -208,11 +228,6 @@ class CollectionCovers(
     lastPass = current to places
     placeCovers.keys.retainAll(found.keys)
     placeCovers.putAll(found)
-    if (requestThumbs) {
-      val media = (entries.mapNotNull { it.cover } + found.values).distinct()
-      val requests = media.mapNotNull { request(current, it) }
-      if (requests.isNotEmpty()) loader.window(requests, emptyList())
-    }
   }
 
   /**
@@ -302,21 +317,76 @@ val LocalCollectionCovers = staticCompositionLocalOf<CollectionCovers?> { null }
 internal val CollectionRowArtSize: Dp get() = CollectionsDimens.RowArt
 
 /**
- * Prepara le copertine di [entries] (foto, luoghi, volti) **una volta** per elenco, e di nuovo solo se l'elenco o la Libreria cambiano: non a ogni
- * scorrimento. [requestThumbs] falso sul tablet: il pannello accanto puo' essere una griglia, che ha la sua finestra di richieste e non va
- * disturbata; li' la foto c'e' se e' gia' in cache (i volti e i luoghi invece si preparano lo stesso: non toccano la finestra).
+ * I1: il lato dei ritagli dei volti delle schede delle persone: l'altezza della scheda (il volto la riempie), al piu' [FACE_MAX_PX] come gli avatar di
+ * feature-people (`PeopleDimens.CropMaxPx`), cosi' sul telefono la scheda e la griglia di "Tutte le persone" chiedono lo stesso ritaglio alla stessa
+ * cache e nessuno lo ritaglia due volte.
  */
 @Composable
-internal fun CollectionCoverWindow(covers: CollectionCovers, entries: List<CollectionEntry>, requestThumbs: Boolean) {
-  val facePx = with(LocalDensity.current) { CollectionRowArtSize.roundToPx() }
-  LaunchedEffect(covers, entries, requestThumbs, facePx) {
-    if (entries.isNotEmpty()) covers.refresh(entries, requestThumbs, facePx)
+internal fun collectionFacePx(): Int = with(LocalDensity.current) { CollectionsDimens.PersonCardHeight.roundToPx() }.coerceAtMost(FACE_MAX_PX)
+
+/** Il tetto dei ritagli, lo stesso degli avatar di feature-people. */
+internal const val FACE_MAX_PX = 384
+
+/**
+ * I1: la taglia delle miniature delle schede grandi: la piu' piccola della cache che copre il lato lungo della scheda piu' larga (di fatto la L, la
+ * piu' grande che la cache ha: la M delle righe a tutta scheda si sgranerebbe). Le foto appuntate sulla mappa usano la stessa, cosi' sono le stesse
+ * miniature delle schede dei luoghi (una decodifica sola).
+ */
+@Composable
+internal fun collectionCardBucket(): ThumbBucket = ThumbBucket.covering(with(LocalDensity.current) { CollectionsDimens.WideCardWidth.roundToPx() })
+
+/**
+ * I1: le schede **vicine allo schermo**. Ogni carosello (e la mappa) dice quali sue voci si vedono e quali stanno per entrare; quando un carosello esce
+ * dalla composizione (la colonna lo ha lasciato lontano) se ne va anche da qui. [CollectionCoverWindow] ne fa **una** finestra di miniature per tutta la
+ * scheda.
+ */
+@Stable
+internal class CoverViewport {
+  private class Near(val visible: List<CollectionEntry>, val ahead: List<CollectionEntry>)
+
+  private val near = mutableStateMapOf<String, Near>()
+
+  fun report(key: String, visible: List<CollectionEntry>, ahead: List<CollectionEntry>) {
+    near[key] = Near(visible, ahead)
+  }
+
+  fun drop(key: String) {
+    near.remove(key)
+  }
+
+  fun visible(): List<CollectionEntry> = near.values.flatMap { it.visible }
+
+  fun ahead(): List<CollectionEntry> = near.values.flatMap { it.ahead }
+}
+
+/** Le schede vicine allo schermo della scheda di adesso; null fuori dalle Raccolte (le righe di altri moduli non ne hanno bisogno). */
+internal val LocalCoverViewport = staticCompositionLocalOf<CoverViewport?> { null }
+
+/**
+ * Prepara le copertine di [entries] (luoghi e volti) **una volta** per elenco, e di nuovo solo se l'elenco o la Libreria cambiano: non a ogni
+ * scorrimento. I1: le miniature si chiedono per le sole schede vicine allo schermo ([viewport]) alla taglia delle schede, in **una** finestra per tutta
+ * la scheda, rifatta quando cambia cio' che e' vicino o la Libreria (con la stessa dose dei luoghi: al piu' una volta al secondo mentre il catalogo
+ * cresce). [requestThumbs] falso sul tablet con un pannello accanto: li' la finestra e' della griglia, e le schede mostrano cio' che e' gia' in cache.
+ */
+@Composable
+internal fun CollectionCoverWindow(covers: CollectionCovers, entries: List<CollectionEntry>, viewport: CoverViewport, requestThumbs: Boolean) {
+  val facePx = collectionFacePx()
+  LaunchedEffect(covers, entries, facePx) {
+    if (entries.isNotEmpty()) covers.refresh(entries, facePx)
+  }
+  val bucket = collectionCardBucket()
+  LaunchedEffect(covers, viewport, requestThumbs, bucket) {
+    if (!requestThumbs) return@LaunchedEffect
+    val near = snapshotFlow { viewport.visible().mapNotNull(covers::mediaOf) to viewport.ahead().mapNotNull(covers::mediaOf) }.distinctUntilChanged()
+    combine(PassDose().apply(covers.view), near) { view, wanted -> view to wanted }
+      .collectLatest { (view, wanted) -> covers.window(view, wanted.first, wanted.second, bucket) }
   }
 }
 
 /**
- * La famiglia di una voce: il colore della sua piastrella quando non c'e' una foto. Una famiglia per sezione, dai colori del tema, cosi' la pagina
- * si legge a colpo d'occhio (le persone, i ricordi, i luoghi, il NAS, le utilita') e i posti protetti hanno un aspetto loro, scuro su chiaro.
+ * La famiglia di una voce: il colore della sua piastrella quando non c'e' una foto. Una famiglia per sezione, cosi' la pagina si legge a colpo d'occhio
+ * (le persone, i ricordi, i luoghi, il NAS, le utilita') e i posti protetti hanno un aspetto loro. I1: i colori sono quelli del componente condiviso
+ * delle icone ([GalleryIconFamily], I3), la stessa lingua di Impostazioni e Backup.
  */
 enum class CollectionArtFamily {
   People, Memories, Places, Trips, Nas, Utility, Protected, Other;
@@ -336,48 +406,30 @@ enum class CollectionArtFamily {
   }
 }
 
-/** I colori di una famiglia: il fondo (in sfumatura) e l'icona. */
-private class ArtColors(val from: Color, val to: Color, val ink: Color)
-
-@Composable
-private fun artColors(family: CollectionArtFamily, tone: FluidTone): ArtColors {
-  val scheme = MaterialTheme.colorScheme
-  fun pair(container: Color, strong: Color, ink: Color) = ArtColors(container, lerp(container, strong, ART_DEPTH), ink)
-  return when (family) {
-    CollectionArtFamily.People, CollectionArtFamily.Trips -> pair(scheme.primaryContainer, scheme.primary, scheme.onPrimaryContainer)
-    CollectionArtFamily.Memories, CollectionArtFamily.Utility -> pair(scheme.tertiaryContainer, scheme.tertiary, scheme.onTertiaryContainer)
-    CollectionArtFamily.Places, CollectionArtFamily.Nas -> pair(scheme.secondaryContainer, scheme.secondary, scheme.onSecondaryContainer)
-    // I posti protetti sono scuri su chiaro, e in tema scuro **grafite** con il segno chiaro (CU-18, giro 2): l'inverso del tema scuro e' bianco, la
-    // cosa piu' luminosa della pagina sulla voce piu' riservata.
-    CollectionArtFamily.Protected -> if (scheme.surface.luminance() < DARK_SURFACE) {
-      ArtColors(scheme.surfaceContainerHighest, lerp(scheme.surfaceContainerHighest, scheme.primaryContainer, ART_DEPTH), scheme.onSurface)
-    } else {
-      ArtColors(scheme.inverseSurface, lerp(scheme.inverseSurface, scheme.primary, ART_DEPTH), scheme.inverseOnSurface)
-    }
-    CollectionArtFamily.Other -> when (tone) {
-      FluidTone.Danger -> pair(scheme.errorContainer, scheme.error, scheme.onErrorContainer)
-      FluidTone.Neutral -> pair(scheme.surfaceContainerHighest, scheme.secondary, scheme.onSurface)
-      else -> pair(scheme.primaryContainer, scheme.primary, scheme.onPrimaryContainer)
-    }
+/**
+ * I1: la famiglia del componente condiviso per una voce della famiglia [family] con il tono [tone] e l'icona [icon]: il cestino e' sempre "pericolo"
+ * (lo stesso segno di Impostazioni), le altre voci prendono il colore della loro sezione.
+ */
+internal fun iconFamilyOf(family: CollectionArtFamily, tone: FluidTone, icon: ImageVector? = null): GalleryIconFamily = when {
+  icon == Icons.Rounded.Delete || tone == FluidTone.Danger -> GalleryIconFamily.Danger
+  else -> when (family) {
+    CollectionArtFamily.People -> GalleryIconFamily.People
+    CollectionArtFamily.Memories, CollectionArtFamily.Trips -> GalleryIconFamily.Memories
+    CollectionArtFamily.Places -> GalleryIconFamily.Places
+    CollectionArtFamily.Nas -> GalleryIconFamily.Backup
+    CollectionArtFamily.Utility -> GalleryIconFamily.System
+    CollectionArtFamily.Protected -> GalleryIconFamily.Security
+    CollectionArtFamily.Other -> GalleryIconFamily.Photos
   }
 }
 
-/** Sotto questa luminanza il fondo della pagina e' quello del tema scuro. */
-private const val DARK_SURFACE = 0.5f
-
-/** Quanto del colore pieno entra nell'angolo in basso della sfumatura: abbastanza per dare profondita', poco per non far gridare la piastrella. */
-private const val ART_DEPTH = 0.42f
-
-/** La forma della piastrella (il raggio segue il lato, come in `FluidToneTile`). */
-private fun artShape(side: Dp) = ContinuousCornerShape(FluidRadius.Small * (side / FluidToneTileSize))
-
 /** La forma di un volto: un tondo continuo. */
-private fun faceShape(side: Dp) = ContinuousCornerShape(side / 2)
+internal fun faceShape(side: Dp) = ContinuousCornerShape(side / 2)
 
 /**
- * La piastrella di una riga delle Raccolte: la foto ([cover], o quella del luogo [coverPlace]), il mosaico dei luoghi ([coverPlaces]: la Mappa), i
- * volti ([faces]: uno pieno, due o tre raccolti), o l'icona sul colore della famiglia [family]. Senza copertine ([LocalCollectionCovers] null), o
- * finche' non sono pronte, la piastrella della famiglia.
+ * La piastrella di una riga delle Raccolte (le righe che restano: le prove e le pagine degli altri moduli): la foto ([cover], o quella del luogo
+ * [coverPlace]), il mosaico dei luoghi ([coverPlaces]), i volti ([faces]), o l'icona sul colore della famiglia [family] (il componente condiviso).
+ * Senza copertine ([LocalCollectionCovers] null), o finche' non sono pronte, la piastrella della famiglia.
  */
 @Composable
 internal fun CollectionRowArt(
@@ -395,76 +447,87 @@ internal fun CollectionRowArt(
   val media = if (covers == null) null else cover ?: covers.placeCover(coverPlace)
   val mosaic = if (covers == null || media != null) emptyList() else coverPlaces.take(MOSAIC_CELLS).mapNotNull { covers.placeCover(it) }
   val faceImages = if (covers == null || media != null) emptyList() else faces.take(MAX_FACES).mapNotNull { covers.faceImage(it, px) }
-  Box(modifier = Modifier.size(side)) {
-    val colors = artColors(family, tone)
-    val shape = artShape(side)
-    // Un volto solo e' un tondo pieno: senza la piastrella sotto, che ne lascerebbe vedere gli angoli.
-    if (faceImages.size == 1) {
-      Image(bitmap = faceImages[0], contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize().clip(faceShape(side)))
-      return@Box
-    }
-    Box(
-      modifier = Modifier.matchParentSize().clip(shape).background(Brush.linearGradient(listOf(colors.from, colors.to))),
-    ) {
-      // Sotto il mosaico l'icona non si disegna: il segno della mappa e' gia' al centro.
-      if (mosaic.isEmpty()) {
-        Icon(
-          imageVector = icon,
-          contentDescription = null,
-          tint = colors.ink,
-          modifier = Modifier.align(androidx.compose.ui.Alignment.Center).size(CollectionsDimens.RowArtGlyph),
-        )
-      }
-    }
-    if (covers == null) return@Box
-    if (media != null) {
-      CoverImage(covers, media, Modifier.matchParentSize().clip(shape))
-    } else if (mosaic.isNotEmpty()) {
-      Mosaic(covers, mosaic, icon, colors, Modifier.matchParentSize().clip(shape))
-    } else if (faceImages.size > 1) {
-      Faces(faceImages, colors.from)
+  val iconFamily = iconFamilyOf(family, tone, icon)
+  // Un volto solo e' un tondo pieno: senza la piastrella sotto, che ne lascerebbe vedere gli angoli.
+  if (faceImages.size == 1) {
+    Image(bitmap = faceImages[0], contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(side).clip(faceShape(side)))
+    return
+  }
+  if (covers == null || (media == null && mosaic.isEmpty() && faceImages.isEmpty())) {
+    GalleryIconTile(icon = icon, family = iconFamily, size = side)
+    return
+  }
+  val colors = rememberGalleryIconColors(iconFamily)
+  GalleryIconTile(family = iconFamily, size = side) {
+    when {
+      media != null -> CoverImage(covers, media, Modifier.matchParentSize())
+      mosaic.isNotEmpty() -> MapMosaic(covers, mosaic, icon, colors, Modifier.matchParentSize(), CollectionRowArtSize, CollectionsDimens.MapBadge)
+      else -> Faces(faceImages, colors.top)
     }
   }
 }
 
 /**
- * CU-15 (giro 2): la piastrella della Mappa. Due per due, come i quadrati di una carta: una foto per luogo (i piu' fotografati), prima in diagonale
- * (con due luoghi si legge a scacchiera), i quadrati senza foto nel colore della famiglia; al centro, dove i quadrati si toccano, il segno della
- * mappa. Cosi' la Mappa non ripete la piastrella del primo luogo che le sta sotto. Una foto nascosta non si disegna ([CoverImage]).
+ * CU-15 (giro 2): il mosaico della Mappa. Due per due, come i quadrati di una carta: una foto per luogo (i piu' fotografati), prima in diagonale, i
+ * quadrati senza foto nel colore della famiglia; al centro il segno della mappa. Una foto nascosta non si disegna ([CoverImage]). I1: la stessa figura,
+ * grande, e' la mappa delle Raccolte quando la carta vera non c'e' (nessuna mappa, nessun luogo con un centro).
  */
 @Composable
-private fun Mosaic(covers: CollectionCovers, media: List<MediaId>, icon: ImageVector, colors: ArtColors, modifier: Modifier) {
-  val cell = (CollectionRowArtSize - CollectionsDimens.MosaicGap) / 2
-  val far = cell + CollectionsDimens.MosaicGap
+internal fun MapMosaic(
+  covers: CollectionCovers?,
+  media: List<MediaId>,
+  icon: ImageVector,
+  colors: GalleryIconColors,
+  modifier: Modifier,
+  side: Dp,
+  badge: Dp,
+  aspect: Float = 1f,
+  bucket: ThumbBucket = ThumbBucket.M,
+) {
+  val cellW = (side - CollectionsDimens.MosaicGap) / 2
+  val cellH = (side / aspect - CollectionsDimens.MosaicGap) / 2
   Box(modifier = modifier) {
-    media.forEachIndexed { i, id ->
-      val (x, y) = MOSAIC_ORDER[i]
-      CoverImage(covers, id, Modifier.offset(x = far * x, y = far * y).size(cell))
+    if (covers != null) {
+      media.take(MOSAIC_CELLS).forEachIndexed { i, id ->
+        val (x, y) = MOSAIC_ORDER[i]
+        CoverImage(covers, id, Modifier.offset(x = (cellW + CollectionsDimens.MosaicGap) * x, y = (cellH + CollectionsDimens.MosaicGap) * y).size(cellW, cellH), bucket)
+      }
     }
     Box(
-      modifier = Modifier.align(androidx.compose.ui.Alignment.Center).size(CollectionsDimens.MapBadge).clip(faceShape(CollectionsDimens.MapBadge))
-        .background(colors.from),
-      contentAlignment = androidx.compose.ui.Alignment.Center,
+      modifier = Modifier.align(Alignment.Center).size(badge).clip(faceShape(badge)).background(colors.top),
+      contentAlignment = Alignment.Center,
     ) {
-      Icon(imageVector = icon, contentDescription = null, tint = colors.ink, modifier = Modifier.size(CollectionsDimens.MapBadgeGlyph))
+      Icon(imageVector = icon, contentDescription = null, tint = colors.glyph, modifier = Modifier.size(badge * MAP_BADGE_GLYPH))
     }
   }
 }
+
+/** Il glifo dentro il segno della mappa, in frazione del segno (12 su 18 dp). */
+private const val MAP_BADGE_GLYPH = 2f / 3f
 
 /** CU-15: i quadrati del mosaico in ordine di riempimento (colonna, riga): prima la diagonale, poi l'altra. */
 private val MOSAIC_ORDER = listOf(0 to 0, 1 to 1, 1 to 0, 0 to 1)
 
 /** CU-15: quattro quadrati, due per due. */
-private const val MOSAIC_CELLS = 4
+internal const val MOSAIC_CELLS = 4
 
+/**
+ * Una copertina: la miniatura di [media] alla taglia [bucket], se il media e' nella Libreria visibile di adesso (un nascosto non si disegna mai). Finche'
+ * la taglia chiesta non c'e', una piu' piccola gia' in memoria (la griglia della Libreria la tiene spesso): niente buco, niente salto. Nessuna
+ * animazione (il movimento e' dell'engine).
+ */
 @Composable
-private fun CoverImage(covers: CollectionCovers, media: MediaId, modifier: Modifier) {
+internal fun CoverImage(covers: CollectionCovers, media: MediaId, modifier: Modifier, bucket: ThumbBucket = ThumbBucket.M) {
   val view by covers.view.collectAsState()
-  val request = remember(view, media) { covers.request(view, media) } ?: return
-  // La foto compare sopra la piastrella quando la miniatura c'e': nessuna animazione (la regola del modulo: il movimento e' dell'engine).
-  val image = covers.loader.image(request.key, request.ref).value ?: return
+  val request = remember(view, media, bucket) { covers.request(view, media, bucket) } ?: return
+  val image = covers.loader.image(request.key, request.ref).value
+    ?: FALLBACK_BUCKETS.firstNotNullOfOrNull { b -> if (b == bucket) null else covers.loader.peek(request.key.copy(bucket = b)) }
+    ?: return
   Image(bitmap = image, contentDescription = null, contentScale = ContentScale.Crop, modifier = modifier)
 }
+
+/** Le taglie da guardare in memoria mentre quella chiesta non c'e': dalla piu' grande. */
+private val FALLBACK_BUCKETS = ThumbBucket.entries.reversed()
 
 /**
  * I volti: uno solo riempie il tondo; due affiancati; tre a triangolo (due sopra, uno sotto in mezzo). Ognuno ha un filo del colore della piastrella

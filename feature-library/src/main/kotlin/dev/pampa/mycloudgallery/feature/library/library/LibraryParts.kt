@@ -73,6 +73,7 @@ import dev.pampa.mycloudgallery.feature.library.countText
 import dev.pampa.mycloudgallery.feature.library.familyNoticeAfterHide
 import dev.pampa.mycloudgallery.feature.library.photoVideoSummary
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGridState
+import dev.pampa.mycloudgallery.feature.library.grid.followViews
 import dev.pampa.mycloudgallery.feature.library.grid.SavedGridPosition
 import dev.pampa.mycloudgallery.feature.library.grid.SavedSelection
 import java.io.File
@@ -148,9 +149,10 @@ internal fun LibraryEffects(state: LibraryTabState) {
     launch { state.commands.selectionSettled.collect { grid.stopSelecting() } }
   }
   // Il filtro sceglie la vista dalla timeline: le viste con lo stesso filtro condividono il lavoro del repository.
+  // D3 (fase H): a griglia ferma le viste nuove entrano subito; mentre si scorre al piu' una ogni tanto (`followViews`).
   val timeline = state.timeline
   LaunchedEffect(state, timeline, state.filter) {
-    timeline?.view(state.filter)?.collect { view -> grid.view = view }
+    timeline?.view(state.filter)?.let { views -> grid.followViews(views) }
   }
   // Il riepilogo in fondo conta la vista mostrata (fuori dal thread principale: 100 mila elementi).
   LaunchedEffect(state, grid.view) {

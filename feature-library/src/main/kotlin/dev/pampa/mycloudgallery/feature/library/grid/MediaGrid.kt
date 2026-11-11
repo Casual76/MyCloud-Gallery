@@ -190,8 +190,11 @@ fun MediaGrid(
     val ready = state.layouts.get(inputs, level)
     // Avvio istantaneo: la vista grande della Libreria trova il layout gia' preparato mentre il processo nasceva (`GridWarmup`).
     val immediate = if (ready == null) remember(inputs, level) { state.layouts.layoutNowIfSmall(inputs, level) ?: GridWarmup.take(inputs, level) } else null
-    val renderLayout = ready ?: immediate ?: state.layout
-    val renderView = if (ready != null || immediate != null) inputs.view else state.shownView
+    val candidate = ready ?: immediate
+    // D3 (fase H): un aggiornamento dei dati non interrompe mai uno scorrimento ne' uno slancio: aspetta la griglia ferma (`holdsDataChange`).
+    val held = candidate != null && state.holdsDataChange(candidate, inputs.view)
+    val renderLayout = if (held) state.layout else candidate ?: state.layout
+    val renderView = if (!held && candidate != null) inputs.view else state.shownView
 
     // --- Lo spazio sullo schermo ----------------------------------------------------------------
     val topPad = contentPadding.calculateTopPadding()
@@ -371,14 +374,18 @@ private fun GridEffects(state: MediaGridState, reducedMotion: Boolean) {
   }
   // Il piede cresce mentre lo si guarda (arriva la voce del NAS, un dettaglio va a capo): la lista lo segue, cosi' resta
   // tutto sopra la pillola. Solo se si era in fondo (il piede in vista, o la griglia mai trascinata): altrove non si salta.
+  // D3 (fase H): durante la prima lettura il piede cambia spesso; mentre la lista scorre non si salta (fermerebbe lo slancio): si decide a lista ferma.
   LaunchedEffect(state) {
     var previous = state.footerHeight
-    snapshotFlow { state.footerHeight }.collect { height ->
-      val grew = previous in 1 until height
+    var grew = false
+    snapshotFlow { state.footerHeight to state.listState.isScrollInProgress }.collect { (height, scrolling) ->
+      if (previous in 1 until height) grew = true
       previous = height
+      if (!grew || scrolling) return@collect
+      grew = false
       val l = state.layout ?: return@collect
       val footerShown = state.listState.layoutInfo.visibleItemsInfo.any { it.key == FooterKey }
-      if (grew && l.rowCount > 0 && (!state.userScrolled || footerShown)) state.listState.requestScrollToItem(l.rowCount, 0)
+      if (l.rowCount > 0 && (!state.userScrolled || footerShown)) state.listState.requestScrollToItem(l.rowCount, 0)
     }
   }
 

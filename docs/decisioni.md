@@ -18732,3 +18732,30 @@ Ramo `fix/h4-ricerca-barra` dopo l'unione di `integra/beta-grafica` (`ad4310a5`,
 ### HR, ultimo giro di correzione (11 novembre 2026)
 
 Build: tolta la protezione riflessiva del layout; in un worktree riusato dopo un cambio di commit, se serve ricostruire core-designsystem usare nel batch autorizzato `.\gradlew.bat --no-daemon --no-watch-fs --max-workers=2 --no-parallel :core-designsystem:compileDebugKotlin --rerun`: provati cambio main/debug e modifica API main con e senza protezione, tutti riusciti, quindi queste prove non spiegano la causa del guasto storico.
+
+### I4, il resto dell'app con meno testo (fase I, 11/11 notte)
+
+Il metro dell'utente: «se non sapessi leggere o sentire, potrei usare l'app?». Censimento in `docs/i4-censimento.md`, prima e dopo in
+`docs/I4-prima-dopo.md`, screenshot in `docs/screenshots/beta-grafica/I4/` (e `prima/`).
+- **Pop-up della nuvola** (Libreria): i lavori sono anelli con la percentuale e il conto accanto («1.240 / 6.658», il tempo con l'orologio); lo
+  spazio del NAS e' un anello con il disco e il numero; l'ultima sincronizzazione e' il segno della cronologia e l'ora; «Libera spazio» ha la
+  scopa e non ha piu' la frase sotto. Un problema e' la capsula con la «i»: la frase si apre al tocco (TalkBack la legge sempre). I tasti hanno
+  l'icona. Lo stato e la mappa dagli stati veri alla nuvola non cambiano (`libraryCloud`, `LibraryCloudTest`).
+- **Stati vuoti della Libreria**: figura, titolo, tasto (niente paragrafi). **Strisce** (accesso parziale, foto in attesa): segno, due parole e
+  tasto sulla stessa riga; a testo grande (oltre 1,15x) il tasto torna sotto. Tocca `GalleryGridNotice` (core-designsystem) nel modo piu' piccolo:
+  con `message` vuoto diventa una striscia.
+- **Album**: niente numero sotto le copertine (TalkBack lo dice); pagina con «24 elementi» e righe di stato con la piastrella colorata di I3 e
+  il segno nell'angolo, la frase solo per gli avvisi; foglio di condivisione piu' corto.
+- **NAS**: operazioni con piastrella, segno di stato e anello; garanzia di «Annulla il resto» una volta sola; cartelle con la piastrella per tipo;
+  cestino piu' corto (anche quello della Libreria).
+- **Viewer**: il foglio «Eliminare questa foto?» dice i 30 giorni una volta.
+- **Onboarding**: Benvenuto con tre piastrelle e due parole; percorsi e permessi con la piastrella di cio' che si ottiene (permessi concessi: il
+  segno «fatto»).
+- **Integrazioni**: ricezione con i segni delle aree e degli album; «media» tolto dalle frasi.
+- **Diagnostica**: «Prova della connessione», «Accordo con il NAS», «Connessione» al posto di «Test di connessione», «Negoziazione SMB», «Connessione TCP».
+- **Non fatto**: anteprime vere nelle cartelle del NAS (serve un legame nuovo fra il percorso del NAS e le miniature della Libreria, che non c'e':
+  da decidere con l'orchestratore); il testo dello stato «in prova» del backup e del NAS (lo gira l'orchestratore quando I3 consegna).
+- **Prove sul telefono**: (1) Libreria → nuvola durante un backup: l'anello avanza e la percentuale cambia senza scatti; il pop-up non cambia
+  misura mentre avanza; (2) con un problema: tocco sulla capsula → la frase si apre e si richiude; (3) strisce in cima con l'accesso parziale a
+  1,3x: il tasto va sotto, niente sovrapposizioni; (4) Operazioni NAS durante uno spostamento: l'anello avanza, il segno nell'angolo passa da
+  in corso a fatto; (5) onboarding Permessi: dopo aver concesso, la capsula sparisce e compare il segno «fatto».

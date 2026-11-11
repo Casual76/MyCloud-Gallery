@@ -1,6 +1,5 @@
 package dev.pampa.mycloudgallery.feature.library.collections
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -14,13 +13,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
-import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.antigravity.fluidengine.ui.theme.FluidToneTile
@@ -73,8 +69,8 @@ class CollectionCovers(val loader: ThumbnailLoader, private val library: ViewerI
 /** Le copertine della scheda Raccolte: le mette `CollectionsTab`; null = solo icone. */
 val LocalCollectionCovers = staticCompositionLocalOf<CollectionCovers?> { null }
 
-/** Il lato della piastrella delle righe delle Raccolte: piu' grande di quella di serie (32 dp), perche' una foto a 32 dp non si legge. */
-internal val CollectionRowArtSize: Dp = 44.dp
+/** Il lato della piastrella delle righe delle Raccolte ([CollectionsDimens.RowArt]). */
+internal val CollectionRowArtSize: Dp get() = CollectionsDimens.RowArt
 
 /**
  * Chiede le miniature delle copertine [media] **una volta**, e di nuovo solo se l'elenco o la Libreria cambiano: non a ogni scorrimento (sono
@@ -93,8 +89,8 @@ internal fun CollectionCoverWindow(covers: CollectionCovers, media: List<MediaId
 }
 
 /**
- * La piastrella di una riga delle Raccolte: l'icona sul tono e, sopra, la copertina [cover] quando la miniatura c'e' (entra in dissolvenza la
- * prima volta, ferma se era gia' in cache). Senza copertine ([LocalCollectionCovers] null) o senza [cover], l'icona e basta.
+ * La piastrella di una riga delle Raccolte: l'icona sul tono e, sopra, la copertina [cover] quando la miniatura c'e' (compare appena c'e', senza
+ * movimento). Senza copertine ([LocalCollectionCovers] null) o senza [cover], l'icona e basta.
  */
 @Composable
 internal fun CollectionRowArt(icon: ImageVector, tone: FluidTone, cover: MediaId?) {
@@ -109,14 +105,13 @@ internal fun CollectionRowArt(icon: ImageVector, tone: FluidTone, cover: MediaId
 private fun CoverImage(covers: CollectionCovers, media: MediaId, modifier: Modifier) {
   val view by covers.view.collectAsState()
   val request = remember(view, media) { covers.request(view, media) } ?: return
-  val image = covers.loader.image(request.key, request.ref).value
-  val alpha by animateFloatAsState(targetValue = if (image != null) 1f else 0f, animationSpec = FluidMotion.fadeIn(), label = "copertinaRaccolta")
-  if (image == null) return
+  // La copertina compare quando la miniatura c'e', sopra l'icona: nessuna animazione (la regola del modulo: il movimento e' dell'engine).
+  val image = covers.loader.image(request.key, request.ref).value ?: return
   Image(
     bitmap = image,
     contentDescription = null,
     contentScale = ContentScale.Crop,
-    // La forma della piastrella del tono alla stessa misura (il raggio segue il lato, come in `FluidToneTile`); l'alfa si legge nel disegno.
-    modifier = modifier.clip(ContinuousCornerShape(FluidRadius.Small * (CollectionRowArtSize / FluidToneTileSize))).graphicsLayer { this.alpha = alpha },
+    // La forma della piastrella del tono alla stessa misura (il raggio segue il lato, come in `FluidToneTile`).
+    modifier = modifier.clip(ContinuousCornerShape(FluidRadius.Small * (CollectionRowArtSize / FluidToneTileSize))),
   )
 }

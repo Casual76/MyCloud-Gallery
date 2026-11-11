@@ -212,10 +212,12 @@ class AlbumsSectionSources(
   private fun tripEntry(trip: TripProposal): SectionEntry = SectionEntry(
     code = AlbumEntryTarget.TRIP_PREFIX + trip.id.value,
     title = trip.label,
-    subtitle = resources.getQuantityString(R.plurals.trips_count, trip.count, GalleryNumbers.format(trip.count)),
+    // H5: il tipo sta nel sottotitolo ("Viaggio · 640 elementi"), non piu' a destra: a 360 dp, con la copertina, la parola a destra mandava a capo
+    // il titolo.
+    subtitle = resources.getString(if (trip.kind == TripKind.TRIP) R.string.trips_kind_trip else R.string.trips_kind_event) + " · " +
+      resources.getQuantityString(R.plurals.trips_count, trip.count, GalleryNumbers.format(trip.count)),
     icon = if (trip.kind == TripKind.TRIP) Icons.Rounded.Flight else Icons.Rounded.Event,
     tone = FluidTone.Info,
-    trailing = resources.getString(if (trip.kind == TripKind.TRIP) R.string.trips_kind_trip else R.string.trips_kind_event),
     cover = trip.cover,
   )
 

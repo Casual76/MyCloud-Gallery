@@ -110,12 +110,9 @@ class UtilityEntriesTest : ComposeScreenTest() {
 
   @Test
   fun lePagineFiltroDiconoQuanteSono_DoppioniEEliminatiNo() {
-    val bySubtitle = compose(counts = mapOf(UtilityPage.EDITED to 1)).associate { UtilityPage.fromEntryCode(it.code)!! to it.subtitle }
-    assertThat(bySubtitle.getValue(UtilityPage.EDITED)).isEqualTo("1 elemento")
-    assertThat(compose(counts = mapOf(UtilityPage.EDITED to 12)).first { it.code == UtilityPage.EDITED.entryCode }.subtitle).isEqualTo("12 elementi")
-    // Un conteggio che non c'e' (il flusso non ha ancora risposto) non finge uno zero.
-    assertThat(compose().first { it.code == UtilityPage.EDITED.entryCode }.subtitle).isEqualTo("Nessun elemento")
-    val entries = compose(counts = mapOf(UtilityPage.EDITED to 0))
+    val entries = compose(counts = mapOf(UtilityPage.EDITED to 12))
+    val bySubtitle = entries.associate { UtilityPage.fromEntryCode(it.code)!! to it.subtitle }
+    assertThat(bySubtitle.getValue(UtilityPage.EDITED)).isEqualTo("12 elementi")
     // Doppioni ed Eliminati di recente non dicono mai quanti sono: dal di fuori non si deve capire (E-H1).
     assertThat(bySubtitle.getValue(UtilityPage.DUPLICATES)).doesNotContainMatch("\\d")
     assertThat(bySubtitle.getValue(UtilityPage.RECENTLY_DELETED)).doesNotContainMatch("\\d")
@@ -131,11 +128,23 @@ class UtilityEntriesTest : ComposeScreenTest() {
   }
 
   @Test
+  fun unConteggioCheNonCeNonFingeUnoZero() {
+    // Il flusso non ha ancora risposto: "Nessun elemento", non "0 elementi".
+    assertThat(compose().first { it.code == UtilityPage.EDITED.entryCode }.subtitle).isEqualTo("Nessun elemento")
+  }
+
+  @Test
+  fun unSoloElementoAlSingolare() {
+    assertThat(compose(counts = mapOf(UtilityPage.EDITED to 1)).first { it.code == UtilityPage.EDITED.entryCode }.subtitle).isEqualTo("1 elemento")
+  }
+
+  @Test
   fun senzaIlCestinoLaVoceNonCe() {
     val entries = compose(canTrash = false)
 
     assertThat(entries.map { UtilityPage.fromEntryCode(it.code) }).doesNotContain(UtilityPage.RECENTLY_DELETED)
-    assertThat(entries).hasSize(5)
+    // H5: Modificate e Doppioni (Screenshot, Video e WhatsApp sono nella scheda Album).
+    assertThat(entries).hasSize(2)
   }
 }
 

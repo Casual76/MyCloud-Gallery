@@ -48,4 +48,7 @@ internal object CollectionsDimens {
 
   /** "Modifica Raccolte": quanto si solleva la riga che il dito trascina (l'ombra la stacca dalle altre: nessuna riga ne copre un'altra). */
   val DragElevation: Dp = 8.dp
+
+  /** H5: la piastrella delle righe delle Raccolte (icona o copertina): piu' grande di quella di serie (32 dp), una foto a 32 dp non si legge. */
+  val RowArt: Dp = 44.dp
 }

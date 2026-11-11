@@ -164,6 +164,9 @@ class CollectionsSectionBindingTest {
     assertThat(group.code).isEqualTo(CollectionSections.TRIPS)
     assertThat(group.entries).hasSize(2)
     for (entry in group.entries) assertThat(entry.code).startsWith(AlbumEntryTarget.TRIP_PREFIX)
+    // H5: il tipo nel sottotitolo, niente parola a destra (a 360 dp mandava a capo il titolo accanto alla copertina).
+    assertThat(group.entries.map { it.subtitle.substringBefore(" · ") }).containsExactly("Viaggio", "Evento")
+    assertThat(group.entries.map { it.trailing }.toSet()).containsExactly(null)
 
     val none = sources(scenes, StaticTrips(TripProposals(emptyList(), homeKnown = true))).trips.value!!
     assertThat(none.entries).isEmpty()

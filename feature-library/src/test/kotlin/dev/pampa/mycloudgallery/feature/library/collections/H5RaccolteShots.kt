@@ -87,8 +87,8 @@ abstract class H5RaccolteShotBase(private val dark: Boolean, private val device:
       CollectionEntryGroup(
         "Viaggi",
         listOf(
-          entry("trip/t1", "Toscana, agosto 2025", "640 elementi", Icons.Rounded.Flight, cover = 3, trailing = "Viaggio", tone = FluidTone.Info),
-          entry("trip/t2", "Sabato 12 aprile 2025", "96 elementi", Icons.Rounded.Event, cover = 11, trailing = "Evento", tone = FluidTone.Info),
+          entry("trip/t1", "Toscana, agosto 2025", "Viaggio · 640 elementi", Icons.Rounded.Flight, cover = 3, tone = FluidTone.Info),
+          entry("trip/t2", "Sabato 12 aprile 2025", "Evento · 96 elementi", Icons.Rounded.Event, cover = 11, tone = FluidTone.Info),
         ),
         code = CollectionSections.TRIPS,
       ),

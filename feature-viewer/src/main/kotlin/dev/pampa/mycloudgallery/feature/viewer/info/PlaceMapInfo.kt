@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Map
@@ -101,8 +100,8 @@ private fun PlaceMapCard(place: ViewerMapPlace.Located, onShow: () -> Unit, onOp
   val shape = ContinuousCornerShape(FluidRadius.Card)
   Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(CreditGap)) {
     Box(
+      // Larga quanto le altre schede (anche nella colonna del tablet, piu' larga di 320 dp: la bitmap si allarga un poco e si ritaglia).
       modifier = Modifier
-        .widthIn(max = MiniMapWidth)
         .fillMaxWidth()
         .aspectRatio(MiniMapAspect),
     ) {

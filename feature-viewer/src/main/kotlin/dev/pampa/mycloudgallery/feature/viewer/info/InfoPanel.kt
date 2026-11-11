@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.CameraAlt
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.Icon
@@ -57,6 +58,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -86,7 +88,6 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterEntry
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryMotion
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
-import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryInfoHeader
 import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryInfoRow
 import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryInfoSection
 import dev.pampa.mycloudgallery.feature.viewer.R
@@ -403,7 +404,8 @@ internal fun BoxScope.InfoSidePanel(
       .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
       .semantics { paneTitle = title },
   ) {
-    GalleryInfoHeader(title = title, onClose = onClose, showGrabber = false, modifier = Modifier.padding(top = PanelHeaderTop))
+    // Giro di correzione 1: la data e' l'unico titolo del pannello. Qui resta solo la X; il nome del pannello lo dice `paneTitle` a TalkBack.
+    SideCloseButton(onClose = onClose, modifier = Modifier.align(Alignment.End).padding(top = PanelHeaderTop, end = SideCloseEnd))
     Column(
       modifier = Modifier
         .weight(1f)
@@ -414,6 +416,21 @@ internal fun BoxScope.InfoSidePanel(
         .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
       content = content,
     )
+  }
+}
+
+/** La X della colonna: 48 dp per il dito, il segno grande come quello delle intestazioni della galleria. */
+@Composable
+private fun SideCloseButton(onClose: () -> Unit, modifier: Modifier = Modifier) {
+  val label = stringResource(dev.pampa.mycloudgallery.core.designsystem.R.string.info_close)
+  Box(
+    modifier = modifier
+      .size(GalleryDimens.MinTouchTarget)
+      .semantics { contentDescription = label }
+      .fluidPressable(onClick = onClose, role = Role.Button, focusShape = FluidCapsuleShape),
+    contentAlignment = Alignment.Center,
+  ) {
+    Icon(imageVector = Icons.Rounded.Close, contentDescription = null, modifier = Modifier.size(CloseGlyph), tint = MaterialTheme.colorScheme.onSurfaceVariant)
   }
 }
 
@@ -548,7 +565,9 @@ private fun ShotCard(model: InfoModel, accent: Color?) {
         imageVector = if (model.video) Icons.Rounded.Videocam else Icons.Rounded.CameraAlt,
         contentDescription = null,
         modifier = Modifier.size(LineIcon),
-        tint = scheme.primary,
+        // Il segno ha il colore della foto, portato verso il testo (piu' scuro sul chiaro, piu' chiaro sullo scuro): scheda e segno dicono la
+        // stessa foto, e il segno resta leggibile sulla sua scheda.
+        tint = if (accent != null) lerp(accent, scheme.onSurface, AccentInk) else scheme.primary,
       )
       Box(modifier = Modifier.weight(1f)) {
         when {
@@ -655,6 +674,7 @@ private fun OpenInMapsButton(onClick: () -> Unit) {
   val label = stringResource(R.string.viewer_place_open_maps)
   Box(
     modifier = Modifier
+      .overhangVertically(PlaceLine)
       .size(GalleryDimens.MinTouchTarget)
       .fluidPressable(onClick = onClick, role = Role.Button)
       .semantics { contentDescription = label },
@@ -667,6 +687,16 @@ private fun OpenInMapsButton(onClick: () -> Unit) {
       modifier = Modifier.size(LineIcon),
     )
   }
+}
+
+/**
+ * Il tasto tiene i suoi 48 dp per il dito ma conta, per la riga, solo [visible]: sporge sopra e sotto in parti uguali (il tocco arriva lo stesso,
+ * nessun genitore lo ritaglia). Cosi' una riga di testo con un tasto in coda non e' piu' alta, e piu' staccata, delle righe senza.
+ */
+private fun Modifier.overhangVertically(visible: Dp): Modifier = layout { measurable, constraints ->
+  val placeable = measurable.measure(constraints)
+  val height = minOf(placeable.height, visible.roundToPx())
+  layout(placeable.width, height) { placeable.place(0, (height - placeable.height) / 2) }
 }
 
 private val BlockGap = 20.dp
@@ -687,6 +717,11 @@ private val ScrollFade = 12.dp
 // La scheda dello scatto (giro di correzione 1 di H2).
 /** Quanto del colore della foto entra nella superficie della scheda: abbastanza per sentirlo, poco per non toccare il contrasto. */
 private const val AccentShare = 0.14f
+/** Quanto il segno della scheda va dal colore della foto verso il testo. */
+private const val AccentInk = 0.45f
+private val PlaceLine = 24.dp
+private val SideCloseEnd = 8.dp
+private val CloseGlyph = 22.dp
 private val CardPadding = 16.dp
 private val CardPaddingVertical = 14.dp
 private val CardLineGap = 4.dp

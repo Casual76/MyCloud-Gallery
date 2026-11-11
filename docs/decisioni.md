@@ -18732,3 +18732,45 @@ Ramo `fix/h4-ricerca-barra` dopo l'unione di `integra/beta-grafica` (`ad4310a5`,
 ### HR, ultimo giro di correzione (11 novembre 2026)
 
 Build: tolta la protezione riflessiva del layout; in un worktree riusato dopo un cambio di commit, se serve ricostruire core-designsystem usare nel batch autorizzato `.\gradlew.bat --no-daemon --no-watch-fs --max-workers=2 --no-parallel :core-designsystem:compileDebugKotlin --rerun`: provati cambio main/debug e modifica API main con e senza protezione, tutti riusciti, quindi queste prove non spiegano la causa del guasto storico.
+
+## I2 (fase I, 11/11 notte): la ricerca che mostra invece di spiegare
+
+Il disegno della ricerca della fase H resta (H4). Cambia come si esprime: anteprime al posto del testo, segni e numeri al posto delle frasi.
+
+- **Esempi con la foto, a rotazione** (`feature-search/.../SearchExamples.kt`). A campo vuoto due esempi e la ricerca recente piu' nuova; ogni voce e' una
+  capsula con un tondo (la foto del primo risultato; per una persona il volto, dal cancello dei volti delle Raccolte; senza anteprima il segno del suo
+  tipo sul colore della sua famiglia, le stesse di I3). Gli esempi si scelgono fra cio' che la libreria ha in abbondanza (almeno 12 risultati, 3 in una
+  libreria piccola): cose che l'indice trova (16 parole fisse provate sul motore quando il contenuto e' pronto), persone, luoghi, mesi pieni, tipi; si
+  mescolano un tipo dopo l'altro e **girano a ogni chiusura** (la prossima apertura e' gia' piena e diversa, senza ripetere finche' ce ne sono altri).
+  Preparazione **fuori dal thread principale e prima che serva**: 4 s dopo la prima istantanea, una passata sull'istantanea (`LibraryDigest`: conteggi e
+  le foto piu' recenti per luogo, mese, tipo, con il filtro finale dei nascosti) e poche prove sul motore; di nuovo solo se la Libreria cambia di almeno
+  50 media o di un cinquantesimo, al piu' ogni 30 s. Aprire la ricerca non interroga niente. Le ricerche recenti prendono la foto del primo risultato
+  della ricerca fatta (in memoria) o di una prova in sottofondo, una volta per testo per sessione.
+- **Ordine**: prima gli esempi, poi la recente. A 360 dp tre voci entrano intere solo se corte (`SuggestionFit` con il tondo: 48 dp fissi per capsula);
+  quando non entrano restano le foto d'esempio. La recente si ritrova scrivendo e quando non si trova niente.
+- **Anteprime con il caricatore della Libreria, accanto alla sua finestra**: `ThumbnailLoader.keep(owner, richieste)` (nuovo, additivo, in
+  `core-imaging`): le anteprime della barra si caricano come richieste "in arrivo" che restano a ogni finestra della griglia sotto (non la sostituiscono,
+  le celle in volo non si annullano; la sorgente del NAS non legge mai un originale per loro, CE-5). Chiusa la barra si tolgono. Stessa cache, stesse
+  chiavi (bucket M) della griglia: l'esempio toccato apre risultati la cui prima cella e' gia' in memoria.
+- **Nascosti mai** (D29) anche per le anteprime: il riassunto passa dal filtro finale (`SearchData.hidden`), le prove dal motore, e la barra disegna una
+  foto solo se il suo media e' nell'istantanea di adesso, un volto solo se una delle sue foto d'origine lo e'. Prova: `SearchHiddenNeverTest` (le
+  anteprime di molte aperture e dei completamenti non contengono nessun nascosto, nemmeno quello nascosto un attimo fa) e `SearchExamplesTest`.
+- **La riga sopra la barra**: un segno e al piu' due parole; TalkBack dice la frase intera. La copertura sotto il 98% e l'aggiornamento della ricerca sono
+  **una riga sola con una barra** (`GallerySearchProgress`): si allunga con la molla `FluidMotion.fluid()` e a ogni passo avanti un riflesso la percorre
+  due volte (corse finite, nessun ciclo infinito; con «riduci animazioni» ferma); accanto la percentuale. Il tocco apre Ricerca e modelli. Anche lo
+  scaricamento del modello e i volti in riconoscimento hanno la barra. «Nessun dispositivo analizza quest'area» **non e' piu' nella ricerca** (solo in
+  Impostazioni). «Niente per…» e' il segno e «0»; "Trova simili" la foto da cui vengono e «Simili».
+- **Ricerca e modelli** ridisegnata con i segni di I3 (`GalleryIconTile`, `GalleryStatusMark`): in testa un anello con la percentuale e il numero delle foto
+  conosciute, i motivi come segni con un numero; le aree come due piastrelle con il segno (✓ / !) e un solo interruttore «Questo dispositivo analizza» (il
+  ruolo e' uno e copre tutte e due le aree dell'account); l'analisi come anello o segno, la misura come segno (luna e notti, caldo, misura in corso); i
+  modelli come anelli (pronto, in arrivo con la percentuale, assente, problema) con il dettaglio e le azioni dietro il tocco; una «i» con le frasi lunghe.
+  Lo stato si dice una volta: finita l'analisi resta «Fatto» (la riga della misura sparisce), la freccia del modello mancante sta solo nell'anello.
+  La logica (ruoli, richieste dei modelli, misura legata a STARTED, primo avvio di HR) non e' cambiata. Le prove della pagina cercano i numeri a vista
+  nell'albero non fuso e le frasi nella descrizione per TalkBack (`SearchSettingsUiTest`, `HrProbeScreenshotTest`).
+- **Fuori perimetro, nel modo piu' piccolo**: `core-imaging` (`ThumbnailLoader.keep` con implementazione di serie vuota, `PipelineThumbnailLoader`),
+  `app/di/FacesModule.kt` (un `@Provides` per la porta `SearchFaces`, implementata in `app/search/SearchFacesPort.kt` sopra `FacesGraph`),
+  `app/main/MainScaffold.kt` (i tre parametri della riga). `core-designsystem/.../motion/GalleryMotion.kt`: `sweepSpec()` (le `tween` stanno li').
+- **Nella ricerca non c'e' un filtro**: l'icona a cursori in alto a destra degli screenshot H4 e' il segno «modificata» di una cella, lo stesso della
+  Libreria (griglia condivisa, non toccata). La selezione nei risultati e' quella della Libreria (I4).
+- **Da provare sul telefono**: vedi il report di I2 (aperture ripetute, tempo delle anteprime alla prima apertura, barra della copertura che avanza,
+  pagina Ricerca e modelli a 360 dp e testo grande, nessun calo del pinch e dello scorrimento con la barra aperta).

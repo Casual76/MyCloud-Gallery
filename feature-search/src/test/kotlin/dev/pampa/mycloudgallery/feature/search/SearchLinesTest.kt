@@ -18,7 +18,7 @@ class SearchLinesTest {
   private val lib = library(count = 20)
 
   private fun results(notices: List<SearchNotice> = emptyList(), coverage: SearchCoverage = SearchCoverage.Complete, similar: Int? = null) =
-    SearchScreenState.Results(emptyList(), lib.view(0, 1, 2), lib.view(), coverage, notices, similar)
+    SearchScreenState.Results(emptyList(), lib.view(0, 1, 2), lib.view(*IntArray(0)), coverage, notices, similar)
 
   @Test
   fun aRiposoNienteRiga() {

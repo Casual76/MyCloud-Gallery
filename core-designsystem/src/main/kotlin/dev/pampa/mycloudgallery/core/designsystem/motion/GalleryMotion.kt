@@ -1,6 +1,10 @@
 package dev.pampa.mycloudgallery.core.designsystem.motion
 
 import androidx.annotation.StringRes
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.InfiniteRepeatableSpec
@@ -77,6 +81,21 @@ object GalleryMotion {
 
   /** L'apparizione di una barra o di un elemento di chrome: sfuma (e' chrome, non una pagina). */
   fun <T> chromeAppearSpec(): FiniteAnimationSpec<T> = FluidMotion.fadeIn()
+
+  /** Quanto dura lo scambio di un contenuto con un altro nello stesso posto ([contentSwap]): breve, cosi' scrivendo non si aspetta. */
+  const val ContentSwapMillis: Int = 160
+
+  /**
+   * H4: lo scambio di un contenuto con un altro **nello stesso posto** (la griglia della Libreria e i risultati della ricerca, una lista di risultati e la
+   * successiva): una dissolvenza incrociata breve, senza animare la misura. Non e' una pagina che arriva (quelle non sfumano mai): e' lo stesso posto
+   * che cambia contenuto. Con il movimento ridotto il cambio e' immediato.
+   */
+  fun contentSwap(reducedMotion: Boolean): ContentTransform =
+    if (reducedMotion) {
+      ContentTransform(fadeIn(snap()), fadeOut(snap()), sizeTransform = null)
+    } else {
+      ContentTransform(fadeIn(FluidMotion.fadeIn(ContentSwapMillis)), fadeOut(FluidMotion.fadeOut(ContentSwapMillis)), sizeTransform = null)
+    }
 }
 
 // ---------------------------------------------------------------------------------------------

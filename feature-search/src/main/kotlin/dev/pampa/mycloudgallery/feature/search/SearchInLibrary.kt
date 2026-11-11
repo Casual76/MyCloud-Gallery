@@ -1,9 +1,6 @@
 package dev.pampa.mycloudgallery.feature.search
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,11 +22,11 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryLiveAnnouncement
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GallerySuggestionBar
+import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryMotion
 import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
 import dev.pampa.mycloudgallery.core.library.contract.ViewerAnchor
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
@@ -162,13 +159,8 @@ fun SearchResults(
     AnimatedContent(
       targetState = state,
       contentKey = { (it as? SearchScreenState.Results)?.let(::listKey) ?: it::class },
-      transitionSpec = {
-        if (reduced) {
-          fadeIn(FluidMotion.fadeIn(0)) togetherWith fadeOut(FluidMotion.fadeOut(0))
-        } else {
-          fadeIn(FluidMotion.fadeIn(ResultsFadeMillis)) togetherWith fadeOut(FluidMotion.fadeOut(ResultsFadeMillis))
-        }.using(null)
-      },
+      // Fra una lista e la successiva una dissolvenza breve nello stesso posto (non e' una pagina che arriva).
+      transitionSpec = { GalleryMotion.contentSwap(reduced) },
       label = "risultati",
     ) { shown ->
       when (shown) {
@@ -241,6 +233,3 @@ fun FindSimilarEffect(request: List<MediaId>?, onFind: (List<MediaId>) -> Unit, 
     }
   }
 }
-
-/** La dissolvenza fra la Libreria e i risultati e fra due liste: breve, cosi' scrivendo non si aspetta. */
-private const val ResultsFadeMillis = 160

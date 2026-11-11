@@ -46,7 +46,8 @@ class PeopleSearchControllerTest {
     c.onQueryChange("ma")
     advanceTimeBy(150)
     runCurrent()
-    assertThat(c.topSuggestions.value.map { it.label }).containsExactly("Marco")
+    // Prima le persone, poi i mesi che cominciano cosi' (mai piu' di tre).
+    assertThat(c.topSuggestions.value.map { it.label }).containsExactly("Marco", "Marzo", "Maggio").inOrder()
   }
 
   @Test

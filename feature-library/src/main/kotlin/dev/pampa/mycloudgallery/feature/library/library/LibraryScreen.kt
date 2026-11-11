@@ -181,11 +181,17 @@ internal fun LibraryScreen(
     animationSpec = if (reduced) snap() else FluidMotion.crossFade(),
     label = "risultati",
   )
+  // Senza risultati (CU-11) lo strato della ricerca e' un velo e la Libreria resta dietro, attenuata: si dissolve solo sotto risultati veri.
+  val cover = animateFloatAsState(
+    targetValue = if (searching && search?.coversLibrary == true) 1f else 0f,
+    animationSpec = if (reduced) snap() else FluidMotion.crossFade(),
+    label = "libreria coperta",
+  )
   val libraryTopShown by remember { derivedStateOf { searchTop.value < 1f } }
   val searchTopShown by remember { derivedStateOf { searchTop.value > 0f } }
   val resultsShown by remember { derivedStateOf { results.value > 0f } }
   // La griglia della Libreria esce dalla composizione solo quando i risultati la coprono del tutto; tornando, e' dov'era (lo stato e' fuori).
-  val libraryCovered by remember { derivedStateOf { results.value >= 1f } }
+  val libraryCovered by remember { derivedStateOf { cover.value >= 1f } }
   val lift = rememberGallerySearchLift()
   // Senza ricerca non c'e' nessuno strato in piu' (la griglia, i pezzi in alto e il velo sono quelli di sempre).
   val searchLayers = searching || searchTopShown || resultsShown
@@ -202,7 +208,7 @@ internal fun LibraryScreen(
         Box(
           if (searchLayers) {
             Modifier.fillMaxSize().graphicsLayer {
-              alpha = 1f - results.value
+              alpha = 1f - cover.value
               translationY = -lift.px().toFloat()
             }
           } else {

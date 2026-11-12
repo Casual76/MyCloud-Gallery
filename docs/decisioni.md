@@ -19307,5 +19307,17 @@ il suo file JVM `annotation-jvm` 1.7.1) prima di scegliere la 1.9.1: metadati se
 come la regola gia' scritta per `lifecycle-viewmodel-compose` 2.9.0: le richieste di 1.7.1 e 1.8.0 vanno alla 1.8.1 (che ha le impronte). Nessuna
 versione risolta cambia: 1.7.1 e 1.8.0 non vincevano mai (i loro file JVM non hanno impronte). `gradle/verification-metadata.xml` non cambia.
 
+**Prove e mutazioni (12/11, sul computer).** `:feature-update` 93/93 verdi (regole, client con connessioni finte, installatore con porte
+finte, `AppUpdates`, pagina e avviso con Robolectric, chiavi dell'elenco del publisher); architettura di `core-common` 102/102; `:app` 1692
+prove di prima verdi piu' `ReleaseStoppedUpdateTest` 2/2; feature-settings (voce, novita', icona, mappa) verdi; `:app:verifyReleaseManifest` verde
+(il manifest unito di release ha `REQUEST_INSTALL_PACKAGES` e il ricevitore dell'engine, e nient'altro di nuovo). 24 screenshot in
+`docs/screenshots/beta-grafica/U/` (telefono chiaro e scuro, testo 1,3x, tablet). Ogni garanzia tolta a mano fa cadere almeno una prova:
+M01 sha256 obbligatorio, M02 peso obbligatorio, M03 tetto del peso, M04 nomi di tag e file, M05 indirizzo uguale a quello delle release del
+repository, M06 stessa app, M07 versionCode strettamente maggiore, M08 stessa firma, M09 sha256 del file prima di Android, M10 permesso prima di
+scaricare, M11 host dell'elenco chiuso, M12 solo https, M13 rimando fuori elenco, M14 tetto dei byte scaricati, M15 nessun cookie, M16 al piu' un
+controllo ogni 24 ore, M17 canale salvato, M18 avviso una volta per versione, M19 nessuna installazione senza tocco, M20 domanda sui dati mobili,
+M21 sha256 obbligatorio gia' al controllo (niente avviso), M22 rete solo in `net/` (`NoNetworkSourcesTest`), M23 «Aggiorna» nella pagina
+«versione fermata» (ReleaseStoppedUpdateTest). Tutte: CADE.
+
 **Non fatto.** Niente telefono (l'aggiornamento vero, beta 1 -> beta 2, e' descritto in `docs/aggiornamenti-in-app.md`); `tools/check.ps1` intero
 non lanciato (build di release e dex: il passo 7e nuovo e' scritto ma non provato su un APK); `publisher.py` non toccato ne' lanciato.

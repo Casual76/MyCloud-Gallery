@@ -271,6 +271,13 @@ internal fun tileOf(figure: UpdateFigure): Triple<ImageVector, GalleryIconFamily
 /** Il riassunto della nota di rilascio: il primo paragrafo, senza Markdown (`FluidUpdate.notesSummary`), vuoto se non c'e'. */
 internal fun notesOf(state: UpdatesState): String = state.found?.changelog?.let { FluidUpdate.notesSummary(it) }.orEmpty()
 
+/** Le note senza la prima riga se e' il titolo del riquadro (il `### Novità` del changelog): «Novità» non si legge due volte. */
+internal fun withoutHeading(notes: String, heading: String): String {
+  val lines = notes.lines()
+  val first = lines.firstOrNull()?.trim().orEmpty()
+  return if (first.equals(heading, ignoreCase = true)) lines.drop(1).joinToString("\n").trim() else notes
+}
+
 /** Una riga corta per l'avviso: «1.1.0 · 112 MB». */
 internal fun shortLine(state: UpdatesState): String {
   val found = state.found ?: return ""

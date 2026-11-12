@@ -42,11 +42,12 @@ import dev.pampa.mycloudgallery.feature.update.UpdatesState
 
 @Composable
 fun UpdatesScreen(state: UpdatesState, actions: UpdateActions, onBack: () -> Unit) {
+  val whatsNew = stringResource(R.string.update_whats_new)
   FluidScreen(title = stringResource(R.string.update_title), onBack = onBack) {
     item(key = "figure") {
       FluidListGroup { UpdatePanel(state = state, actions = actions) }
     }
-    val notes = notesOf(state)
+    val notes = withoutHeading(notesOf(state), whatsNew)
     if (notes.isNotBlank() && state.install == null && !state.askMetered) {
       item(key = "notes") { NotesBlock(notes) }
     }

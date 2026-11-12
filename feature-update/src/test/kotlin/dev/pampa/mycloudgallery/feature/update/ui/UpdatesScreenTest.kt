@@ -113,6 +113,9 @@ class UpdatesScreenTest {
     // La nota di rilascio senza Markdown, solo il primo paragrafo.
     rule.onNode(hasText("Album più veloci", substring = true)).assertExists()
     assertThat(texts().none { it.contains("**") }).isTrue()
+    // Il `### Novità` del changelog non si ripete sotto il titolo del riquadro.
+    val whatsNew = string(R.string.update_whats_new)
+    assertThat(texts().none { it != whatsNew && it.startsWith(whatsNew) }).isTrue()
     rule.onNodeWithText(string(R.string.update_action)).performClick()
     assertThat(called).containsExactly("install")
   }

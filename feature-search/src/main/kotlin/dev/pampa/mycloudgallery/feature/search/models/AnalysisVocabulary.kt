@@ -14,6 +14,7 @@ import androidx.compose.material.icons.rounded.EnergySavingsLeaf
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.ImageSearch
 import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.SdStorage
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.WifiOff
@@ -57,8 +58,27 @@ internal fun analysisSign(status: LibraryAnalysisStatus): AnalysisSign = when (s
   LibraryAnalysisStatus.ModelMissing -> AnalysisSign(GalleryIconStatus.Attention, Icons.Rounded.Download, GalleryIconFamily.Search)
   LibraryAnalysisStatus.Disabled -> AnalysisSign(GalleryIconStatus.Stopped, Icons.Rounded.PowerSettingsNew, GalleryIconFamily.System)
   is LibraryAnalysisStatus.NotHere -> AnalysisSign(GalleryIconStatus.Stopped, Icons.Rounded.Devices, GalleryIconFamily.System)
-  is LibraryAnalysisStatus.Problem -> AnalysisSign(GalleryIconStatus.Problem, Icons.Rounded.Warning, GalleryIconFamily.Danger)
+  // XU-6: nel mirino l'icona del perche' (la memoria, il modello), non un triangolo generico.
+  is LibraryAnalysisStatus.Problem -> AnalysisSign(GalleryIconStatus.Problem, problemGlyph(status.code), GalleryIconFamily.Danger)
   LibraryAnalysisStatus.Idle -> AnalysisSign(null, AnalysisGlyph, GalleryIconFamily.Search)
+}
+
+/** I codici dei problemi che hanno un perche' corto e un'icona loro; gli altri dicono la frase del catalogo e il triangolo. */
+private val StorageCodes = setOf("AI_STORAGE_LOW", "AI_MODEL_NO_SPACE", "AI_KILLED_MEMORY")
+private val ModelCodes = setOf("AI_MODEL_FETCH_FAILED", "AI_MODEL_MISMATCH", "AI_MODEL_MISSING")
+
+private fun problemGlyph(code: String): ImageVector = when (code) {
+  in StorageCodes -> Icons.Rounded.SdStorage
+  in ModelCodes -> Icons.Rounded.Download
+  else -> Icons.Rounded.Warning
+}
+
+/** Il perche' corto di un problema per la riga della testata (XU-6): due o tre parole, o la frase del catalogo. */
+@Composable
+private fun problemLine(code: String): String = when (code) {
+  in StorageCodes -> stringResource(R.string.analysis_problem_storage)
+  in ModelCodes -> stringResource(R.string.analysis_problem_model)
+  else -> SearchCodes.message(LocalResources.current, DiagCode(code))
 }
 
 /** L'icona del perche' di una pausa: il termometro, la batteria, la luna, il Wi-Fi spento... */
@@ -110,7 +130,8 @@ internal fun analysisLabel(status: LibraryAnalysisStatus): String? = when (statu
   LibraryAnalysisStatus.ModelMissing -> stringResource(R.string.analysis_hero_model)
   LibraryAnalysisStatus.Disabled -> stringResource(R.string.analysis_hero_disabled)
   is LibraryAnalysisStatus.NotHere -> stringResource(R.string.analysis_hero_not_here)
-  is LibraryAnalysisStatus.Problem -> SearchCodes.message(LocalResources.current, DiagCode(status.code))
+  // XU-6: due parole fisse; il perche' sta nella riga, come nel backup.
+  is LibraryAnalysisStatus.Problem -> stringResource(R.string.analysis_hero_problem)
 }
 
 /** La riga sotto l'etichetta (al piu' una) e la sua icona davanti (il perche' di una pausa). */
@@ -119,26 +140,27 @@ internal class AnalysisLine(val text: String, val glyph: ImageVector? = null)
 
 @Composable
 internal fun analysisLine(status: LibraryAnalysisStatus): AnalysisLine? = when (status) {
-  is LibraryAnalysisStatus.Running -> {
-    val rest = status.remaining?.takeIf { it > 0 }?.let { GalleryNumbers.format(it) }
-    val eta = status.etaMinutes
-    when {
-      rest != null && eta != null -> AnalysisLine(stringResource(R.string.analysis_line_remaining_eta, rest, eta))
-      rest != null -> AnalysisLine(stringResource(R.string.analysis_line_remaining, rest))
-      else -> null
-    }
+  // XU-1: niente minuti (il motore stima solo il mese in lavorazione, non tutto il lavoro) e niente «Restano N» quando l'anello dice gia' pronte su
+  // totale: due misure diverse dello stesso lavoro nello stesso riquadro non tornano. Il conto resta solo se l'anello non ha numeri.
+  is LibraryAnalysisStatus.Running -> status.remaining?.takeIf { it > 0 && readyOf(status) == null }?.let {
+    AnalysisLine(stringResource(R.string.analysis_line_remaining, GalleryNumbers.format(it)))
   }
   is LibraryAnalysisStatus.Queued -> AnalysisLine(stringResource(R.string.analysis_line_queued))
   is LibraryAnalysisStatus.Paused -> AnalysisLine(stringResource(analysisWaitRes(status.reason)), waitGlyph(status.reason))
   LibraryAnalysisStatus.AllReady -> AnalysisLine(stringResource(R.string.analysis_line_ready))
   LibraryAnalysisStatus.Disabled -> AnalysisLine(stringResource(R.string.analysis_line_disabled))
   is LibraryAnalysisStatus.NotHere -> AnalysisLine(stringResource(R.string.analysis_line_not_here))
-  LibraryAnalysisStatus.ModelMissing, is LibraryAnalysisStatus.Problem, LibraryAnalysisStatus.Idle -> null
+  is LibraryAnalysisStatus.Problem -> AnalysisLine(problemLine(status.code))
+  LibraryAnalysisStatus.ModelMissing -> AnalysisLine(stringResource(R.string.analysis_line_model))
+  LibraryAnalysisStatus.Idle -> null
 }
 
-/** La frase intera per TalkBack: lo stato e, dove c'e', quante foto restano (un numero vero o niente). */
-internal fun analysisSentence(resources: Resources, status: LibraryAnalysisStatus): String {
-  val rest = remainingOf(status)?.let { resources.getString(R.string.analysis_remaining, GalleryNumbers.format(it)) } ?: ""
+/**
+ * La frase intera per TalkBack: lo stato e, dove l'anello non ha gia' i numeri, quante foto restano (un numero vero o niente). [withCount] falso per
+ * la regione viva (XU-17): si annuncia il cambio di stato, non il conto che cambia a ogni foto.
+ */
+internal fun analysisSentence(resources: Resources, status: LibraryAnalysisStatus, withCount: Boolean = true): String {
+  val rest = remainingOf(status)?.takeIf { withCount && readyOf(status) == null }?.let { resources.getString(R.string.analysis_remaining, GalleryNumbers.format(it)) } ?: ""
   return when (status) {
     LibraryAnalysisStatus.Idle -> ""
     is LibraryAnalysisStatus.Running -> resources.getString(R.string.analysis_sentence_running, rest).trim()
@@ -149,7 +171,7 @@ internal fun analysisSentence(resources: Resources, status: LibraryAnalysisStatu
     LibraryAnalysisStatus.ModelMissing -> resources.getString(R.string.analysis_sentence_model_missing)
     LibraryAnalysisStatus.Disabled -> resources.getString(R.string.analysis_sentence_disabled)
     is LibraryAnalysisStatus.NotHere -> resources.getString(R.string.analysis_sentence_not_here)
-    is LibraryAnalysisStatus.Problem -> SearchCodes.message(resources, DiagCode(status.code))
+    is LibraryAnalysisStatus.Problem -> resources.getString(R.string.analysis_sentence_problem, SearchCodes.message(resources, DiagCode(status.code)))
   }
 }
 

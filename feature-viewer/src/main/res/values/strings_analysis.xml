@@ -10,8 +10,10 @@
     <string name="analysis_badge_first_video">Primo in coda</string>
     <string name="analysis_badge_analyzing">In analisi adesso</string>
     <string name="analysis_badge_unsupported">Non si può analizzare</string>
-    <string name="analysis_badge_model_missing">Manca il modello</string>
+    <string name="analysis_badge_model_missing">Serve un download</string>
     <string name="analysis_badge_not_here">La analizza un altro dispositivo</string>
+    <string name="analysis_badge_not_here_video">Lo analizza un altro dispositivo</string>
+    <string name="analysis_unsupported_why">Formato non supportato</string>
     <string name="analysis_hold_hot">Telefono caldo: parte appena si raffredda</string>
     <string name="analysis_hold_nas">Aspetta il NAS</string>
     <string name="analysis_hold_preparation">Si sta preparando</string>

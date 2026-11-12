@@ -128,10 +128,12 @@ internal fun AnalysisHero(
   background: Color = MaterialTheme.colorScheme.surfaceContainerLow,
   corner: (@Composable BoxScope.() -> Unit)? = null,
   below: (@Composable ColumnScope.() -> Unit)? = null,
+  /** XU-5: l'icona del perche' davanti alla riga; falso dove il mirino della pagina la mostra gia' grande. */
+  lineGlyph: Boolean = true,
 ) {
   val sign = analysisSign(status)
   val label = analysisLabel(status) ?: return
-  val line = analysisLine(status)
+  val line = analysisLine(status)?.let { if (lineGlyph) it else AnalysisLine(it.text) }
   val sentence = analysisSentence(LocalResources.current, status)
   Box(modifier = modifier.fillMaxWidth().testTag(AnalysisStatusTag)) {
     Column(
@@ -193,7 +195,8 @@ private fun HeroRing(ring: AnalysisRing, mark: GalleryIconStatus?, background: C
             maxLines = 1,
           )
           if (ring.ready != null && ring.total != null) {
-            // Su una riga se ci sta; con il testo grande «/ 15.000» va a capo dentro l'anello, mai sopra l'arco.
+            // Su una riga se ci sta; con il testo grande «/ 15.000» va a capo dentro l'anello, mai sopra l'arco. `labelSmall` e non il `labelMedium`
+            // del backup (XU-14): «12.300 / 15.000» in `labelMedium` tocca l'arco dell'anello da 132 dp (verificato negli screenshot del giro 2).
             FlowRow(horizontalArrangement = Arrangement.spacedBy(SearchDimens.AnalysisLineGap, Alignment.CenterHorizontally)) {
               Text(text = ring.ready, style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
               Text(text = ring.total, style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
@@ -246,12 +249,12 @@ private fun HeroTexts(label: String, line: AnalysisLine?, sentence: String, onOp
       color = MaterialTheme.colorScheme.onSurface,
       modifier = Modifier.semantics { heading() },
     )
-    if (line != null || onOpen != null) {
+    // XU-12: dove la testata apre la pagina e non c'e' altro da dire, la riga e' la porta («Guarda l'analisi ›»).
+    val text = line?.text ?: if (onOpen != null) stringResource(R.string.analysis_line_open) else null
+    if (text != null) {
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(SearchDimens.AnalysisLineGap)) {
         if (line?.glyph != null) Icon(imageVector = line.glyph, contentDescription = null, tint = ink, modifier = Modifier.size(SearchDimens.InlineGlyph))
-        if (line != null) {
-          Text(text = line.text, style = MaterialTheme.typography.bodyMedium, color = ink, textAlign = TextAlign.Center, modifier = Modifier.weight(1f, fill = false))
-        }
+        Text(text = text, style = MaterialTheme.typography.bodyMedium, color = ink, textAlign = TextAlign.Center, modifier = Modifier.weight(1f, fill = false))
         if (onOpen != null) Icon(imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = ink, modifier = Modifier.size(SearchDimens.InlineGlyph))
       }
     }

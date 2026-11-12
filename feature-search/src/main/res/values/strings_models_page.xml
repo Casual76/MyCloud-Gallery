@@ -7,7 +7,7 @@
   <!-- Ruolo Indicizzatore (D15, Q3) -->
   <string name="models_section_indexer">Analisi delle foto</string>
   <string name="models_indexer_detail">Un dispositivo che analizza calcola una volta per tutta la famiglia ciò che serve a cercare per contenuto. Lo scegli tu, dispositivo per dispositivo.</string>
-  <string name="models_indexer_state_on">Indicizzatore</string>
+  <string name="models_indexer_state_on">Analizza le foto</string>
   <string name="models_indexer_state_off">Non analizza</string>
   <string name="models_indexer_measuring">Misuro la velocità del telefono…</string>
   <string name="models_indexer_probe">Misura: %1$s immagini al secondo (%2$s)</string>
@@ -108,7 +108,7 @@
   <string name="models_index_off_message">Questo dispositivo non analizza più le foto. Il modello occupa 370 MB: puoi toglierlo, e lo riscaricherai se riaccendi l’analisi.</string>
   <string name="models_index_off_keep">Tienilo</string>
   <string name="models_cancel">Annulla</string>
-  <string name="models_space">Spazio dell’indice: vettori %1$s, testo %2$s.</string>
+  <string name="models_space">Spazio della ricerca sul telefono: foto %1$s, testo %2$s.</string>
 
   <!-- Cronologia (D32, Q5) -->
   <string name="models_section_history">Ricerche recenti</string>
@@ -178,6 +178,6 @@
   <string name="models_model_query_short">Ricerca</string>
   <string name="models_model_index_short">Analisi</string>
   <string name="models_model_cutout_short">Ritaglio</string>
-  <string name="models_index_space_short">Indice: %1$s</string>
+  <string name="models_index_space_short">Ricerca: %1$s</string>
 </resources>
 

@@ -431,7 +431,7 @@ internal fun LibraryCloudPanel(
       )
     }
     for (item in cloud.activity) {
-      ActivityRow(note = noteOf(item), gauge = gaugeOf(item), mark = markOf(item), onClick = {
+      ActivityRow(note = noteOf(item), gauge = gaugeOf(item), mark = markOf(item), family = familyOf(item), onClick = {
         close()
         actionOf(item, actions)()
       })
@@ -546,7 +546,8 @@ private fun gaugeOf(item: CloudItem): CloudGauge? = when (item) {
     val ready = s.ready
     val total = s.total
     if (ready != null && total != null && total > 0) {
-      CloudGauge(AnalysisGlyph, ofTotal(GalleryNumbers.format(ready), GalleryNumbers.format(total)), s.etaMinutes?.let { stringResource(R.string.library_cloud_analysis_eta, it) })
+      // Giro 2 (XU-1): solo il conto vero; niente minuti (il motore stima solo il mese in lavorazione, non tutto il lavoro).
+      CloudGauge(AnalysisGlyph, ofTotal(GalleryNumbers.format(ready), GalleryNumbers.format(total)), null)
     } else {
       null
     }
@@ -566,10 +567,17 @@ private fun etaText(etaMillis: Long?): String? = etaMillis?.let { withEta(null, 
  * freccia. Per TalkBack una descrizione sola, la frase intera di prima.
  */
 @Composable
-private fun ActivityRow(note: GalleryFooterNote, gauge: CloudGauge?, onClick: () -> Unit, mark: GalleryIconStatus? = null) {
+private fun ActivityRow(
+  note: GalleryFooterNote,
+  gauge: CloudGauge?,
+  onClick: () -> Unit,
+  mark: GalleryIconStatus? = null,
+  family: GalleryIconFamily = GalleryIconFamily.Backup,
+) {
   val ink = MaterialTheme.colorScheme.onSurface
-  // CU-30: lo stesso avanzamento ha lo stesso colore ovunque, quello del backup.
-  val accent = galleryRingColor(GalleryIconFamily.Backup)
+  // CU-30: lo stesso avanzamento ha lo stesso colore ovunque, quello del backup; l'analisi ha la tinta della ricerca (giro 2, XU-2), come la sua
+  // testata, cosi' sotto «Tutto al sicuro» non sembra un backup che corre.
+  val accent = galleryRingColor(family)
   val spoken = note.description ?: listOfNotNull(note.label, note.detail).joinToString(". ")
   Row(
     modifier = Modifier
@@ -791,6 +799,9 @@ private fun actionLabel(item: CloudItem): String = stringResource(
 )
 
 /** Il segno del tasto sotto un problema: la Diagnostica lo stetoscopio, WireGuard la VPN, la password la chiave, il backup la nuvola. */
+/** La tinta dell'anello di una riga di lavoro: il backup per tutte, la ricerca per l'analisi (XU-2). */
+private fun familyOf(item: CloudItem): GalleryIconFamily = if (item is CloudItem.Analysis) GalleryIconFamily.Search else GalleryIconFamily.Backup
+
 /** Il segno di stato sull'anello di una riga di lavoro: per ora solo l'analisi (lo stesso vocabolario della sua testata). */
 private fun markOf(item: CloudItem): GalleryIconStatus? = when (item) {
   is CloudItem.Analysis -> when (val s = item.status) {
@@ -918,7 +929,7 @@ private fun analysisNoteOf(status: LibraryAnalysisStatus): GalleryFooterNote {
       glyph = AnalysisGlyph,
       detail = stringResource(R.string.library_cloud_analysis_queued_line),
       progress = status.progressOrNull(),
-      description = listOfNotNull(stringResource(R.string.library_cloud_analysis_queued), rest).joinToString(". "),
+      description = listOfNotNull(stringResource(R.string.library_cloud_analysis_queued), rest.takeIf { status.progressOrNull() == null }).joinToString(". "),
     )
     is LibraryAnalysisStatus.Paused -> {
       val why = stringResource(analysisWaitRes(status.reason))
@@ -928,16 +939,24 @@ private fun analysisNoteOf(status: LibraryAnalysisStatus): GalleryFooterNote {
         glyph = AnalysisGlyph,
         detail = why,
         progress = status.progressOrNull(),
-        description = listOfNotNull(stringResource(R.string.library_cloud_analysis_paused), why, rest).joinToString(". "),
+        description = listOfNotNull(stringResource(R.string.library_cloud_analysis_paused), why, rest.takeIf { status.progressOrNull() == null }).joinToString(". "),
       )
     }
+    // Giro 2 (XU-6): la capsula dice il perche' corto («Memoria quasi piena»), il tasto sotto dove si risolve; un codice senza perche' corto
+    // resta «Analisi ferma».
     is LibraryAnalysisStatus.Problem -> GalleryFooterNote(
       tone = GalleryFooterTone.Attention,
-      label = stringResource(R.string.library_cloud_analysis_problem),
+      label = stringResource(problemRes(status.code)),
       glyph = AnalysisGlyph,
     )
     else -> GalleryFooterNote(tone = GalleryFooterTone.Calm, label = stringResource(R.string.library_cloud_analysis_queued), glyph = AnalysisGlyph)
   }
+}
+
+private fun problemRes(code: String): Int = when (code) {
+  "AI_STORAGE_LOW", "AI_MODEL_NO_SPACE", "AI_KILLED_MEMORY" -> R.string.library_cloud_analysis_problem_storage
+  "AI_MODEL_FETCH_FAILED", "AI_MODEL_MISMATCH", "AI_MODEL_MISSING" -> R.string.library_cloud_analysis_problem_model
+  else -> R.string.library_cloud_analysis_problem
 }
 
 /** L'icona dell'analisi delle foto: la foto con la lente (la stessa di Ricerca e modelli e del visore). */

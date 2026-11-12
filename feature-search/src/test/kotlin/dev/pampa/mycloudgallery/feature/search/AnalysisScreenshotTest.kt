@@ -32,6 +32,7 @@ internal enum class AnalysisShot(val file: String) {
   QUEUED("analisi-in-coda"),
   PAUSED("analisi-in-pausa-telefono-caldo"),
   NIGHT("analisi-in-pausa-di-notte"),
+  QUIET("analisi-in-corso-con-foto-nascoste"),
   READY("analisi-tutto-pronto"),
   MODEL("analisi-modello-mancante"),
   NOT_HERE("analisi-non-analizza-qui"),
@@ -47,15 +48,16 @@ internal enum class AnalysisShot(val file: String) {
     when (this) {
       RUNNING -> AnalysisScreen(s.RUNNING, s.flow(), s.thumbnails, NoAnalysisHandlers, onBack = {})
       STEP -> AnalysisScreen(s.RUNNING, s.flow(), s.thumbnails, NoAnalysisHandlers, onBack = {}, frozenShift = HALF_STEP)
-      QUEUED -> AnalysisScreen(LibraryAnalysisStatus.Queued(13_760, 12_300, 15_000), s.restFlow(), s.thumbnails, NoAnalysisHandlers, onBack = {})
+      QUEUED -> AnalysisScreen(LibraryAnalysisStatus.Queued(2_700, 12_300, 15_000), s.restFlow(), s.thumbnails, NoAnalysisHandlers, onBack = {})
       PAUSED -> AnalysisScreen(s.PAUSED, s.restFlow(), s.thumbnails, NoAnalysisHandlers, onBack = {})
       NIGHT -> AnalysisScreen(
-        LibraryAnalysisStatus.Paused(LibraryAnalysisWait.NIGHT_WINDOW, 13_760, 12_300, 15_000),
+        LibraryAnalysisStatus.Paused(LibraryAnalysisWait.NIGHT_WINDOW, 2_700, 12_300, 15_000),
         AnalysisFlow.EMPTY,
         s.thumbnails,
         NoAnalysisHandlers,
         onBack = {},
       )
+      QUIET -> AnalysisScreen(s.RUNNING, s.quietFlow(), s.thumbnails, NoAnalysisHandlers, onBack = {})
       READY -> AnalysisScreen(LibraryAnalysisStatus.AllReady, s.restFlow(), s.thumbnails, NoAnalysisHandlers, onBack = {})
       MODEL -> AnalysisScreen(LibraryAnalysisStatus.ModelMissing, AnalysisFlow.EMPTY, s.thumbnails, NoAnalysisHandlers, onBack = {})
       NOT_HERE -> AnalysisScreen(LibraryAnalysisStatus.NotHere(ready = 12_300, total = 15_000), AnalysisFlow.EMPTY, s.thumbnails, NoAnalysisHandlers, onBack = {})
@@ -64,7 +66,7 @@ internal enum class AnalysisShot(val file: String) {
       SETTINGS -> SearchSettingsScreen(SearchSamples.settingsIndexer, false, true, true, true, NoSearchSettingsHandlers, onBack = {})
       SETTINGS_QUEUED -> SearchSettingsScreen(
         SearchSamples.settingsIndexer.copy(
-          indexer = SearchSamples.settingsIndexer.indexer.copy(analysis = LibraryAnalysisStatus.Paused(LibraryAnalysisWait.THERMAL, 13_760, 12_300, 15_000)),
+          indexer = SearchSamples.settingsIndexer.indexer.copy(analysis = LibraryAnalysisStatus.Paused(LibraryAnalysisWait.THERMAL, 2_700, 12_300, 15_000)),
         ),
         false,
         true,
@@ -121,6 +123,7 @@ internal class AnalysisPhoneScreenshotTest(shot: AnalysisShot, dark: Boolean, sc
       every(AnalysisShot.RUNNING, AnalysisShot.PAUSED, AnalysisShot.PROBLEM, AnalysisShot.SETTINGS, large = true) +
         every(
           AnalysisShot.STEP,
+          AnalysisShot.QUIET,
           AnalysisShot.QUEUED,
           AnalysisShot.NIGHT,
           AnalysisShot.READY,

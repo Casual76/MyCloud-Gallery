@@ -45,6 +45,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -55,7 +56,6 @@ import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryStatusMark
-import dev.pampa.mycloudgallery.core.designsystem.icon.glyph
 import dev.pampa.mycloudgallery.core.designsystem.media.galleryRingColor
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
@@ -66,10 +66,13 @@ import dev.pampa.mycloudgallery.feature.search.contract.AnalysisFlow
 import dev.pampa.mycloudgallery.feature.search.contract.AnalysisThumb
 import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
 import dev.pampa.mycloudgallery.feature.search.ui.SearchDimens
+import dev.pampa.mycloudgallery.feature.search.windowOf
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sign
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.conflate
 
 // IL NASTRO DELL'ANALISI (grafica XU, 12/11/2026). L'utente: «un menu' che mostra in maniera animata le foto e video scorrere nel mentre che vengono
@@ -84,13 +87,20 @@ import kotlinx.coroutines.flow.conflate
 //
 // IL COSTO, tenuto basso di proposito (oggi un foglio ha scaldato il telefono ridisegnandosi a ogni fotogramma):
 //  - superfici piene, nessun vetro e nessuna sfocatura sotto il nastro; il segnaposto sfocato e' una bitmap gia' pronta, non un effetto;
-//  - **un passo per volta e mai piu' di uno ogni [LaneStepMillis]**: il motore puo' finire piu' foto al secondo, la pagina ne mostra il passo
-//    piu' recente (gli intermedi si saltano, la corsia scorre di piu' posti in un movimento solo). Fra un passo e l'altro **niente si muove**;
+//  - **un passo per volta e mai piu' di uno ogni [LaneStepMillis] (1,2 s)**: il motore puo' finire piu' foto al secondo, la pagina ne mostra il
+//    passo piu' recente (gli intermedi si saltano, la corsia scorre di piu' posti in un movimento solo). Un passo dura ~0,75 s (corsia con
+//    `standard` 0,36-0,40 s insieme al mirino che si apre con `snappy` 0,35 s, poi mirino che si chiude e luce con `snappy` 0,35 s: misurati
+//    simulando le molle di FluidMotion): fra un passo e l'altro restano **almeno ~0,45 s in cui niente si muove**;
 //  - il movimento e' una sola molla ([shift]) letta **nel piazzamento** e nel livello di ciascuna anteprima, e il mirino legge la sua ([focus]) nel
 //    disegno: a ogni fotogramma si ripiazza e si ridisegna, **non si ricompone** niente;
 //  - nessun ciclo infinito; con la pagina non visibile i flussi non si raccolgono (ciclo di vita) e niente cambia; con il movimento ridotto le
 //    anteprime cambiano posto **senza scorrere** e il mirino non si stringe ne' passa la luce;
 //  - miniature solo da cio' che e' gia' sul dispositivo (lo stesso caricatore di Cerca); un media che la Libreria non mostrerebbe e' la casella neutra.
+//
+// RISERVATEZZA (XS2-1, giro 2): il passo riguarda il **movimento**, non l'autorizzazione. Il fotogramma trattenuto dal passo ([rememberPaced]) si
+// disegna sempre **filtrato dal nastro di adesso** ([visibleNow]): un media che il flusso non da' piu' come anteprima (revocato, nascosto, nel
+// cestino) diventa la casella neutra nello stesso fotogramma in cui il flusso lo toglie, anche a meta' di un passo e con il movimento ridotto; e
+// riferimento e ThumbHash vengono sempre dal valore di adesso, mai da quello trattenuto.
 
 /** Un'anteprima della corsia e il suo posto: 0 = nel mirino, negativo = finita (a sinistra), positivo = in arrivo (a destra). */
 @Immutable
@@ -111,28 +121,39 @@ internal fun AnalysisLane(
 ) {
   val reduced = LocalFluidMotionPolicy.current.reducedMotion
   val paced = rememberPaced(flow)
-  var shown by remember { mutableStateOf(paced) }
+  var held by remember { mutableStateOf(paced) }
   val shift = remember { Animatable(frozenShift ?: 0f) }
   val focus = remember { Animatable(1f) }
+  val light = remember { Animatable(1f) }
   LaunchedEffect(paced, reduced) {
-    val old = shown
+    val old = held
     val step = laneStep(old, paced)
-    val arrived = paced.current != null && paced.current != old.current
-    shown = paced
+    val arrived = paced.current != null && (step > 0 || paced.current != old.current)
+    held = paced
     if (frozenShift != null) return@LaunchedEffect
     if (reduced) {
       shift.snapTo(0f)
       focus.snapTo(1f)
+      light.snapTo(1f)
       return@LaunchedEffect
     }
-    // Prima scorre la corsia (il mirino resta aperto mentre l'anteprima entra), poi il mirino si stringe e la luce passa una volta.
-    if (arrived) focus.snapTo(0f)
-    // Un passo che arriva mentre il precedente sta finendo parte da dove la corsia e' adesso (nessun salto).
+    // XU-3: la corsia scorre mentre il mirino si apre (insieme, senza scatti), poi il mirino si stringe e la luce passa una volta. Un passo che
+    // arriva mentre il precedente sta finendo parte da dove la corsia e il mirino sono adesso.
     shift.snapTo(step + shift.value)
-    shift.animateTo(0f, FluidMotion.smooth())
-    if (arrived) focus.animateTo(1f, FluidMotion.gentle())
+    coroutineScope {
+      launch { shift.animateTo(0f, FluidMotion.standard()) }
+      if (arrived) launch { focus.animateTo(0f, FluidMotion.snappy()) }
+    }
+    if (arrived) {
+      light.snapTo(0f)
+      coroutineScope {
+        launch { focus.animateTo(1f, FluidMotion.snappy()) }
+        launch { light.animateTo(1f, FluidMotion.snappy()) }
+      }
+    }
   }
-  val frame = shown
+  // XS2-1: il fotogramma trattenuto si disegna filtrato dal nastro di adesso (lo stesso fotogramma in cui il flusso revoca).
+  val frame = visibleNow(held, flow)
   val running = frame.current != null
   val description = laneDescription(frame)
   BoxWithConstraints(
@@ -156,6 +177,14 @@ internal fun AnalysisLane(
     // Una chiave per anteprima; se lo stesso media comparisse due volte (finito e di nuovo in coda), la seconda prende anche il posto.
     val seen = HashSet<Any>()
     val keys = entries.map { entry -> laneKey(entry).let { if (seen.add(it)) it else "$it@${entry.slot}" } }
+    // XU-15: le miniature nella finestra del caricatore solo per le anteprime che la corsia mostra (quelle del NAS "in arrivo", mai l'originale), e
+    // solo quando cambiano quelle mostrate: non a ogni emissione del motore. Sono gia' filtrate dal nastro di adesso (XS2-1).
+    val requests = entries.mapNotNull { (it.thumb as? AnalysisThumb.Shown)?.request }
+    LaunchedEffect(requests, thumbnails) {
+      val loader = thumbnails?.loader ?: return@LaunchedEffect
+      val (local, replicaOnly) = windowOf(requests)
+      loader.window(local, replicaOnly)
+    }
     val accent = galleryRingColor(GalleryIconFamily.Search)
     val restInk = MaterialTheme.colorScheme.outlineVariant
     val edge = with(density) { (maxWidth / 2 + bleed).toPx() }
@@ -171,7 +200,8 @@ internal fun AnalysisLane(
           // Letto nel disegno: il mirino si ridisegna, la pagina no.
           // A meta' passo (lo screenshot) il mirino e' aperto: si stringe solo quando l'anteprima e' arrivata.
           val f = if (frozenShift != null) 0f else focus.value
-          drawGate(geometry, gate, if (running) accent else restInk, f, sweep = running && f < 1f, accent)
+          val l = if (frozenShift != null) 1f else light.value
+          drawGate(geometry, gate, if (running) accent else restInk, f, sweepAt = if (running && l < 1f) l else null, accent)
         },
       content = {
         entries.forEachIndexed { index, entry ->
@@ -283,7 +313,7 @@ private class GateMetrics(val inset: Float, val corner: Float, val stroke: Float
  * Il mirino: quattro angoli intorno al posto di adesso. All'arrivo di un'anteprima si stringe ([focus] da 0 a 1) e una luce la attraversa una volta
  * dall'alto in basso ([sweep]); poi resta fermo. A riposo e' del colore dei bordi, mentre lavora della tinta della ricerca.
  */
-private fun DrawScope.drawGate(geometry: LaneGeometry, gate: GateMetrics, color: Color, focus: Float, sweep: Boolean, light: Color) {
+private fun DrawScope.drawGate(geometry: LaneGeometry, gate: GateMetrics, color: Color, focus: Float, sweepAt: Float?, light: Color) {
   val center = Offset(size.width / 2f, size.height / 2f)
   val half = geometry.current / 2f + gate.inset + gate.focus * (1f - focus)
   val box = Rect(center.x - half, center.y - half, center.x + half, center.y + half)
@@ -296,12 +326,12 @@ private fun DrawScope.drawGate(geometry: LaneGeometry, gate: GateMetrics, color:
     moveTo(box.left + arm, box.bottom); lineTo(box.left, box.bottom); lineTo(box.left, box.bottom - arm)
   }
   drawPath(path, color = color, style = stroke)
-  if (!sweep) return
+  val sweep = sweepAt ?: return
   // La luce che passa una volta: una fascia sfumata della tinta della ricerca, dentro l'anteprima (ritagliata alla sua forma).
   val photoHalf = geometry.current / 2f
   val photo = Rect(center.x - photoHalf, center.y - photoHalf, center.x + photoHalf, center.y + photoHalf)
   val band = geometry.current * SweepBand
-  val y = photo.top - band + (photo.height + band * 2f) * focus
+  val y = photo.top - band + (photo.height + band * 2f) * sweep
   val shape = ContinuousCornerShape(FluidRadius.Card).createOutline(Size(photo.width, photo.height), layoutDirection, this)
   val clip = Path().apply { addOutline(shape); translate(photo.topLeft) }
   clipPath(clip) {
@@ -329,7 +359,11 @@ private fun LaneThumb(thumb: AnalysisThumb, thumbnails: SearchThumbnails?, side:
       .clip(shape)
       .background(MaterialTheme.colorScheme.surfaceContainerHigh)
       .testTag(if (thumb is AnalysisThumb.Quiet) AnalysisQuietTag else AnalysisShownTag)
-      .semantics { hideFromAccessibility() },
+      .semantics {
+        hideFromAccessibility()
+        // Solo per le prove (XS2-1: quale media e' a schermo); TalkBack non lo legge.
+        (thumb as? AnalysisThumb.Shown)?.let { this[AnalysisMediaKey] = it.id.value }
+      },
   ) {
     when (thumb) {
       is AnalysisThumb.Shown -> {
@@ -376,9 +410,8 @@ private fun RestCard(status: LibraryAnalysisStatus, side: Dp) {
       .testTag(AnalysisRestTag),
     contentAlignment = androidx.compose.ui.Alignment.Center,
   ) {
-    // Il segno non ripete l'icona (in coda: la clessidra basta una volta).
-    val mark = sign.mark?.takeUnless { it.glyph() == sign.glyph }
-    GalleryIconTile(icon = sign.glyph, family = sign.family, size = side * RestTile, status = mark, ring = ground, statusDescription = null)
+    // XU-5: il mirino dice solo il perche'; lo stato (il segno) lo dice l'anello della testata, una volta.
+    GalleryIconTile(icon = sign.glyph, family = sign.family, size = side * RestTile, status = null, ring = ground, statusDescription = null)
   }
 }
 
@@ -412,7 +445,13 @@ private fun laneKey(entry: LaneEntry): Any = when (val thumb = entry.thumb) {
   null -> "riposo"
 }
 
-/** Di quanti posti e' scorsa la corsia da [old] a [new]: dalla prima anteprima di [new] che c'era anche in [old]. Zero se non si sa. */
+/**
+ * Di quanti posti e' scorsa la corsia da [old] a [new]: dalla prima anteprima di [new] che c'era anche in [old].
+ *  - XU-4: dalla corsia vuota (la pagina appena aperta) alle prime anteprime, la corsia **entra da destra** di [EntrySteps] posti, una volta;
+ *  - XU-9: senza anteprime in comune (una fila di caselle neutre) ma con il mirino occupato prima e dopo, il motore e' andato avanti: un posto.
+ *    Non scorre se l'unica differenza e' una revoca (un'anteprima diventata casella neutra al suo posto: [onlyRevoked]).
+ * Zero se non si sa.
+ */
 internal fun laneStep(old: AnalysisFlow, new: AnalysisFlow): Int {
   val before = HashMap<Any, Int>()
   slotsOf(old).forEach { (slot, thumb) -> (thumb as? AnalysisThumb.Shown)?.let { before.putIfAbsent(it.id, slot) } }
@@ -421,7 +460,33 @@ internal fun laneStep(old: AnalysisFlow, new: AnalysisFlow): Int {
     val was = before[id] ?: continue
     return (was - slot).coerceIn(0, MaxStep)
   }
+  val oldEmpty = old.current == null && old.recent.isEmpty() && old.next.isEmpty()
+  if (oldEmpty && new.current != null) return EntrySteps
+  if (old.current != null && new.current != null && old != new && !onlyRevoked(old, new)) return 1
   return 0
+}
+
+/** Vero se [new] e' [old] con qualche anteprima diventata casella neutra allo stesso posto (una revoca, non un passo del motore). */
+private fun onlyRevoked(old: AnalysisFlow, new: AnalysisFlow): Boolean {
+  if (old.recent.size != new.recent.size || old.next.size != new.next.size || (old.current == null) != (new.current == null)) return false
+  val before = slotsOf(old)
+  val after = slotsOf(new)
+  return before.zip(after).all { (b, a) -> a.second == b.second || a.second == AnalysisThumb.Quiet }
+}
+
+/**
+ * XS2-1: il fotogramma trattenuto [held], ma solo con cio' che il nastro di adesso [now] mostra: un'anteprima trattenuta resta un'anteprima solo se
+ * [now] da' lo stesso media come anteprima, e allora con **il suo** riferimento e il suo ThumbHash; altrimenti e' la casella neutra.
+ */
+internal fun visibleNow(held: AnalysisFlow, now: AnalysisFlow): AnalysisFlow {
+  if (held === now) return now
+  val allowed = HashMap<Any, AnalysisThumb.Shown>()
+  (listOfNotNull(now.current) + now.recent + now.next).forEach { thumb -> (thumb as? AnalysisThumb.Shown)?.let { allowed.putIfAbsent(it.id, it) } }
+  fun clean(thumb: AnalysisThumb): AnalysisThumb = when (thumb) {
+    is AnalysisThumb.Shown -> allowed[thumb.id] ?: AnalysisThumb.Quiet
+    AnalysisThumb.Quiet -> AnalysisThumb.Quiet
+  }
+  return AnalysisFlow(held.current?.let(::clean), held.recent.map(::clean), held.next.map(::clean))
 }
 
 private fun slotsOf(flow: AnalysisFlow): List<Pair<Int, AnalysisThumb>> = buildList {
@@ -438,11 +503,15 @@ private fun rememberPaced(flow: AnalysisFlow): AnalysisFlow {
   LaunchedEffect(Unit) {
     snapshotFlow { latest.value }.conflate().collect { value ->
       paced = value
-      delay(LaneStepMillis)
+      // XU-4: dopo un nastro vuoto (la pagina appena aperta) nessuna attesa: le prime anteprime entrano appena arrivano.
+      if (value.current != null || value.recent.isNotEmpty() || value.next.isNotEmpty()) delay(LaneStepMillis)
     }
   }
   return paced
 }
+
+/** Il media di un'anteprima a schermo, per le prove di riservatezza (nessun lettore lo legge). */
+internal val AnalysisMediaKey: SemanticsPropertyKey<String> = SemanticsPropertyKey("AnalysisMedia")
 
 internal const val AnalysisLaneTag: String = "analisi-nastro"
 internal const val AnalysisShownTag: String = "analisi-anteprima"
@@ -450,14 +519,17 @@ internal const val AnalysisQuietTag: String = "analisi-nascosta"
 internal const val AnalysisRestTag: String = "analisi-a-riposo"
 
 /** Il passo piu' breve della corsia: sotto, il movimento diventerebbe continuo (e la pagina si ridisegnerebbe sempre). */
-internal const val LaneStepMillis: Long = 900L
+internal const val LaneStepMillis: Long = 1_200L
 
 /** Di quanti posti al massimo scorre la corsia in un passo (gli intermedi gia' usciti dallo schermo non si animano). */
 private const val MaxStep = 4
 
+/** Di quanti posti entra la corsia la prima volta che arrivano anteprime (dalla destra, come le prossime). */
+private const val EntrySteps = 2
+
 private const val PartsPerEntry = 3
 private const val CurrentOfHeight = 0.66f
-private const val CurrentOfWidth = 0.56f
+private const val CurrentOfWidth = 0.68f
 private const val SideOfCurrent = 0.36f
 private const val NextAlpha = 0.62f
 private const val MarkFrom = 0.2f

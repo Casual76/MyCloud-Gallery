@@ -107,11 +107,12 @@ class SearchSettingsUiTest {
     // Pacchetto X: lo stato sta in testata, detto una volta (sotto resta solo la misura).
     // Grafica XU: la testata dell'analisi, sorella del Backup: due parole e una riga.
     shown("In corso").assertIsDisplayed()
-    shown("Restano 13.760 · circa 95\u00A0min").assertIsDisplayed()
+    // Giro 2 (XU-1): niente minuti ne' «restano» sotto un anello che dice gia' pronte su totale; la riga e' la porta verso la pagina.
+    shown("Guarda l’analisi").assertIsDisplayed()
     assertThat(rule.onAllNodesWithText("1.240 / 15.000", useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
     shown("≈ 2 notti").performScrollTo().assertIsDisplayed()
-    said("Analizzare 13.760 foto e video richiede circa 2 notti.").assertExists()
-    said("Sta analizzando le foto adesso. Restano 13.760 foto").assertExists()
+    said("Analizzare 2.700 foto e video richiede circa 2 notti.").assertExists()
+    said("Sta analizzando le foto adesso.").assertExists()
     // CS-15: niente sigle sotto la stima.
     assertThat(rule.onAllNodesWithText("CPU", substring = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
     assertThat(rule.onAllNodesWithText("GPU", substring = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
@@ -234,7 +235,9 @@ class SearchSettingsUiTest {
   @Test
   fun ogniProblemaHaIlSuoMessaggioELaSuaAzione_Paragrafo2_6() {
     show(SearchSamples.settingsProblems)
-    shown("Memoria quasi piena: analisi ferma").performScrollTo().assertIsDisplayed()
+    // Giro 2 (XU-6): due parole fisse in testata e il perche' corto nella riga.
+    shown("Analisi ferma").performScrollTo().assertIsDisplayed()
+    shown("Memoria quasi piena").assertIsDisplayed()
     // "Libera spazio" per il calcolo fermo, sotto l'interruttore.
     rule.onAllNodesWithText("Libera spazio").onFirst().performScrollTo().performClick()
     // Il modello delle query: lo scaricamento non riuscito, con "Riprova" e "Diagnostica" nel suo dettaglio.
@@ -401,7 +404,7 @@ class SearchSettingsUiTest {
     )
     show(state)
     shown("In coda").assertIsDisplayed()
-    said("Le foto da analizzare sono in coda. Restano 13.760 foto").assertExists()
+    said("Le foto da analizzare sono in coda.").assertExists()
     noneSaid("Questo dispositivo non analizza le foto.")
   }
 }

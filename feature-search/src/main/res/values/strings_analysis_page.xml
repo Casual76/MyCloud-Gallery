@@ -10,17 +10,21 @@
     <string name="analysis_hero_queued">In coda</string>
     <string name="analysis_hero_paused">In pausa</string>
     <string name="analysis_hero_ready">Tutto pronto</string>
-    <string name="analysis_hero_model">Manca il modello</string>
+    <string name="analysis_hero_model">Serve un download</string>
+    <string name="analysis_hero_problem">Analisi ferma</string>
     <string name="analysis_hero_disabled">Spenta</string>
     <string name="analysis_hero_not_here">Su un altro dispositivo</string>
 
     <!-- La riga sotto l'etichetta. -->
     <string name="analysis_line_remaining">Restano %1$s</string>
-    <string name="analysis_line_remaining_eta">Restano %1$s · circa %2$d&#160;min</string>
     <string name="analysis_line_queued">Riparte da sola</string>
     <string name="analysis_line_ready">Ogni foto si trova cercando</string>
     <string name="analysis_line_disabled">Si riaccende dalle impostazioni</string>
     <string name="analysis_line_not_here">Qui arrivano i risultati</string>
+    <string name="analysis_line_model">Il modello per cercare nelle foto</string>
+    <string name="analysis_line_open">Guarda l’analisi</string>
+    <string name="analysis_problem_storage">Memoria quasi piena</string>
+    <string name="analysis_problem_model">Il modello va riscaricato</string>
     <string name="analysis_percent">%1$d%%</string>
     <string name="analysis_ring_description">%1$d%% pronte: %2$s su %3$s</string>
 
@@ -67,5 +71,6 @@
     <string name="analysis_sentence_ready">Tutte le foto sono pronte per la ricerca.</string>
     <string name="analysis_sentence_not_here">Questo dispositivo non analizza le foto: le analizza un altro dispositivo.</string>
     <string name="analysis_sentence_model_missing">Manca il modello di analisi su questo dispositivo.</string>
+    <string name="analysis_sentence_problem">L’analisi è ferma: %1$s</string>
     <string name="analysis_sentence_disabled">L’analisi delle foto è spenta nelle impostazioni.</string>
 </resources>

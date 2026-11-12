@@ -977,6 +977,9 @@ private fun ViewerOverlays(
     analysisActions = if (request.secure) emptyList() else analysisMenuEntries(resources, analysisMedia) {
       analysisFeedback.asked(currentId)
       services.analysis?.analyzeNow(currentId)
+      // Grafica XU, giro 2 (XU-7): dal menu il riscontro si vede: le informazioni si aprono sulla capsula, che dice «Prima in coda · Parte sul
+      // Wi-Fi» (o «Telefono caldo») e poi cambia segno fino a «Pronta per la ricerca».
+      if (!state.infoOpen) controller.toggleInfo()
     },
     dock = LocalViewerDock.current.entry(secure = request.secure),
     albumActions = albumMenuEntries(

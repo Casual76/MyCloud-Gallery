@@ -33,10 +33,11 @@ object SearchSamples {
       indexer = true,
       status = AiStatus.Running(done = 1_240, total = 15_000, etaMinutes = 95, backend = AiBackend.GPU),
       probe = null,
-      toAnalyze = 13_760,
+      // Grafica XU, giro 2: i campioni tornano fra loro (15.000 - 12.300 = 2.700 da fare).
+      toAnalyze = 2_700,
       nights = 2,
       areasWithoutIndexer = listOf(AreaKind.COMMON_AREA),
-      analysis = LibraryAnalysisStatus.Running(remaining = 13_760, etaMinutes = 95, ready = 12_300, total = 15_000),
+      analysis = LibraryAnalysisStatus.Running(remaining = 2_700, etaMinutes = null, ready = 12_300, total = 15_000),
     ),
     textReading = TextReadingPageState(TextReadingState.Off, TextReadingSwitch.CURRENT_TEXT_VERSION, needsConsent = true),
     models = ModelsState(

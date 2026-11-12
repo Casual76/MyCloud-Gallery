@@ -53,8 +53,9 @@
   <string name="library_cloud_analysis_queued_line">Riparte da sola</string>
   <string name="library_cloud_analysis_paused">Analisi in pausa</string>
   <string name="library_cloud_analysis_problem">Analisi ferma</string>
+  <string name="library_cloud_analysis_problem_storage">Memoria quasi piena</string>
+  <string name="library_cloud_analysis_problem_model">Il modello va riscaricato</string>
   <string name="library_cloud_analysis_remaining">Restano %1$s foto</string>
-  <string name="library_cloud_analysis_eta">circa %1$d min</string>
   <string name="library_cloud_analysis_wait_window">Fuori dall’orario</string>
   <string name="library_cloud_analysis_wait_charging">Serve la carica</string>
   <string name="library_cloud_analysis_wait_battery">Batteria scarica</string>

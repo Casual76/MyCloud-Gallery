@@ -55,8 +55,8 @@ internal object SearchScenes {
  * a misura di schermo stanno in `AnalysisScreenshotTest` (grafica XU).
  */
 internal object AnalysisScenes {
-  val RUNNING = LibraryAnalysisStatus.Running(remaining = 13_760, etaMinutes = 95, ready = 12_300, total = 15_000)
-  val PAUSED = LibraryAnalysisStatus.Paused(LibraryAnalysisWait.THERMAL, remaining = 13_760, ready = 12_300, total = 15_000)
+  val RUNNING = LibraryAnalysisStatus.Running(remaining = 2_700, etaMinutes = null, ready = 12_300, total = 15_000)
+  val PAUSED = LibraryAnalysisStatus.Paused(LibraryAnalysisWait.THERMAL, remaining = 2_700, ready = 12_300, total = 15_000)
 
   val thumbnails = SearchThumbnails(FakeThumbnailLoader(), FakePlaceholderCache(), SearchRefs { _, _ -> null })
 
@@ -73,6 +73,15 @@ internal object AnalysisScenes {
   /** A riposo: niente di adesso ne' prossime, le ultime finite ferme. */
   fun restFlow(seed: Long = 41): AnalysisFlow =
     AnalysisFlow(current = null, recent = listOf(shown(seed), shown(seed - 1, video = true), shown(seed - 2), shown(seed - 3), shown(seed - 4)), next = emptyList())
+
+  /** XU-9: una fila di foto che la Libreria non mostra: la casella neutra nel mirino, a sinistra e tre di fila a destra. */
+  fun quietFlow(): AnalysisFlow = AnalysisFlow(
+    current = AnalysisThumb.Quiet,
+    recent = listOf(shown(41), AnalysisThumb.Quiet, shown(39)),
+    next = listOf(AnalysisThumb.Quiet, AnalysisThumb.Quiet, AnalysisThumb.Quiet, shown(46)),
+  )
+
+  fun shownFor(seed: Long, video: Boolean = false): AnalysisThumb.Shown = shown(seed, video)
 
   fun flow(): AnalysisFlow = AnalysisFlow(
     current = shown(42),

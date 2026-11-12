@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.HourglassTop
@@ -80,9 +79,9 @@ internal fun analysisMark(kind: MediaAnalysisKind): GalleryIconStatus = when (ki
 /** Le parole della capsula per [media] (e la frase per TalkBack), o null se non c'e' niente da dire. */
 internal fun analysisNote(format: ViewerFormat, media: MediaAnalysis, video: Boolean): GalleryFooterNote? {
   val res = format.resources
-  fun note(tone: GalleryFooterTone, label: Int, glyph: ImageVector?, busy: Boolean = false): GalleryFooterNote {
+  fun note(tone: GalleryFooterTone, label: Int, glyph: ImageVector?, busy: Boolean = false, why: Int? = null): GalleryFooterNote {
     val text = res.getString(label)
-    val detail = media.hold?.let { res.getString(holdRes(it)) }
+    val detail = media.hold?.let { res.getString(holdRes(it)) } ?: why?.let { res.getString(it) }
     val spoken = listOfNotNull(res.getString(R.string.analysis_badge_spoken, text), detail).joinToString(". ")
     return GalleryFooterNote(tone = tone, label = text, glyph = glyph, detail = detail, busy = busy, description = spoken)
   }
@@ -100,9 +99,14 @@ internal fun analysisNote(format: ViewerFormat, media: MediaAnalysis, video: Boo
       Icons.Rounded.HourglassTop,
     )
     MediaAnalysisKind.ANALYZING -> note(GalleryFooterTone.Working, R.string.analysis_badge_analyzing, Icons.Rounded.Sync, busy = true)
-    MediaAnalysisKind.UNSUPPORTED -> note(GalleryFooterTone.Waiting, R.string.analysis_badge_unsupported, Icons.Rounded.Remove)
+    // Giro 2 (XU-13): il perche' in una riga.
+    MediaAnalysisKind.UNSUPPORTED -> note(GalleryFooterTone.Waiting, R.string.analysis_badge_unsupported, Icons.Rounded.Remove, why = R.string.analysis_unsupported_why)
     MediaAnalysisKind.MODEL_MISSING -> note(GalleryFooterTone.Attention, R.string.analysis_badge_model_missing, Icons.Rounded.Download)
-    MediaAnalysisKind.NOT_HERE -> note(GalleryFooterTone.Waiting, R.string.analysis_badge_not_here, Icons.Rounded.Remove)
+    MediaAnalysisKind.NOT_HERE -> note(
+      GalleryFooterTone.Waiting,
+      if (video) R.string.analysis_badge_not_here_video else R.string.analysis_badge_not_here,
+      Icons.Rounded.Remove,
+    )
   }
 }
 
@@ -174,9 +178,6 @@ internal fun AnalysisCapsule(badge: AnalysisBadge, onClick: (() -> Unit)?, actio
         color = ink,
         maxLines = 2,
       )
-      if (onClick != null) {
-        Icon(imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = ink, modifier = Modifier.size(ArrowSize))
-      }
     }
     badge.note.detail?.let { detail ->
       Text(
@@ -192,10 +193,9 @@ internal fun AnalysisCapsule(badge: AnalysisBadge, onClick: (() -> Unit)?, actio
 internal const val AnalysisCapsuleTag: String = "visore-analisi"
 
 private const val PopFrom = 0.55f
-private val CapsuleHeight: Dp = 44.dp
+private val CapsuleHeight: Dp = 48.dp
 private val CapsuleStart: Dp = 6.dp
 private val CapsuleEnd: Dp = 14.dp
 private val CapsuleGap: Dp = 10.dp
-private val TileSize: Dp = 32.dp
-private val ArrowSize: Dp = 18.dp
+private val TileSize: Dp = 40.dp
 private val LineGap: Dp = 4.dp

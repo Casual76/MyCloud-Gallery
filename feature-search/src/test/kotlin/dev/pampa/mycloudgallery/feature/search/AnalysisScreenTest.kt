@@ -2,6 +2,13 @@ package dev.pampa.mycloudgallery.feature.search
 
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
+import dev.pampa.mycloudgallery.feature.search.models.visibleNow
+import dev.pampa.mycloudgallery.feature.search.models.AnalysisMediaKey
+import dev.pampa.mycloudgallery.feature.search.contract.AnalysisThumb
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -66,7 +73,9 @@ class AnalysisScreenTest {
     rule.onNodeWithTag(AnalysisStatusTag).assertIsDisplayed()
     // La testata: due parole e una riga a vista, la frase intera per TalkBack.
     rule.onNodeWithText("In corso", useUnmergedTree = true).assertIsDisplayed()
-    rule.onNodeWithText("Restano 13.760 · circa 95\u00A0min", useUnmergedTree = true).assertIsDisplayed()
+    // Giro 2 (XU-1): sotto un anello che dice gia' pronte su totale niente «restano» e niente minuti.
+    assertThat(rule.onAllNodesWithText("Restano", substring = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+    assertThat(rule.onAllNodesWithText("min", substring = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
     rule.onAllNodesWithContentDescription("Sta analizzando le foto adesso", substring = true).onFirst().assertIsDisplayed()
     rule.onAllNodesWithText("82%", useUnmergedTree = true).onFirst().assertIsDisplayed()
     // Il nastro: dice che cosa guarda e quante ne passano; niente etichette da modulo.
@@ -113,7 +122,7 @@ class AnalysisScreenTest {
     rule.setSearchContent {
       AnalysisScreen(LibraryAnalysisStatus.ModelMissing, AnalysisFlow.EMPTY, AnalysisScenes.thumbnails, handlers, onBack = {})
     }
-    rule.onNodeWithText("Manca il modello", useUnmergedTree = true).assertIsDisplayed()
+    rule.onNodeWithText("Serve un download", useUnmergedTree = true).assertIsDisplayed()
     rule.onNodeWithText("Scarica ora").performClick()
     assertThat(handlers.codes).containsExactly(CodeAction.DOWNLOAD_NOW)
   }
@@ -155,5 +164,82 @@ class AnalysisScreenTest {
     assertThat(laneStep(one, AnalysisFlow(null, one.recent, emptyList()))).isEqualTo(0)
     // Niente in comune: nessuno scorrimento (le anteprime cambiano sul posto).
     assertThat(laneStep(before, AnalysisScenes.restFlow(seed = 900))).isEqualTo(0)
+  }
+
+  // --- Giro 2 ------------------------------------------------------------------------------------------------------------------------------------
+
+  /** XS2-1: una revoca a meta' del passo toglie il media nello stesso fotogramma (il passo trattiene il movimento, non l'autorizzazione). */
+  @Test
+  fun unaRevocaAMetaPassoTogliePrimaDelPasso() = revocaAMetaPasso(reduced = false)
+
+  @Test
+  fun unaRevocaAMetaPassoTogliePrimaDelPassoAncheConIlMovimentoRidotto() = revocaAMetaPasso(reduced = true)
+
+  private fun revocaAMetaPasso(reduced: Boolean) {
+    val before = AnalysisScenes.flow()
+    val target = before.recent[0] as AnalysisThumb.Shown
+    var flow by mutableStateOf(before)
+    rule.mainClock.autoAdvance = false
+    rule.setSearchContent {
+      CompositionLocalProvider(LocalFluidMotionPolicy provides FluidMotionPolicy(durationScale = if (reduced) 0f else 1f)) {
+        AnalysisScreen(AnalysisScenes.RUNNING, flow, AnalysisScenes.thumbnails, Recording(), onBack = {})
+      }
+    }
+    rule.mainClock.advanceTimeByFrame()
+    rule.waitForIdle()
+    assertThat(nodesOf(target)).isNotEmpty()
+    // Siamo dentro il passo (il nastro aspetta 1,2 s prima di prendere un valore nuovo): il flusso revoca il media.
+    rule.mainClock.advanceTimeBy(STEP_INSIDE)
+    // La scrittura sul filo dell'interfaccia, come il flusso raccolto dalla pagina; il fotogramma dopo deve essere gia' senza il media.
+    rule.runOnIdle { flow = AnalysisFlow(before.current, listOf(AnalysisThumb.Quiet) + before.recent.drop(1), before.next) }
+    rule.waitForIdle()
+    rule.mainClock.advanceTimeByFrame()
+    rule.waitForIdle()
+    assertThat(nodesOf(target)).isEmpty()
+    // ...e non torna nemmeno quando il passo scade.
+    rule.mainClock.advanceTimeBy(STEP_AFTER)
+    rule.waitForIdle()
+    assertThat(nodesOf(target)).isEmpty()
+  }
+
+  private fun nodesOf(thumb: AnalysisThumb.Shown) =
+    rule.onAllNodes(SemanticsMatcher.expectValue(AnalysisMediaKey, thumb.id.value), useUnmergedTree = true).fetchSemanticsNodes()
+
+  @Test
+  fun ilFotogrammaTrattenutoPrendeSoloCioCheIlNastroDiAdessoMostra() {
+    val held = AnalysisScenes.flow()
+    val target = held.recent[0] as AnalysisThumb.Shown
+    val now = AnalysisFlow(held.current, listOf(AnalysisThumb.Quiet) + held.recent.drop(1), held.next)
+    val shown = visibleNow(held, now)
+    assertThat(shown.recent[0]).isEqualTo(AnalysisThumb.Quiet)
+    assertThat((listOfNotNull(shown.current) + shown.recent + shown.next).filterIsInstance<AnalysisThumb.Shown>().map { it.id }).doesNotContain(target.id)
+    // Riferimento e ThumbHash vengono dal nastro di adesso, non da quello trattenuto.
+    val fresh = AnalysisThumb.Shown(target.id, request = null, thumbHash = null, video = false)
+    val moved = visibleNow(held, AnalysisFlow(held.current, listOf(fresh) + held.recent.drop(1), held.next))
+    assertThat(moved.recent[0]).isSameInstanceAs(fresh)
+  }
+
+  /** XU-4 e XU-9: la prima entrata scorre da destra; una fila di caselle neutre fa avanzare il nastro; una revoca senza anteprime in comune no. */
+  @Test
+  fun ilPassoConLaPrimaEntrataEConLeCaselleNeutre() {
+    assertThat(laneStep(AnalysisFlow.EMPTY, AnalysisScenes.flow())).isEqualTo(2)
+    val q = AnalysisThumb.Quiet
+    val one = AnalysisScenes.shownFor(41)
+    assertThat(laneStep(AnalysisFlow(q, listOf(q), listOf(q, q)), AnalysisFlow(q, listOf(q, q), listOf(q)))).isEqualTo(1)
+    assertThat(laneStep(AnalysisFlow(q, listOf(one), listOf(q)), AnalysisFlow(q, listOf(q), listOf(q)))).isEqualTo(0)
+  }
+
+  @Test
+  fun leCaselleNeutreSiVedonoNelMirinoEInFila() {
+    rule.setSearchContent {
+      AnalysisScreen(AnalysisScenes.RUNNING, AnalysisScenes.quietFlow(), AnalysisScenes.thumbnails, Recording(), onBack = {})
+    }
+    rule.onAllNodesWithContentDescription("Adesso guarda una foto che qui non si mostra", substring = true).onFirst().assertExists()
+    assertThat(rule.onAllNodesWithTag(AnalysisQuietTag, useUnmergedTree = true).fetchSemanticsNodes().size).isAtLeast(4)
+  }
+
+  private companion object {
+    const val STEP_INSIDE = 300L
+    const val STEP_AFTER = 1_500L
   }
 }

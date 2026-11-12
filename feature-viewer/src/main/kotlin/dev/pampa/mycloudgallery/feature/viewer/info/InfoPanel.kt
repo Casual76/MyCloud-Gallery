@@ -525,13 +525,22 @@ internal fun InfoContent(
     }
 
     // 2. Il backup: un'icona e due parole, il perche' solo quando serve. Finche' la fonte non risponde, il suo posto (niente salti).
-    when {
-      backup != null -> GalleryFooterEntry(note = backup, onClick = null, alignment = Alignment.Start)
-      backupPending -> FluidSkeleton(modifier = Modifier.width(CapsuleSkeletonWidth), height = CapsuleSkeletonHeight, shape = FluidCapsuleShape)
+    // 2b. Pacchetto X: l'analisi per la ricerca, con lo stato prima del tocco (in coda, la capsula e' "Analizza adesso"). Grafica XU, giro 2
+    // (XU-10): le due capsule stanno **sulla stessa riga** se ci stanno (vanno a capo solo se non c'e' posto), non impilate.
+    if (backup != null || backupPending || analysis != null) {
+      FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(PillGap),
+        verticalArrangement = Arrangement.spacedBy(PillGap),
+        itemVerticalAlignment = Alignment.CenterVertically,
+      ) {
+        when {
+          backup != null -> GalleryFooterEntry(note = backup, onClick = null, alignment = Alignment.Start)
+          backupPending -> FluidSkeleton(modifier = Modifier.width(CapsuleSkeletonWidth), height = CapsuleSkeletonHeight, shape = FluidCapsuleShape)
+        }
+        // Grafica XU: la piastrella dell'analisi con il segno di stato (lo stesso vocabolario della testata), in coda il tasto.
+        if (analysis != null) AnalysisCapsule(badge = analysis, onClick = onAnalysis, actionLabel = stringResource(R.string.analysis_now))
+      }
     }
-    // 2b. Pacchetto X: l'analisi per la ricerca, con lo stato prima del tocco (in coda, la capsula e' "Analizza adesso").
-    // Grafica XU: la piastrella dell'analisi con il segno di stato (lo stesso vocabolario della testata), in coda il tasto.
-    if (analysis != null) AnalysisCapsule(badge = analysis, onClick = onAnalysis, actionLabel = stringResource(R.string.analysis_now))
 
     // 3. Le persone: le facce, subito sotto la testa.
     if (leading.isNotEmpty()) InfoSections(leading)

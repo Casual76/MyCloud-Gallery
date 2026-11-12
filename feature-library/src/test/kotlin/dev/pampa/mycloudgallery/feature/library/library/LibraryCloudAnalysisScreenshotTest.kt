@@ -129,21 +129,21 @@ internal abstract class LibraryCloudAnalysisScreenshotBase(private val dark: Boo
   }
 
   @Test
-  fun inCorso() = shoot("analisi-in-corso", LibraryAnalysisStatus.Running(remaining = 13_760, etaMinutes = 95, ready = 12_300, total = 15_000))
+  fun inCorso() = shoot("analisi-in-corso", LibraryAnalysisStatus.Running(remaining = 2_700, etaMinutes = null, ready = 12_300, total = 15_000))
 
   @Test
   fun inCorsoTestoGrande() {
     org.junit.Assume.assumeTrue(device == "telefono" && !dark)
-    shoot("analisi-in-corso", LibraryAnalysisStatus.Running(remaining = 13_760, etaMinutes = 95, ready = 12_300, total = 15_000), fontScale = LARGE_TEXT)
+    shoot("analisi-in-corso", LibraryAnalysisStatus.Running(remaining = 2_700, etaMinutes = null, ready = 12_300, total = 15_000), fontScale = LARGE_TEXT)
   }
 
   @Test
-  fun inPausa() = shoot("analisi-in-pausa", LibraryAnalysisStatus.Paused(LibraryAnalysisWait.THERMAL, remaining = 13_760, ready = 12_300, total = 15_000))
+  fun inPausa() = shoot("analisi-in-pausa", LibraryAnalysisStatus.Paused(LibraryAnalysisWait.THERMAL, remaining = 2_700, ready = 12_300, total = 15_000))
 
   @Test
   fun inCoda() {
     org.junit.Assume.assumeTrue(device == "telefono")
-    shoot("analisi-in-coda", LibraryAnalysisStatus.Queued(remaining = 13_760, ready = 12_300, total = 15_000))
+    shoot("analisi-in-coda", LibraryAnalysisStatus.Queued(remaining = 2_700, ready = 12_300, total = 15_000))
   }
 
   @Test

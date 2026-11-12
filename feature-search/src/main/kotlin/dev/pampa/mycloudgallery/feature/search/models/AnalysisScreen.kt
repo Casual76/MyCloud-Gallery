@@ -12,7 +12,6 @@ import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalResources
@@ -24,10 +23,8 @@ import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryLiveAnnouncement
 import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
 import dev.pampa.mycloudgallery.feature.search.R
 import dev.pampa.mycloudgallery.feature.search.contract.AnalysisFlow
-import dev.pampa.mycloudgallery.feature.search.contract.AnalysisThumb
 import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
 import dev.pampa.mycloudgallery.feature.search.ui.SearchDimens
-import dev.pampa.mycloudgallery.feature.search.windowOf
 
 // LA PAGINA "ANALISI DELLE FOTO" (Pacchetto X; grafica XU, 12/11/2026). Due pezzi e basta:
 //  - **la testata**, sorella di quella del Backup ([AnalysisHero]): anello grande con le foto pronte, il segno dello stato, due parole, una riga, il
@@ -61,14 +58,7 @@ internal fun AnalysisScreen(
   frozenShift: Float? = null,
 ) {
   val resources = LocalResources.current
-  // Le miniature del nastro nella finestra del caricatore: solo quelle mostrate, quelle del NAS "in arrivo" (mai l'originale, CE-5).
-  LaunchedEffect(flow, thumbnails) {
-    if (thumbnails == null) return@LaunchedEffect
-    val all = listOfNotNull(flow.current) + flow.recent + flow.next
-    val requests = all.filterIsInstance<AnalysisThumb.Shown>().mapNotNull { it.request }
-    val (local, replicaOnly) = windowOf(requests)
-    thumbnails.loader.window(local, replicaOnly)
-  }
+  // XU-15: la finestra del caricatore la apre il nastro, solo per le anteprime che entrano nello schermo (AnalysisLane).
   val buttons = heroButtons(status, handlers)
   FluidScreen(
     title = stringResource(R.string.analysis_page_title),
@@ -77,8 +67,11 @@ internal fun AnalysisScreen(
   ) {
     item(key = "analysis-stage") { AnalysisStage(status, flow, thumbnails, buttons, frozenShift) }
   }
-  // Uno stato che cambia da solo si annuncia una volta (come la testata del backup); «tutto pronto» non e' una notizia.
-  if (status != LibraryAnalysisStatus.AllReady) analysisSentence(resources, status).takeIf { it.isNotEmpty() }?.let { GalleryLiveAnnouncement(it) }
+  // Uno stato che cambia da solo si annuncia una volta (come la testata del backup); «tutto pronto» non e' una notizia. XU-17: senza il conto, che
+  // cambia a ogni foto (la regione viva riparlerebbe di continuo).
+  if (status != LibraryAnalysisStatus.AllReady) {
+    analysisSentence(resources, status, withCount = false).takeIf { it.isNotEmpty() }?.let { GalleryLiveAnnouncement(it) }
+  }
 }
 
 /** Testata e nastro: affiancati se c'e' larghezza (tablet in orizzontale), altrimenti uno sopra l'altro con il nastro che prende il resto. */
@@ -94,13 +87,14 @@ private fun LazyItemScope.AnalysisStage(
   val lane = Modifier.fillParentMaxHeight(LaneOfScreen).heightIn(min = SearchDimens.LaneMinHeight)
   BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
     if (maxWidth >= SearchDimens.AnalysisSideBySide) {
-      Row(modifier = tall.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(SearchDimens.BlockGap)) {
-        FluidListGroup(modifier = Modifier.width(SearchDimens.AnalysisHeroSideWidth)) { AnalysisHero(status, buttons = buttons) }
+      // XU-8: la testata in alto, sotto il titolo (non a meta' altezza); il nastro prende tutta l'altezza accanto.
+      Row(modifier = tall.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(SearchDimens.BlockGap)) {
+        FluidListGroup(modifier = Modifier.width(SearchDimens.AnalysisHeroSideWidth)) { AnalysisHero(status, buttons = buttons, lineGlyph = false) }
         AnalysisLane(status, flow, thumbnails, modifier = Modifier.weight(1f).fillMaxHeight(), bleed = SearchDimens.LaneNoBleed, frozenShift = frozenShift)
       }
     } else {
       Column(verticalArrangement = Arrangement.spacedBy(SearchDimens.BlockGap)) {
-        FluidListGroup { AnalysisHero(status, buttons = buttons) }
+        FluidListGroup { AnalysisHero(status, buttons = buttons, lineGlyph = false) }
         AnalysisLane(status, flow, thumbnails, modifier = lane.fillMaxWidth(), frozenShift = frozenShift)
       }
     }
@@ -133,5 +127,5 @@ private fun heroButtons(status: LibraryAnalysisStatus, handlers: AnalysisHandler
 private const val MODEL_MISSING = "AI_MODEL_MISSING"
 
 /** Il nastro sul telefono prende circa meta' dello schermo (sotto la testata: lo riempie); affiancato, quasi tutta l'altezza sotto il titolo. */
-private const val LaneOfScreen = 0.54f
+private const val LaneOfScreen = 0.5f
 private const val StageOfScreenSide = 0.8f

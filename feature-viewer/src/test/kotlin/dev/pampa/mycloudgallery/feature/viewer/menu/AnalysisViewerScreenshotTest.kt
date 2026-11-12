@@ -1,6 +1,10 @@
 package dev.pampa.mycloudgallery.feature.viewer.menu
 
 import android.app.Application
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CloudDone
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,7 +58,7 @@ abstract class AnalysisViewerScreenshotBase(private val dark: Boolean, private v
   }
 
   @androidx.compose.runtime.Composable
-  private fun Panel(media: MediaAnalysis) {
+  private fun Panel(media: MediaAnalysis, backup: GalleryFooterNote? = null) {
     val context = LocalContext.current
     val format = ViewerFormat(context)
     val id = MediaId("00000000-0000-0000-0000-000000000042")
@@ -69,7 +73,7 @@ abstract class AnalysisViewerScreenshotBase(private val dark: Boolean, private v
       ) {
         InfoContent(
           model = model,
-          backup = null,
+          backup = backup,
           extras = emptyList(),
           onOpenMaps = null,
           analysis = analysisBadge(format, media, video = false),
@@ -88,6 +92,19 @@ abstract class AnalysisViewerScreenshotBase(private val dark: Boolean, private v
     shoot("info-analizza-adesso", fontScale = NAS_LARGE_TEXT) { Panel(MediaAnalysis(MediaAnalysisKind.QUEUED)) }
   }
 
+  /** Giro 2 (XU-10): la capsula del backup e quella dell'analisi insieme, sulla stessa riga. */
+  @Test
+  fun pannelloConIlBackupELAnalisi() = shoot("info-backup-e-analisi") {
+    Panel(
+      MediaAnalysis(MediaAnalysisKind.QUEUED),
+      backup = GalleryFooterNote(tone = GalleryFooterTone.Calm, label = "Al sicuro", glyph = Icons.Rounded.CloudDone),
+    )
+  }
+
+  /** Giro 2 (XU-7): chiesta dai dati mobili, la capsula dice perche' non parte subito. */
+  @Test
+  fun pannelloPrimaInCodaSulWifi() = shoot("info-parte-sul-wifi") { Panel(MediaAnalysis(MediaAnalysisKind.FIRST, MediaAnalysisHold.WIFI)) }
+
   @Test
   fun pannelloPronta() = shoot("info-pronta") { Panel(MediaAnalysis(MediaAnalysisKind.READY)) }
 
@@ -103,6 +120,7 @@ abstract class AnalysisViewerScreenshotBase(private val dark: Boolean, private v
       listOf(
         MediaAnalysis(MediaAnalysisKind.QUEUED) to true,
         MediaAnalysis(MediaAnalysisKind.FIRST, MediaAnalysisHold.HOT) to false,
+        MediaAnalysis(MediaAnalysisKind.FIRST, MediaAnalysisHold.WIFI) to false,
         MediaAnalysis(MediaAnalysisKind.ANALYZING) to false,
         MediaAnalysis(MediaAnalysisKind.READY) to false,
         MediaAnalysis(MediaAnalysisKind.NOT_HERE) to false,

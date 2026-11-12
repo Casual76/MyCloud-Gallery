@@ -106,8 +106,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  * primitive del backup, lo verifica `Phase5ArchitectureTest`), il verificatore e il guardiano. Senza NAS configurato non parte niente.
  *
  * **Sicurezza** (§6.1):
- * - **D12**: il [gate] non lascia scrivere su una share che non e' di prova (`FeatureFlags.backupMayWriteTo`, vero in release): lo stato
- *   dice "Backup in prova" e niente si scrive; anche le verifiche e il guardiano si fermano. Vale per ogni build;
+ * - **D12**: con la recinzione accesa il [gate] non lascia scrivere su una share che non e' di prova (`FeatureFlags.backupMayWriteTo`): lo
+ *   stato dice "Backup in prova" e niente si scrive; anche le verifiche e il guardiano si fermano. Spenta dal passo unico del 12/11/2026;
  * - **D13**: in debug con un account di prova la recinzione del telefono (`DeveloperTools.backupFence()`) limita le sorgenti, le righe
  *   che si aprono e le destinazioni (`mcg-campo/Backup/`); in release `fence` e' null. **R2**: per questo, in release un account di prova
  *   non scrive in nessuna share (`FeatureFlags.backupMayWriteAs`, "Backup in prova" per ogni share): senza la recinzione tutta la libreria
@@ -713,7 +713,7 @@ class BackupGraph(
     }.getOrDefault(false)
   }
 
-  /** I record e le miniature dei media caricati vanno all'indice: pubblicazione dell'outbox, sulle share vere solo locale (D31). */
+  /** I record e le miniature dei media caricati vanno all'indice: pubblicazione dell'outbox (con D31 accesa, sulle share vere solo locale). */
   suspend fun flushIndex() {
     nas.flushOutbox()
   }
@@ -981,8 +981,8 @@ class BackupGraph(
   }
 
   private suspend fun composeStatus(sources: BackupSources, share: String?, access: PhoneAccess?, counts: SafetyCounts): BackupStatus {
-    // D12 vale per primo: sulle share vere il backup e' "in prova", qualunque altra cosa manchi. Con R2, in release, anche per un account
-    // di prova (senza la recinzione del telefono di D13 non si scrive da nessuna parte).
+    // D12 vale per primo: con la recinzione accesa sulle share vere il backup e' "in prova", qualunque altra cosa manchi. Con R2, in release,
+    // anche per un account di prova (senza la recinzione del telefono di D13 non si scrive da nessuna parte).
     if (share != null && familyReady() && testOnly(share)) return BackupStatus.TestOnly
     val missing = LinkedHashSet<BackupSetupStep>()
     if (nasInputs.shares().isEmpty() || nasInputs.deviceId() == null) {

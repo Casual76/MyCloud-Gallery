@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.faces.sync.chaos
 
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
+import dev.pampa.mycloudgallery.core.faces.FencedFlags
 import dev.pampa.mycloudgallery.core.faces.chaos.ChaosInjector
 import dev.pampa.mycloudgallery.core.faces.chaos.Surface
 import dev.pampa.mycloudgallery.core.faces.contract.FacesClock
@@ -75,7 +76,7 @@ internal fun chaosFsKit(
   written: MutableList<Pair<String, SharePath>>,
   attempts: MutableList<Pair<String, SharePath>>,
   onWrite: (SharePath) -> Unit,
-  flags: FeatureFlags = FeatureFlags.RELEASE,
+  flags: FeatureFlags = FencedFlags.of(),
 ): ChaosFsKit {
   val fs = RecordingShare(ChaosFs(privateShare, inj, index, online, onWrite), deviceId, written, attempts)
   val remote = NasFacesRemote(fs, deviceId, commonShare, Dispatchers.Unconfined)

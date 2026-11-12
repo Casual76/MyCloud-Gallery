@@ -26,7 +26,8 @@ benchmark del tablet (F165–F169, F188).
 ## Decisioni che aspettano te
 - **"Elimina dal telefono" dalla selezione della Libreria** oggi manda subito al cestino di Android, senza il foglio "Prima mettilo al sicuro"
   che usa il viewer. Proposta: con il backup attivo, anche la selezione passa da quel foglio (cambia cio' che vedi).
-- **Il passaggio alle share vere** (§2.10): dopo le prove, un solo "si'" con i numeri della "Simulazione del passo" (circa 10 minuti).
+- **Il passaggio alle share vere** (§2.10): **fatto il 12/11/2026**, con il tuo "si'". Restano il primo backup sull'S25 e la fotografia "dopo" dal
+  PC; fino alla fotografia "dopo" meglio non usare "Salva sul NAS" e "Riporta nelle mie cartelle" (scrivono nelle cartelle che scegli tu).
 - **La fase grafica**: ora che l'engine 3.0 e' dentro, il piano si fa con te (la tua lista in `docs/grafica-segnalazioni-utente.md`, piu'
   cio' che la 3.0 risolve gia').
 

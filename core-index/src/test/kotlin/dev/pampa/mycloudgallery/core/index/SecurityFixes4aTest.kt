@@ -126,7 +126,7 @@ class SecurityFixes4aTest {
     blobs: InMemoryOutboxBlobStore,
     sink: LocalReplica,
     gate: MapWriteGate = MapWriteGate(),
-    flags: FeatureFlags = FeatureFlags.RELEASE,
+    flags: FeatureFlags = FencedFlags.of(),
     maxOutboxBlobBytes: Long = OutboxIndexPublisher.DEFAULT_MAX_OUTBOX_BLOB_BYTES,
   ) = OutboxIndexPublisher(
     identity = device.identity,

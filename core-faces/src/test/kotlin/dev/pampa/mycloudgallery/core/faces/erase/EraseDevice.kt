@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.faces.erase
 
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
+import dev.pampa.mycloudgallery.core.faces.FencedFlags
 import dev.pampa.mycloudgallery.core.faces.contract.EraseWait
 import dev.pampa.mycloudgallery.core.faces.contract.FacesActivationConsent
 import dev.pampa.mycloudgallery.core.faces.contract.FacesArchive
@@ -224,7 +225,7 @@ internal class EraseDevice(val world: EraseWorld, val name: String, val signer: 
     val remote = NasFacesRemote(RecordingShare(world.share, id, world.written), id, { world.family.state.registry.config.commonShare }, Dispatchers.Unconfined)
     publisher = NasFacesPublisher(
       identity, switch, remote, fence.archives(FacesArchives { g -> local.archive(g, create = false) }), publishStore,
-      FacesAttestation { it.toSet() }, FacesWriteGate { if (world.frozen) FacesWriteBlock.FROZEN else null }, world.clock, FeatureFlags.RELEASE,
+      FacesAttestation { it.toSet() }, FacesWriteGate { if (world.frozen) FacesWriteBlock.FROZEN else null }, world.clock, FencedFlags.of(),
     )
     computing = null
   }

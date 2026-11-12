@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.faces.sync
 
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
+import dev.pampa.mycloudgallery.core.faces.FencedFlags
 import dev.pampa.mycloudgallery.core.faces.contract.AreaKind
 import dev.pampa.mycloudgallery.core.faces.contract.FacesLease
 import dev.pampa.mycloudgallery.core.faces.contract.FacesResource
@@ -21,7 +22,7 @@ import org.junit.Test
  */
 class NasFacesLeasesTest {
 
-  private fun leases(world: FacesSyncWorld, device: SyncDevice, flags: FeatureFlags = FeatureFlags.RELEASE) =
+  private fun leases(world: FacesSyncWorld, device: SyncDevice, flags: FeatureFlags = FencedFlags.of()) =
     NasFacesLeases(device.identity, device.switch, device.share, world.clock, device.gate, flags)
 
   @Test

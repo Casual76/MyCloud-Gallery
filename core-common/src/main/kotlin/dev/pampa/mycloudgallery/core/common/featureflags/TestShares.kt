@@ -9,8 +9,8 @@ import java.util.Locale
  * modifica che si vede in revisione, mai un valore letto da un file o dal NAS.
  *
  * Chi lo usa:
- * - D31 (`FeatureFlags.indexPublishTestSharesOnly`): in 4A l'indice e le prenotazioni si pubblicano solo qui
- *   (`core-index`, P3); vale anche in release;
+ * - D31 (`FeatureFlags.indexPublishTestSharesOnly`): con la recinzione accesa l'indice e le prenotazioni si pubblicano solo qui
+ *   (`core-index`, P3); in release spenta dal passo unico del 12/11/2026, come D12, D30 e D34 (che usano lo stesso elenco);
  * - D33 (`ShareFence` di `core-nas`, P1, legata solo nella build debug da :app): con un account di prova ogni share
  *   fuori da questo elenco e' rifiutata prima di qualunque richiesta SMB;
  * - D30 (`TestAreaGuard`, nei test d'integrazione di `core-nas`): l'intersezione con le share del file delle

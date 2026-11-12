@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.faces
 
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.FencedFlags
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
 import dev.pampa.mycloudgallery.core.faces.contract.FacesWriteBlock
 import dev.pampa.mycloudgallery.core.faces.contract.FacesWriteGate
@@ -12,13 +13,17 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
 /**
- * Fase 8, P13 (§1.4 "Cancelli", D34, D35): `FacesWriteGate` = la recinzione D34 (`facesSyncMayUse`, accesa **anche in release**) + `ShareFence` (solo debug) +
- * i cancelli dell'indice (`IndexWriteRules`: emergenza, fiducia, congelamento, salto dell'ora, sola lettura). La recinzione D34 viene **prima di tutto**:
- * su una share vera nessun altro cancello puo' dire "si puo'" (e nemmeno chiede l'account o il NAS).
+ * Fase 8, P13 (§1.4 "Cancelli", D34, D35): `FacesWriteGate` = la recinzione D34 (`facesSyncMayUse`) + `ShareFence` (solo debug) + i cancelli dell'indice
+ * (`IndexWriteRules`: emergenza, fiducia, congelamento, salto dell'ora, sola lettura). Con la recinzione accesa D34 viene **prima di tutto**: su una share
+ * vera nessun altro cancello puo' dire "si puo'" (e nemmeno chiede l'account o il NAS).
+ *
+ * **Dal passo unico del 12/11/2026** D34 e' spenta in `FeatureFlags`: le prove di D34 usano flag con la recinzione accesa ([FencedFlags], solo nelle
+ * prove); `passoUnico_*` usa i valori di release di adesso (una share vera passa, gli altri cancelli restano).
  */
 class AppFacesWriteGateTest {
 
-  private val release = FeatureFlags.RELEASE
+  /** La release com'era prima del passo unico: D34 accesa. */
+  private val release = FencedFlags.of()
   private val open = IndexWriteGate { null }
 
   private fun gate(
@@ -106,12 +111,22 @@ class AppFacesWriteGateTest {
   }
 
   @Test
-  fun laReleaseTieneLaRecinzioneAcceso() {
-    // Una costante, non un parametro: nessuna build la spegne da fuori (la spegne solo l'utente, a mano, con Q5).
-    assertThat(FeatureFlags.RELEASE.facesSyncTestSharesOnly).isTrue()
-    assertThat(FeatureFlags.forBuild(debugBuild = true).facesSyncTestSharesOnly).isTrue()
-    assertThat(FeatureFlags.forBuild(debugBuild = false).facesSyncTestSharesOnly).isTrue()
-    assertThat(FeatureFlags.RELEASE.facesSyncMayUse("famiglia")).isFalse()
+  fun passoUnico_laRecinzioneESpentaInReleaseEInDebug() {
+    // Una costante, non un parametro: nessuna build la cambia da fuori (l'ha spenta l'utente, a mano, con il passo unico del 12/11/2026).
+    assertThat(FeatureFlags.RELEASE.facesSyncTestSharesOnly).isFalse()
+    assertThat(FeatureFlags.forBuild(debugBuild = true).facesSyncTestSharesOnly).isFalse()
+    assertThat(FeatureFlags.forBuild(debugBuild = false).facesSyncTestSharesOnly).isFalse()
+    assertThat(FeatureFlags.RELEASE.facesSyncMayUse("famiglia")).isTrue()
     assertThat(FeatureFlags.RELEASE.facesSyncMayUse("test")).isTrue()
+  }
+
+  @Test
+  fun passoUnico_conLaReleaseDiAdessoUnaShareVeraPassaEGliAltriCancelliRestano() = runBlocking<Unit> {
+    val now = FeatureFlags.RELEASE
+    for (share in listOf("alessio", "famiglia", "pampa")) assertThat(gate(flags = now, user = "alessio").blockFor(share)).isNull()
+    assertThat(gate(flags = now, user = null, index = null).blockFor("alessio")).isEqualTo(FacesWriteBlock.NO_NAS)
+    assertThat(gate(flags = now, user = "alessio", index = IndexWriteGate { WriteBlock.EMERGENCY_STOP }).blockFor("alessio")).isEqualTo(FacesWriteBlock.EMERGENCY_STOP)
+    assertThat(gate(flags = now, user = "alessio", index = IndexWriteGate { WriteBlock.FROZEN }).blockFor("alessio")).isEqualTo(FacesWriteBlock.FROZEN)
+    assertThat(gate(flags = now, user = "alessio", index = IndexWriteGate { WriteBlock.NOT_TRUSTED }).blockFor("alessio")).isEqualTo(FacesWriteBlock.NOT_TRUSTED)
   }
 }

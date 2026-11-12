@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.index.p3
 
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
+import dev.pampa.mycloudgallery.core.index.FencedFlags
 import dev.pampa.mycloudgallery.core.index.contract.BlobPut
 import dev.pampa.mycloudgallery.core.index.contract.HeadFetch
 import dev.pampa.mycloudgallery.core.index.contract.IndexHeadView
@@ -324,7 +325,7 @@ class TestDevice(
   val blobs: InMemoryOutboxBlobStore = InMemoryOutboxBlobStore(),
   val replica: InMemoryReplica = InMemoryReplica(TrustIds.deviceIdOf(signer.publicKey)),
   var gate: MapWriteGate = MapWriteGate(),
-  var flags: FeatureFlags = FeatureFlags.RELEASE,
+  var flags: FeatureFlags = FencedFlags.of(),
 ) {
   val id: String = TrustIds.deviceIdOf(signer.publicKey)
   val identity = IndexIdentity(signer, account) { world.trust.state }

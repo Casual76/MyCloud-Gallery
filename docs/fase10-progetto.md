@@ -859,6 +859,11 @@ fase grafica (Q5 (a), D38), sui soli dispositivi dell'admin. La famiglia riceve 
 - **Due settimane** d'uso normale dei dispositivi dell'admin (sono anche le due settimane di `beta` di Q7 (a) quando la release candidata è
   quella finale) con il riepilogo giornaliero pulito (nessun congelamento, nessun errore di scrittura); lo scenario 8 del §2.14 si misura qui.
 - **Gli account di prova** restano utili fino alla fine delle prove; poi la checklist (§2.9).
+- **Scritture scelte dall'utente** (12/11/2026, il giorno del passo): «Salva sul NAS» (anche il trascinamento; F5-D12, cancello `IncomingGate`)
+  scrive nella cartella scelta dall'utente, nell'area privata o comune; «Smetti di condividere» → «Riporta nelle mie cartelle» (F7-D30, cancello
+  `AlbumWriteGate`) riporta i propri media alla loro cartella d'origine. Sono fuori dalle cartelle attese, ma dopo un tocco e una conferma: un loro uso
+  fra le due fotografie dà il codice 3 **senza essere un'anomalia**, e si riconosce dai percorsi (quelli scelti dall'utente o la cartella d'origine dei
+  suoi media). Fino alla fotografia "dopo" meglio non usarle (nota anche in `recinzioni.json`, `scrittureSceltedallUtente`).
 
 **Indietro** (comune alle quattro aree): subito "Ferma le scritture sul NAS" (c'è: chiude ogni cancello di scrittura), poi una build con le
 quattro costanti di nuovo vere (o solo quella dell'area che ha sbagliato, se la fotografia la isola e l'utente lo decide), `recinzioni.json`

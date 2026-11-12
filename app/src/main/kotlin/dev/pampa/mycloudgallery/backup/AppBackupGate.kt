@@ -39,9 +39,9 @@ class BackupGateInputs(
  * 2. nessuna area privata, **o la share chiesta non e' (piu') quell'area privata** (R7 della revisione 5A: l'admin ha corretto la
  *    configurazione a motore costruito, o un elemento del diario e' di una share di prima; il confronto non distingue le maiuscole,
  *    come Samba): [BackupGateState.NO_PRIVATE_AREA];
- * 3. **D12**: la share non e' di prova ([FeatureFlags.backupMayWriteTo], vero in release e non spegnibile da `forBuild`):
- *    [BackupGateState.TEST_ONLY], "Backup in prova". **E' la regola piu' importante di questo cancello**: sulle share vere non si
- *    scrive niente, anche con la release, finche' l'utente non chiude la 5B (risposta Q3 (b));
+ * 3. **D12**: la share non e' di prova ([FeatureFlags.backupMayWriteTo], una costante che `forBuild` non cambia):
+ *    [BackupGateState.TEST_ONLY], "Backup in prova". Con la recinzione accesa **e' la regola piu' importante di questo cancello**: sulle
+ *    share vere non si scrive niente. Spenta dal passo unico del 12/11/2026 (D35): la regola resta, per riaccenderla;
  * 4. **R2**: in release un account di prova ([FeatureFlags.backupMayWriteAs]) non scrive in **nessuna** share, nemmeno di prova: D13, la
  *    recinzione del telefono, c'e' solo in debug, e senza tutta la libreria vera finirebbe nella share di prova. Anche questo e'
  *    [BackupGateState.TEST_ONLY]; in debug (dove D13 recinta) non blocca;

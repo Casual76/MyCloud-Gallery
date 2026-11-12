@@ -173,6 +173,13 @@ class FakeThumbnailLoader(
     windows += visible to ahead
   }
 
+  /** I2 (fase I): le richieste tenute accanto alla finestra, per chi le ha date ([ThumbnailLoader.keep]); una lista vuota le toglie. */
+  val kept: MutableMap<String, List<ThumbRequest>> = mutableMapOf()
+
+  override fun keep(owner: String, requests: List<ThumbRequest>) {
+    if (requests.isEmpty()) kept.remove(owner) else kept[owner] = requests
+  }
+
   /**
    * Come la cache vera (GA-3): da `UI_HIDDEN` (20) in su si scartano anche le miniature visibili, e le celle che le tenevano tornano sul
    * segnaposto (lo stato diventa null) finche' non si chiama [resume]. Prima il finto svuotava la mappa ma lasciava alle celle la bitmap

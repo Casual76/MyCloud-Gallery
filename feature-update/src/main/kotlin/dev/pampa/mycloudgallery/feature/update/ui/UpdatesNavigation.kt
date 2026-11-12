@@ -1,10 +1,10 @@
 package dev.pampa.mycloudgallery.feature.update.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
@@ -17,7 +17,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 
 // LA PAGINA NELLA NAVIGAZIONE (pacchetto U). Le Impostazioni non conoscono questo modulo (i feature non si conoscono): la voce «Aggiornamenti» porta
-// qui con una callback che scrive `:app` (`SettingsLinks.openUpdates`), come la Mappa e i Ricordi. `AppUpdates` lo crea `:app` (uno per processo).
+// qui con una callback che scrive `:app` (`SettingsLinks.openUpdates`), come la Mappa e i Ricordi. `AppUpdates` lo crea `:app` (uno per processo); il
+// ritorno davanti lo segue `UpdateLifecycleEffect`, alla radice.
 
 /** La pagina Impostazioni -> Aggiornamenti. */
 @Serializable
@@ -31,6 +32,11 @@ class UpdatesViewModel @Inject constructor(private val updates: AppUpdates) : Vi
   val actions: UpdateActions = UpdateActions.of(updates)
 
   fun onResumed() = updates.onResumed()
+
+  /** La pagina aperta: un controllo se l'ultimo ha piu' di 24 ore (UU-4). */
+  fun refreshIfDue() {
+    updates.refreshIfDue()
+  }
 }
 
 /** Registra la pagina in una navigazione (quella dell'app, e quella della pagina «versione fermata»). */
@@ -44,23 +50,17 @@ fun NavController.openUpdates() = navigate(UpdatesRoute)
 @Composable
 fun UpdatesPage(onBack: () -> Unit, viewModel: UpdatesViewModel = hiltViewModel()) {
   val state by viewModel.state.collectAsStateWithLifecycle()
-  LifecycleResumeEffect(viewModel) {
-    viewModel.onResumed()
-    onPauseOrDispose { }
-  }
+  LaunchedEffect(viewModel) { viewModel.refreshIfDue() }
   UpdatesScreen(state = state, actions = viewModel.actions, onBack = onBack)
 }
 
 /**
  * L'aggiornamento dentro un'altra pagina (la pagina «versione fermata»): la figura con il suo tasto. Senza una versione trovata offre «Controlla
- * adesso»: la versione fermata e' proprio il caso in cui l'aggiornamento e' il rimedio.
+ * adesso»: la versione fermata e' proprio il caso in cui l'aggiornamento e' il rimedio. Aperta, controlla da sola se sono passate 24 ore.
  */
 @Composable
 fun UpdateInline(viewModel: UpdatesViewModel = hiltViewModel()) {
   val state by viewModel.state.collectAsStateWithLifecycle()
-  LifecycleResumeEffect(viewModel) {
-    viewModel.onResumed()
-    onPauseOrDispose { }
-  }
+  LaunchedEffect(viewModel) { viewModel.refreshIfDue() }
   UpdatePanel(state = state, actions = viewModel.actions)
 }

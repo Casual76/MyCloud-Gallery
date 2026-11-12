@@ -8,8 +8,10 @@
   <string name="release_stopped_data">Questa versione di MyCloud Gallery potrebbe rovinare dei dati sul NAS. Aggiornala: le tue foto e i tuoi dati restano dove sono.</string>
   <string name="release_open_diagnostics">Diagnostica</string>
   <string name="release_update_title">Aggiorna MyCloud Gallery</string>
-  <string name="release_update_update">C\'è una versione più nuova: aggiornala da Impostazioni → Aggiornamenti. Finché non aggiorni, l\'app non scrive niente sul NAS.</string>
-  <string name="release_update_security">Questa versione ha un problema di sicurezza: aggiornala da Impostazioni → Aggiornamenti. Finché non aggiorni, l\'app non scrive niente sul NAS.</string>
-  <string name="release_update_data">Questa versione potrebbe rovinare dei dati sul NAS: aggiornala da Impostazioni → Aggiornamenti. Finché non aggiorni, l\'app non scrive niente sul NAS.</string>
+  <string name="release_update_update">C\'è una versione più nuova. Finché non aggiorni, l\'app non scrive niente sul NAS.</string>
+  <string name="release_update_security">Questa versione ha un problema di sicurezza. Finché non aggiorni, l\'app non scrive niente sul NAS.</string>
+  <string name="release_update_data">Questa versione potrebbe rovinare dei dati sul NAS. Finché non aggiorni, l\'app non scrive niente sul NAS.</string>
   <string name="release_update_dismiss">Ho capito</string>
+  <string name="release_update_action">Aggiorna</string>
+  <string name="release_stopped_why">Perché è fermata</string>
 </resources>

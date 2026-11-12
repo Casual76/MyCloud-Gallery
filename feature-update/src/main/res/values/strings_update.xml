@@ -1,59 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- L'aggiornamento dentro l'app (pacchetto U, 12/11/2026). Poche parole: l'icona e l'anello dicono lo stato, il testo lo nomina una volta. -->
+<!-- L'aggiornamento dentro l'app (pacchetto U, 12/11/2026; giro 1 delle critiche). Poche parole: la figura (l'icona dell'app con il suo segno, l'anello)
+     dice lo stato, il testo lo nomina una volta. Nessuna frase dell'engine o di Android arriva a schermo: ogni esito ha la sua frase qui. -->
 <resources>
   <string name="update_title">Aggiornamenti</string>
 
   <!-- La testata: lo stato in due parole. -->
-  <string name="update_installed_version">Versione installata</string>
+  <string name="update_current">Versione %1$s</string>
   <string name="update_up_to_date">App aggiornata</string>
   <string name="update_checking">Sto controllando…</string>
   <string name="update_unavailable">Non riesco a controllare adesso</string>
-  <string name="update_found">Versione %1$s</string>
-  <string name="update_unusable">Versione %1$s non installabile</string>
-  <string name="update_unusable_detail">Pubblicata senza impronta o peso del file: chi pubblica deve rifarla.</string>
+  <string name="update_found">Nuova versione</string>
+  <string name="update_found_detail">%1$s → %2$s · %3$s</string>
+  <string name="update_unusable">Non ancora pronta</string>
+  <string name="update_unusable_detail">Riprova domani</string>
   <string name="update_whats_new">Novità</string>
 
   <!-- I tasti. -->
   <string name="update_action">Aggiorna</string>
+  <string name="update_install">Installa</string>
   <string name="update_check_now">Controlla adesso</string>
   <string name="update_later">Dopo</string>
   <string name="update_retry">Riprova</string>
   <string name="update_cancel">Annulla</string>
   <string name="update_close">Chiudi</string>
   <string name="update_allow">Consenti</string>
-  <string name="update_download_anyway">Scarica %1$s</string>
+  <string name="update_download_anyway">Scarica lo stesso</string>
+  <string name="update_ok">Ok</string>
+  <string name="update_hide">Nascondi l\'avviso</string>
 
   <!-- Le richieste, una riga. -->
   <string name="update_metered">Sei sui dati mobili</string>
-  <string name="update_permission">Android chiede il permesso di installare. Si dà una volta sola.</string>
+  <string name="update_permission">Serve un permesso</string>
+  <string name="update_permission_detail">Accendi l\'interruttore e torna indietro</string>
+  <string name="update_permission_why">Android lo chiede una volta sola: serve per installare le versioni nuove di questa app.</string>
 
   <!-- L'avanzamento. -->
-  <string name="update_downloading">Scarico</string>
-  <string name="update_verifying">Controllo il file</string>
-  <string name="update_installing">Installo</string>
-  <string name="update_awaiting">Conferma nella finestra di Android</string>
+  <string name="update_downloading">Sto scaricando</string>
+  <string name="update_verifying">Quasi pronto</string>
+  <string name="update_installing">Sto installando</string>
+  <string name="update_closes">L\'app si chiude per aggiornarsi: poi riaprila</string>
+  <string name="update_awaiting">Tocca «Aggiorna» nella finestra di Android</string>
+  <string name="update_ready">Pronta da installare</string>
+  <string name="update_interrupted">Non installata. Se Android dice che non è sicura, scegli «Installa comunque»</string>
   <string name="update_installed">Aggiornata</string>
   <string name="update_progress_spoken">Scaricato il %1$d per cento</string>
 
-  <!-- Gli errori: corti, senza gergo. Quando e' Android a non installare si mostra il suo messaggio (dall'engine). -->
+  <!-- Gli errori: una frase dell'app per ogni esito. Dove riprovare non serve, si dice a chi rivolgersi. -->
   <string name="update_failed">Aggiornamento non riuscito</string>
-  <string name="update_problem_published">Questa versione non è pubblicata bene: non si installa.</string>
-  <string name="update_problem_download">Download non riuscito. Riprova più tardi.</string>
-  <string name="update_problem_checksum">Il file non è quello pubblicato: non si installa.</string>
-  <string name="update_problem_unreadable">Il file scaricato non si apre.</string>
-  <string name="update_problem_other_app">Il file è di un\'altra app: non si installa.</string>
-  <string name="update_problem_not_newer">Non è più nuova di quella che hai.</string>
-  <string name="update_problem_signature">Non è firmata come la tua app: non si installa.</string>
-  <string name="update_problem_install">Android non l\'ha installata.</string>
+  <string name="update_tell_sender">Avvisa chi ti ha dato l\'app</string>
+  <string name="update_problem_published">Questa versione non è pronta</string>
+  <string name="update_problem_download">Scaricamento interrotto</string>
+  <string name="update_problem_checksum">Il file è arrivato rovinato</string>
+  <string name="update_problem_unreadable">Il file non si apre</string>
+  <string name="update_problem_other_app">Il file è di un\'altra app</string>
+  <string name="update_problem_wrong_version">Il file è di un\'altra versione</string>
+  <string name="update_problem_not_newer">Non è più nuova di quella che hai</string>
+  <string name="update_problem_signature">Non viene da chi ha fatto la tua app</string>
+  <string name="update_problem_space">Manca spazio sul telefono</string>
+  <string name="update_problem_blocked">Il telefono non l\'ha permessa</string>
+  <string name="update_problem_incompatible">Non funziona su questo telefono</string>
+  <string name="update_problem_install">Android non l\'ha installata</string>
 
   <!-- Il canale. -->
-  <string name="update_channel">Canale</string>
+  <string name="update_channel">Versioni da ricevere</string>
   <string name="update_channel_stable">Stabile</string>
   <string name="update_channel_stable_detail">Le versioni collaudate</string>
   <string name="update_channel_beta">Beta</string>
   <string name="update_channel_beta_detail">Arrivano prima, ma possono avere difetti</string>
+  <string name="update_channel_beta_why">Se torni a Stabile, tieni questa versione finché non ne esce una stabile più nuova.</string>
+  <string name="update_channel_beta_why_label">Tornare a Stabile</string>
   <string name="update_selected">Scelto</string>
 
-  <!-- L'avviso all'apertura. -->
+  <!-- L'avviso. -->
   <string name="update_prompt_title">Nuova versione</string>
 </resources>

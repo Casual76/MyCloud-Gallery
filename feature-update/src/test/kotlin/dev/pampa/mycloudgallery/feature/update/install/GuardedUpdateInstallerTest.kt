@@ -19,8 +19,9 @@ import org.junit.After
 import org.junit.Test
 
 /**
- * Pacchetto U (C480, C481, C484, C485): la sequenza dell'installazione fra lo scaricamento e la sessione dell'engine. L'installatore dell'engine e' finto
- * ([FakeTransfer]): ogni controllo dell'app si prova guardando che `installFile` NON venga chiamato e che il file scaricato sparisca.
+ * Pacchetto U (C480, C481, C484, C485, C487): la sequenza dell'installazione in due tempi, fra lo scaricamento e la sessione dell'engine. L'installatore
+ * dell'engine e' finto ([FakeTransfer]): ogni controllo dell'app si prova guardando che `installFile` NON venga chiamato e che il file scaricato sparisca;
+ * ogni messaggio dell'engine diventa un problema dell'app (UU-6).
  */
 class GuardedUpdateInstallerTest {
 
@@ -89,23 +90,38 @@ class GuardedUpdateInstallerTest {
   private val me = PackageFacts("dev.pampa.mycloudgallery", 5, "1.0.0", setOf("ab".repeat(32)))
   private val good = me.copy(versionCode = 6, versionName = "1.1.0")
 
-  private fun run(
+  private fun installer(
+    transfer: FakeTransfer,
+    facts: FakeFacts = FakeFacts(me, good),
+    permission: FakePermission = FakePermission(),
+    actualSha: () -> String = { sha },
+  ) = GuardedUpdateInstaller(transfer, facts, permission, checksum = { actualSha() }, io = Dispatchers.Unconfined)
+
+  /** Il primo tempo: dall'offerta al file verificato. */
+  private fun prepare(
     transfer: FakeTransfer = FakeTransfer(),
     facts: FakeFacts = FakeFacts(me, good),
     permission: FakePermission = FakePermission(),
     actualSha: String = sha,
     update: AvailableAppUpdate = update(),
-  ): List<InstallStep> = runBlocking {
-    GuardedUpdateInstaller(transfer, facts, permission, checksum = { actualSha }, io = Dispatchers.Unconfined).run(update).toList()
+  ): List<InstallStep> = runBlocking { installer(transfer, facts, permission) { actualSha }.prepare(update).toList() }
+
+  /** I due tempi di seguito, come quando l'app e' davanti. */
+  private fun both(transfer: FakeTransfer, facts: FakeFacts = FakeFacts(me, good)): List<InstallStep> = runBlocking {
+    val guarded = installer(transfer, facts)
+    val first = guarded.prepare(update()).toList()
+    val ready = first.last() as InstallStep.Ready
+    first + guarded.commit(update(), ready.file).toList()
   }
 
   @Test
-  fun tuttoInRegola_scaricaVerificaEPassaAllEngine() {
+  fun tuttoInRegola_scaricaVerificaPoiPassaAllEngine() {
     val transfer = FakeTransfer()
-    val steps = run(transfer = transfer)
+    val steps = both(transfer)
     assertThat(steps.first()).isEqualTo(InstallStep.Preparing)
     assertThat(steps).contains(InstallStep.Downloading(1f, 10, 10))
-    assertThat(steps.takeLast(4)).containsExactly(InstallStep.Verifying, InstallStep.Installing, InstallStep.AwaitingUser, InstallStep.Installed).inOrder()
+    assertThat(steps).contains(InstallStep.Ready(transfer.file!!))
+    assertThat(steps.takeLast(3)).containsExactly(InstallStep.Installing, InstallStep.AwaitingUser, InstallStep.Installed).inOrder()
     // All'engine arrivano la versione e lo sha256 dell'elenco (che ricontrolla).
     assertThat(transfer.installed.single().second).isEqualTo("1.1.0")
     assertThat(transfer.installed.single().third).isEqualTo(sha)
@@ -114,9 +130,18 @@ class GuardedUpdateInstallerTest {
   }
 
   @Test
+  fun ilPrimoTempoSiFermaAlFilePronto_senzaSessione() {
+    val transfer = FakeTransfer()
+    val steps = prepare(transfer = transfer)
+    assertThat(steps.last()).isEqualTo(InstallStep.Ready(transfer.file!!))
+    assertThat(transfer.installed).isEmpty()
+    assertThat(transfer.file!!.exists()).isTrue()
+  }
+
+  @Test
   fun senzaSha256NelElencoNonSiScaricaNemmeno() {
     val transfer = FakeTransfer()
-    val steps = run(transfer = transfer, update = update(sha256 = ""))
+    val steps = prepare(transfer = transfer, update = update(sha256 = ""))
     assertThat(steps.last()).isEqualTo(InstallStep.Failed(UpdateProblem.CHECKSUM_MISSING))
     assertThat(transfer.downloads).isEqualTo(0)
     assertThat(transfer.installed).isEmpty()
@@ -125,7 +150,7 @@ class GuardedUpdateInstallerTest {
   @Test
   fun senzaPesoNelElencoNonSiScaricaNemmeno() {
     val transfer = FakeTransfer()
-    val steps = run(transfer = transfer, update = update(size = 0))
+    val steps = prepare(transfer = transfer, update = update(size = 0))
     assertThat(steps.last()).isEqualTo(InstallStep.Failed(UpdateProblem.SIZE_MISSING))
     assertThat(transfer.downloads).isEqualTo(0)
   }
@@ -134,7 +159,7 @@ class GuardedUpdateInstallerTest {
   fun senzaPermessoCiSiFermaPrimaDelloScaricamentoSenzaAprireNiente() {
     val transfer = FakeTransfer()
     val permission = FakePermission(granted = false)
-    val steps = run(transfer = transfer, permission = permission)
+    val steps = prepare(transfer = transfer, permission = permission)
     assertThat(steps.last()).isEqualTo(InstallStep.NeedsPermission)
     assertThat(transfer.downloads).isEqualTo(0)
     // La pagina di Android la apre la pagina dell'app, dopo la riga che spiega (non l'installatore da solo).
@@ -144,14 +169,14 @@ class GuardedUpdateInstallerTest {
   @Test
   fun unoScaricamentoFallitoEUnErroreCorto() {
     val transfer = FakeTransfer(failDownload = true)
-    assertThat(run(transfer = transfer).last()).isEqualTo(InstallStep.Failed(UpdateProblem.DOWNLOAD_FAILED))
+    assertThat(prepare(transfer = transfer).last()).isEqualTo(InstallStep.Failed(UpdateProblem.DOWNLOAD_FAILED))
     assertThat(transfer.installed).isEmpty()
   }
 
   @Test
   fun unFileConUnAltroSha256NonArrivaAdAndroid() {
     val transfer = FakeTransfer()
-    val steps = run(transfer = transfer, actualSha = "f".repeat(64))
+    val steps = prepare(transfer = transfer, actualSha = "f".repeat(64))
     assertThat(steps.last()).isEqualTo(InstallStep.Failed(UpdateProblem.CHECKSUM_MISMATCH))
     assertThat(transfer.installed).isEmpty()
     assertThat(transfer.file!!.exists()).isFalse()
@@ -160,16 +185,24 @@ class GuardedUpdateInstallerTest {
   @Test
   fun unApkDiUnAltraAppNonArrivaAdAndroid() {
     val transfer = FakeTransfer()
-    val steps = run(transfer = transfer, facts = FakeFacts(me, good.copy(packageName = "com.altra")))
+    val steps = prepare(transfer = transfer, facts = FakeFacts(me, good.copy(packageName = "com.altra")))
     assertThat(steps.last()).isEqualTo(InstallStep.Failed(UpdateProblem.OTHER_APP))
     assertThat(transfer.installed).isEmpty()
     assertThat(transfer.file!!.exists()).isFalse()
   }
 
   @Test
+  fun unApkDiUnAltraVersioneNonArrivaAdAndroid() {
+    val transfer = FakeTransfer()
+    val steps = prepare(transfer = transfer, facts = FakeFacts(me, good.copy(versionName = "1.2.0")))
+    assertThat(steps.last()).isEqualTo(InstallStep.Failed(UpdateProblem.WRONG_VERSION))
+    assertThat(transfer.file!!.exists()).isFalse()
+  }
+
+  @Test
   fun unApkNonPiuNuovoNonArrivaAdAndroid() {
     val transfer = FakeTransfer()
-    val steps = run(transfer = transfer, facts = FakeFacts(me, good.copy(versionCode = 5)))
+    val steps = prepare(transfer = transfer, facts = FakeFacts(me, good.copy(versionCode = 5)))
     assertThat(steps.last()).isEqualTo(InstallStep.Failed(UpdateProblem.NOT_NEWER))
     assertThat(transfer.installed).isEmpty()
   }
@@ -177,7 +210,7 @@ class GuardedUpdateInstallerTest {
   @Test
   fun unApkFirmatoDaUnAltroNonArrivaAdAndroid() {
     val transfer = FakeTransfer()
-    val steps = run(transfer = transfer, facts = FakeFacts(me, good.copy(signers = setOf("cd".repeat(32)))))
+    val steps = prepare(transfer = transfer, facts = FakeFacts(me, good.copy(signers = setOf("cd".repeat(32)))))
     assertThat(steps.last()).isEqualTo(InstallStep.Failed(UpdateProblem.OTHER_SIGNATURE))
     assertThat(transfer.installed).isEmpty()
     assertThat(transfer.file!!.exists()).isFalse()
@@ -186,23 +219,95 @@ class GuardedUpdateInstallerTest {
   @Test
   fun unApkIllegibileNonArrivaAdAndroid() {
     val transfer = FakeTransfer()
-    assertThat(run(transfer = transfer, facts = FakeFacts(me, null)).last()).isEqualTo(InstallStep.Failed(UpdateProblem.UNREADABLE))
+    assertThat(prepare(transfer = transfer, facts = FakeFacts(me, null)).last()).isEqualTo(InstallStep.Failed(UpdateProblem.UNREADABLE))
     assertThat(transfer.installed).isEmpty()
   }
 
   @Test
-  fun quandoAndroidNonInstallaSiMostraIlSuoMessaggio() {
-    val transfer = FakeTransfer(engineSteps = listOf(AppUpdateInstallState.Error("Installazione interrotta: annullata, oppure bloccata da Play Protect.")))
-    val steps = run(transfer = transfer)
-    assertThat(steps.last())
-      .isEqualTo(InstallStep.Failed(UpdateProblem.INSTALL_FAILED, "Installazione interrotta: annullata, oppure bloccata da Play Protect."))
+  fun primaDellaSessioneIlFileSiRicontrolla() {
+    // Fra «Pronta» e «Installa» il file e' cambiato (o la firma non e' piu' quella): non arriva ad Android.
+    val transfer = FakeTransfer()
+    var actual = sha
+    val guarded = installer(transfer) { actual }
+    runBlocking {
+      val ready = guarded.prepare(update()).toList().last() as InstallStep.Ready
+      actual = "0".repeat(64)
+      assertThat(guarded.commit(update(), ready.file).toList().last()).isEqualTo(InstallStep.Failed(UpdateProblem.CHECKSUM_MISMATCH))
+    }
+    assertThat(transfer.installed).isEmpty()
     assertThat(transfer.file!!.exists()).isFalse()
+  }
+
+  @Test
+  fun senzaPermessoAllaSessione_ilFileResta() {
+    val transfer = FakeTransfer()
+    val permission = FakePermission()
+    val guarded = installer(transfer, permission = permission)
+    runBlocking {
+      val ready = guarded.prepare(update()).toList().last() as InstallStep.Ready
+      permission.granted = false
+      assertThat(guarded.commit(update(), ready.file).toList().last()).isEqualTo(InstallStep.NeedsPermission)
+    }
+    assertThat(transfer.installed).isEmpty()
+    assertThat(transfer.file!!.exists()).isTrue()
+  }
+
+  @Test
+  fun annullataInAndroid_nonEUnGuasto_siTornaAPronta() {
+    val transfer = FakeTransfer(engineSteps = listOf(AppUpdateInstallState.Error(EngineMessages.ABORTED)))
+    val steps = both(transfer)
+    assertThat(steps.last()).isEqualTo(InstallStep.Ready(transfer.file!!, interrupted = true))
+    // Il file verificato resta: «Installa» non riscarica.
+    assertThat(transfer.file!!.exists()).isTrue()
+  }
+
+  @Test
+  fun nessunaFraseDellEngineArrivaAllUtente() {
+    // Ogni messaggio dell'engine 3.0.4 ha il suo problema dell'app; uno sconosciuto (anche il testo inglese di Android) diventa quello generico.
+    val table = mapOf(
+      EngineMessages.BLOCKED to UpdateProblem.BLOCKED,
+      EngineMessages.CONFLICT to UpdateProblem.OTHER_SIGNATURE,
+      EngineMessages.INCOMPATIBLE to UpdateProblem.INCOMPATIBLE,
+      EngineMessages.INVALID to UpdateProblem.UNREADABLE,
+      EngineMessages.STORAGE to UpdateProblem.NO_SPACE,
+      EngineMessages.UNREADABLE to UpdateProblem.UNREADABLE,
+      EngineMessages.OTHER_APP to UpdateProblem.OTHER_APP,
+      "Versione APK inattesa: 9.9.9." to UpdateProblem.WRONG_VERSION,
+      EngineMessages.CHECKSUM to UpdateProblem.CHECKSUM_MISMATCH,
+      "INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package signatures do not match" to UpdateProblem.INSTALL_FAILED,
+      "Installazione non riuscita." to UpdateProblem.INSTALL_FAILED,
+      "" to UpdateProblem.INSTALL_FAILED,
+    )
+    for ((message, problem) in table) assertThat(EngineMessages.problemOf(message)).isEqualTo(problem)
+    assertThat(EngineMessages.problemOf(EngineMessages.ABORTED)).isNull()
+  }
+
+  @Test
+  fun unGuastoDiAndroidChiudeIlFileSoloSeServe() {
+    // Lo spazio: il file resta per «Riprova» (senza riscaricare).
+    val space = FakeTransfer(engineSteps = listOf(AppUpdateInstallState.Error(EngineMessages.STORAGE)))
+    assertThat(both(space).last()).isEqualTo(InstallStep.Failed(UpdateProblem.NO_SPACE))
+    assertThat(space.file!!.exists()).isTrue()
+    // Un'altra firma per Android: il file non serve piu'.
+    val conflict = FakeTransfer(engineSteps = listOf(AppUpdateInstallState.Error(EngineMessages.CONFLICT)))
+    assertThat(both(conflict).last()).isEqualTo(InstallStep.Failed(UpdateProblem.OTHER_SIGNATURE))
+    assertThat(conflict.file!!.exists()).isFalse()
   }
 
   @Test
   fun ilPermessoTolto_traIlControlloELaSessione_tornaComePermesso() {
     val transfer = FakeTransfer(engineSteps = listOf(AppUpdateInstallState.Error("Abilita...", AppUpdateErrorKind.InstallPermission)))
-    assertThat(run(transfer = transfer).last()).isEqualTo(InstallStep.NeedsPermission)
+    assertThat(both(transfer).last()).isEqualTo(InstallStep.NeedsPermission)
+  }
+
+  @Test
+  fun chiPassaDallEngine_passaDagliStessiControlli() {
+    // `EngineAppUpdater.install` delega qui: un APK firmato da un altro si ferma prima della sessione anche da li'.
+    val transfer = FakeTransfer()
+    val guarded = installer(transfer, FakeFacts(me, good.copy(signers = setOf("cd".repeat(32)))))
+    val states = runBlocking { guarded.install(update()).toList() }
+    assertThat(states.last()).isEqualTo(AppUpdateInstallState.Error(UpdateProblem.OTHER_SIGNATURE.code))
+    assertThat(transfer.installed).isEmpty()
   }
 
   @Test

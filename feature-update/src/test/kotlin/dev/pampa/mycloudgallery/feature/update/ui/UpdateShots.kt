@@ -72,6 +72,8 @@ internal class UpdatePhoneShots : UpdateShotsBase("telefono") {
 
   @Test fun primaDelControlloChiaro() = page("prima", UpdateSamples.idle, dark = false)
 
+  @Test fun controllaChiaro() = page("controlla", UpdateSamples.checking, dark = false)
+
   @Test fun nuovaChiaro() = page("nuova", UpdateSamples.found, dark = false)
 
   @Test fun nuovaScuro() = page("nuova", UpdateSamples.found, dark = true)
@@ -84,11 +86,27 @@ internal class UpdatePhoneShots : UpdateShotsBase("telefono") {
 
   @Test fun scaricaScuro() = page("scarica", UpdateSamples.downloading, dark = true)
 
+  @Test fun quasiProntoChiaro() = page("quasi-pronto", UpdateSamples.verifying, dark = false)
+
+  @Test fun prontaChiaro() = page("pronta", UpdateSamples.ready, dark = false)
+
+  @Test fun prontaScuro() = page("pronta", UpdateSamples.ready, dark = true)
+
+  @Test fun annullataChiaro() = page("annullata-in-android", UpdateSamples.interrupted, dark = false)
+
+  @Test fun installaChiaro() = page("installa", UpdateSamples.installing, dark = false)
+
   @Test fun confermaChiaro() = page("conferma-android", UpdateSamples.awaiting, dark = false)
 
   @Test fun permessoChiaro() = page("permesso", UpdateSamples.permission, dark = false)
 
+  @Test fun permessoScuro() = page("permesso", UpdateSamples.permission, dark = true)
+
   @Test fun firmaDiversaChiaro() = page("firma-diversa", UpdateSamples.signature, dark = false)
+
+  @Test fun firmaDiversaScuro() = page("firma-diversa", UpdateSamples.signature, dark = true)
+
+  @Test fun spazioChiaro() = page("spazio", UpdateSamples.noSpace, dark = false)
 
   @Test fun nonRaggiungibileChiaro() = page("non-raggiungibile", UpdateSamples.unavailable, dark = false)
 
@@ -100,7 +118,15 @@ internal class UpdatePhoneShots : UpdateShotsBase("telefono") {
 
   @Test fun avvisoScaricaChiaro() = prompt("avviso-scarica", UpdateSamples.downloading, dark = false)
 
+  @Test fun avvisoProntaChiaro() = prompt("avviso-pronta", UpdateSamples.ready, dark = false)
+
   @Test fun avvisoPermessoChiaro() = prompt("avviso-permesso", UpdateSamples.permission, dark = false)
+
+  @Test fun avvisoErroreScuro() = prompt("avviso-errore", UpdateSamples.signature, dark = true)
+
+  @Test fun avvisoAggiornataChiaro() = prompt("avviso-aggiornata", UpdateSamples.justUpdated, dark = false)
+
+  @Test fun avvisoAggiornataScuro() = prompt("avviso-aggiornata", UpdateSamples.justUpdated, dark = true)
 }
 
 @RunWith(AndroidJUnit4::class)
@@ -111,7 +137,13 @@ internal class UpdateLargeTextShots : UpdateShotsBase("telefono-testo-grande", f
 
   @Test fun scaricaScuro() = page("scarica", UpdateSamples.downloading, dark = true)
 
+  @Test fun prontaChiaro() = page("pronta", UpdateSamples.ready, dark = false)
+
+  @Test fun permessoChiaro() = page("permesso", UpdateSamples.permission, dark = false)
+
   @Test fun avvisoChiaro() = prompt("avviso", UpdateSamples.found, dark = false)
+
+  @Test fun avvisoProntaChiaro() = prompt("avviso-pronta", UpdateSamples.ready, dark = false)
 }
 
 @RunWith(AndroidJUnit4::class)
@@ -122,5 +154,17 @@ internal class UpdateTabletShots : UpdateShotsBase("tablet") {
 
   @Test fun nuovaScuro() = page("nuova", UpdateSamples.found, dark = true)
 
+  @Test fun prontaChiaro() = page("pronta", UpdateSamples.ready, dark = false)
+
   @Test fun avvisoChiaro() = prompt("avviso", UpdateSamples.found, dark = false)
+}
+
+/** Il tablet in orizzontale, come le Impostazioni di I3. */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "it-w1280dp-h800dp-land-xhdpi")
+internal class UpdateTabletLandShots : UpdateShotsBase("tablet-orizzontale") {
+  @Test fun nuovaChiaro() = page("nuova", UpdateSamples.found, dark = false)
+
+  @Test fun scaricaScuro() = page("scarica", UpdateSamples.downloading, dark = true)
 }

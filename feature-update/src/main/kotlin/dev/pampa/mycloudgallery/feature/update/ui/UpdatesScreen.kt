@@ -2,43 +2,43 @@ package dev.pampa.mycloudgallery.feature.update.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Science
 import androidx.compose.material.icons.rounded.Verified
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.style.TextOverflow
 import dev.antigravity.fluidengine.foundation.UpdateChannel
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChoiceMark
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.feature.update.R
 import dev.pampa.mycloudgallery.feature.update.UpdatesState
 
-// LA PAGINA IMPOSTAZIONI -> AGGIORNAMENTI (pacchetto U, 12/11/2026). Dall'alto: la figura con lo stato e il tasto che serve (Controlla adesso, Aggiorna,
-// Consenti, Riprova); quando c'e' una versione, che cosa cambia in poche righe; il canale come due scelte con il segno (Stabile, di serie, e Beta);
-// la versione installata. Nient'altro da leggere: l'avanzamento e' l'anello comune della galleria, il permesso una riga.
+// LA PAGINA IMPOSTAZIONI -> AGGIORNAMENTI (pacchetto U, 12/11/2026; giro 1 delle critiche). Dall'alto: la figura con lo stato e il tasto che serve
+// (Controlla adesso, Aggiorna, Consenti, Installa, Riprova); quando c'e' una versione, che cosa cambia in poche righe; le versioni da ricevere come due
+// scelte con il segno (Stabile, di serie, e Beta), con la «i» per chi torna a Stabile. La versione installata la dice la figura (UU-7): nessuna riga in
+// piu'. Aperta, la pagina controlla da sola se sono passate 24 ore (UU-4) e intanto mostra la versione gia' nota.
 
 @Composable
 fun UpdatesScreen(state: UpdatesState, actions: UpdateActions, onBack: () -> Unit) {
@@ -73,22 +73,17 @@ fun UpdatesScreen(state: UpdatesState, actions: UpdateActions, onBack: () -> Uni
         )
       }
     }
-    item(key = "installed") {
-      FluidListGroup {
-        FluidListRow(
-          title = stringResource(R.string.update_installed_version),
-          subtitle = "",
-          badge = { ValueText(state.installedVersion) },
-          leading = { GalleryIconTile(icon = Icons.Rounded.Info, family = GalleryIconFamily.Photos) },
-          leadingTile = false,
-          disclosure = false,
-        )
-      }
+    item(key = "channel-why") {
+      GalleryInfoRow(
+        label = stringResource(R.string.update_channel_beta_why_label),
+        detail = stringResource(R.string.update_channel_beta_why),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = UpdateDimens.CardPadding),
+      )
     }
   }
 }
 
-/** Che cosa cambia: il primo paragrafo della nota di rilascio dell'elenco, al piu' sei righe, con il suo titolo. */
+/** Che cosa cambia: il primo paragrafo della nota di rilascio dell'elenco, al piu' sei righe; i punti con le righe a capo rientrate sotto il testo. */
 @Composable
 private fun NotesBlock(notes: String) {
   FluidListGroup {
@@ -97,20 +92,36 @@ private fun NotesBlock(notes: String) {
       verticalArrangement = Arrangement.spacedBy(UpdateDimens.TightGap),
     ) {
       Text(text = stringResource(R.string.update_whats_new), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-      Text(
-        text = notes,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = NOTES_LINES,
-        overflow = TextOverflow.Ellipsis,
-      )
+      for (line in noteLines(notes)) {
+        if (line.bullet) {
+          Row(horizontalArrangement = Arrangement.spacedBy(UpdateDimens.BulletGap)) {
+            Text(text = BULLET, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = line.text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+          }
+        } else {
+          Text(text = line.text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+      }
     }
   }
 }
 
+/** Una riga delle note: con il punto davanti o no. */
+internal class NoteLine(val text: String, val bullet: Boolean)
+
+/** Le righe delle note, al piu' [NOTES_LINES]: «• testo» e «- testo» diventano punti. */
+internal fun noteLines(notes: String): List<NoteLine> = notes.lines()
+  .map { it.trim() }
+  .filter { it.isNotEmpty() }
+  .take(NOTES_LINES)
+  .map { line ->
+    val bullet = line.startsWith(BULLET) || line.startsWith("- ")
+    NoteLine(text = if (bullet) line.drop(if (line.startsWith(BULLET)) BULLET.length else 2).trim() else line, bullet = bullet)
+  }
+
 /**
- * Una scelta del canale: la piastrella (la spunta per le collaudate, la provetta per le beta), il nome, la riga corta e il segno della scelta. Per
- * TalkBack e' una scelta con il nome, la riga e lo stato.
+ * Una scelta del canale: la piastrella (la spunta per le collaudate, la provetta per le beta, nel colore dell'app come tutto l'aggiornamento), il nome,
+ * la riga corta e il segno della scelta. Durante un'installazione e' spenta: si vede (piu' tenue) e TalkBack la dice non disponibile.
  */
 @Composable
 private fun ChannelRow(title: String, detail: String, icon: ImageVector, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
@@ -118,33 +129,23 @@ private fun ChannelRow(title: String, detail: String, icon: ImageVector, selecte
   FluidListRow(
     title = title,
     subtitle = detail,
-    leading = { GalleryIconTile(icon = icon, family = if (icon == Icons.Rounded.Science) GalleryIconFamily.Search else GalleryIconFamily.Places) },
+    leading = { GalleryIconTile(icon = icon, family = GalleryIconFamily.Photos) },
     leadingTile = false,
-    badge = { ChoiceMark(selected) },
+    badge = { GalleryChoiceMark(selected) },
     disclosure = false,
     onClick = if (enabled) onClick else null,
-    modifier = Modifier.semantics(mergeDescendants = true) {
-      role = Role.RadioButton
-      this.selected = selected
-      contentDescription = "$title. $detail"
-      if (selected) stateDescription = chosen
-    },
+    modifier = Modifier
+      .alpha(if (enabled) 1f else DISABLED_ALPHA)
+      .semantics(mergeDescendants = true) {
+        role = Role.RadioButton
+        this.selected = selected
+        contentDescription = "$title. $detail"
+        if (selected) stateDescription = chosen
+        if (!enabled) disabled()
+      },
   )
-}
-
-@Composable
-private fun ChoiceMark(selected: Boolean) {
-  Icon(
-    imageVector = if (selected) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
-    contentDescription = null,
-    tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-    modifier = Modifier.size(UpdateDimens.ChoiceMark),
-  )
-}
-
-@Composable
-private fun ValueText(text: String) {
-  Text(text = text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
 private const val NOTES_LINES = 6
+private const val BULLET = "•"
+private const val DISABLED_ALPHA = 0.38f

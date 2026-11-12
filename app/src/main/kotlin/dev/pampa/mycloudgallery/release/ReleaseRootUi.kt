@@ -32,6 +32,7 @@ import dev.antigravity.fluidengine.ui.navigation.composable
 import dev.antigravity.fluidengine.ui.theme.FluidCard
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.pampa.mycloudgallery.R
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.LocalWritesHeldByRelease
 import dev.pampa.mycloudgallery.core.release.contract.ReleaseMessage
@@ -82,7 +83,7 @@ class ReleaseRootViewModel @Inject constructor(release: ReleaseGraph) : ViewMode
  * (`LocalWritesHeldByRelease`).
  */
 @Composable
-fun ReleaseRoot(ui: ReleaseUi, update: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
+fun ReleaseRoot(ui: ReleaseUi, update: (@Composable () -> Unit)? = null, onUpdate: (() -> Unit)? = null, content: @Composable () -> Unit) {
   if (ui is ReleaseUi.Stopped) {
     ReleaseStoppedHost(ui.message, update)
     return
@@ -95,6 +96,7 @@ fun ReleaseRoot(ui: ReleaseUi, update: (@Composable () -> Unit)? = null, content
       ReleaseUpdateBanner(
         message = banner,
         onDismiss = { dismissed = true },
+        onUpdate = onUpdate,
         modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
       )
     }
@@ -118,12 +120,29 @@ private fun ReleaseStoppedHost(message: ReleaseMessage, update: (@Composable () 
 }
 
 /**
- * "Questa versione e' stata fermata" (E-REL6): il perche' dal catalogo, cosa fare (aggiornare), la Diagnostica. Nessun dato si cancella. Pacchetto U: sotto il perche',
- * l'aggiornamento dentro l'app ([update]): la versione nuova con «Aggiorna», oppure «Controlla adesso».
+ * "Questa versione e' stata fermata" (E-REL6): il perche' dal catalogo, cosa fare (aggiornare), la Diagnostica. Nessun dato si cancella. Pacchetto U (giro 1,
+ * UU-8): con l'aggiornamento dentro l'app ([update]) la figura e' UNA, quella dell'aggiornamento con il suo tasto («Aggiorna», oppure «Controlla adesso»);
+ * il perche' sta dietro la «i» e la Diagnostica e' un tasto leggero.
  */
 @Composable
 fun ReleaseStoppedScreen(message: ReleaseMessage, onDiagnostics: () -> Unit, update: (@Composable () -> Unit)? = null) {
   FluidScreen(title = stringResource(R.string.release_stopped_title)) {
+    if (update != null) {
+      item { FluidListGroup { update() } }
+      item {
+        GalleryInfoRow(
+          label = stringResource(R.string.release_stopped_why),
+          detail = stringResource(stoppedText(message)),
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        )
+      }
+      item {
+        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+          FluidButton(text = stringResource(R.string.release_open_diagnostics), onClick = onDiagnostics, style = FluidButtonStyle.Plain, size = FluidButtonSize.Large)
+        }
+      }
+      return@FluidScreen
+    }
     item {
       Column(
         modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
@@ -133,16 +152,6 @@ fun ReleaseStoppedScreen(message: ReleaseMessage, onDiagnostics: () -> Unit, upd
         // CS-17 (fase I): la forma comune; la frase resta aperta (dice che cosa resta fermo).
         GalleryFigureState(icon = Icons.Rounded.NewReleases, title = stringResource(R.string.release_stopped_title), fill = false) {
           BlockingText(stringResource(stoppedText(message)))
-          if (update == null) {
-            FluidButton(text = stringResource(R.string.release_open_diagnostics), onClick = onDiagnostics, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
-          }
-        }
-      }
-    }
-    if (update != null) {
-      item { FluidListGroup { update() } }
-      item {
-        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
           FluidButton(text = stringResource(R.string.release_open_diagnostics), onClick = onDiagnostics, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
         }
       }
@@ -150,13 +159,21 @@ fun ReleaseStoppedScreen(message: ReleaseMessage, onDiagnostics: () -> Unit, upd
   }
 }
 
-/** L'avviso "Aggiorna" (E-REL5): il perche' dal catalogo e cosa resta fermo (le scritture sul NAS). */
+/**
+ * L'avviso "Aggiorna" (E-REL5): il perche' dal catalogo e cosa resta fermo (le scritture sul NAS). Pacchetto U (giro 1, UU-8): con una versione nuova trovata
+ * c'e' il tasto «Aggiorna» ([onUpdate]) al posto di un percorso da leggere.
+ */
 @Composable
-fun ReleaseUpdateBanner(message: ReleaseMessage, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+fun ReleaseUpdateBanner(message: ReleaseMessage, onDismiss: () -> Unit, modifier: Modifier = Modifier, onUpdate: (() -> Unit)? = null) {
   FluidCard(modifier = modifier.fillMaxWidth(), highlighted = true) {
     Text(stringResource(R.string.release_update_title))
     Text(stringResource(updateText(message)))
-    FluidButton(text = stringResource(R.string.release_update_dismiss), onClick = onDismiss, style = FluidButtonStyle.Tinted, fillWidth = true)
+    if (onUpdate != null) {
+      FluidButton(text = stringResource(R.string.release_update_action), onClick = onUpdate, style = FluidButtonStyle.Filled, fillWidth = true)
+      FluidButton(text = stringResource(R.string.release_update_dismiss), onClick = onDismiss, style = FluidButtonStyle.Plain, fillWidth = true)
+    } else {
+      FluidButton(text = stringResource(R.string.release_update_dismiss), onClick = onDismiss, style = FluidButtonStyle.Tinted, fillWidth = true)
+    }
   }
 }
 

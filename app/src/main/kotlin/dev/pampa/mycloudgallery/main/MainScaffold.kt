@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Block
@@ -348,6 +349,12 @@ fun MainScaffold(
           modifier = Modifier.onFirstDraw { AvvioTrace.pageDrawn(AvvioTrace.PAGE_SEARCH) },
         )
       }
+    }
+
+    // Pacchetto U (UU-5): l'avviso dell'aggiornamento appoggiato sopra la pillola, solo quando la pillola c'e'. Il visore della radice gli sta sopra.
+    val notice = LocalTabBarNotice.current
+    if (notice != null && !searchOpen && !selecting && !tabBarSlot.taken) {
+      notice(Modifier.align(Alignment.BottomCenter).padding(bottom = navigationBottom + GalleryTabBarDefaults.ContentInset))
     }
 
     if (ownViewer != null) ViewerLayer(ownViewer)

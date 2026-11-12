@@ -217,11 +217,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     // I5: l'icona dell'app a scelta. Prima di qualunque activity (conta quelle avviate per cambiare l'ingresso del launcher solo in secondo piano);
     // il riallineamento con il PackageManager gira fuori dal thread principale.
     AvvioTrace.section("MCG:app:icona") { appIconLazy.get().install(this) }
-    // Pacchetto U: un APK lasciato nella cache da un aggiornamento di prima (riuscito: Android ha chiuso il processo prima della fine) si cancella
-    // all'avvio, fuori dal thread principale. Nessuna installazione e' in corso in un processo appena nato.
-    graph.scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-      runCatching { dev.pampa.mycloudgallery.feature.update.install.UpdateCache.clear(cacheDir) }
-    }
+    // Pacchetto U: un APK lasciato nella cache da un aggiornamento di prima (riuscito: Android ha chiuso il processo prima della fine) lo cancella
+    // AppUpdates appena nasce, fuori dal thread principale e prima di ogni scaricamento (giro 1: qui avrebbe potuto correre insieme a una ripresa).
   }
 
   /**

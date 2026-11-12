@@ -80,17 +80,11 @@ class AndroidPackageFacts(context: Context) : PackageFactsSource {
   )
 
   /**
-   * I certificati con cui il pacchetto e' firmato ADESSO: con piu' firmatari tutti (`apkContentsSigners`), con uno solo l'ultimo della storia delle
-   * rotazioni (`signingCertificateHistory`, come chiede la documentazione di `SigningInfo`). La chiave Pampa e' una, senza rotazioni.
+   * I certificati con cui il pacchetto e' firmato ADESSO: sempre `apkContentsSigners`, con uno o piu' firmatari (US-4 della critica di sicurezza: prima,
+   * con un firmatario solo, si prendeva l'ultimo della storia delle rotazioni). Il confronto resta l'uguaglianza esatta degli insiemi: la chiave Pampa
+   * e' una, senza rotazioni, e una rotazione futura vorra' una regola sua (docs/sicurezza.md L614).
    */
-  private fun currentSigners(info: PackageInfo): List<Signature> {
-    val signing = info.signingInfo ?: return emptyList()
-    return if (signing.hasMultipleSigners()) {
-      signing.apkContentsSigners?.toList().orEmpty()
-    } else {
-      listOfNotNull(signing.signingCertificateHistory?.lastOrNull())
-    }
-  }
+  private fun currentSigners(info: PackageInfo): List<Signature> = info.signingInfo?.apkContentsSigners?.toList().orEmpty()
 
   private fun fingerprint(signature: Signature): String =
     MessageDigest.getInstance("SHA-256").digest(signature.toByteArray()).joinToString("") { "%02x".format(it) }

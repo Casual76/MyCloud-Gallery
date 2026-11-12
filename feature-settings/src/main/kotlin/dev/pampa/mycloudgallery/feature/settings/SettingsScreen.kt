@@ -264,6 +264,13 @@ fun SettingsScreen(
     }
     family.description?.let { why -> item { GalleryInfoRow(label = stringResource(R.string.settings_hero_why), detail = why(), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) } }
 
+    // Pacchetto U (giro 1, UU-4): con una versione nuova la voce «Aggiornamenti» sale qui, in cima, con il segno (come «Aggiornamento disponibile» di
+    // iOS); senza, sta in fondo, in «Avanzate».
+    val updateAvailable = updateSummary?.available != null
+    links.openUpdates?.takeIf { updateAvailable }?.let { openUpdates ->
+      item(key = "update-available") { FluidListGroup { UpdateEntryRow(summary = updateSummary, onClick = openUpdates) } }
+    }
+
     // I3 (fase I): pochi gruppi, ognuno con una famiglia di colori: prima cio' che protegge le foto (backup, NAS, rete), poi le foto, la privacy,
     // la famiglia; cio' che serve di rado sta in fondo, in «Avanzate». Ogni riga ha la piastrella espressiva della sua famiglia e lo stato a destra
     // (un valore corto, un segno, un interruttore); il sottotitolo solo dove porta uno stato che cambia.
@@ -439,8 +446,8 @@ fun SettingsScreen(
     item { GallerySectionHeader(title = stringResource(R.string.settings_section_advanced)) }
     item {
       FluidListGroup {
-        // Pacchetto U: "Aggiornamenti" (con il segno quando c'e' una versione nuova), solo se `:app` ha scritto dove porta.
-        links.openUpdates?.let { openUpdates ->
+        // Pacchetto U: "Aggiornamenti", solo se `:app` ha scritto dove porta; con una versione nuova la voce e' in cima (sopra).
+        links.openUpdates?.takeIf { !updateAvailable }?.let { openUpdates ->
           UpdateEntryRow(summary = updateSummary, onClick = openUpdates)
           FluidListDivider()
         }

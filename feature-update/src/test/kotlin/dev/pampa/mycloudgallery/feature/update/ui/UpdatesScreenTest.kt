@@ -1,23 +1,26 @@
 package dev.pampa.mycloudgallery.feature.update.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import dev.antigravity.fluidengine.foundation.EngineSettings
 import dev.antigravity.fluidengine.foundation.ThemeMode
 import dev.antigravity.fluidengine.foundation.UpdateChannel
-import dev.antigravity.fluidengine.ui.fluid.FluidUpdate
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.feature.update.R
 import dev.pampa.mycloudgallery.feature.update.UpdatesState
@@ -28,8 +31,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Pacchetto U: la pagina Impostazioni -> Aggiornamenti e l'avviso all'apertura, con stati di esempio ([UpdateSamples]): che cosa si vede (poche parole,
- * lo stato una volta), che cosa sente TalkBack, che cosa fanno i tasti.
+ * Pacchetto U (giro 1 delle critiche): la pagina Impostazioni -> Aggiornamenti e l'avviso, con stati di esempio ([UpdateSamples]): che cosa si vede
+ * (poche parole, lo stato una volta, nessuna frase dell'engine), che cosa sente TalkBack, che cosa fanno i tasti, e che non c'e' mai un'attesa senza tasti.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -49,9 +52,11 @@ class UpdatesScreenTest {
     cancelMetered = { called += "cancelMetered" },
     allow = { called += "allow" },
     cancelDownload = { called += "cancelDownload" },
+    cancelReady = { called += "cancelReady" },
     close = { called += "close" },
     chooseChannel = { channels += it },
     later = { called += "later" },
+    hide = { called += "hide" },
   )
 
   private fun show(content: @Composable () -> Unit) {
@@ -60,6 +65,8 @@ class UpdatesScreenTest {
   }
 
   private fun page(state: UpdatesState) = show { UpdatesScreen(state = state, actions = actions, onBack = {}) }
+
+  private fun prompt(state: UpdatesState) = show { UpdatePromptCard(state = state, actions = actions) }
 
   private fun string(id: Int, vararg args: Any): String = rule.activity.getString(id, *args)
 
@@ -71,11 +78,12 @@ class UpdatesScreenTest {
     rule.onNode(hasContentDescription(name, substring = true) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton))
 
   @Test
-  fun primaDiControllare_laFiguraEUnTasto_laVersioneInstallataUnaVolta() {
+  fun primaDiControllare_laVersioneInstallataUnaVoltaEUnTasto() {
     page(UpdateSamples.idle)
-    // In pagina: il titolo, il tasto, il canale con le due scelte e le loro righe, la versione installata. Nient'altro da leggere.
+    // In pagina: il titolo, la versione installata (una volta), il tasto, le versioni da ricevere con le due scelte. Nient'altro da leggere.
     assertThat(texts()).containsExactly(
       string(R.string.update_title),
+      string(R.string.update_current, "1.0.0"),
       string(R.string.update_check_now),
       // L'intestazione di sezione comune scrive in maiuscolo.
       string(R.string.update_channel).uppercase(),
@@ -83,16 +91,15 @@ class UpdatesScreenTest {
       string(R.string.update_channel_stable_detail),
       string(R.string.update_channel_beta),
       string(R.string.update_channel_beta_detail),
-      string(R.string.update_installed_version),
-      "1.0.0",
+      // La riga della «i» per chi torna a Stabile (la frase si apre al tocco).
+      string(R.string.update_channel_beta_why_label),
     )
-    assertThat(rule.onAllNodesWithText("1.0.0").fetchSemanticsNodes()).hasSize(1)
     rule.onNodeWithText(string(R.string.update_check_now)).performClick()
     assertThat(called).containsExactly("check")
   }
 
   @Test
-  fun ilCanaleSonoDueScelteConIlSegno_StabileDiSerie() {
+  fun ilCanaleSonoDueScelteConIlSegno_StabileDiSerie_eLaIPerChiTorna() {
     page(UpdateSamples.upToDate)
     val stable = choice(string(R.string.update_channel_stable)).fetchSemanticsNode()
     val beta = choice(string(R.string.update_channel_beta)).fetchSemanticsNode()
@@ -101,17 +108,27 @@ class UpdatesScreenTest {
     assertThat(beta.config.getOrNull(SemanticsProperties.Selected)).isFalse()
     choice(string(R.string.update_channel_beta)).performClick()
     assertThat(channels).containsExactly(UpdateChannel.BETA)
+    // Dietro la «i»: chi torna a Stabile tiene la beta finche' non ne esce una stabile piu' nuova.
+    rule.onNode(hasContentDescription(string(R.string.update_channel_beta_why), substring = true)).assertExists()
   }
 
   @Test
-  fun unaVersioneNuova_versionePesoNovitaEAggiorna() {
+  fun conLAppAggiornataControllaAdessoEUnTastoLeggero() {
+    page(UpdateSamples.upToDate)
+    rule.onNodeWithText(string(R.string.update_up_to_date)).assertExists()
+    rule.onNodeWithText(string(R.string.update_current, "1.0.0")).assertExists()
+    rule.onNodeWithText(string(R.string.update_check_now)).assertExists()
+  }
+
+  @Test
+  fun unaVersioneNuova_daQualeAQualePesoNovitaEAggiorna() {
     page(UpdateSamples.found)
-    val size = FluidUpdate.sizeLabel(UpdateSamples.SIZE)!!
-    rule.onNodeWithText(string(R.string.update_found, "1.1.0")).assertExists()
-    rule.onNodeWithText(size).assertExists()
+    rule.onNodeWithText(string(R.string.update_found)).assertExists()
+    // UU-7 e UU-13: le due versioni e il peso in una riga, «110 MB».
+    rule.onNodeWithText("1.0.0 → 1.1.0 · 110 MB").assertExists()
     rule.onNodeWithText(string(R.string.update_whats_new)).assertExists()
-    // La nota di rilascio senza Markdown, solo il primo paragrafo.
-    rule.onNode(hasText("Album più veloci", substring = true)).assertExists()
+    // La nota di rilascio senza Markdown, a punti (le righe a capo rientrano sotto il testo).
+    rule.onNodeWithText("Album più veloci da aprire.").assertExists()
     assertThat(texts().none { it.contains("**") }).isTrue()
     // Il `### Novità` del changelog non si ripete sotto il titolo del riquadro.
     val whatsNew = string(R.string.update_whats_new)
@@ -121,11 +138,15 @@ class UpdatesScreenTest {
   }
 
   @Test
-  fun mentreScarica_lAnelloEIlPercentoPerTalkBack() {
+  fun mentreScarica_lAnelloEUnaBarraDAvanzamento_eLeSceltePiuTenuiESpente() {
     page(UpdateSamples.downloading)
-    rule.onNode(hasContentDescription(string(R.string.update_progress_spoken, 42))).assertExists()
+    // UU-11: l'anello e' un avanzamento vero e annuncia ogni quarto (42 -> 25).
+    val ring = rule.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)).fetchSemanticsNode()
+    assertThat(ring.config[SemanticsProperties.ProgressBarRangeInfo].current).isWithin(0.001f).of(0.42f)
+    assertThat(ring.config.getOrNull(SemanticsProperties.StateDescription)).isEqualTo(string(R.string.update_progress_spoken, 25))
     rule.onNodeWithText(string(R.string.update_downloading)).assertExists()
-    // Mentre scarica il canale non si cambia.
+    // Mentre scarica il canale non si cambia, e TalkBack lo dice.
+    assertThat(choice(string(R.string.update_channel_beta)).fetchSemanticsNode().config.contains(SemanticsProperties.Disabled)).isTrue()
     choice(string(R.string.update_channel_beta)).performClick()
     assertThat(channels).isEmpty()
     rule.onNodeWithText(string(R.string.update_cancel)).performClick()
@@ -133,60 +154,130 @@ class UpdatesScreenTest {
   }
 
   @Test
-  fun suiDatiMobiliPrimaSiChiedeConIlPeso() {
+  fun suiDatiMobiliPrimaSiChiede_ilPesoUnaVolta() {
     page(UpdateSamples.metered)
-    val size = FluidUpdate.sizeLabel(UpdateSamples.SIZE)!!
     rule.onNodeWithText(string(R.string.update_metered)).assertExists()
-    rule.onNodeWithText(string(R.string.update_download_anyway, size)).performClick()
+    assertThat(rule.onAllNodesWithText("110 MB", substring = true).fetchSemanticsNodes()).hasSize(1)
+    rule.onNodeWithText(string(R.string.update_download_anyway)).performClick()
     rule.onNodeWithText(string(R.string.update_cancel)).performClick()
     assertThat(called).containsExactly("metered", "cancelMetered").inOrder()
   }
 
   @Test
-  fun ilPermessoInUnaRigaEConsenti() {
+  fun ilPermesso_unaFiguraEUnaRigaEsatta_ilPercheDietroLaI() {
     page(UpdateSamples.permission)
     rule.onNodeWithText(string(R.string.update_permission)).assertExists()
+    rule.onNodeWithText(string(R.string.update_permission_detail)).assertExists()
+    rule.onNodeWithContentDescription(string(R.string.update_permission_why)).assertExists()
     rule.onNodeWithText(string(R.string.update_allow)).performClick()
-    assertThat(called).containsExactly("allow")
+    rule.onNodeWithText(string(R.string.update_close)).performClick()
+    assertThat(called).containsExactly("allow", "close").inOrder()
   }
 
   @Test
-  fun unErroreCortoConRiprova() {
+  fun prontaDaInstallare_InstallaEAnnulla_eDiceCheLAppSiChiude() {
+    // UU-1 e UU-2: mai un'attesa senza tasti; prima della sessione una riga dice che l'app si chiude.
+    page(UpdateSamples.ready)
+    rule.onNodeWithText(string(R.string.update_ready)).assertExists()
+    rule.onNodeWithText(string(R.string.update_closes)).assertExists()
+    rule.onNodeWithText(string(R.string.update_install)).performClick()
+    rule.onNodeWithText(string(R.string.update_cancel)).performClick()
+    assertThat(called).containsExactly("install", "cancelReady").inOrder()
+  }
+
+  @Test
+  fun annullataInAndroid_nonEUnGuasto() {
+    page(UpdateSamples.interrupted)
+    rule.onNodeWithText(string(R.string.update_ready)).assertExists()
+    rule.onNodeWithText(string(R.string.update_interrupted)).assertExists()
+    assertThat(rule.onAllNodesWithText(string(R.string.update_failed)).fetchSemanticsNodes()).isEmpty()
+  }
+
+  @Test
+  fun mentreInstalla_unaRigaDiceCheLAppSiChiude() {
+    page(UpdateSamples.installing)
+    rule.onNodeWithText(string(R.string.update_installing)).assertExists()
+    rule.onNodeWithText(string(R.string.update_closes)).assertExists()
+  }
+
+  @Test
+  fun unGuastoCheNonSiRisolveRiprovando_haSoloChiudiEAChiRivolgersi() {
     page(UpdateSamples.signature)
     rule.onNodeWithText(string(R.string.update_failed)).assertExists()
-    rule.onNodeWithText(string(R.string.update_problem_signature)).assertExists()
+    rule.onNodeWithText(string(R.string.update_problem_signature) + ". " + string(R.string.update_tell_sender)).assertExists()
+    assertThat(rule.onAllNodesWithText(string(R.string.update_retry)).fetchSemanticsNodes()).isEmpty()
+    rule.onNodeWithText(string(R.string.update_close)).performClick()
+    assertThat(called).containsExactly("close")
+  }
+
+  @Test
+  fun unGuastoCheSiRisolveRiprovando_haRiprova() {
+    page(UpdateSamples.noSpace)
+    rule.onNodeWithText(string(R.string.update_problem_space)).assertExists()
     rule.onNodeWithText(string(R.string.update_retry)).performClick()
     assertThat(called).containsExactly("install")
   }
 
   @Test
-  fun unaVersionePubblicataMaleNonHaAggiorna() {
+  fun nessunaParolaDellEngineAdOgniStato() {
+    // UU-6: «APK», «firma», il registro tecnico non arrivano mai a schermo.
+    val states = listOf(UpdateSamples.signature, UpdateSamples.noSpace, UpdateSamples.unusable, UpdateSamples.permission, UpdateSamples.interrupted)
+    show { Column { for (state in states) UpdatePanel(state = state, actions = actions) } }
+    assertThat(texts()).isNotEmpty()
+    assertThat(texts().none { it.contains("APK") || it.contains("firma", ignoreCase = true) || it.contains("Play Protect") }).isTrue()
+  }
+
+  @Test
+  fun unaVersionePubblicataMale_nonAncoraPronta_senzaAggiorna() {
     page(UpdateSamples.unusable)
-    rule.onNodeWithText(string(R.string.update_unusable, "1.1.0")).assertExists()
+    rule.onNodeWithText(string(R.string.update_unusable)).assertExists()
+    rule.onNodeWithText(string(R.string.update_unusable_detail)).assertExists()
     assertThat(rule.onAllNodesWithText(string(R.string.update_action)).fetchSemanticsNodes()).isEmpty()
   }
 
   @Test
   fun lAvviso_nuovaVersioneAggiornaEDopo() {
-    show { UpdatePromptCard(state = UpdateSamples.found, actions = actions) }
-    val size = FluidUpdate.sizeLabel(UpdateSamples.SIZE)!!
+    prompt(UpdateSamples.found)
     rule.onNodeWithText(string(R.string.update_prompt_title)).assertExists()
-    rule.onNodeWithText("1.1.0 · $size").assertExists()
+    rule.onNodeWithText("1.1.0 · 110 MB").assertExists()
     rule.onNodeWithText(string(R.string.update_later)).performClick()
     rule.onNodeWithText(string(R.string.update_action)).performClick()
     assertThat(called).containsExactly("later", "install").inOrder()
   }
 
   @Test
-  fun lAvvisoMentreScarica_annullaODopo_ilDownloadContinua() {
-    show { UpdatePromptCard(state = UpdateSamples.downloading, actions = actions) }
+  fun lAvvisoMentreScarica_soloAnnulla_eLaXLoNasconde() {
+    // UU-10: «Dopo» non e' «nascondi»; mentre scarica c'e' la «×».
+    prompt(UpdateSamples.downloading)
     rule.onNodeWithText(string(R.string.update_cancel)).assertExists()
-    rule.onNodeWithText(string(R.string.update_later)).performClick()
+    assertThat(rule.onAllNodesWithText(string(R.string.update_later)).fetchSemanticsNodes()).isEmpty()
+    rule.onNodeWithContentDescription(string(R.string.update_hide)).performClick()
+    assertThat(called).containsExactly("hide")
+  }
+
+  @Test
+  fun lAvvisoAggiornata_unaVoltaConOk() {
+    prompt(UpdateSamples.justUpdated)
+    rule.onNodeWithText(string(R.string.update_installed)).assertExists()
+    rule.onNodeWithText("1.1.0").assertExists()
+    rule.onNodeWithText(string(R.string.update_ok)).performClick()
     assertThat(called).containsExactly("later")
   }
 
   @Test
-  fun lAvvisoNonCompareSenzaUnaVersione() {
+  fun iTastiDellAvvisoSonoAltiAlmeno48dp() {
+    // UU-11: «Dopo» e «Aggiorna» nella scheda, la «×»: almeno 48 dp per il dito.
+    val states = listOf(UpdateSamples.found, UpdateSamples.downloading, UpdateSamples.ready)
+    show { Column { for (state in states) UpdatePromptCard(state = state, actions = actions) } }
+    val min = with(rule.density) { 48.dp.toPx() } - 0.5f
+    val heights = rule.onAllNodes(hasClickAction()).fetchSemanticsNodes().map { it.size.height }
+    // Dopo, Aggiorna; Annulla e la «×»; Annulla, Installa e la «×».
+    assertThat(heights).hasSize(7)
+    for (height in heights) assertThat(height.toFloat()).isAtLeast(min)
+  }
+
+  @Test
+  fun lAvvisoNonHaControllaAdesso() {
     // Il modello dell'avviso non ha tasti di controllo: «Controlla adesso» e' della pagina.
     assertThat(promptButtons(UpdatePanels.of(UpdateSamples.upToDate)).mapNotNull { it.action }).isEmpty()
   }

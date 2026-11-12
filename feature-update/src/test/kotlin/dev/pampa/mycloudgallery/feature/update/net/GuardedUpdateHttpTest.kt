@@ -141,9 +141,14 @@ class GuardedUpdateHttpTest {
 
   @Test
   fun unElencoTroppoGrandeSiFerma() {
+    // Senza Content-Length (il server non lo dice): il tetto conta i byte letti.
     replies[manifest] = Reply(200, body = ByteArray(2048) { 'a'.code.toByte() })
     val failure = assertThrows(UpdateNetException::class.java) { runBlocking { http(maxManifest = 1024).readText(manifest) } }
     assertThat(failure.refusal).isEqualTo(UpdateNetRefusal.TOO_LARGE)
+    // Al tetto esatto passa; il tetto vero dell'app e' 256 KiB.
+    replies[manifest] = Reply(200, body = ByteArray(1024) { 'a'.code.toByte() })
+    assertThat(runBlocking { http(maxManifest = 1024).readText(manifest) }).hasLength(1024)
+    assertThat(UpdateSourceConfig.MAX_MANIFEST_BYTES).isEqualTo(256 * 1024)
   }
 
   @Test
@@ -169,6 +174,10 @@ class GuardedUpdateHttpTest {
     assertThat(opened.map { it.url.toString() }).containsExactly(asset, cdn).inOrder()
     assertThat(opened.last().sent["Accept-Encoding"]).isEqualTo("identity")
     assertThat(File(dir, "mycloud-gallery-1.1.0.apk.part").exists()).isFalse()
+    // Anche lo scaricamento segue i rimandi a mano (ogni salto passa dal cancello), senza cache (critica di sicurezza, punto 7).
+    assertThat(opened.map { it.instanceFollowRedirects }).containsExactly(false, false)
+    assertThat(opened.map { it.useCaches }).containsExactly(false, false)
+    Unit
   }
 
   @Test

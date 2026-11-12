@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.update
 import android.content.Context
 import dev.antigravity.fluidengine.foundation.AvailableAppUpdate
 import dev.antigravity.fluidengine.foundation.UpdateChannel
+import dev.antigravity.fluidengine.foundation.compareVersions
 import dev.antigravity.fluidengine.net.EngineHttp
 import dev.antigravity.fluidengine.update.AndroidAppUpdateInstaller
 import dev.antigravity.fluidengine.update.EngineAppUpdater
@@ -13,17 +14,20 @@ import dev.pampa.mycloudgallery.feature.update.install.EngineApkTransfer
 import dev.pampa.mycloudgallery.feature.update.install.GuardedUpdateInstaller
 import dev.pampa.mycloudgallery.feature.update.install.InstallPermission
 import dev.pampa.mycloudgallery.feature.update.install.InstallStep
-import dev.pampa.mycloudgallery.feature.update.install.UpdateRunner
+import dev.pampa.mycloudgallery.feature.update.install.UpdateCache
+import dev.pampa.mycloudgallery.feature.update.install.UpdateInstaller
 import dev.pampa.mycloudgallery.feature.update.net.GuardedUpdateHttp
 import dev.pampa.mycloudgallery.feature.update.policy.UpdateProblem
 import dev.pampa.mycloudgallery.feature.update.policy.UpdateRules
 import dev.pampa.mycloudgallery.feature.update.source.UpdateSourceConfig
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,17 +39,27 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-// L'AGGIORNAMENTO DENTRO L'APP, IL CUORE (pacchetto U, 12/11/2026; docs/aggiornamenti-in-app.md). Uno per processo (lo crea `:app`): lo stato che la
-// pagina Impostazioni -> Aggiornamenti, l'avviso all'apertura, la voce delle Impostazioni e la pagina «versione fermata» guardano.
+// L'AGGIORNAMENTO DENTRO L'APP, IL CUORE (pacchetto U, 12/11/2026; giro 1 delle critiche; docs/aggiornamenti-in-app.md). Uno per processo (lo crea
+// `:app`): lo stato che la pagina Impostazioni -> Aggiornamenti, l'avviso sopra la barra delle schede, la voce delle Impostazioni e la pagina «versione
+// fermata» guardano.
 //
-// QUANDO CONTROLLA: all'apertura dell'app, in silenzio, al piu' una volta ogni 24 ore ([checkIfDue], ora dell'ultimo tentativo salvata anche se non
-// riesce: un telefono offline non bussa a GitHub a ogni apertura); a mano con «Controlla adesso» ([checkNow]) e quando si cambia canale. Mai un lavoro
-// periodico in background. Il controllo e' una GET dell'elenco (pochi KB): parte anche sui dati mobili.
+// QUANDO CONTROLLA: all'apertura dell'app, in silenzio, al piu' una volta ogni 24 ore ([checkIfDue]); all'apertura della pagina, con la stessa regola
+// ([refreshIfDue]); a mano con «Controlla adesso» ([checkNow]) e quando si cambia canale. Mai un lavoro periodico in background. L'ultima versione trovata
+// si ricorda ([SavedOffer]): dopo un riavvio la pagina e il segno la mostrano subito, senza aspettare la rete.
 //
-// LO SCARICAMENTO (~110 MB) parte solo dal tocco su «Aggiorna» ([install]); su una rete a consumo prima si chiede ([UpdatesState.askMetered]).
-// Il permesso «installa app sconosciute» si chiede quando serve, e al ritorno dalla pagina di Android si riparte da soli ([onResumed]).
+// L'AVVISO compare quando c'e' una versione da offrire e il promemoria lo permette (`UpdateRules.shouldPrompt`): «Dopo» lo rimanda di tre giorni, al
+// piu' tre volte per la versione installata. Alla prima apertura dopo un aggiornamento riuscito dice «Aggiornata» ([UpdatesState.justUpdated]),
+// confrontando la versione del tentativo salvato con quella che gira: l'evento `Installed` dell'engine non arriva quasi mai (Android chiude l'app).
 //
-// LA VERSIONE CORRENTE e' il `versionName` INTERO (con il suffisso beta): una `1.1.0-beta.2` vede la stabile `1.1.0` (update.md, trappole).
+// L'INSTALLAZIONE parte solo dal tocco su «Aggiorna» ([install]), in due tempi (`UpdateInstaller.prepare` e `commit`):
+//  - sui dati mobili prima si chiede; il consenso vale per QUEL tentativo ([Attempt.meteredConsent], US-2): al ritorno dal permesso di Android si
+//    riguarda la rete e, se e' a consumo senza consenso, si chiede di nuovo;
+//  - il permesso «installa app sconosciute» si chiede quando serve; il tentativo si salva, cosi' se Android chiude l'app per darlo (Android 11) al
+//    ritorno si riprende (UU-3);
+//  - il file scaricato e verificato va alla sessione di Android solo con l'app davanti ([foreground]); altrimenti «Pronta» con «Installa» (UU-1). Se la
+//    finestra di Android non si apre o si chiude senza installare, al ritorno davanti si torna a «Pronta»: «Installa» riprova senza riscaricare.
+//
+// LA VERSIONE CORRENTE e' il `versionName` INTERO (con il suffisso beta): una `1.1.0-beta.02` vede la stabile `1.1.0` (update.md, trappole).
 
 /** Il controllo dell'elenco. */
 sealed interface CheckState {
@@ -62,7 +76,7 @@ sealed interface CheckState {
   /** C'e' una versione piu' nuova, installabile. */
   data class Found(val update: AvailableAppUpdate) : CheckState
 
-  /** C'e' una versione piu' nuova, ma l'elenco non la descrive come serve (senza sha256 o peso, nomi, indirizzo): non si offre. */
+  /** C'e' una versione piu' nuova, ma l'elenco non la descrive come serve (senza sha256 o peso, versione, nomi, indirizzo): non si offre. */
   data class Unusable(val update: AvailableAppUpdate, val problem: UpdateProblem) : CheckState
 }
 
@@ -76,6 +90,8 @@ data class UpdatesState(
   val install: InstallStep? = null,
   /** Si aspetta la risposta a «sei sui dati mobili: scarico lo stesso?». */
   val askMetered: Boolean = false,
+  /** L'app si e' appena aggiornata a questa versione: la prima apertura dopo lo dice, una volta. */
+  val justUpdated: String? = null,
 ) {
   /** La versione che «Aggiorna» installerebbe. */
   val found: AvailableAppUpdate? get() = (check as? CheckState.Found)?.update
@@ -84,10 +100,10 @@ data class UpdatesState(
   val installing: Boolean get() = install.isActive()
 }
 
-/** Vero per i passi che lavorano ancora (non per il permesso da dare, un errore o la fine). */
+/** Vero per i passi che lavorano ancora (non per il permesso da dare, il file pronto, un errore o la fine). */
 fun InstallStep?.isActive(): Boolean = when (this) {
   InstallStep.Preparing, is InstallStep.Downloading, InstallStep.Verifying, InstallStep.Installing, InstallStep.AwaitingUser -> true
-  null, InstallStep.NeedsPermission, InstallStep.Installed, is InstallStep.Failed -> false
+  null, InstallStep.NeedsPermission, is InstallStep.Ready, InstallStep.Installed, is InstallStep.Failed -> false
 }
 
 /** Chi legge l'elenco: `EngineAppUpdater.check` in produzione. */
@@ -97,15 +113,19 @@ fun interface UpdateChecker {
 
 class AppUpdates(
   private val checker: UpdateChecker,
-  private val runner: UpdateRunner,
+  private val installer: UpdateInstaller,
   private val store: UpdateStore,
   private val installedVersion: String,
   private val permission: InstallPermission,
   private val metered: () -> Boolean,
-  /** L'ora per le 24 ore fra un controllo e l'altro: la da' `:app` (questo modulo non legge l'orologio). */
+  /** L'app e' davanti (un'activity visibile): solo allora il file va alla sessione di Android, che mostra la sua finestra. */
+  private val foreground: () -> Boolean,
+  /** L'ora per le 24 ore, i tre giorni del promemoria e il tentativo salvato: la da' `:app` (questo modulo non legge l'orologio). */
   private val now: () -> Long,
   private val scope: CoroutineScope,
   private val io: CoroutineDispatcher = Dispatchers.IO,
+  /** Svuota la cartella dei download (`UpdateCache`): all'avvio, prima di ogni scaricamento. */
+  private val clearCache: () -> Unit = {},
 ) {
   private val mutable = MutableStateFlow(UpdatesState(installedVersion = installedVersion))
   val state: StateFlow<UpdatesState> = mutable.asStateFlow()
@@ -113,44 +133,98 @@ class AppUpdates(
   private val promptOpen = MutableStateFlow(false)
 
   /**
-   * L'avviso all'apertura: vero quando un controllo SILENZIOSO ha trovato una versione mai annunciata (una volta per versione, [UpdateRules.shouldPrompt]:
-   * la versione si segna subito). Resta vero finche' l'utente non tocca «Dopo», anche mentre l'aggiornamento si scarica dall'avviso.
+   * L'avviso sopra la barra delle schede: una versione da offrire (con il promemoria che lo permette), il permesso da dare per un tentativo partito,
+   * oppure «Aggiornata» dopo un aggiornamento riuscito. Resta finche' l'utente non risponde, anche mentre scarica dall'avviso.
    */
   val prompt: StateFlow<Boolean> = promptOpen.asStateFlow()
 
   private val loaded = CompletableDeferred<Unit>()
   private val checks = Mutex()
-  private var installJob: Job? = null
+  private var job: Job? = null
 
-  @Volatile
-  private var resumeAfterPermission = false
+  /** Il file verificato e la sua versione: «Installa» e «Riprova» non riscaricano finche' c'e'. */
+  @Volatile private var readyFile: File? = null
+
+  @Volatile private var readyVersion: String? = null
+
+  /** Il tentativo partito dal tocco su «Aggiorna» (salvato quando serve: permesso, installazione). */
+  @Volatile private var attempt: Attempt? = null
+
+  @Volatile private var reminder = Reminder(forInstalled = installedVersion)
 
   init {
     // Le preferenze si leggono fuori dal thread principale: nascere non costa niente al primo disegno.
     scope.launch(io) {
       try {
-        val channel = store.channel()
-        mutable.update { it.copy(channel = channel) }
+        runCatching(clearCache)
+        restore()
       } finally {
         loaded.complete(Unit)
       }
     }
   }
 
-  /** All'apertura dell'app (dopo il primo disegno): un controllo silenzioso se l'ultimo ha piu' di 24 ore. Mai un errore visibile. */
-  fun checkIfDue(): Job = scope.launch { runCheck(manual = false) }
+  private fun restore() {
+    val channel = store.channel()
+    val offer = store.offer()?.takeIf { usable(it, channel) }
+    if (offer == null) store.setOffer(null)
+    reminder = store.reminder().let { saved -> if (saved.forInstalled == installedVersion) saved else Reminder(forInstalled = installedVersion) }
+    store.setReminder(reminder)
+    val saved = store.attempt()
+    var justUpdated: String? = null
+    var install: InstallStep? = null
+    when {
+      saved == null -> Unit
+      saved.stage == AttemptStage.INSTALLING && saved.version == installedVersion -> {
+        justUpdated = installedVersion
+        store.setAttempt(null)
+      }
+      saved.stage == AttemptStage.PERMISSION && offer?.update?.version == saved.version && UpdateRules.attemptFresh(saved.startedAt, now()) -> {
+        attempt = saved
+        install = InstallStep.NeedsPermission
+      }
+      else -> store.setAttempt(null)
+    }
+    mutable.update { current ->
+      current.copy(
+        channel = channel,
+        check = offer?.let { CheckState.Found(it.update) } ?: current.check,
+        install = install ?: current.install,
+        justUpdated = justUpdated,
+      )
+    }
+    promptOpen.value = justUpdated != null || install != null || offer != null && promptAllowed()
+  }
+
+  /** Una versione salvata vale ancora: dello stesso canale, scritta bene, piu' nuova di quella che gira. */
+  private fun usable(offer: SavedOffer, channel: UpdateChannel): Boolean =
+    offer.channel == channel && UpdateRules.offerProblem(offer.update) == null && compareVersions(offer.update.version, installedVersion) > 0
+
+  private fun promptAllowed(): Boolean = UpdateRules.shouldPrompt(hasOffer = true, now = now(), snoozedUntil = reminder.snoozedUntil, declines = reminder.declines)
+
+  /** All'apertura dell'app (dopo il primo disegno): un controllo silenzioso se l'ultimo ha piu' di 24 ore. Mai un errore visibile; puo' aprire l'avviso. */
+  fun checkIfDue(): Job = scope.launch { runCheck(CheckMode.APP) }
+
+  /** All'apertura della pagina Aggiornamenti: come [checkIfDue], senza avviso (la pagina lo mostra gia'). */
+  fun refreshIfDue(): Job = scope.launch { runCheck(CheckMode.PAGE) }
 
   /** «Controlla adesso»: sempre, e un errore si vede («Non riesco a controllare adesso»). */
-  fun checkNow(): Job = scope.launch { runCheck(manual = true) }
+  fun checkNow(): Job = scope.launch { runCheck(CheckMode.MANUAL) }
 
-  private suspend fun runCheck(manual: Boolean) {
+  private enum class CheckMode { APP, PAGE, MANUAL }
+
+  private suspend fun runCheck(mode: CheckMode) {
     loaded.await()
     checks.withLock {
-      if (state.value.installing) return
+      val current = state.value
+      // Un'installazione partita (o un file pronto) non si disturba: l'elenco si rilegge dopo.
+      if (current.installing || current.install is InstallStep.Ready) return
+      val manual = mode == CheckMode.MANUAL
       if (!manual && !UpdateRules.isDue(withContext(io) { store.lastCheckedAt() }, now())) return
-      val before = state.value.check
-      val channel = state.value.channel
-      mutable.update { it.copy(check = CheckState.Checking) }
+      val before = current.check
+      val channel = current.channel
+      // Una versione gia' nota resta a schermo mentre si rilegge in silenzio; a mano si vede che controlla.
+      if (manual || before !is CheckState.Found) mutable.update { it.copy(check = CheckState.Checking) }
       val result = try {
         checker.check(installedVersion, channel)
       } catch (cancelled: CancellationException) {
@@ -163,7 +237,7 @@ class AppUpdates(
       // Il canale e' cambiato mentre si leggeva: questo esito non vale piu' (il cambio ha chiesto il suo controllo).
       if (state.value.channel != channel) return
       result.fold(
-        onSuccess = { offered -> settle(offered, manual) },
+        onSuccess = { offered -> settle(offered, channel, mayPrompt = mode == CheckMode.APP) },
         onFailure = {
           val shown = if (manual) CheckState.Unavailable else before.takeUnless { it == CheckState.Checking } ?: CheckState.Idle
           mutable.update { it.copy(check = shown) }
@@ -172,104 +246,251 @@ class AppUpdates(
     }
   }
 
-  private suspend fun settle(offered: AvailableAppUpdate?, manual: Boolean) {
+  private suspend fun settle(offered: AvailableAppUpdate?, channel: UpdateChannel, mayPrompt: Boolean) {
     if (offered == null) {
-      mutable.update { it.copy(check = CheckState.UpToDate) }
+      withContext(io) { store.setOffer(null) }
+      dropReady()
+      mutable.update { it.copy(check = CheckState.UpToDate, install = it.install.takeIf { step -> step is InstallStep.Failed }) }
       return
     }
-    val problem = UpdateRules.offerProblem(offered)
+    val clean = UpdateRules.cleanOffer(offered)
+    val problem = UpdateRules.offerProblem(clean)
     if (problem != null) {
-      // Pubblicata male (per esempio senza sha256): non si offre e non si annuncia. La pagina lo dice in piccolo, per chi pubblica.
-      mutable.update { it.copy(check = CheckState.Unusable(offered, problem)) }
+      // Pubblicata male (per esempio senza sha256): non si offre e non si annuncia. La pagina dice «non ancora pronta».
+      withContext(io) { store.setOffer(null) }
+      mutable.update { it.copy(check = CheckState.Unusable(clean, problem)) }
       return
     }
+    withContext(io) { store.setOffer(SavedOffer(channel, clean)) }
+    if (readyVersion != null && readyVersion != clean.version) dropReady()
     mutable.update { current ->
-      // Un'installazione finita male della stessa versione resta da leggere finche' non si riprova.
-      val keep = (current.install as? InstallStep.Failed)?.takeIf { current.found?.version == offered.version }
-      current.copy(check = CheckState.Found(offered), install = keep)
+      // Il passo di un tentativo della stessa versione resta (il permesso da dare, un guasto da leggere); una versione nuova riparte da capo.
+      val keep = current.install.takeIf { current.found?.version == clean.version }
+      current.copy(check = CheckState.Found(clean), install = keep)
     }
-    if (UpdateRules.shouldPrompt(offered.version, withContext(io) { store.promptedVersion() })) {
-      withContext(io) { store.setPromptedVersion(offered.version) }
-      if (!manual) promptOpen.value = true
-    }
+    if (mayPrompt && promptAllowed()) promptOpen.value = true
   }
 
   /** Il canale scelto in Impostazioni: si salva su questo dispositivo e si controlla subito. Non durante un'installazione. */
   fun chooseChannel(channel: UpdateChannel) {
     val current = state.value
     if (current.installing || current.channel == channel) return
-    mutable.update { it.copy(channel = channel, check = CheckState.Idle, install = null, askMetered = false) }
+    mutable.update { it.copy(channel = channel) }
     scope.launch {
       loaded.await()
-      withContext(io) { store.setChannel(channel) }
-      runCheck(manual = true)
+      dropReady()
+      clearAttempt()
+      mutable.update { it.copy(channel = channel, check = CheckState.Idle, install = null, askMetered = false) }
+      withContext(io) {
+        store.setChannel(channel)
+        store.setOffer(null)
+      }
+      runCheck(CheckMode.MANUAL)
     }
   }
 
   /**
-   * «Aggiorna»: l'unico punto da cui parte un'installazione (un tocco dell'utente). Su una rete a consumo, la prima volta chiede ([acceptMetered]
-   * falso): «Scarica» la richiama con vero. Un secondo tocco mentre lavora non fa niente.
+   * «Aggiorna» (e «Riprova», «Installa»): l'unico punto da cui parte un'installazione, un tocco dell'utente. Se c'e' gia' il file verificato di questa
+   * versione va diritto alla sessione (senza riscaricare). Altrimenti un tentativo nuovo: su una rete a consumo prima si chiede ([acceptMetered] falso);
+   * «Scarica lo stesso» la richiama con vero, e quel consenso vale solo per questo tentativo. Un secondo tocco mentre lavora non fa niente.
    */
   fun install(acceptMetered: Boolean = false) {
     val update = state.value.found ?: return
-    if (state.value.installing || installJob?.isActive == true) return
-    if (!acceptMetered && metered()) {
-      mutable.update { it.copy(askMetered = true) }
+    if (state.value.installing || job?.isActive == true) return
+    val ready = readyFile?.takeIf { it.isFile && readyVersion == update.version }
+    if (ready != null) {
+      val consent = acceptMetered || attempt?.meteredConsent == true
+      attempt = Attempt(update.version, AttemptStage.INSTALLING, consent, now(), installedVersion)
+      job = scope.launch { commit(update, ready) }
       return
     }
-    resumeAfterPermission = false
-    mutable.update { it.copy(askMetered = false, install = InstallStep.Preparing) }
-    installJob = scope.launch {
-      runner.run(update)
-        // Lo scaricamento, l'impronta e la lettura dell'APK (anche quella dell'engine, che non cambia filo) mai sul thread principale.
-        .flowOn(io)
-        .catch { failure ->
-          if (failure is CancellationException) throw failure
-          emit(InstallStep.Failed(UpdateProblem.INSTALL_FAILED))
-        }
-        .collect { step ->
-          if (step == InstallStep.NeedsPermission) resumeAfterPermission = true
-          mutable.update { it.copy(install = step) }
-        }
+    startAttempt(update, consent = acceptMetered)
+  }
+
+  private fun startAttempt(update: AvailableAppUpdate, consent: Boolean) {
+    if (!consent && metered()) {
+      mutable.update { it.copy(askMetered = true, install = null) }
+      return
     }
+    attempt = Attempt(update.version, AttemptStage.PERMISSION, consent, now(), installedVersion)
+    mutable.update { it.copy(askMetered = false, install = InstallStep.Preparing) }
+    // L'avviso sopra la barra delle schede segue il tentativo (partito dalla pagina, dall'avviso o dal manifest in sola lettura); la «×» lo nasconde.
+    promptOpen.value = true
+    job = scope.launch {
+      var ready: File? = null
+      installer.prepare(update)
+        // Lo scaricamento, l'impronta e la lettura dell'APK mai sul thread principale.
+        .flowOn(io)
+        .failSafe(UpdateProblem.DOWNLOAD_FAILED)
+        .collect { step ->
+          when (step) {
+            is InstallStep.Ready -> ready = step.file
+            InstallStep.NeedsPermission -> saveAttempt(AttemptStage.PERMISSION)
+            is InstallStep.Failed -> clearAttempt()
+            else -> Unit
+          }
+          if (step !is InstallStep.Ready) mutable.update { it.copy(install = step) }
+        }
+      val file = ready ?: return@launch
+      readyFile = file
+      readyVersion = update.version
+      if (foreground()) {
+        commit(update, file)
+      } else {
+        // L'app e' dietro: la finestra di Android non si aprirebbe. Si aspetta «Installa» (UU-1).
+        mutable.update { it.copy(install = InstallStep.Ready(file)) }
+      }
+    }
+  }
+
+  /** Il file pronto alla sessione di Android. Il tentativo si salva prima: se l'app riparte con la versione nuova, e' riuscito. */
+  private suspend fun commit(update: AvailableAppUpdate, file: File) {
+    saveAttempt(AttemptStage.INSTALLING)
+    installer.commit(update, file)
+      .flowOn(io)
+      .failSafe(UpdateProblem.INSTALL_FAILED)
+      .collect { step ->
+        when (step) {
+          is InstallStep.Ready -> clearAttempt()
+          InstallStep.NeedsPermission -> saveAttempt(AttemptStage.PERMISSION)
+          is InstallStep.Failed -> {
+            if (!step.problem.keepsFile) forgetReady()
+            clearAttempt()
+          }
+          InstallStep.Installed -> forgetReady()
+          else -> Unit
+        }
+        mutable.update { it.copy(install = step) }
+      }
+  }
+
+  private fun Flow<InstallStep>.failSafe(problem: UpdateProblem): Flow<InstallStep> = catch { failure ->
+    if (failure is CancellationException) throw failure
+    emit(InstallStep.Failed(problem))
   }
 
   /** «Annulla» sulla domanda dei dati mobili. */
   fun cancelMetered() {
+    clearAttempt()
     mutable.update { it.copy(askMetered = false) }
   }
 
   /** «Annulla» durante lo scaricamento: il file a meta' si cancella (il client si ferma al blocco dopo). */
   fun cancelInstall() {
-    val job = installJob ?: return
-    if (state.value.install !is InstallStep.Downloading && state.value.install != InstallStep.Preparing) return
-    job.cancel()
-    installJob = null
+    val current = state.value.install
+    if (current !is InstallStep.Downloading && current != InstallStep.Preparing) return
+    job?.cancel()
+    job = null
+    clearAttempt()
     mutable.update { it.copy(install = null) }
   }
 
-  /** «Consenti»: la pagina di Android del permesso. Al ritorno [onResumed] riparte da solo. */
+  /** «Annulla» su «Pronta»: il file verificato si cancella, si torna alla versione nuova con «Aggiorna». */
+  fun cancelReady() {
+    if (state.value.install !is InstallStep.Ready) return
+    dropReady()
+    clearAttempt()
+    mutable.update { it.copy(install = null) }
+  }
+
+  /** «Consenti»: la pagina di Android del permesso. Al ritorno [onResumed] riprende il tentativo. */
   fun openInstallPermission() {
-    resumeAfterPermission = true
     permission.open()
   }
 
-  /** L'app torna davanti (anche dalla pagina del permesso): se il permesso ora c'e', l'installazione riparte senza un altro tocco. */
+  /**
+   * L'app torna davanti. Con il permesso da dare: se ora c'e', il tentativo riprende (il tocco l'ha gia' dato), riguardando la rete (US-2). Con la
+   * finestra di Android che si aspettava: se l'app e' di nuovo davanti, la finestra non c'e' piu' (chiusa, o mai aperta): si torna a «Pronta».
+   */
   fun onResumed() {
-    if (!resumeAfterPermission || state.value.install != InstallStep.NeedsPermission) return
-    if (!permission.granted()) return
-    resumeAfterPermission = false
-    install(acceptMetered = true)
+    scope.launch {
+      loaded.await()
+      when (state.value.install) {
+        InstallStep.NeedsPermission -> resumeAfterPermission()
+        InstallStep.AwaitingUser -> backToReady()
+        else -> Unit
+      }
+    }
   }
 
-  /** «Dopo» sull'avviso: non torna per questa versione (gia' segnata). */
-  fun dismissPrompt() {
+  private fun resumeAfterPermission() {
+    if (!permission.granted()) return
+    val update = state.value.found ?: return
+    val current = attempt?.takeIf { it.version == update.version } ?: return
+    val ready = readyFile?.takeIf { it.isFile && readyVersion == update.version }
+    if (ready != null) {
+      job = scope.launch { commit(update, ready) }
+      return
+    }
+    startAttempt(update, consent = current.meteredConsent)
+  }
+
+  private fun backToReady() {
+    job?.cancel()
+    job = null
+    val file = readyFile?.takeIf { it.isFile }
+    mutable.update { it.copy(install = file?.let { ready -> InstallStep.Ready(ready) }) }
+  }
+
+  /**
+   * «Dopo» sull'avviso: lo chiude e lo rimanda di tre giorni (al piu' tre volte per la versione installata). Un permesso che si aspettava o un guasto
+   * si lasciano: il tentativo finisce. Con «Aggiornata» e' solo «Ok».
+   */
+  fun later() {
+    promptOpen.value = false
+    if (state.value.justUpdated != null) {
+      mutable.update { it.copy(justUpdated = null) }
+      return
+    }
+    val install = state.value.install
+    if (install == InstallStep.NeedsPermission || install is InstallStep.Failed) {
+      clearAttempt()
+      mutable.update { it.copy(install = null) }
+    }
+    reminder = Reminder(snoozedUntil = now() + UpdateRules.SNOOZE_MILLIS, declines = reminder.declines + 1, forInstalled = installedVersion)
+    val saved = reminder
+    scope.launch(io) { store.setReminder(saved) }
+  }
+
+  /** La «×» dell'avviso mentre lavora: lo nasconde e basta (lo scaricamento continua, la pagina Aggiornamenti lo mostra). */
+  fun hidePrompt() {
     promptOpen.value = false
   }
 
-  /** Chiude il messaggio di un'installazione finita male (la versione resta, «Aggiorna» riprova). */
-  fun dismissFailure() {
-    mutable.update { if (it.install is InstallStep.Failed || it.install == InstallStep.Installed) it.copy(install = null) else it }
+  /**
+   * «Chiudi»: il messaggio di un'installazione finita male, o il permesso che non si vuole dare adesso (il tentativo finisce). La versione resta,
+   * «Aggiorna» riprova; un file verificato che il guasto ha lasciato resta per non riscaricare.
+   */
+  fun dismiss() {
+    val install = state.value.install
+    if (install !is InstallStep.Failed && install != InstallStep.Installed && install != InstallStep.NeedsPermission) return
+    clearAttempt()
+    mutable.update { it.copy(install = null) }
+  }
+
+  /** Salva il tentativo al passo [stage] e aspetta che sia su disco: prima della sessione di Android, che chiude l'app. */
+  private suspend fun saveAttempt(stage: AttemptStage) {
+    val current = attempt ?: return
+    val next = current.copy(stage = stage, startedAt = now())
+    attempt = next
+    withContext(io) { store.setAttempt(next) }
+  }
+
+  private fun clearAttempt() {
+    if (attempt == null) return
+    attempt = null
+    scope.launch(io) { store.setAttempt(null) }
+  }
+
+  /** Il file pronto non serve piu': si cancella. */
+  private fun dropReady() {
+    readyFile?.let(installer::discard)
+    forgetReady()
+  }
+
+  private fun forgetReady() {
+    readyFile = null
+    readyVersion = null
   }
 
   companion object {
@@ -277,25 +498,27 @@ class AppUpdates(
      * Quello vero (`:app`, uno per processo): il client avvolto ([UpdateHttp]) per l'elenco e per l'APK, `EngineAppUpdater` per il controllo,
      * [GuardedUpdateInstaller] sopra `AndroidAppUpdateInstaller` per l'installazione. [versionName] e' il `versionName` intero dell'app.
      */
-    fun create(context: Context, versionName: String, now: () -> Long, scope: CoroutineScope): AppUpdates {
+    fun create(context: Context, versionName: String, now: () -> Long, foreground: () -> Boolean, scope: CoroutineScope): AppUpdates {
       val app = context.applicationContext
       val http = UpdateHttp.create(versionName)
       val permission = AndroidInstallPermission(app)
-      val runner = GuardedUpdateInstaller(
+      val installer = GuardedUpdateInstaller(
         transfer = EngineApkTransfer(AndroidAppUpdateInstaller(app, http)),
         facts = AndroidPackageFacts(app),
         permission = permission,
       )
-      val updater = EngineAppUpdater(http, UpdateSourceConfig.engineSource(app.packageName), runner)
+      val updater = EngineAppUpdater(http, UpdateSourceConfig.engineSource(app.packageName), installer)
       return AppUpdates(
         checker = { current, channel -> updater.check(currentVersionName = current, channel = channel, ignoredVersion = "") },
-        runner = runner,
+        installer = installer,
         store = PrefsUpdateStore(app),
         installedVersion = versionName,
         permission = permission,
         metered = AndroidMeteredNetwork(app)::isMetered,
+        foreground = foreground,
         now = now,
         scope = scope,
+        clearCache = { UpdateCache.clear(app.cacheDir) },
       )
     }
   }

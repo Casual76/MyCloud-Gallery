@@ -8,14 +8,14 @@ import dev.pampa.mycloudgallery.feature.update.source.UpdateSourceConfig
 import org.junit.Test
 
 /**
- * Pacchetto U: le regole dell'app sopra l'engine (C480, C481, C484, C485). Ogni controllo di sicurezza ha qui una prova che cade se lo si toglie
- * (mutazioni provate e descritte in docs/aggiornamenti-in-app.md, «Prove»).
+ * Pacchetto U: le regole dell'app sopra l'engine (C480-C489). Ogni controllo di sicurezza ha qui una prova che cade se lo si toglie (mutazioni, con i
+ * comandi, in docs/aggiornamenti-in-app.md, «Prove e mutazioni»).
  */
 class UpdateRulesTest {
 
   private val sha = "a".repeat(64)
 
-  /** Un aggiornamento con la forma che `EngineAppUpdater.check` costruisce da un elenco di `publisher.py` con lo sha256 aggiunto. */
+  /** Un aggiornamento con la forma che `EngineAppUpdater.check` costruisce da un elenco di `publisher.py` (tag `<canale>-<app-id>-v<versione>`). */
   private fun offered(
     version: String = "1.1.0",
     tag: String = "stable-mycloud-gallery-v$version",
@@ -23,16 +23,18 @@ class UpdateRulesTest {
     url: String = UpdateSourceConfig.downloadUrl(tag, asset),
     size: Long = 115_000_000L,
     sha256: String = sha,
-  ) = AvailableAppUpdate(version = version, changelog = "", releaseTag = tag, apkAsset = asset, downloadUrl = url, sizeBytes = size, sha256 = sha256)
+    notes: String = "",
+  ) = AvailableAppUpdate(version = version, changelog = notes, releaseTag = tag, apkAsset = asset, downloadUrl = url, sizeBytes = size, sha256 = sha256)
 
-  private val installed = PackageFacts("dev.pampa.mycloudgallery", versionCode = 5, versionName = "1.1.0-beta.2", signers = setOf("ab".repeat(32)))
+  private val installed = PackageFacts("dev.pampa.mycloudgallery", versionCode = 5, versionName = "1.1.0-beta.02", signers = setOf("ab".repeat(32)))
 
   // --- L'offerta ------------------------------------------------------------------------------------------------------------------------------------
 
   @Test
   fun unAggiornamentoBenPubblicatoPassa() {
     assertThat(UpdateRules.offerProblem(offered())).isNull()
-    assertThat(UpdateRules.offerProblem(offered(version = "1.1.0-beta.3", tag = "beta-mycloud-gallery-v1.1.0-beta.3"))).isNull()
+    // I nomi che scrive publisher.py con --app-id mycloud-gallery, anche per una beta.
+    assertThat(UpdateRules.offerProblem(offered(version = "1.1.0-beta.03", tag = "beta-mycloud-gallery-v1.1.0-beta.03"))).isNull()
   }
 
   @Test
@@ -49,6 +51,22 @@ class UpdateRulesTest {
     assertThat(UpdateRules.offerProblem(offered(size = -1))).isEqualTo(UpdateProblem.SIZE_MISSING)
     assertThat(UpdateRules.offerProblem(offered(size = UpdateSourceConfig.MAX_APK_BYTES + 1))).isEqualTo(UpdateProblem.TOO_LARGE)
     assertThat(UpdateRules.offerProblem(offered(size = UpdateSourceConfig.MAX_APK_BYTES))).isNull()
+  }
+
+  @Test
+  fun versioniFuoriFormaNonSiOffrono() {
+    // US-3: la forma ammessa e' corta ed esplicita; tutto il resto (anche cio' che il confronto dell'engine metterebbe in un ordine sbagliato) no.
+    for (version in listOf("1.0.0", "0.9.12", "12.3.4", "1.1.0-beta.01", "1.1.0-beta.99", "9999.9999.9999")) {
+      assertThat(UpdateRules.VERSION.matches(version)).isTrue()
+    }
+    val bad = listOf(
+      "v1.1.0", "1.1.0+build.5", "1.1.0.0", "1.1", "01.1.0", "1.1.0-beta.3", "1.1.0-beta.100", "1.1.0-rc.01", "1.1.0-beta", " 1.1.0",
+      "1.1.0 ", "1.1.0‮", "1.1.0\n", "10000.0.0", "1.1.0-beta.01-x", "9".repeat(400),
+    )
+    for (version in bad) {
+      assertThat(UpdateRules.offerProblem(offered(version = version, tag = "stable-mycloud-gallery-v1.1.0", asset = "mycloud-gallery-1.1.0.apk")))
+        .isEqualTo(UpdateProblem.BAD_VERSION)
+    }
   }
 
   @Test
@@ -69,6 +87,25 @@ class UpdateRulesTest {
     assertThat(UpdateRules.offerProblem(offered(url = http))).isEqualTo(UpdateProblem.OTHER_SOURCE)
   }
 
+  // --- Le note --------------------------------------------------------------------------------------------------------------------------------------
+
+  @Test
+  fun leNoteSiTaglianoPrimaEPerdonoIControlliEIlBidi() {
+    // Il taglio viene prima di ogni trasformazione: un elenco con mezzo megabyte di note ne passa al piu' MAX_NOTES_CHARS.
+    val huge = "x".repeat(500_000)
+    assertThat(UpdateRules.cleanNotes(huge)).hasLength(UpdateRules.MAX_NOTES_CHARS)
+    // Via i caratteri che girano o nascondono il testo, e i controlli; l'a capo resta, il tab diventa uno spazio.
+    val tricky = "Novità\n- Album più veloci‮.kpa‬​⁦x⁩\u0007\u0000\tok"
+    val clean = UpdateRules.cleanNotes(tricky)
+    assertThat(clean).isEqualTo("Novità\n- Album più veloci.kpax ok")
+    for (ch in listOf('‮', '‬', '​', '⁦', '⁩', '\u0007', '\u0000')) assertThat(clean).doesNotContain(ch.toString())
+    // L'offerta pulita tiene il resto com'e', con lo sha256 in minuscolo.
+    val cleaned = UpdateRules.cleanOffer(offered(sha256 = "A".repeat(64), notes = tricky))
+    assertThat(cleaned.changelog).isEqualTo(clean)
+    assertThat(cleaned.sha256).isEqualTo(sha)
+    assertThat(cleaned.version).isEqualTo("1.1.0")
+  }
+
   // --- Il file scaricato ---------------------------------------------------------------------------------------------------------------------------
 
   @Test
@@ -84,6 +121,15 @@ class UpdateRulesTest {
     assertThat(UpdateRules.archiveProblem(installed, null)).isEqualTo(UpdateProblem.UNREADABLE)
     assertThat(UpdateRules.archiveProblem(installed, installed.copy(packageName = "com.altra.app", versionCode = 9)))
       .isEqualTo(UpdateProblem.OTHER_APP)
+  }
+
+  @Test
+  fun laVersioneDellApkDeveEssereQuellaAnnunciata() {
+    val newer = installed.copy(versionCode = 6, versionName = "1.1.0")
+    assertThat(UpdateRules.archiveProblem(installed, newer, expectedVersionName = "1.1.0")).isNull()
+    assertThat(UpdateRules.archiveProblem(installed, newer, expectedVersionName = "1.2.0")).isEqualTo(UpdateProblem.WRONG_VERSION)
+    // Come l'engine: un APK senza versionName non e' un motivo di rifiuto (lo decide il versionCode).
+    assertThat(UpdateRules.archiveProblem(installed, newer.copy(versionName = null), expectedVersionName = "1.2.0")).isNull()
   }
 
   @Test
@@ -106,7 +152,15 @@ class UpdateRulesTest {
     assertThat(UpdateRules.archiveProblem(installed, installed.copy(versionCode = 6, signers = setOf("AB".repeat(32))))).isNull()
   }
 
-  // --- Quando si controlla e quando si annuncia ----------------------------------------------------------------------------------------------------
+  @Test
+  fun riprovaSoloDoveServe_eIlFileRestaSoloPerIGuastiDiAndroid() {
+    // UU-6: la rete, il file rovinato, lo spazio e cio' che non si riconosce si riprovano; il resto fallirebbe uguale.
+    assertThat(UpdateProblem.entries.filter { it.retryable })
+      .containsExactly(UpdateProblem.DOWNLOAD_FAILED, UpdateProblem.CHECKSUM_MISMATCH, UpdateProblem.NO_SPACE, UpdateProblem.INSTALL_FAILED)
+    assertThat(UpdateProblem.entries.filter { it.keepsFile }).containsExactly(UpdateProblem.NO_SPACE, UpdateProblem.INSTALL_FAILED)
+  }
+
+  // --- Quando si controlla e quando si avvisa -------------------------------------------------------------------------------------------------------
 
   @Test
   fun alPiuUnaVoltaOgni24Ore() {
@@ -120,34 +174,50 @@ class UpdateRulesTest {
   }
 
   @Test
-  fun lAvvisoUnaVoltaPerVersione() {
-    assertThat(UpdateRules.shouldPrompt(null, null)).isFalse()
-    assertThat(UpdateRules.shouldPrompt("1.1.0", null)).isTrue()
-    assertThat(UpdateRules.shouldPrompt("1.1.0", "1.1.0")).isFalse()
-    assertThat(UpdateRules.shouldPrompt("1.2.0", "1.1.0")).isTrue()
+  fun dopoRimandaDiTreGiorni_alPiuTreVolte() {
+    val now = 1_000_000_000_000L
+    val snooze = UpdateRules.SNOOZE_MILLIS
+    assertThat(UpdateRules.shouldPrompt(hasOffer = false, now = now, snoozedUntil = null, declines = 0)).isFalse()
+    assertThat(UpdateRules.shouldPrompt(hasOffer = true, now = now, snoozedUntil = null, declines = 0)).isTrue()
+    // «Dopo»: rimandato di tre giorni, per qualunque versione (chi pubblica due nomi a giorni alterni non lo fa tornare ogni giorno, US-3).
+    assertThat(UpdateRules.shouldPrompt(hasOffer = true, now = now + 1, snoozedUntil = now + snooze, declines = 1)).isFalse()
+    assertThat(UpdateRules.shouldPrompt(hasOffer = true, now = now + snooze, snoozedUntil = now + snooze, declines = 1)).isTrue()
+    // Dopo tre «Dopo» non torna piu' (resta il segno sulla voce delle Impostazioni).
+    assertThat(UpdateRules.shouldPrompt(hasOffer = true, now = now + 10 * snooze, snoozedUntil = now, declines = UpdateRules.MAX_DECLINES)).isFalse()
+    // L'orologio e' tornato indietro di piu' del rimando: vale come scaduto.
+    assertThat(UpdateRules.shouldPrompt(hasOffer = true, now = now, snoozedUntil = now + 2 * snooze, declines = 1)).isTrue()
   }
 
-  // --- La numerazione delle versioni con le regole dell'engine (docs/aggiornamenti-in-app.md, «Versioni») -------------------------------------------
+  @Test
+  fun unTentativoSiRiprendeSoloSeEDiPocoFa() {
+    val now = 1_000_000_000_000L
+    assertThat(UpdateRules.attemptFresh(now - 1_000, now)).isTrue()
+    assertThat(UpdateRules.attemptFresh(now - UpdateRules.ATTEMPT_TTL_MILLIS - 1, now)).isFalse()
+    assertThat(UpdateRules.attemptFresh(now + 1_000, now)).isFalse()
+  }
+
+  // --- La numerazione delle versioni con le regole dell'engine (docs/aggiornamenti-in-app.md, «Le versioni») ----------------------------------------
 
   @Test
   fun laBetaConIlVersionNameInteroVedeLaStabileOmonima() {
-    // La versione corrente e' il versionName INTERO: una 1.1.0-beta.2 riceve la 1.1.0.
-    assertThat(isStableVersionNewer("1.1.0", "1.1.0-beta.2")).isTrue()
+    // La versione corrente e' il versionName INTERO: una 1.1.0-beta.02 riceve la 1.1.0.
+    assertThat(isStableVersionNewer("1.1.0", "1.1.0-beta.02")).isTrue()
     // Tagliato il suffisso (come nel KDoc del controllore dell'engine) non la vedrebbe mai: la trappola che qui si evita.
-    assertThat(isStableVersionNewer("1.1.0", "1.1.0-beta.2".substringBefore("-"))).isFalse()
+    assertThat(isStableVersionNewer("1.1.0", "1.1.0-beta.02".substringBefore("-"))).isFalse()
     // Il canale Stabile non propone mai una versione con il trattino.
-    assertThat(isStableVersionNewer("1.2.0-beta.1", "1.1.0")).isFalse()
+    assertThat(isStableVersionNewer("1.2.0-beta.01", "1.1.0")).isFalse()
   }
 
   @Test
-  fun lePreReleaseSiConfrontanoComeTesto_beta10VienePrimaDiBeta9() {
-    // La trappola di `compareVersions` (engine-foundation): dopo la beta.9 il canale Beta non proporrebbe la beta.10. Regola di pubblicazione:
-    // al piu' nove beta per versione (poi si passa alla versione dopo), oppure due cifre fin dall'inizio (beta.01 ... beta.99).
+  fun lePreReleaseSiConfrontanoComeTesto_dueCifreDallInizio() {
+    // La trappola di `compareVersions` (engine-foundation): beta.10 viene prima di beta.9. Per questo la forma ammessa vuole due cifre.
     assertThat(compareVersions("1.1.0-beta.10", "1.1.0-beta.9")).isLessThan(0)
     assertThat(compareVersions("1.1.0-beta.10", "1.1.0-beta.09")).isGreaterThan(0)
-    assertThat(compareVersions("1.1.0-beta.2", "1.1.0-beta.1")).isGreaterThan(0)
-    // La prima beta di oggi si chiama 1.0.0 (senza suffisso, versionCode 1, canale beta): la stabile 1.0.0 dello stesso APK non e' «piu' nuova».
-    assertThat(compareVersions("1.0.0", "1.0.0")).isEqualTo(0)
-    assertThat(compareVersions("1.0.1", "1.0.0")).isGreaterThan(0)
+    assertThat(compareVersions("1.1.0-beta.02", "1.1.0-beta.01")).isGreaterThan(0)
+    // La prima beta di oggi si chiama 1.0.0 (versionCode 1, canale beta): una «1.0.0-beta.NN» sembrerebbe un passo indietro. La prossima e'
+    // 1.1.0-beta.01 (versionCode 2), che il canale Beta vede.
+    assertThat(compareVersions("1.0.0-beta.02", "1.0.0")).isLessThan(0)
+    assertThat(compareVersions("1.1.0-beta.01", "1.0.0")).isGreaterThan(0)
+    assertThat(UpdateRules.VERSION.matches("1.1.0-beta.01")).isTrue()
   }
 }

@@ -63,10 +63,18 @@ class UpdateEntryTest {
     rule.onNode(hasContentDescription(title)).assertExists()
     rule.onNodeWithText(title).performClick()
     assertThat(clicks).isEqualTo(1)
+    // Senza una versione nuova la voce sta in fondo, in «Avanzate» (sotto il primo gruppo).
+    val firstSection = string(R.string.settings_section_backup).uppercase()
+    assertThat(top(title)).isGreaterThan(top(firstSection))
 
     summary = UpdateEntrySummary(available = "1.1.0")
     rule.waitForIdle()
     rule.onNodeWithText("1.1.0").assertExists()
     rule.onNode(hasContentDescription(title + ", " + string(R.string.settings_updates_available, "1.1.0"))).assertExists()
+    // Pacchetto U, giro 1 (UU-4): con una versione nuova la voce sale in cima, sopra il primo gruppo, e c'e' una volta sola.
+    assertThat(rule.onAllNodesWithText(title).fetchSemanticsNodes()).hasSize(1)
+    assertThat(top(title)).isLessThan(top(firstSection))
   }
+
+  private fun top(text: String): Float = rule.onNodeWithText(text).fetchSemanticsNode().boundsInRoot.top
 }

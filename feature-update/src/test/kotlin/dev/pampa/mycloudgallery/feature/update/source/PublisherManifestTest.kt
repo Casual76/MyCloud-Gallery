@@ -17,9 +17,9 @@ import org.junit.Test
 /**
  * Pacchetto U: l'elenco che scrive `publisher.py` del Pampa Store (`upsert_app_manifest`, `build_version_info`; letto il 12/11/2026, non lanciato)
  * contro cio' che legge `EngineAppUpdater.check` dell'engine 3.0.4 con la sorgente di questa app. Le chiavi combaciano (`app.repository.repoOwner/
- * repoName`, `stable`/`beta` con `version`, `releaseTag`, `apkAsset`, `sizeBytes`, `changelog`), tranne una: **`publisher.py` calcola lo sha256
- * dell'APK (`inspect_apk`) ma non lo scrive nell'elenco**. Con lo sha256 obbligatorio un elenco cosi' non installa niente: la prova lo fissa (la
- * correzione di una riga in `build_version_info` e' in docs/aggiornamenti-in-app.md).
+ * repoName`, `stable`/`beta` con `version`, `releaseTag`, `apkAsset`, `sizeBytes`, `sha256`, `changelog`). Lo `sha256` il publisher lo scrive dalla
+ * correzione del 12/11 (decisa dall'utente: obbligatorio, 64 cifre minuscole, accanto a `sizeBytes`); un elenco scritto prima, senza, non installa
+ * niente (fallisce chiuso). Tag e nomi dei file sono quelli del publisher con `--app-id mycloud-gallery`.
  */
 class PublisherManifestTest {
 
@@ -36,8 +36,8 @@ class PublisherManifestTest {
     override fun install(update: AvailableAppUpdate): Flow<AppUpdateInstallState> = emptyFlow()
   }
 
-  /** Un rilascio come lo scrive `build_version_info` (piu', se [sha256] non e' null, la riga che oggi manca). */
-  private fun release(version: String, channel: String, sha256: String? = null): String {
+  /** Un rilascio come lo scrive `build_version_info` (con lo sha256 dalla correzione del 12/11; null = come lo scriveva prima). */
+  private fun release(version: String, channel: String, sha256: String? = "c".repeat(64)): String {
     val sha = if (sha256 != null) ""","sha256":"$sha256"""" else ""
     return """{"version":"$version","releaseDate":"2026-11-20","changelog":"- Novita' della $version","releaseTag":"$channel-mycloud-gallery-v$version",""" +
       """"apkAsset":"mycloud-gallery-$version.apk","sizeBytes":115343360$sha}"""
@@ -82,8 +82,8 @@ class PublisherManifestTest {
   }
 
   @Test
-  fun senzaLoSha256CheOggiPublisherNonScrive_nonSiInstallaNiente() {
-    val found = check(manifest(stable = null, beta = release("1.0.1", "beta")), current = "1.0.0", channel = UpdateChannel.BETA).getOrThrow()!!
+  fun unElencoScrittoPrimaDellaCorrezione_senzaSha256_nonInstallaNiente() {
+    val found = check(manifest(stable = null, beta = release("1.0.1", "beta", sha256 = null)), current = "1.0.0", channel = UpdateChannel.BETA).getOrThrow()!!
     assertThat(found.sha256).isEmpty()
     assertThat(UpdateRules.offerProblem(found)).isEqualTo(UpdateProblem.CHECKSUM_MISSING)
   }
@@ -96,7 +96,7 @@ class PublisherManifestTest {
     val stable = release("1.1.0", "stable", "d".repeat(64))
     val both = manifest(stable = stable, beta = stable)
     assertThat(check(both, current = "1.0.0", channel = UpdateChannel.STABLE).getOrThrow()?.version).isEqualTo("1.1.0")
-    assertThat(check(both, current = "1.1.0-beta.3", channel = UpdateChannel.BETA).getOrThrow()?.version).isEqualTo("1.1.0")
+    assertThat(check(both, current = "1.1.0-beta.03", channel = UpdateChannel.BETA).getOrThrow()?.version).isEqualTo("1.1.0")
     val onlyStable = manifest(stable = stable, beta = null)
     assertThat(check(onlyStable, current = "1.0.0", channel = UpdateChannel.BETA).getOrThrow()?.version).isEqualTo("1.1.0")
   }
@@ -105,7 +105,18 @@ class PublisherManifestTest {
   fun nienteRitorniIndietroCambiandoCanale() {
     // Chi passa da Beta a Stabile con una beta piu' nuova della stabile non si vede proporre la stabile vecchia.
     val stable = release("1.0.0", "stable", "d".repeat(64))
-    assertThat(check(manifest(stable, stable), current = "1.1.0-beta.2", channel = UpdateChannel.STABLE).getOrThrow()).isNull()
+    assertThat(check(manifest(stable, stable), current = "1.1.0-beta.02", channel = UpdateChannel.STABLE).getOrThrow()).isNull()
+  }
+
+  @Test
+  fun laProssimaBetaDopoLaPrima_1_1_0_beta_01_siVede() {
+    // La prima beta di oggi e' 1.0.0 (versionCode 1). La prossima si chiama 1.1.0-beta.01: il canale Beta la vede, il tag del publisher passa.
+    val next = release("1.1.0-beta.01", "beta")
+    val found = check(manifest(stable = null, beta = next), current = "1.0.0", channel = UpdateChannel.BETA).getOrThrow()!!
+    assertThat(found.releaseTag).isEqualTo("beta-mycloud-gallery-v1.1.0-beta.01")
+    assertThat(UpdateRules.offerProblem(found)).isNull()
+    // Una «1.0.0-beta.02» invece sembrerebbe un passo indietro e non arriverebbe a nessuno.
+    assertThat(check(manifest(stable = null, beta = release("1.0.0-beta.02", "beta")), current = "1.0.0", channel = UpdateChannel.BETA).getOrThrow()).isNull()
   }
 
   @Test

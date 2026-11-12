@@ -190,6 +190,15 @@ internal fun AppIconPreview(choice: AppIconChoice, art: AppIconArt, side: Dp, ra
   }
 }
 
+/**
+ * L'icona dell'app come la vede il launcher, a una misura qualunque, con gli angoli in proporzione a quelli dell'anteprima: la figura dell'aggiornamento
+ * dentro l'app (pacchetto U, UU-7: «un'anteprima, non un simbolo»), che `:app` le passa.
+ */
+@Composable
+fun AppIconFigure(choice: AppIconChoice, art: AppIconArt, side: Dp, modifier: Modifier = Modifier) {
+  AppIconPreview(choice = choice, art = art, side = side, radius = SettingsDimens.AppIconRadius * (side / SettingsDimens.AppIconPreview), modifier = modifier)
+}
+
 /** La voce della pagina principale: a sinistra l'icona scelta in piccolo (la vera), a destra il suo nome. */
 @Composable
 internal fun AppIconEntryRow(choice: AppIconChoice, art: AppIconArt, onClick: () -> Unit) {

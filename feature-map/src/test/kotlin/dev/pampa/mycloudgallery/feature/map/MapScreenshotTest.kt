@@ -107,7 +107,7 @@ internal abstract class MapShots(private val dark: Boolean, private val device: 
 
   @Test fun mappaSenzaRete() = shoot("mappa-senza-rete", "Nessuna rete: la carta semplice e le zone scaricate", content = mapScene(MapUi(MapScreenState.Ready(on, MapNotice.OFFLINE, 0), style(on), start, bubbles())))
 
-  @Test fun mappaVuota() = shoot("mappa-vuota", "Nessuna foto con la posizione", "320 foto senza posizione", content = mapScene(MapUi(MapScreenState.Empty(320), style(on), start)))
+  @Test fun mappaVuota() = shoot("mappa-vuota", "Nessuna foto con la posizione", content = mapScene(MapUi(MapScreenState.Empty(320), style(on), start)))
 
   @Test fun mappaVuotaTestoGrande() = shoot("mappa-vuota", "Nessuna foto con la posizione", fontScale = LARGE_TEXT, content = mapScene(MapUi(MapScreenState.Empty(320), style(on), start)))
 
@@ -165,6 +165,16 @@ internal abstract class MapShots(private val dark: Boolean, private val device: 
   @Test fun impostazioniSpenta() = shoot("impostazioni-spenta", "Spenta: resta la carta semplice dentro l’app", "2 zone scaricate", content = settings(MapPrivacyState.Shown(MapOnline.Off, true, 1, 2)))
 
   @Test fun impostazioniNonDisponibile() = shoot("impostazioni-non-disponibile", "La mappa dettagliata non c’è in questa versione", content = settings(MapPrivacyState.Unavailable))
+
+  /** Giro 2 (CS-17): «La zona attorno a un luogo» quando l'elenco dei luoghi non c'e' su questo telefono, nella forma unica degli stati vuoti. */
+  @Test fun zonaAttornoNonDisponibile() = shoot("zona-attorno-non-disponibile", "Elenco dei luoghi non disponibile") {
+    dev.pampa.mycloudgallery.feature.map.regions.RegionsStage {
+      dev.pampa.mycloudgallery.feature.map.regions.RegionsScreen(
+        dev.pampa.mycloudgallery.feature.map.regions.RegionsUi(around = dev.pampa.mycloudgallery.feature.map.regions.AroundState(available = false)),
+        dev.pampa.mycloudgallery.feature.map.regions.NoRegionsHandlers,
+      )
+    }
+  }
 }
 
 @RunWith(ParameterizedRobolectricTestRunner::class)

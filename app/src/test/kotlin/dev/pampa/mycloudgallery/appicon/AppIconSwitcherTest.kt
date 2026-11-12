@@ -22,8 +22,13 @@ class AppIconSwitcherTest {
     var failOn: String? = null
     var broken = false
 
+    /** CG-5: cosa succede mentre il filo legge il PackageManager (l'utente rientra) e dopo una scrittura. */
+    var onRead: (() -> Unit)? = null
+    var afterWrite: ((String) -> Unit)? = null
+
     override fun isEnabled(className: String): Boolean {
       if (broken) throw IllegalStateException("PackageManager morto")
+      onRead?.invoke()
       return className in enabled
     }
 
@@ -33,6 +38,7 @@ class AppIconSwitcherTest {
       writes += write
       if (enabled) this.enabled += className else this.enabled -= className
       smallest = minOf(smallest, this.enabled.size)
+      afterWrite?.invoke(write)
     }
   }
 
@@ -46,8 +52,125 @@ class AppIconSwitcherTest {
 
   private val inline = Executor { it.run() }
 
-  private fun switcher(components: FakeComponents, store: MemoryStore = MemoryStore()) =
-    AppIconSwitcher(store, components, AppIconArt(foreground = 1, lightBackground = 2, darkBackground = 3), inline)
+  private fun switcher(components: FakeComponents, store: MemoryStore = MemoryStore(), worker: Executor = inline) =
+    AppIconSwitcher(store, components, AppIconArt(foreground = 1, lightBackground = 2, darkBackground = 3), worker)
+
+  /** Un esecutore che tiene i lavori finche' il test non li fa girare: il filo del cambio arriva quando vuole lui, come sul telefono. */
+  private class Deferred : Executor {
+    val queue = ArrayDeque<Runnable>()
+
+    override fun execute(command: Runnable) {
+      queue += command
+    }
+
+    fun runAll() {
+      while (queue.isNotEmpty()) queue.removeFirst().run()
+    }
+  }
+
+  /**
+   * Giro 2 della fase I, CG-5: esco (il cambio si accoda), rientro subito, poi il filo arriva. Non deve disabilitare niente con l'app davanti (l'ingresso
+   * da cui e' aperta la chiuderebbe): la scelta resta in attesa e si fa all'uscita dopo.
+   */
+  @Test
+  fun cg5_rientratoPrimaCheIlCambioGiriNonSiToccaNienteESiFaAllUscitaDopo() {
+    val components = FakeComponents(LauncherAliases.AUTO)
+    val worker = Deferred()
+    val icon = switcher(components, worker = worker)
+    worker.runAll()
+    icon.onStarted()
+    icon.choose(AppIconChoice.DARK)
+    icon.onStopped(changingConfigurations = false)
+    icon.onStarted()
+
+    worker.runAll()
+
+    assertWithMessage("con l'app rientrata nessuna scrittura").that(components.writes).isEmpty()
+    assertThat(components.enabled).containsExactly(LauncherAliases.AUTO)
+    assertThat(icon.choice.value).isEqualTo(AppIconChoice.DARK)
+
+    icon.onStopped(changingConfigurations = false)
+    worker.runAll()
+
+    assertThat(components.writes).containsExactly("+LauncherDark", "-LauncherAuto", "-LauncherLight").inOrder()
+    assertThat(components.enabled).containsExactly(LauncherAliases.DARK)
+  }
+
+  /** CG-5: rientro mentre il filo legge il PackageManager (fra la lettura e la prima scrittura): nessuna scrittura, si rifa' all'uscita dopo. */
+  @Test
+  fun cg5_rientroDuranteLaLetturaDelPackageManager() {
+    val components = FakeComponents(LauncherAliases.AUTO)
+    val worker = Deferred()
+    val icon = switcher(components, worker = worker)
+    icon.onStarted()
+    icon.choose(AppIconChoice.LIGHT)
+    icon.onStopped(changingConfigurations = false)
+    components.onRead = {
+      components.onRead = null
+      icon.onStarted()
+    }
+
+    worker.runAll()
+
+    assertThat(components.writes).isEmpty()
+    icon.onStopped(changingConfigurations = false)
+    worker.runAll()
+    assertThat(components.enabled).containsExactly(LauncherAliases.LIGHT)
+  }
+
+  /**
+   * CG-5: rientro dopo che il nuovo ingresso e' abilitato, prima di spegnere il vecchio: il vecchio resta acceso (due ingressi, mai zero e nessuna
+   * finestra chiusa) e il cambio finisce all'uscita dopo. Lo stesso stato lascia un processo morto a meta': il riallineamento dell'avvio lo finisce.
+   */
+  @Test
+  fun cg5_rientroAMetaCambioEProcessoMortoAMetaRestanoCoerenti() {
+    val components = FakeComponents(LauncherAliases.AUTO)
+    val worker = Deferred()
+    val icon = switcher(components, worker = worker)
+    icon.onStarted()
+    icon.choose(AppIconChoice.DARK)
+    icon.onStopped(changingConfigurations = false)
+    components.afterWrite = { write -> if (write == "+LauncherDark") icon.onStarted() }
+
+    worker.runAll()
+
+    assertWithMessage("il vecchio ingresso resta acceso con l'app davanti").that(components.enabled)
+      .containsExactly(LauncherAliases.AUTO, LauncherAliases.DARK)
+    assertThat(components.writes.filter { it.startsWith("-") }).isEmpty()
+    components.afterWrite = null
+    icon.onStopped(changingConfigurations = false)
+    worker.runAll()
+    assertThat(components.enabled).containsExactly(LauncherAliases.DARK)
+
+    // Il processo muore con due ingressi accesi: al prossimo avvio si riallinea e il cambio finisce alla prima uscita.
+    val restarted = FakeComponents(LauncherAliases.AUTO, LauncherAliases.DARK)
+    val again = switcher(restarted, MemoryStore(AppIconChoice.DARK), worker)
+    again.realign()
+    assertWithMessage("all'avvio non si spegne niente").that(restarted.writes).isEmpty()
+    again.onStarted()
+    again.onStopped(changingConfigurations = false)
+    worker.runAll()
+    assertThat(restarted.enabled).containsExactly(LauncherAliases.DARK)
+    assertThat(restarted.smallest).isAtLeast(1)
+  }
+
+  /** CG-5: esco, rientro ed esco di nuovo prima che il filo arrivi: il lavoro accodato trova l'app fuori e fa il cambio una volta sola. */
+  @Test
+  fun cg5_unLavoroDiUnUscitaVecchiaNonScrive() {
+    val components = FakeComponents(LauncherAliases.AUTO)
+    val worker = Deferred()
+    val icon = switcher(components, worker = worker)
+    icon.onStarted()
+    icon.choose(AppIconChoice.DARK)
+    icon.onStopped(changingConfigurations = false)
+    icon.onStarted()
+    icon.onStopped(changingConfigurations = false)
+
+    worker.runAll()
+
+    assertThat(components.writes).containsExactly("+LauncherDark", "-LauncherAuto", "-LauncherLight").inOrder()
+    assertThat(components.enabled).containsExactly(LauncherAliases.DARK)
+  }
 
   @Test
   fun conLAppApertaLaSceltaSiSegnaSubitoELIngressoCambiaInSecondoPiano() {

@@ -107,8 +107,9 @@ internal fun SettingsInfo(label: String, text: String, modifier: Modifier = Modi
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(SettingsDimens.TightGap),
     ) {
-      GalleryInfoGlyph(open = open, tint = MaterialTheme.colorScheme.primary)
-      Text(text = label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+      GalleryInfoGlyph(open = open)
+      // Giro 2 (CU-30): la «i» ha una tinta sola, quella del componente comune; l'etichetta accanto la segue.
+      Text(text = label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     GalleryInfoDetail(text = text, visible = open, color = MaterialTheme.colorScheme.onSurfaceVariant)
   }

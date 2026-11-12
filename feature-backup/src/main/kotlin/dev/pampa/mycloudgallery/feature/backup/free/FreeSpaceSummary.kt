@@ -1,5 +1,10 @@
 package dev.pampa.mycloudgallery.feature.backup.free
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -185,40 +190,64 @@ private fun FreeLine(icon: ImageVector, text: String) {
 internal fun FreePreviews(media: List<MediaId>, total: Int, modifier: Modifier = Modifier) {
   val covers = LocalBackupCovers.current ?: return
   val view by covers.view.collectAsState()
-  // Col testo grande il «+N» e' piu' largo: un'anteprima in meno, cosi' la riga resta dentro la testata.
-  val max = if (LocalDensity.current.fontScale >= LargeTextScale) FreePreviewCount - 1 else FreePreviewCount
-  val requests = remember(view, media, max) { freePreviewRequests(media, max) { covers.request(view, it) } }
-  DisposableEffect(covers, requests.map { it.key }) {
-    covers.loader.keep(FreePreviewOwner, requests)
-    onDispose { covers.loader.keep(FreePreviewOwner, emptyList()) }
-  }
+  val requests = remember(view, media) { freePreviewRequests(media) { covers.request(view, it) } }
   if (requests.isEmpty()) return
-  Row(
-    modifier = modifier.clearAndSetSemantics {},
-    horizontalArrangement = Arrangement.spacedBy(BackupDimens.FreePreviewGap, Alignment.CenterHorizontally),
-  ) {
-    requests.forEach { request -> PreviewThumb(covers, request) }
-    val more = total - requests.size
-    if (more > 0) {
-      Box(
-        modifier = Modifier
-          .height(BackupDimens.FreePreview)
-          .widthIn(min = BackupDimens.FreePreview)
-          .clip(ContinuousCornerShape(FluidRadius.Card))
-          .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-          .padding(horizontal = BackupDimens.LineGap),
-        contentAlignment = Alignment.Center,
-      ) {
-        Text(
-          text = stringResource(R.string.backup_free_preview_more, GalleryNumbers.format(more)),
-          style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurface,
-          maxLines = 1,
-        )
+  // Giro 2 (CU-28 = CS-18): il «+N» si misura **prima** delle anteprime e prende tutta la larghezza che gli serve; le anteprime sono quante ne stanno
+  // accanto (al piu' quattro). Prima il riquadro aveva una misura fissa e «+1.236» diventava «+1.23», un numero sbagliato.
+  val style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Bold)
+  val measurer = rememberTextMeasurer()
+  val resources = LocalContext.current.resources
+  val texts = remember(requests.size, total, resources) {
+    (0..requests.size).associateWith { shown ->
+      if (total - shown > 0) resources.getString(R.string.backup_free_preview_more, GalleryNumbers.format(total - shown)) else null
+    }
+  }
+  BoxWithConstraints(modifier = modifier.fillMaxWidth().clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
+    val density = LocalDensity.current
+    val thumb = BackupDimens.FreePreview
+    val gap = BackupDimens.FreePreviewGap
+    fun chipWidth(text: String?): Dp = if (text == null) {
+      BackupDimens.None
+    } else {
+      val textWidth = with(density) { measurer.measure(text, style, softWrap = false, maxLines = 1).size.width.toDp() }
+      maxOf(thumb, textWidth + BackupDimens.LineGap * 2)
+    }
+    val shown = freePreviewFit(requests.size, maxWidth, thumb, gap) { n -> chipWidth(texts[n]) }
+    val more = texts[shown]
+    DisposableEffect(covers, requests.take(shown).map { it.key }) {
+      covers.loader.keep(FreePreviewOwner, requests.take(shown))
+      onDispose { covers.loader.keep(FreePreviewOwner, emptyList()) }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally)) {
+      requests.take(shown).forEach { request -> PreviewThumb(covers, request) }
+      if (more != null) {
+        Box(
+          modifier = Modifier
+            .height(thumb)
+            .width(chipWidth(more))
+            .clip(ContinuousCornerShape(FluidRadius.Card))
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+          contentAlignment = Alignment.Center,
+        ) {
+          Text(text = more, style = style, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
+        }
       }
     }
   }
+}
+
+/**
+ * Quante anteprime stanno in [available] accanto al «+N» ([chip] = la sua larghezza con n anteprime mostrate, 0 senza «+N»): la piu' grande fra
+ * [count] e uno, senza mai tagliare il «+N». Pura, per la prova.
+ */
+internal fun freePreviewFit(count: Int, available: Dp, thumb: Dp, gap: Dp, chip: (Int) -> Dp): Int {
+  for (n in count downTo 1) {
+    val chipWidth = chip(n)
+    val items = n + if (chipWidth > BackupDimens.None) 1 else 0
+    val width = thumb * n + chipWidth + gap * (items - 1)
+    if (width <= available) return n
+  }
+  return 1
 }
 
 /** Le richieste delle anteprime: nell'ordine del piano, solo quelle che [request] lascia passare (la Libreria visibile), al piu' [FreePreviewCount]. */
@@ -240,9 +269,6 @@ private fun PreviewThumb(covers: BackupCovers, request: ThumbRequest) {
 
 /** Quante anteprime al piu': quattro e il «+N» stanno nella testata sul telefono dell'utente (360 dp: 288 dp dentro la scheda). */
 internal const val FreePreviewCount: Int = 4
-
-/** Da qui in su il testo e' «grande» (1,3x): un'anteprima in meno. */
-private const val LargeTextScale = 1.3f
 
 /** Chi tiene le richieste delle anteprime accanto alla finestra della griglia. */
 private const val FreePreviewOwner = "libera-spazio"

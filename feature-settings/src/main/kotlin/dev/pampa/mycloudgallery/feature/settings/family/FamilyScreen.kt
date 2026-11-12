@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.feature.settings.family
 
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.Groups
@@ -23,7 +25,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidTone
@@ -133,9 +134,13 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
   ) {
     if (!state.isMember && !state.canRejoin) {
       item {
-        FluidEmptyState(
+        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i».
+        GalleryFigureState(
+          icon = Icons.Rounded.Groups,
           title = stringResource(R.string.family_none_title),
-          detail = stringResource(R.string.family_none_detail),
+          tone = GalleryIllustrationTone.Brand,
+          fill = false,
+          action = { SettingsInfo(label = stringResource(R.string.settings_state_why), text = stringResource(R.string.family_none_detail)) },
         )
       }
       return@FluidScreen

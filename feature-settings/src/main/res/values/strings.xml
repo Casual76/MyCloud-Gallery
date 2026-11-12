@@ -163,4 +163,6 @@
   </plurals>
   <!-- Giro 1 della fase I (CU-5): il perche' di uno stato della famiglia, dietro la «i». -->
   <string name="settings_hero_why">Che cosa vuol dire</string>
+  <!-- Giro 2 della fase I (CS-17): la «i» sotto uno stato vuoto delle Impostazioni. -->
+  <string name="settings_state_why">Perché</string>
 </resources>

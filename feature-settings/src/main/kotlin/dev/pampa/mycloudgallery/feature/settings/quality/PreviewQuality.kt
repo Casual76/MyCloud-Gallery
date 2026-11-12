@@ -131,6 +131,8 @@ fun PreviewQualityScreen(
             leadingTile = false,
             // CU-16: tre livelli, uno solo: il segno di scelta, non un interruttore.
             badge = { ChoiceMark(level == state.level) },
+            // Giro 2 (CS-22): una scelta non apre niente: senza la freccia, come nel Widget.
+            disclosure = false,
             selected = level == state.level,
             onClick = { if (level != state.level) onChoose(level) },
           )

@@ -1,5 +1,9 @@
 package dev.pampa.mycloudgallery.feature.settings.devices
 
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
+import androidx.compose.material.icons.rounded.SearchOff
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,7 +38,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSegmentedControl
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
@@ -170,9 +173,13 @@ private fun ApprovalPage(state: ApprovalUiState, actions: ApprovalActions, modif
 
     if (request == null) {
       item {
-        FluidEmptyState(
+        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i».
+        GalleryFigureState(
+          icon = Icons.Rounded.SearchOff,
           title = stringResource(R.string.approve_missing_title),
-          detail = stringResource(R.string.approve_missing_detail),
+          tone = GalleryIllustrationTone.Caution,
+          fill = false,
+          action = { SettingsInfo(label = stringResource(R.string.settings_state_why), text = stringResource(R.string.approve_missing_detail)) },
         )
       }
       item {

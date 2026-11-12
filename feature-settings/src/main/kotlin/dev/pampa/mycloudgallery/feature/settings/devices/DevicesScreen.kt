@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.feature.settings.devices
 
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.NotificationImportant
@@ -19,7 +21,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -75,9 +76,13 @@ internal fun DevicesScreen(
   ) {
     if (state.trust is TrustStatus.NotConfigured) {
       item {
-        FluidEmptyState(
+        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i».
+        GalleryFigureState(
+          icon = Icons.Rounded.Devices,
           title = stringResource(R.string.devices_empty_title),
-          detail = stringResource(R.string.devices_empty_detail),
+          tone = GalleryIllustrationTone.Brand,
+          fill = false,
+          action = { SettingsInfo(label = stringResource(R.string.settings_state_why), text = stringResource(R.string.devices_empty_detail)) },
         )
       }
       return@FluidScreen

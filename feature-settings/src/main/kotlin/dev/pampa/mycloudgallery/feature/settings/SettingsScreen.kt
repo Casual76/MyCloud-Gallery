@@ -532,6 +532,14 @@ private fun familyHero(state: SettingsUiState): FamilyHero = when {
     description = { stringResource(R.string.hero_requests_detail) },
     status = GalleryIconStatus.Attention,
   )
+  // Giro 2 (CU-29): l'unico admin e' un rischio vero, e la pagina Famiglia lo dice con «attenzione»: qui lo stesso segno, il perche' dietro la «i».
+  state.soleAdmin -> FamilyHero(
+    tone = FluidHeroTone.PrimaryToSecondary,
+    value = { deviceCountText(state.deviceCount) },
+    title = { stringResource(R.string.hero_ok_title_admin) },
+    description = { pluralStringResource(R.plurals.family_hero_detail_admin, 1, 1) },
+    status = GalleryIconStatus.Attention,
+  )
   else -> FamilyHero(
     tone = FluidHeroTone.PrimaryToSecondary,
     value = { deviceCountText(state.deviceCount) },

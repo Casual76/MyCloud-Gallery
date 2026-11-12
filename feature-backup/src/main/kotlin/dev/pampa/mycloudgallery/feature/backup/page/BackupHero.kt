@@ -480,8 +480,7 @@ private fun HeroTexts(label: String, line: String?, detail: String?) {
           open = open,
           onToggle = { open = !open },
           openState = openState,
-          closedState = closedState,
-          tint = MaterialTheme.colorScheme.primary,
+          closedState = closedState,
         )
       }
     }
@@ -500,7 +499,7 @@ private fun HeroTexts(label: String, line: String?, detail: String?) {
           textAlign = TextAlign.Center,
           modifier = Modifier.weight(1f, fill = false),
         )
-        if (detail != null) GalleryInfoGlyph(open = open, tint = MaterialTheme.colorScheme.primary)
+        if (detail != null) GalleryInfoGlyph(open = open)
       }
     }
     if (detail != null) {

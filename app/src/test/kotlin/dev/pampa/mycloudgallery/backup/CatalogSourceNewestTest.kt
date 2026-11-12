@@ -67,9 +67,10 @@ class CatalogSourceNewestTest {
       sql.execSQL(
         "INSERT INTO media_location (version_id, location_type, location_key, folder_key, state, volume, relative_path, display_name, " +
           "media_store_id, media_store_version, generation, account_id, share_name, share_key, nas_path, size, modified_at, absent_since, " +
-          "verified_at, last_seen_at, file_id) VALUES (?, 'nas', ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, 'alessio', 'alessio', " +
+          "verified_at, last_seen_at, file_id) VALUES (?, 'nas', ?, ?, ?, 'external_primary', ?, NULL, NULL, NULL, NULL, 'alessio', 'alessio', " +
           "'alessio', ?, 1000, 1000, NULL, NULL, 1000, NULL)",
-        arrayOf<Any?>(versionId, "nas:alessio:alessio:${path.lowercase()}img_$n.jpg", "nas:alessio:alessio:${path.lowercase()}", state, "${path}IMG_$n.jpg"),
+        // Giro 2 (mutazione di CS-11): la riga del NAS ha anche volume e cartella, cosi' a escluderla e' solo il controllo del tipo di posizione.
+        arrayOf<Any?>(versionId, "nas:alessio:alessio:${path.lowercase()}img_$n.jpg", "nas:alessio:alessio:${path.lowercase()}", state, path, "${path}IMG_$n.jpg"),
       )
     }
     sql.setTransactionSuccessful()
@@ -91,6 +92,21 @@ class CatalogSourceNewestTest {
     assertThat(found.getValue(telegram.id)).doesNotContain(old)
     // Solo le sorgenti chieste: WhatsApp non c'e' anche se ha la foto piu' recente.
     assertThat(found.keys).containsExactly(telegram.id)
+  }
+
+  /**
+   * Il tetto vale per ogni sorgente anche quando un'altra non e' ancora piena (giro 2, mutazione di CS-11: con una sola sorgente chiesta il ciclo si
+   * fermava da solo e la prova non vedeva il tetto). Telegram ha tre foto piu' recenti di quella di WhatsApp: ne restano due, e WhatsApp ha la sua.
+   */
+  @Test
+  fun ilTettoValePerOgniSorgenteAncheConLeAltreNonPiene() = runBlocking<Unit> {
+    val chat = media("Pictures/WhatsApp/", sortTime = 1_000)
+    media("Pictures/Telegram/", sortTime = 3_000)
+    val mid = media("Pictures/Telegram/", sortTime = 4_000)
+    val last = media("Pictures/Telegram/", sortTime = 5_000)
+    val found = newest.newest(listOf(telegram, whatsapp), perSource = 2)
+    assertThat(found.getValue(telegram.id)).containsExactly(last, mid).inOrder()
+    assertThat(found.getValue(whatsapp.id)).containsExactly(chat)
   }
 
   @Test

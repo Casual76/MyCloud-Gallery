@@ -28,7 +28,12 @@ import kotlinx.coroutines.flow.asStateFlow
 // - l'ordine: prima si abilita il nuovo, poi si disabilitano gli altri, mai zero ingressi; se qualcosa va storto si torna all'automatica;
 // - all'avvio si riallinea: nessun ingresso abilitato (non dovrebbe succedere) -> si abilita subito quello scelto (abilitare non chiude niente);
 //   uno stato diverso dalla scelta (un processo chiuso prima del cambio, un aggiornamento) -> si corregge al primo passaggio in secondo piano;
-// - le chiamate al PackageManager girano fuori dal thread principale, una alla volta (l'avvio non le aspetta).
+// - le chiamate al PackageManager girano fuori dal thread principale, una alla volta (l'avvio non le aspetta);
+// - (giro 2 della fase I, CG-5) un cambio accodato non si fida dell'uscita che l'ha accodato: subito prima di ogni scrittura si ricontrolla che
+//   nessuna activity sia avviata. Se l'utente e' tornato davanti (esce e rientra subito, anche mentre il filo legge il PackageManager), non si tocca
+//   piu' niente: la scelta resta in attesa e si fa alla prossima uscita. Se il processo muore a meta'
+//   (il nuovo abilitato, il vecchio non ancora spento) restano due ingressi, mai zero: il riallineamento dell'avvio lo vede e finisce il cambio alla
+//   prima uscita.
 
 /** I nomi degli ingressi del launcher: gli `activity-alias` del manifest (nomi completi, quelli che il PackageManager vuole). */
 object LauncherAliases {
@@ -111,7 +116,8 @@ class AppIconSwitcher(
   private val state: MutableStateFlow<AppIconChoice> by lazy { MutableStateFlow(store.read()) }
   override val choice: StateFlow<AppIconChoice> get() = state.asStateFlow()
 
-  /** Le activity avviate: zero = l'app e' in secondo piano (una rotazione non conta). Solo dal thread principale. */
+  /** Le activity avviate: zero = l'app e' in secondo piano (una rotazione non conta). Scritto solo dal thread principale, letto anche dal filo. */
+  @Volatile
   private var started = 0
 
   /** C'e' un cambio da fare al prossimo passaggio in secondo piano. */
@@ -130,6 +136,9 @@ class AppIconSwitcher(
     if (started == 0) worker.execute { apply() } else pending = true
   }
 
+  /** CG-5: l'app e' fuori dal primo piano adesso (nessuna activity avviata). Si guarda subito prima di ogni scrittura, non solo all'accodamento. */
+  private fun away(): Boolean = started == 0
+
   /** All'avvio: mai zero ingressi (si abilita subito quello scelto); uno stato diverso dalla scelta si corregge in secondo piano. */
   internal fun realign() {
     val wanted = LauncherAliases.of(state.value)
@@ -142,18 +151,33 @@ class AppIconSwitcher(
     if (enabled != listOf(wanted)) pending = true
   }
 
-  /** Il cambio: prima il nuovo, poi gli altri; nessuna scrittura se lo stato e' gia' quello; qualunque errore -> l'automatica. */
+  /**
+   * Il cambio: prima il nuovo, poi gli altri; nessuna scrittura se lo stato e' gia' quello; qualunque errore -> l'automatica. Prima di ogni
+   * scrittura si ricontrolla che l'app sia ancora fuori ([away]): se e' rientrata, la scelta torna in attesa ([deferred]).
+   */
   internal fun apply() {
     val wanted = LauncherAliases.of(state.value)
-    if (enabledAliases() == listOf(wanted)) return
+    val enabled = enabledAliases() ?: return
+    if (enabled == listOf(wanted)) return
+    if (!away()) return deferred()
     try {
       components.setEnabled(wanted, true)
-      LauncherAliases.all.filter { it != wanted }.forEach { components.setEnabled(it, false) }
+      for (other in LauncherAliases.all.filter { it != wanted }) {
+        // Disabilitare l'ingresso da cui l'activity e' aperta la chiude: con l'app rientrata non si spegne niente (restano due ingressi, mai zero).
+        if (!away()) return deferred()
+        components.setEnabled(other, false)
+      }
       check(enabledAliases() == listOf(wanted)) { "stato degli ingressi diverso dopo il cambio" }
     } catch (e: RuntimeException) {
       GalleryLog.w(TAG) { "cambio d'icona non riuscito (${e.javaClass.simpleName}): torno all'automatica" }
       backToAuto()
     }
+  }
+
+  /** L'app e' rientrata prima che il cambio finisse: si rifa' alla prossima uscita (lo stato resta coerente: almeno un ingresso abilitato). */
+  private fun deferred() {
+    GalleryLog.d(TAG) { "l'app e' rientrata in primo piano: il cambio d'icona aspetta la prossima uscita" }
+    pending = true
   }
 
   private fun backToAuto() {

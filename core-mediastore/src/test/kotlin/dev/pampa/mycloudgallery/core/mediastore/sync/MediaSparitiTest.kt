@@ -1345,6 +1345,8 @@ class MediaSparitiTest : PhoneSyncTestBase() {
     assertThat(sync.syncNow(SyncReason.CONTENT_CHANGE).vanished).isEqualTo(0)
     assertThat(restored).isTrue()
     assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+    // Il controllo rifatto subito la trova: non resta nemmeno annotata (senza, la ferma solo il ricontrollo prima del lotto, e resta annotata).
+    assertThat(suspected(sync)).isEqualTo(0)
   }
 
   @Test

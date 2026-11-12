@@ -109,8 +109,8 @@ class UrgentRegistryXfTest {
     for (i in 1..40) urgent.add(key(i))
     val first = urgent.priority.value.toList()
     first.forEach { urgent.waiting(it, UrgentWait.PREVIEW) }
-    assertThat(urgent.priority.value).hasSize(AiUrgentFile.PRIORITY_KEYS)
-    assertThat(urgent.priority.value.intersect(first.toSet())).isEmpty()
+    // Le prime in priorita' adesso sono altre: quelle che non hanno ancora aspettato.
+    assertThat(urgent.priority.value.take(AiUrgentFile.PRIORITY_KEYS).intersect(first.toSet())).isEmpty()
     assertThat(urgent.attemptsOf(key(40))).isEqualTo(1)
     // Le richieste restano tutte: la rotazione non ne butta nessuna.
     assertThat(urgent.urgent()).hasSize(40)
@@ -138,30 +138,48 @@ class UrgentRegistryXfTest {
 
   // ---- XS-2, XS-5: la pulizia del ciclo di lavoro ------------------------------------------------------------------------
 
+  /** La pulizia toglie le richieste **finite** (criterio del calcolo, anche se le ha finite un altro dispositivo). Mutazione: nessuna rimozione delle finite. */
   @Test
-  fun laPuliziaToglieLeScaduteLeFiniteELeNonServibiliEMaiLeAltre() = runBlocking<Unit> {
+  fun laPuliziaTogliLeRichiesteFinite() = runBlocking<Unit> {
     val urgent = registry()
-    for (i in 1..6) urgent.add(key(i), media(i.toLong()))
-    val done = setOf(key(2))
-    val gone = setOf(key(3)) // media cancellato / non supportato / non di questo dispositivo
-    val unknown = setOf(key(5)) // non si sa: non si toglie niente
+    for (i in 1..4) urgent.add(key(i), media(i.toLong()))
+    val sweep = AiUrgentSweep(urgent, isDone = { k, _ -> k == key(2) }, servable = { _, _ -> true })
+    sweep.sweep(checkServable = false)
+    assertThat(urgent.urgent()).containsExactly(key(4), key(3), key(1)).inOrder()
+  }
+
+  /**
+   * La pulizia a inizio tappa toglie quelle che qui **non si possono piu' servire** (media cancellato, non supportato, non di questo dispositivo);
+   * dove non si sa (`null`) non toglie niente. Mutazione: nessuna rimozione delle non servibili.
+   */
+  @Test
+  fun laPuliziaTogliLeNonServibiliEMaiQuelleDiCuiNonSiSa() = runBlocking<Unit> {
+    val urgent = registry()
+    for (i in 1..5) urgent.add(key(i), media(i.toLong()))
+    val gone = setOf(key(3))
+    val unknown = setOf(key(5))
     val sweep = AiUrgentSweep(
       urgent,
-      isDone = { k, _ -> k in done },
+      isDone = { _, _ -> false },
       servable = { k, _ -> if (k in gone) false else if (k in unknown) null else true },
     )
-
-    sweep.sweep(checkServable = true)
-
-    assertThat(urgent.urgent()).containsExactly(key(6), key(5), key(4), key(1)).inOrder()
     // A fine tappa basta il criterio di "fatto": le non servibili non si ricontrollano.
-    gone.forEach { urgent.add(it, media(3)) }
     sweep.sweep(checkServable = false)
-    assertThat(urgent.urgent()).contains(key(3))
-    // E le scadute escono comunque.
+    assertThat(urgent.urgent()).hasSize(5)
+    sweep.sweep(checkServable = true)
+    assertThat(urgent.urgent()).containsExactly(key(5), key(4), key(2), key(1)).inOrder()
+  }
+
+  /** Le scadute escono anche dalla pulizia (e dal file). */
+  @Test
+  fun laPuliziaFaScadereLeVecchie() = runBlocking<Unit> {
+    val urgent = registry()
+    urgent.add(key(1), media(1))
+    val sweep = AiUrgentSweep(urgent, isDone = { _, _ -> false }, servable = { _, _ -> true })
     clock += AiUrgentFile.ASK_TTL_MILLIS + 1
     sweep.sweep(checkServable = false)
     assertThat(urgent.urgent()).isEmpty()
+    assertThat(registry().urgent()).isEmpty()
   }
 
   @Test

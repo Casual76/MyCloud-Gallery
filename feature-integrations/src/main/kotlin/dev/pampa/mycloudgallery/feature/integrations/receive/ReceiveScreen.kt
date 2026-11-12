@@ -18,10 +18,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PhotoAlbum
@@ -170,7 +170,8 @@ internal fun ReceiveScreen(ui: ReceiveUi, actions: ReceiveActions, modifier: Mod
           footnoteIsError = false,
         )
         ReceiveScreenState.DONE -> ReceiveMessage(
-          icon = Icons.Rounded.CheckCircle,
+          // CU-39 (fase I): i file sono in coda, non ancora sul NAS: la clessidra dell'attesa, non la spunta.
+          icon = Icons.Rounded.HourglassTop,
           tone = GalleryIllustrationTone.Brand,
           title = pluralStringResource(R.plurals.integrations_receive_done_title, ui.queued, ui.queued),
           detail = doneDetail(ui),

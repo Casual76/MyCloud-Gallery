@@ -1,9 +1,5 @@
 package dev.pampa.mycloudgallery.core.designsystem.grid
 
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.TextMeasurer
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,13 +15,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -95,6 +97,7 @@ fun GalleryGridNotice(
   actionLabel: String? = null,
   onAction: (() -> Unit)? = null,
   family: GalleryIconFamily? = null,
+  peers: List<GalleryStripPeer> = emptyList(),
 ) {
   val scheme = MaterialTheme.colorScheme
   val shape = ContinuousCornerShape(FluidRadius.Card)
@@ -123,7 +126,7 @@ fun GalleryGridNotice(
     // I4 (fase I, «l'app parla troppo»): senza frase l'avviso e' una striscia, il segno, due parole e il tasto sulla stessa riga, anche a testo
     // grande (CS-13: impilate, due strisce coprivano quasi meta' dello schermo): il titolo va al piu' su due righe accanto al tasto.
     if (message.isBlank()) {
-      StripBody(title = title, actionLabel = actionLabel, onAction = onAction, modifier = Modifier.weight(1f))
+      StripBody(title = title, actionLabel = actionLabel, onAction = onAction, peers = peers, modifier = Modifier.weight(1f))
       return@Row
     }
     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NoticeTextGap)) {
@@ -146,11 +149,18 @@ fun GalleryGridNotice(
 }
 
 /**
+ * Un'altra striscia della stessa pila (CU-40, fase I): il suo titolo e il suo tasto. Con le strisce una sopra l'altra la forma e' una sola: se una
+ * manda il tasto sotto, lo mandano sotto tutte.
+ */
+@Immutable
+data class GalleryStripPeer(val title: String, val actionLabel: String)
+
+/**
  * Il corpo di una striscia (CU-26, CS-16): il titolo accanto al tasto quando ci sta con almeno [StripTitleMin] (al piu' due righe); altrimenti il
  * titolo intero sopra e il tasto sotto. Il titolo non si taglia mai a «12 …»: dice quante foto e che cosa aspettano.
  */
 @Composable
-private fun StripBody(title: String, actionLabel: String?, onAction: (() -> Unit)?, modifier: Modifier) {
+private fun StripBody(title: String, actionLabel: String?, onAction: (() -> Unit)?, peers: List<GalleryStripPeer>, modifier: Modifier) {
   val scheme = MaterialTheme.colorScheme
   val style = MaterialTheme.typography.titleSmall
   val measurer = rememberTextMeasurer()
@@ -170,7 +180,19 @@ private fun StripBody(title: String, actionLabel: String?, onAction: (() -> Unit
     }
     val gap = NoticeGap.roundToPx()
     val room = if (button == null) width else width - button.width - gap
-    val fitsBeside = button == null || (!bigText && room >= StripTitleMin.roundToPx() && fitsWhole(measurer, title, style, room))
+    val titleMin = StripTitleMin.roundToPx()
+    // CU-40: le strisce della stessa pila hanno la stessa larghezza; ognuna misura anche il tasto delle altre (senza disegnarlo ne' farlo sentire)
+    // e sceglie la forma che va bene a tutte, nello stesso passaggio: niente stato condiviso, niente salto al secondo fotogramma.
+    fun peersFit(): Boolean = peers.withIndex().all { (i, peer) ->
+      val peerButton = subcompose("tasto-pari-$i") {
+        Box(modifier = Modifier.clearAndSetSemantics {}.defaultMinSize(minHeight = GalleryDimens.MinTouchTarget), contentAlignment = Alignment.Center) {
+          FluidButton(text = peer.actionLabel, onClick = {}, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Medium)
+        }
+      }.first().measure(Constraints(maxWidth = width))
+      val peerRoom = width - peerButton.width - gap
+      peerRoom >= titleMin && fitsWhole(measurer, peer.title, style, peerRoom)
+    }
+    val fitsBeside = button == null || (!bigText && room >= titleMin && fitsWhole(measurer, title, style, room) && peersFit())
     if (fitsBeside) {
       val text = subcompose("titolo") {
         Text(text = title, style = MaterialTheme.typography.titleSmall, color = scheme.onSurface, maxLines = StripTitleLines, overflow = TextOverflow.Ellipsis)

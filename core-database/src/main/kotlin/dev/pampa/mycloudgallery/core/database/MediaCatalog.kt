@@ -988,6 +988,22 @@ class MediaCatalog(
    */
   suspend fun saveMediaStoreCursor(cursor: MediaStoreCursor): Unit = write { tx -> saveCursor(tx, cursor) }
 
+  /**
+   * Pacchetto F (12/11): chiede **una volta sola** per [tag] una scansione completa dei volumi del telefono gia' letti (il cursore torna a
+   * "scansione completa da fare", come quando la riconciliazione trova troppe righe sparite). Serve dopo un aggiornamento che corregge la
+   * lettura: le cancellazioni che le versioni di prima non avevano visto si vedono alla prima apertura, senza reinstallare e senza toccare
+   * altro (la scansione completa ha le sue protezioni: accesso completo a ogni lotto, MediaStore vuoto, ondate sospette). Una scansione gia'
+   * in corso resta com'e'. Vero se l'ha chiesta adesso; il segno sta in `catalog_meta`, nella stessa transazione.
+   */
+  suspend fun requestPhoneFullScanOnce(tag: String): Boolean = write { tx ->
+    if (metaDao.get(tag) != null) return@write false
+    cursorDao.all().map { it.toDomain() }
+      .filter { it.scanEpoch == null && it.generation != null }
+      .forEach { saveCursor(tx, it.copy(generation = null)) }
+    metaDao.put(tag, clock())
+    true
+  }
+
   /** La versione del dataset dei luoghi con cui sono stati calcolati i `place_id` (`catalog_meta`). */
   suspend fun setPlacesDataset(dataset: Int): Unit = write { metaDao.put(PLACES_DATASET, dataset.toLong()) }
 

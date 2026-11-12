@@ -229,6 +229,9 @@ class DefaultPhoneLibrarySync(
       mediaLocation = start.mediaLocation
       if (start.media == MediaAccess.PARTIAL) selection = HashSet()
       try {
+        // Pacchetto F (12/11): alla prima apertura di questa versione, una scansione completa dei volumi gia' letti, una volta sola (le
+        // cancellazioni che le versioni di prima non avevano visto). Solo con l'accesso completo: e' l'unico che puo' dedurre assenze.
+        if (start.media == MediaAccess.FULL) catalog.requestPhoneFullScanOnce(FULL_SCAN_ONCE_TAG)
         val mounted = source.volumes().filter(::isValidMediaStoreVolume).sortedWith(PRIMARY_FIRST)
         handleUnmounted(mounted.toSet())
         for (volume in mounted) {
@@ -424,7 +427,12 @@ class DefaultPhoneLibrarySync(
       val now = source.generation(volume)
       // Generazioni sparite o tornate indietro senza cambio di versione: non ci si fida, scansione completa.
       if (now == null || now < since) return fullScan(volume, version, cursor.copy(generation = null))
-      if (now == since) return VolumeOutcome.CONTINUE
+      // Pacchetto F (12/11): al ritorno in primo piano (e con "Aggiorna") gli _ID si confrontano con la cache anche se la generazione e' ferma.
+      // Le cancellazioni fatte ad app chiusa possono non lasciare traccia: `deleted_files` puo' rispondere vuoto alle app, la stima "generazione
+      // salita piu' delle righe viste" sbaglia quando una transazione porta piu' righe (Quick Share, WhatsApp), e il giro in background puo'
+      // aver gia' portato avanti la generazione. Prima restava solo la manutenzione notturna in carica.
+      val onReturn = reason in RETURN_REASONS
+      if (now == since) return if (onReturn && quickReconcileDue(cursor)) reconcileNow(volume, version) else VolumeOutcome.CONTINUE
       val seenIds = HashSet<Long>()
       var after: Long? = null
       var floor: Long? = null
@@ -479,8 +487,18 @@ class DefaultPhoneLibrarySync(
       // La generazione e' salita piu' di quanto spieghino le righe viste e quelle tolte: probabilmente cancellazioni che
       // `deleted_files` non dice (sull'emulatore API 37 risponde vuoto alle app). Si confrontano gli _ID con la cache
       // subito, al massimo ogni [PhoneSyncConfig.quickReconcileEvery], invece di aspettare la manutenzione quotidiana.
-      if (now - since > explained && quickReconcileDue(cursor)) reconcile(volume)
+      if ((now - since > explained || onReturn) && quickReconcileDue(cursor)) return reconcileNow(volume, version)
       return VolumeOutcome.CONTINUE
+    }
+
+    /**
+     * Il confronto degli `_ID` dentro un giro: se le righe sparite sono troppe per segnarle una a una, la scansione completa (che ha le sue
+     * protezioni: accesso completo a ogni lotto, MediaStore vuoto, ondate sospette) parte subito, non al giro dopo.
+     */
+    private suspend fun reconcileNow(volume: String, version: String): VolumeOutcome {
+      if (!reconcile(volume)) return VolumeOutcome.CONTINUE
+      val reset = catalog.mediaStoreCursor(volume) ?: return VolumeOutcome.CONTINUE
+      return fullScan(volume, version, reset)
     }
 
     private fun quickReconcileDue(cursor: MediaStoreCursor): Boolean {
@@ -530,23 +548,32 @@ class DefaultPhoneLibrarySync(
       purged += catalog.purgeExpiredAbsences(config.purgeCap)
     }
 
-    private suspend fun reconcile(volume: String) {
-      val cursor = catalog.mediaStoreCursor(volume) ?: return
-      if (cursor.scanEpoch != null || cursor.generation == null) return
+    /** Vero se le righe sparite erano troppe e ha chiesto una scansione completa (il cursore e' gia' salvato cosi'). */
+    private suspend fun reconcile(volume: String): Boolean {
+      val cursor = catalog.mediaStoreCursor(volume) ?: return false
+      if (cursor.scanEpoch != null || cursor.generation == null) return false
       val version = source.version(volume)
-      if (cursor.msVersion != version) return
+      if (cursor.msVersion != version) return false
+      // Pacchetto F: prima la cache, poi il MediaStore. Una posizione registrata (dalla lettura o da un salvataggio dell'app) c'era gia' nel
+      // MediaStore quando si leggono gli _ID; nell'ordine opposto un file salvato in mezzo sembrerebbe sparito.
+      val cached = reads.presentWithCache(volume, version)
       val live = source.allIds(volume)
       if (live.isEmpty()) {
         absencesBlocked++
-        return
+        return false
+      }
+      // Pacchetto F: un permesso ridotto mentre si leggevano gli _ID ("foto selezionate") li riduce alla selezione: nessuna assenza.
+      if (!stillFullAccess()) {
+        completed = false
+        return false
       }
       val liveSet = HashSet<Long>(live.size * 2)
       live.forEach { liveSet += it }
-      val missing = reads.presentWithCache(volume, version).filter { it.mediaStoreId !in liveSet }
+      val missing = cached.filter { it.mediaStoreId !in liveSet }
       if (missing.size > config.reconcileMaxDirect) {
         // Troppe: decide una scansione completa, che ha le sue protezioni contro le ondate sospette.
         catalog.saveMediaStoreCursor(cursor.copy(generation = null, lastReconcileAt = clock()))
-        return
+        return true
       }
       for (row in missing) {
         if (catalog.markVanished(row.key)) {
@@ -555,6 +582,7 @@ class DefaultPhoneLibrarySync(
         }
       }
       catalog.saveMediaStoreCursor(cursor.copy(lastReconcileAt = clock()))
+      return false
     }
 
     // --- Un lotto ----------------------------------------------------------------------------------------
@@ -782,6 +810,12 @@ class DefaultPhoneLibrarySync(
 
   private companion object {
     const val TAG = "PhoneSync"
+
+    /** Il segno in `catalog_meta` della scansione completa chiesta una volta dal pacchetto F ([MediaCatalog.requestPhoneFullScanOnce]). */
+    const val FULL_SCAN_ONCE_TAG = "phone_full_scan_once_f1"
+
+    /** I giri dopo i quali gli `_ID` si confrontano con la cache anche a generazione ferma: l'app torna davanti all'utente. */
+    val RETURN_REASONS: Set<SyncReason> = setOf(SyncReason.APP_START, SyncReason.FOREGROUND, SyncReason.MANUAL)
 
     val PRIMARY_FIRST: Comparator<String> = compareBy<String> { it != "external_primary" }.thenBy { it }
 

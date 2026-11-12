@@ -224,6 +224,28 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
     return stored
   }
 
+  /**
+   * Pacchetto F: piu' righe in **una** transazione del MediaProvider (un invio di Quick Share, un salvataggio di WhatsApp), quindi con la stessa
+   * `GENERATION_MODIFIED`: la generazione sale di uno, le righe nuove sono di piu'. Contenuto virtuale, della dimensione dichiarata.
+   */
+  fun putTogether(rows: List<MediaStoreRow>): List<MediaStoreRow> {
+    require(rows.isNotEmpty() && rows.map { it.volume }.distinct().size == 1) { "Un lotto di un volume solo." }
+    val v = volumeMap.getValue(rows.first().volume)
+    v.generation++
+    val generation = if (supportsGenerations) v.generation else null
+    val stored = rows.map { row ->
+      withGeneration(row, generation).also {
+        v.rows[row.id] = it
+        v.content[row.id] = virtualFor(row)
+        v.sortKeys[row.id] = sortKey(it)
+        v.pending -= row.id
+        v.trashed -= row.id
+      }
+    }
+    changed.tryEmit(Unit)
+    return stored
+  }
+
   /** Una riga in scrittura (`IS_PENDING=1`): esiste ma nessuno la vede finche' non e' [publish]. */
   fun putPending(row: MediaStoreRow, content: ByteArray? = null): MediaStoreRow {
     val volume = volumeMap.getValue(row.volume)

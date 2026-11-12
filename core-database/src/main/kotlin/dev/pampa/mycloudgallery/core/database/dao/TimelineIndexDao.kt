@@ -4,6 +4,7 @@ import android.database.Cursor
 import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
+import dev.pampa.mycloudgallery.core.database.entity.CatalogMetaEntity
 import dev.pampa.mycloudgallery.core.database.entity.GroupSizeRow
 import dev.pampa.mycloudgallery.core.database.entity.IndexRow
 import dev.pampa.mycloudgallery.core.database.entity.MediaStoreCursorEntity
@@ -146,6 +147,16 @@ interface CatalogMetaDao {
 
   @Query("UPDATE catalog_meta SET value = value + :delta WHERE `key` = :key")
   suspend fun add(key: String, delta: Long)
+
+  /** Pacchetto F: le righe con la chiave in `[from, until)` (un prefisso, senza `LIKE`: le chiavi possono contenere `%` e `_`). */
+  @Query("SELECT * FROM catalog_meta WHERE `key` >= :from AND `key` < :until ORDER BY `key`")
+  suspend fun range(from: String, until: String): List<CatalogMetaEntity>
+
+  @Query("DELETE FROM catalog_meta WHERE `key` = :key")
+  suspend fun delete(key: String)
+
+  @Query("DELETE FROM catalog_meta WHERE `key` >= :from AND `key` < :until")
+  suspend fun deleteRange(from: String, until: String)
 }
 
 /** I cursori della lettura del MediaStore (`media_store_cursor`). Le scritture passano da `MediaCatalog`. */

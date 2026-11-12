@@ -84,7 +84,7 @@ abstract class PhoneSyncTestBase {
     storageReady = storageReady,
   )
 
-  /** Il tempo passa per tutti e due gli orologi (pacchetto F: la seconda osservazione di un'assenza conta il tempo monotono). */
+  /** Il tempo passa per tutti e due gli orologi (pacchetto F: le annotazioni delle assenze, su disco, contano l'orologio di riferimento). */
   protected fun advance(ms: Long) {
     now += ms
     mono += ms

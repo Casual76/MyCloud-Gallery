@@ -13,12 +13,21 @@ import kotlin.time.Duration.Companion.seconds
  * @property fullHashMaxBytes oltre questa dimensione l'hash completo non si calcola durante la lettura: il media resta
  *   separato (`KEEP_SEPARATE`) e lo completa la manutenzione. Nessuna lettura a file interi grandi durante lo scorrimento.
  * @property vanishCap quante assenze confermate per transazione (l'accesso si ricontrolla prima di ognuna).
- * @property vanishAlarmMin l'ondata sospetta: se le posizioni che il MediaStore non mostra sono almeno tante e anche almeno
- *   quanti i file vivi del volume, non si scrive **nessuna** assenza (un MediaStore che risponde a meta' non deve svuotare
- *   la Libreria, E-P1, E-P15); restano annotate.
+ * @property vanishAlarmMin l'ondata: se le posizioni che il MediaStore non mostra sono almeno `max(vanishAlarmMin, vivi)` (i vivi sono gli
+ *   `_ID` del volume), un MediaStore che risponde a meta' non deve svuotare la Libreria (E-P1, E-P15): nessuna assenza col tempo lungo,
+ *   solo quelle che il disco, attendibile su [waveProbeSample] foto vive, non vede piu' file per file (pacchetto F, FS2-6: una cartella
+ *   cancellata davvero esce; righe solo nascoste restano). Le altre restano annotate.
  * @property absenceConfirmAfter pacchetto F (FS-1): una posizione che il MediaStore non mostra (un `_ID` che manca, una posizione
  *   non vista da una scansione completa) diventa assente solo a un confronto successivo, almeno dopo questo tempo, se manca ancora
  *   e il controllo puntuale non la trova. Un provider in ricostruzione (riavvio, aggiornamento) non fa sparire foto vere.
+ * @property absenceConfirmWithoutProof pacchetto F (FS2-2): senza la prova sul disco (Android 10, disco non leggibile o non attendibile)
+ *   un'omissione si conferma solo dopo questo tempo dalla prima annotazione, se intanto non e' mai tornata, e mai in un'ondata.
+ * @property probeSample quante posizioni vive il disco deve vedere perche' la prova sul disco valga (un disco cieco non conferma niente).
+ * @property waveProbeSample come [probeSample] in un'ondata (almeno [vanishAlarmMin] posizioni mancanti): solo con il disco attendibile e
+ *   la prova file per file un'ondata vera (una cartella cancellata dal PC) si conferma.
+ * @property recoverCap quanti `_ID` vivi sconosciuti al catalogo si rileggono al piu' per giro, per riportare presente una posizione
+ *   assente tornata con un altro `_ID` (FS2-5).
+ * @property absenceRecheckMargin il margine dopo la maturazione di un'annotazione prima del giro da solo in primo piano.
  * @property quickReconcileEvery ogni quanto, al massimo, un incrementale con cancellazioni non spiegate (la generazione sale
  *   piu' delle righe viste e di quelle in `deleted_files`) confronta subito gli `_ID` con la cache; null = solo la
  *   manutenzione quotidiana. Serve perche' `deleted_files` puo' rispondere vuoto alle app (emulatore API 37).
@@ -37,6 +46,11 @@ data class PhoneSyncConfig(
   val vanishCap: Int = 500,
   val vanishAlarmMin: Int = 2_000,
   val absenceConfirmAfter: Duration = 5.minutes,
+  val absenceConfirmWithoutProof: Duration = 24.hours,
+  val probeSample: Int = 3,
+  val waveProbeSample: Int = 20,
+  val recoverCap: Int = 2_000,
+  val absenceRecheckMargin: Duration = 10.seconds,
   val quickReconcileEvery: Duration? = 2.minutes,
   val purgeCap: Int = 500,
   val maxCandidateHashesPerBatch: Int = 20,
@@ -51,6 +65,9 @@ data class PhoneSyncConfig(
     require(fullHashMaxBytes >= 0) { "Soglia dell'hash completo negativa." }
     require(vanishCap > 0 && vanishAlarmMin > 0 && purgeCap > 0) { "Tetti non validi." }
     require(!absenceConfirmAfter.isNegative()) { "Attesa delle assenze negativa." }
+    require(absenceConfirmWithoutProof >= absenceConfirmAfter) { "Attesa senza prova piu' corta di quella con la prova." }
+    require(probeSample > 0 && waveProbeSample >= probeSample && recoverCap >= 0) { "Campioni non validi." }
+    require(!absenceRecheckMargin.isNegative()) { "Margine negativo." }
     require(maxCandidateHashesPerBatch >= 0 && metaBatch > 0 && metaMaxSkips > 0) { "Limiti non validi." }
     require(!foregroundMetaPause.isNegative()) { "Pausa negativa." }
   }

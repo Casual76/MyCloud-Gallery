@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.RowType
 import dev.pampa.mycloudgallery.core.mediastore.sync.MediaStorePointCheck
 import dev.pampa.mycloudgallery.core.mediastore.sync.MediaStoreRowLookup
 import dev.pampa.mycloudgallery.core.mediastore.sync.OriginalBytesUnavailableException
+import dev.pampa.mycloudgallery.core.mediastore.sync.PhoneFileProbe
 import dev.pampa.mycloudgallery.core.mediastore.sync.PhonePlace
 import dev.pampa.mycloudgallery.core.mediastore.sync.PointRow
 import dev.pampa.mycloudgallery.core.metadata.contract.MediaBytes
@@ -37,7 +38,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
  * dipende da posto, dimensione e data di modifica. Lo stesso file rimesso uguale ha gli stessi byte; un file modificato
  * (altra dimensione o data) ha byte diversi.
  */
-class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup, MediaStorePointCheck {
+class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup, MediaStorePointCheck, PhoneFileProbe {
 
   private sealed interface Content {
     val size: Long
@@ -549,6 +550,34 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup, MediaStorePointChe
     if (accessRevoked) return emptyList()
     val wanted = ids.toSet()
     return visible(v).filter { it.id in wanted }
+  }
+
+  /** Pacchetto F (FS2-2): se falso, la prova sul disco non sa niente (Android 10, volume non leggibile): risponde null. */
+  var diskReadable: Boolean = true
+
+  /** Pacchetto F: un disco "cieco" (permesso tolto sotto FUSE, montaggio a meta'): nessun file c'e'. */
+  var diskBlind: Boolean = false
+
+  /** Pacchetto F: i file che il disco nasconde (in scrittura di un'altra app sotto FUSE), anche se ci sono. */
+  val diskHidden: MutableSet<Long> = HashSet()
+
+  /** Pacchetto F: quante volte e' stata chiesta la prova sul disco. */
+  var fileProbes: Int = 0
+    private set
+
+  /**
+   * Il disco: un file c'e' se una riga (anche in scrittura, anche fuori dalla selezione) e' in quel posto e non e' in un cestino (il cestino
+   * di sistema rinomina il file, quello di Galleria lo sposta). Senza permessi FUSE nasconde tutto.
+   */
+  override suspend fun exists(volume: String, place: PhonePlace): Boolean? {
+    fileProbes++
+    val v = volumeMap[volume] ?: return null
+    if (!diskReadable || !v.mounted) return null
+    if (diskBlind || accessRevoked) return false
+    return v.rows.values.any {
+      it.id !in v.trashed && it.id !in v.oneUiTrashed && it.id !in diskHidden &&
+        it.relativePath.equals(place.relativePath, ignoreCase = true) && it.displayName.equals(place.displayName, ignoreCase = true)
+    }
   }
 
   /** Pacchetto F: quante volte e' stato chiesto il controllo puntuale prima di un'assenza. */

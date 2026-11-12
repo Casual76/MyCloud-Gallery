@@ -241,6 +241,31 @@ class AndroidMediaStoreSourceTest {
     assertThat(source.stillThere("external_primary", emptyList(), listOf(PhonePlace("Pictures/", "Screenshot_4.png")))).isEmpty()
   }
 
+  /** Pacchetto F (FS2-2): la prova sul disco distingue "c'e'", "non c'e'" e "non si sa" (volume senza radice, posto non valido). */
+  @Test
+  fun laProvaSulDiscoDistingueCEDaNonCEDaNonSiSa() = runBlocking<Unit> {
+    val root = java.nio.file.Files.createTempDirectory("volume").toFile()
+    try {
+      java.io.File(root, "DCIM/Camera").mkdirs()
+      java.io.File(root, "DCIM/Camera/IMG_1.jpg").writeBytes(byteArrayOf(1))
+      val probe = AndroidMediaStoreSource(
+        context = context,
+        volumeNames = { setOf("external_primary") },
+        volumeRoot = { if (it == "external_primary") root else null },
+      )
+      assertThat(probe.exists("external_primary", PhonePlace("DCIM/Camera/", "IMG_1.jpg"))).isTrue()
+      assertThat(probe.exists("external_primary", PhonePlace("DCIM/Camera/", "IMG_2.jpg"))).isFalse()
+      assertThat(probe.exists("1a2b-3c4d", PhonePlace("DCIM/Camera/", "IMG_1.jpg"))).isNull()
+      assertThat(probe.exists("external_primary", PhonePlace("DCIM/../../", "IMG_1.jpg"))).isNull()
+      assertThat(probe.exists("external_primary", PhonePlace("DCIM/", "Camera/IMG_1.jpg"))).isNull()
+      // Il volume tolto: la radice non c'e' piu', non si sa (mai "non c'e'").
+      root.deleteRecursively()
+      assertThat(probe.exists("external_primary", PhonePlace("DCIM/Camera/", "IMG_1.jpg"))).isNull()
+    } finally {
+      root.deleteRecursively()
+    }
+  }
+
   @Test
   fun unCursoreNulloEUnErroreNonUnaLibreriaVuota() {
     provider.nullCursor = true

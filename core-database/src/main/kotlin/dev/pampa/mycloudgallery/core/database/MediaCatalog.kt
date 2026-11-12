@@ -326,6 +326,51 @@ class MediaCatalog(
     }
   }
 
+  /**
+   * Pacchetto F (FS2-4): come [markVanished] per una posizione del telefono, ma solo se e' ancora **presente** e **nessuno l'ha rivista** dopo
+   * [notSeenSince] (l'istante in cui la lettura del telefono ha preso la sua fotografia). Una posizione registrata o confermata dopo (dalla
+   * lettura stessa, con un altro `_ID`, o da un salvataggio dell'app) resta presente. Un "visto" piu' avanti di adesso non e' una vista nuova:
+   * e' di prima che l'orologio tornasse indietro. Nella stessa transazione del controllo.
+   */
+  suspend fun markVanishedIfNotSeenSince(key: LocationKey, notSeenSince: Long): Boolean = write { tx ->
+    val entity = locationDao.byKey(key.value) ?: return@write false
+    val now = clock()
+    if (entity.state != LocationState.PRESENT.code || entity.lastSeenAt in (notSeenSince + 1)..now) return@write false
+    val location = entity.toDomain()
+    locationDao.update(LocationRules.vanished(location, now).toEntity())
+    tx.touch(mediaOf(location.id))
+    true
+  }
+
+  /**
+   * Pacchetto F (FS-1): le posizioni del telefono di [volume] che il MediaStore non mostrava, annotate dalla lettura del telefono e in attesa
+   * di una conferma (posto → quando e con quale versione del MediaStore). Su disco, in `catalog_meta`: un processo nuovo (la manutenzione
+   * notturna, la prossima apertura) riprende da li'. Nessuna tabella nuova: chiavi `phone_suspect:<volume>:<lunghezza>:<versione>:<posto>`.
+   */
+  suspend fun phoneSuspects(volume: String): Map<LocationKey, PhoneSuspect> {
+    val prefix = suspectPrefix(volume)
+    return metaDao.range(prefix, suspectEnd(volume)).mapNotNull { row ->
+      val rest = row.key.removePrefix(prefix)
+      val colon = rest.indexOf(':')
+      val length = rest.substring(0, colon.coerceAtLeast(0)).toIntOrNull() ?: return@mapNotNull null
+      if (colon + 1 + length + 1 > rest.length) return@mapNotNull null
+      val version = rest.substring(colon + 1, colon + 1 + length)
+      val key = rest.substring(colon + 1 + length + 1)
+      if (key.isEmpty()) null else LocationKey(key) to PhoneSuspect(row.value, version)
+    }.toMap()
+  }
+
+  /** Pacchetto F: aggiunge e toglie annotazioni di [volume] in una transazione. Non tocca l'indice della timeline. */
+  suspend fun updatePhoneSuspects(volume: String, put: Map<LocationKey, PhoneSuspect>, remove: Map<LocationKey, PhoneSuspect>): Unit = write {
+    remove.forEach { (key, suspect) -> metaDao.delete(suspectKey(volume, suspect.msVersion, key)) }
+    put.forEach { (key, suspect) -> metaDao.put(suspectKey(volume, suspect.msVersion, key), suspect.firstAtMillis) }
+  }
+
+  /** Pacchetto F: dimentica le annotazioni di [volume], o di tutti i volumi (accesso non piu' completo). */
+  suspend fun clearPhoneSuspects(volume: String? = null): Unit = write {
+    if (volume == null) metaDao.deleteRange(SUSPECT, SUSPECT_END) else metaDao.deleteRange(suspectPrefix(volume), suspectEnd(volume))
+  }
+
   /** Un posto non contiene piu' il file (riga sparita dal MediaStore, file non trovato sul NAS). */
   suspend fun markVanished(key: LocationKey): Boolean = write { tx ->
     val entity = locationDao.byKey(key.value) ?: return@write false
@@ -352,8 +397,8 @@ class MediaCatalog(
    *
    * Pacchetto F (FS-4): la posizione del telefono di un media "perso prima del backup" (`lost_before_backup`) **resta** finche' il problema
    * c'e': e' la prova che il telefono l'ha avuto, e senza di lei il media e il suo avviso uscirebbero dalle righe del backup dopo 60 giorni
-   * (la pagina direbbe "Tutto al sicuro" per una foto mai salvata). Quando il problema se ne va (la foto torna, l'utente lo archivia) la
-   * posizione si dimentica al giro dopo.
+   * (la pagina direbbe "Tutto al sicuro" per una foto mai salvata). Il problema se ne va da solo quando la foto torna o il media torna al
+   * sicuro; un'azione dell'utente per archiviarlo oggi non c'e' (FS2-7): finche' resta, resta anche la posizione.
    */
   suspend fun purgeExpiredAbsences(cap: Int = Int.MAX_VALUE): Int = write { tx ->
     require(cap > 0) { "Il tetto e' positivo." }
@@ -2862,6 +2907,17 @@ class MediaCatalog(
 
     /** Chiave di `catalog_meta`: la versione del dataset dei luoghi dei `place_id`. */
     const val PLACES_DATASET: String = "places_dataset"
+
+    /** Pacchetto F: il prefisso delle annotazioni della lettura del telefono in `catalog_meta` (`;` e' il carattere dopo `:`). */
+    private const val SUSPECT: String = "phone_suspect:"
+    private const val SUSPECT_END: String = "phone_suspect;"
+
+    private fun suspectPrefix(volume: String): String = "$SUSPECT$volume:"
+
+    private fun suspectEnd(volume: String): String = "$SUSPECT$volume;"
+
+    private fun suspectKey(volume: String, version: String, key: LocationKey): String =
+      "${suspectPrefix(volume)}${version.length}:$version:${key.value}"
 
     /**
      * Ogni colonna che punta a `media` (tabella.colonna). [merge] le gestisce tutte prima di

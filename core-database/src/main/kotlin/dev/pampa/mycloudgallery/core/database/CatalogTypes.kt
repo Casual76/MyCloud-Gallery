@@ -49,6 +49,12 @@ data class CatalogChange(
  * ([MediaCatalog.recordAll], [MediaCatalog.confirmAllPresent], [MediaCatalog.markVanishedNotSeenSince]) o
  * da solo con [MediaCatalog.saveMediaStoreCursor].
  */
+/**
+ * Pacchetto F (FS-1): una posizione del telefono che il MediaStore non mostrava, annotata a [firstAtMillis] (orologio di riferimento) con la
+ * versione del MediaStore [msVersion]: diventa assente solo con una conferma (prova positiva, o un tempo lungo) e mai con un'altra versione.
+ */
+data class PhoneSuspect(val firstAtMillis: Long, val msVersion: String)
+
 data class MediaStoreCursor(
   val volume: String,
   /** La `MediaStore.getVersion()` con cui valgono gli `_ID` in cache. */

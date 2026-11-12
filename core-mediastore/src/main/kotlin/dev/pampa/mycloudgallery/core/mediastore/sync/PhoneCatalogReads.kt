@@ -46,10 +46,11 @@ class PhonePosition(
 interface PhoneCatalogReads {
 
   /**
-   * I posti (presenti o non raggiungibili) che hanno in cache l'`_ID` [id] del volume, **letto con [msVersion]**: un
-   * `_ID` di un'altra versione del MediaStore puo' essere di un altro file (E-P22).
+   * Le posizioni **presenti** che hanno in cache l'`_ID` [id] del volume, **letto con [msVersion]**: un `_ID` di un'altra versione del
+   * MediaStore puo' essere di un altro file (E-P22). Pacchetto F (FS2-1): le cancellazioni di `deleted_files` passano da qui alla stessa
+   * conferma delle altre assenze.
    */
-  suspend fun liveAtMediaStoreRow(volume: String, id: Long, msVersion: String): List<LocationKey>
+  suspend fun positionsAtMediaStoreRow(volume: String, id: Long, msVersion: String): List<PhonePosition>
 
   /**
    * Pacchetto F (FS-1): le posizioni del volume presenti e assenti (non le non raggiungibili), con l'`_ID` e la versione in cache e il posto,
@@ -76,10 +77,18 @@ class RoomPhoneCatalogReads(private val database: GalleryDatabase) : PhoneCatalo
   private val locations get() = database.locationDao()
   private val work get() = database.workStateDao()
 
-  override suspend fun liveAtMediaStoreRow(volume: String, id: Long, msVersion: String): List<LocationKey> =
+  override suspend fun positionsAtMediaStoreRow(volume: String, id: Long, msVersion: String): List<PhonePosition> =
     locations.byMediaStoreId(volume, id)
-      .filter { it.locationType == LocationType.PHONE.code && it.mediaStoreVersion == msVersion && it.state != LocationState.ABSENT.code }
-      .map { LocationKey(it.locationKey) }
+      .filter { it.locationType == LocationType.PHONE.code && it.mediaStoreVersion == msVersion && it.state == LocationState.PRESENT.code }
+      .map {
+        PhonePosition(
+          key = LocationKey(it.locationKey),
+          present = true,
+          mediaStoreId = it.mediaStoreId,
+          msVersion = it.mediaStoreVersion,
+          place = PhonePlace(it.relativePath.orEmpty(), it.displayName.orEmpty()),
+        )
+      }
 
   override suspend fun phonePositions(volume: String): List<PhonePosition> =
     locations.phonePositionsOnVolume(volume).map { row ->
@@ -138,4 +147,16 @@ interface MediaStorePointCheck {
 
   /** Le righe del volume con uno di questi `_ID` o in uno di questi posti, anche `IS_PENDING`, mai cestinate. */
   suspend fun stillThere(volume: String, ids: Collection<Long>, places: Collection<PhonePlace>): List<PointRow>
+}
+
+/**
+ * Pacchetto F (FS2-2): la **prova sul disco**. Il MediaStore puo' omettere righe (un provider in ricostruzione, un indice a meta'), ma un file
+ * che il disco vede ancora non e' sparito; uno che il disco non vede piu', con il disco attendibile (i file di alcune foto vive ci sono), e' la
+ * prova positiva della cancellazione (anche un file nel cestino ha un altro nome o un'altra cartella). Chi la usa ricontrolla comunque accesso
+ * e volume dopo l'ultima lettura.
+ */
+interface PhoneFileProbe {
+
+  /** true: il file c'e'; false: il disco leggibile non lo vede; null: non si sa (Android 10, volume non leggibile, errore). */
+  suspend fun exists(volume: String, place: PhonePlace): Boolean?
 }

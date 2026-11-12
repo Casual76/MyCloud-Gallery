@@ -131,6 +131,8 @@ class FullScanTest : PhoneSyncTestBase() {
     store.supportsDeletedFiles = false
     (4L..50L).forEach { store.remove(PRIMARY, it) }
     store.bumpVersion(PRIMARY, "v2")
+    // Pacchetto F (FS2-6): senza la prova del disco (Android 10, disco non leggibile) un'ondata non si scrive mai.
+    store.diskReadable = false
     advance(MINUTE)
     val sync = newSync()
     assertThat(sync.syncNow(SyncReason.APP_START).vanished).isEqualTo(0)
@@ -141,5 +143,11 @@ class FullScanTest : PhoneSyncTestBase() {
     assertThat(report.vanished).isEqualTo(0)
     assertThat(sync.stats.snapshot.value.absencesBlocked).isEqualTo(1)
     rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
+
+    // Con il disco leggibile i 47 file mancano davvero (le tre vive ci sono): l'ondata si conferma file per file.
+    store.diskReadable = true
+    advance(3 * MINUTE)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(47)
+    rows.take(3).forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
   }
 }

@@ -10,7 +10,9 @@ import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.ext.SdkExtensions
+import android.os.storage.StorageManager
 import android.provider.MediaStore
 import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.core.content.ContextCompat
@@ -22,10 +24,12 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.RowType
 import dev.pampa.mycloudgallery.core.mediastore.sync.MediaStorePointCheck
 import dev.pampa.mycloudgallery.core.mediastore.sync.MediaStoreRowLookup
 import dev.pampa.mycloudgallery.core.mediastore.sync.OriginalBytesUnavailableException
+import dev.pampa.mycloudgallery.core.mediastore.sync.PhoneFileProbe
 import dev.pampa.mycloudgallery.core.mediastore.sync.PhonePlace
 import dev.pampa.mycloudgallery.core.mediastore.sync.PointRow
 import dev.pampa.mycloudgallery.core.metadata.contract.MediaBytes
 import dev.pampa.mycloudgallery.core.model.isValidMediaStoreVolume
+import java.io.File
 import java.io.IOException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -53,8 +57,11 @@ import kotlinx.coroutines.launch
  * - [open]: le foto solo con `ACCESS_MEDIA_LOCATION` e `setRequireOriginal` (D9); senza, [OriginalBytesUnavailableException]
  *   invece di byte oscurati. Con il permesso anche i video si leggono originali.
  * - [changes]: `ContentObserver` su immagini e video di tutti i volumi, con i discendenti, accorpato a [changeWindow].
+ * - [exists] (pacchetto F, FS2-2): la prova sul disco, da Android 11 (FUSE: con il permesso dei media l'app vede i file delle foto e dei
+ *   video per percorso). Su Android 10 o con il volume non leggibile non sa niente (null).
  *
  * @param volumeNames i volumi montati (di default `MediaStore.getExternalVolumeNames`); i test lo sostituiscono.
+ * @param volumeRoot la cartella radice di un volume montato (di default da `StorageManager`, Android 11+); i test la sostituiscono.
  * @param deletedFilesSupported se `deleted_files` esiste (estensione S ≥ 23, docs/android.md tema 4).
  */
 class AndroidMediaStoreSource(
@@ -66,7 +73,8 @@ class AndroidMediaStoreSource(
       PackageManager.PERMISSION_GRANTED
   },
   private val changeWindow: Duration = 1500.milliseconds,
-) : MediaStoreSource, MediaStoreRowLookup, MediaStorePointCheck {
+  private val volumeRoot: (String) -> File? = { volumeRootOf(context.applicationContext, it) },
+) : MediaStoreSource, MediaStoreRowLookup, MediaStorePointCheck, PhoneFileProbe {
 
   private val appContext = context.applicationContext
   private val resolver: ContentResolver = appContext.contentResolver
@@ -150,6 +158,25 @@ class AndroidMediaStoreSource(
       out += queryPointRows(volume, selection, chunk.flatMap { listOf(it.relativePath, it.displayName) })
     }
     return out
+  }
+
+  /**
+   * Pacchetto F (FS2-2): se il file del posto c'e' sul disco. Null se non si sa: Android 10 (nessun accesso per percorso), volume non montato
+   * o non leggibile, posto non valido, errore. Chi la usa controlla prima che il disco veda alcune foto vive (un disco cieco non prova niente).
+   */
+  override suspend fun exists(volume: String, place: PhonePlace): Boolean? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || !isValidMediaStoreVolume(volume)) return null
+    val segments = place.relativePath.split('/').filter { it.isNotEmpty() }
+    if (place.displayName.isEmpty() || '/' in place.displayName || place.displayName == ".." || segments.any { it == ".." || it == "." }) {
+      return null
+    }
+    return try {
+      val root = volumeRoot(volume)?.takeIf { it.isDirectory } ?: return null
+      File(segments.fold(root) { dir, name -> File(dir, name) }, place.displayName).exists()
+    } catch (e: Exception) {
+      // Qualunque errore (permesso, volume in smontaggio, servizio di sistema) vale "non si sa", mai "non c'e'".
+      null
+    }
   }
 
   override suspend fun deletedSince(volume: String, generation: Long): List<DeletedRow>? {
@@ -482,6 +509,19 @@ class AndroidMediaStoreSource(
     internal fun itemUri(volume: String, id: Long, type: RowType): Uri {
       val collection = if (type == RowType.VIDEO) MediaStore.Video.Media.getContentUri(volume) else MediaStore.Images.Media.getContentUri(volume)
       return ContentUris.withAppendedId(collection, id)
+    }
+
+    /** Pacchetto F: la radice di un volume montato (Android 11+), o null. */
+    internal fun volumeRootOf(context: Context, volume: String): File? {
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+      if (!isValidMediaStoreVolume(volume)) return null
+      return try {
+        val storage = context.getSystemService(StorageManager::class.java) ?: return null
+        val sv = storage.getStorageVolume(filesUri(volume))
+        if (sv.state != Environment.MEDIA_MOUNTED && sv.state != Environment.MEDIA_MOUNTED_READ_ONLY) null else sv.directory
+      } catch (e: Exception) {
+        null
+      }
     }
 
     /** `deleted_files` esiste con l'estensione S ≥ 23 (docs/android.md: "37.1 / S Extensions 23"). */

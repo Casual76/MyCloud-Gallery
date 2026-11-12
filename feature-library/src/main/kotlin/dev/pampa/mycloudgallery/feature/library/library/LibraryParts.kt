@@ -46,6 +46,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarAction
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridNotice
+import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryStripPeer
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteLocation
@@ -417,29 +418,38 @@ internal fun LibraryNotices(
   if (!hasNotices(phone, notice, share)) return
   val partial = phone.access == MediaAccess.PARTIAL
   val pending = phone.pendingLocation > 0
+  val partialTitle = stringResource(R.string.library_partial_title)
+  val partialAction = stringResource(R.string.library_partial_action)
+  val pendingTitle = countText(R.plurals.library_pending_title, phone.pendingLocation)
+  val pendingAction = stringResource(R.string.library_pending_action)
+  // CU-40 (fase I): le due strisce insieme hanno la stessa forma (il tasto accanto per tutte e due, o sotto per tutte e due).
+  val partialPeers = if (pending) listOf(GalleryStripPeer(pendingTitle, pendingAction)) else emptyList()
+  val pendingPeers = if (partial) listOf(GalleryStripPeer(partialTitle, partialAction)) else emptyList()
   Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(NoticeSpacing), horizontalAlignment = Alignment.CenterHorizontally) {
     if (share is LibraryShare.Preparing) LibraryShareNotice(share = share, backdrop = backdrop, onCancel = commands::cancelShare)
     if (notice != null) ActionNoticeCard(notice = notice, backdrop = backdrop, onDismiss = onDismissNotice)
     if (partial) {
       GalleryGridNotice(
         icon = Icons.Rounded.PhotoLibrary,
-        title = stringResource(R.string.library_partial_title),
+        title = partialTitle,
         message = "",
         backdrop = backdrop,
-        actionLabel = stringResource(R.string.library_partial_action),
+        actionLabel = partialAction,
         onAction = { commands.requestMediaAccess() },
         family = GalleryIconFamily.Photos,
+        peers = partialPeers,
       )
     }
     if (pending) {
       GalleryGridNotice(
         icon = Icons.Rounded.LocationOn,
-        title = countText(R.plurals.library_pending_title, phone.pendingLocation),
+        title = pendingTitle,
         message = "",
         backdrop = backdrop,
-        actionLabel = stringResource(R.string.library_pending_action),
+        actionLabel = pendingAction,
         onAction = { commands.requestMediaLocation() },
         family = GalleryIconFamily.Places,
+        peers = pendingPeers,
       )
     }
   }

@@ -19020,6 +19020,14 @@ Voci da `beta/brief-I6-rifiniture.md` (sezione I4), partendo da `bca0f065`.
   a testo grande (oltre 1,15x) sempre sotto.
 - PNG: riregistrati anche quelli di Scegli e Ricevi (`5-P10`, `5-P11`, `7-P10`, `10-P6`) e dell'onboarding (`2-P6`) rimasti indietro dal giro 1.
 
+- **Seguito del controllo CU (12/11):** i passi del FRITZ!Box tornano alla riga di Batteria (piastrella della rete, «i» a destra, CU-38); «Niente
+  da scegliere» con il perche' dietro la «i» e «N file in coda» con la clessidra (CU-39); due strisce insieme hanno la stessa forma: ognuna misura
+  anche il tasto dell'altra nello stesso passaggio (CU-40); tolti il file di stringhe vuoto del cestino e il commento che nominava la pagina.
+  **«2.1 GB» non cambiato:** viene dal formattatore comune di Android (`Formatter.formatShortFileSize`), che segue la lingua del telefono: in italiano
+  scrive «2,1 GB»; il punto si vede solo negli screenshot, che girano in inglese. Il formattatore sempre italiano (`ByteFormat`) sta in `core-rules`,
+  che `feature-integrations` non puo' vedere (elenco chiuso di `Phase5BArchitectureTest`, §1.1): aprirlo e' una scelta di architettura, non una
+  rifinitura.
+
 #### I4, giro di correzione 2 della review della fase I (12/11)
 
 Rilievi da `review-fase-I/giro2/` (CU, CS, CG).

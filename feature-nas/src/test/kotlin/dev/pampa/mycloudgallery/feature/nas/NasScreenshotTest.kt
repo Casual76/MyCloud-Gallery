@@ -268,9 +268,7 @@ abstract class NasScreenshotBase(private val dark: Boolean, private val device: 
   @Test
   fun spazioInCaricamento() = shoot("spazio-caricamento") { SpacePage(space(NasSpaceState.Loading)) }
 
-  // --- Eliminati di recente del NAS: niente scene (CU-32, fase I) ----------------------------------------------------------------
-  // `NasTrashScreen` non si raggiunge da nessuna rotta (ogni ingresso passa da `GatedNasTrashPage` -> gli Eliminati di recente di feature-library,
-  // `NasTrashGateTest`): i suoi screenshot sembravano veri e non lo erano. La pagina vera si fotografa in feature-library (`7-P8/eliminati-*`).
+  // --- Eliminati di recente del NAS: la pagina vera e' in feature-library (`7-P8/eliminati-*`), dietro il cancello -------------
 
   // --- Operazioni in corso ----------------------------------------------------------------------------------------------------
 

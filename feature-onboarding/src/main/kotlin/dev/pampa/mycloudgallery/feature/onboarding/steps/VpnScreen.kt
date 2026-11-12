@@ -2,8 +2,6 @@ package dev.pampa.mycloudgallery.feature.onboarding.steps
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -20,9 +18,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
@@ -34,9 +35,9 @@ import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoButton
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
-import dev.pampa.mycloudgallery.core.designsystem.media.galleryRingColor
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.network.contract.ControlPermissionOutcome
 import dev.pampa.mycloudgallery.core.network.contract.VpnCapability
@@ -173,17 +174,23 @@ internal fun VpnScreen(
 }
 
 /**
- * Un passo della guida (CU-34, CS-26 della fase I): la riga comune della «i», con il segno del passo nel colore della rete; il come (il percorso nel
- * FRITZ!Box, gli indirizzi) si apre sotto al tocco. TalkBack lo sente senza tocco.
+ * Un passo della guida (CU-34, CU-38 della fase I): la riga di Batteria, con la piastrella della famiglia della rete, le due parole e la «i» a
+ * destra; il come (il percorso nel FRITZ!Box, gli indirizzi) si apre sotto il titolo, con un tocco sulla «i» o sulla riga. TalkBack lo sente
+ * senza tocco.
  */
 @Composable
 private fun GuideRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: Int, detail: Int) {
-  GalleryInfoRow(
-    label = stringResource(title),
-    detail = stringResource(detail),
-    modifier = Modifier.fillMaxWidth().padding(horizontal = OnboardingDimens.CardPadding),
-    glyph = icon,
-    glyphTint = galleryRingColor(GalleryIconFamily.Network),
+  val how = stringResource(detail)
+  var open by remember(title) { mutableStateOf(false) }
+  FluidListRow(
+    title = stringResource(title),
+    subtitle = if (open) how else "",
+    leading = { GalleryIconTile(icon = icon, family = GalleryIconFamily.Network) },
+    leadingTile = false,
+    badge = { GalleryInfoButton(label = how, open = open, onToggle = { open = !open }) },
+    onClick = { open = !open },
+    disclosure = false,
+    modifier = Modifier.semantics { stateDescription = how },
   )
 }
 

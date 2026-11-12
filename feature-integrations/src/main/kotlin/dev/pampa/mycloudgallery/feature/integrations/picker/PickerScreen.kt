@@ -266,6 +266,8 @@ private fun PickerBody(ui: PickerUi, request: PickerRequest, env: PickerEnv, act
         detail = stringResource(R.string.integrations_picker_empty_detail),
         action = null,
         onAction = null,
+        // CU-39 (fase I): e' un perche', non un'istruzione: dietro la «i» (TalkBack lo sente).
+        detailBehindInfo = true,
       )
     } else {
       PickerGrid(ui, request, env, actions, Modifier.weight(1f).fillMaxWidth())
@@ -496,20 +498,24 @@ private fun PickerMessage(
   onAction: (() -> Unit)?,
   loading: Boolean = false,
   footnote: String? = null,
+  detailBehindInfo: Boolean = false,
 ) {
-  // CS-26 (fase I): la forma comune dello stato (figura e titolo); la frase resta aperta (e' un'istruzione o un errore) e cosi' la nota.
+  // CS-26 (fase I): la forma comune dello stato (figura e titolo); la frase resta aperta quando e' un'istruzione o un errore, e cosi' la nota;
+  // quando e' solo un perche' ([detailBehindInfo], CU-39) sta dietro la «i» sotto il titolo.
   Column(
     modifier = Modifier.fillMaxSize().padding(24.dp),
     verticalArrangement = Arrangement.Center,
   ) {
-    GalleryFigureState(icon = icon, title = title, tone = tone, fill = false) {
-      Text(
-        text = detail,
-        modifier = Modifier.widthIn(max = PickerDimens.MessageMaxWidth),
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center,
-      )
+    GalleryFigureState(icon = icon, title = title, tone = tone, fill = false, why = if (detailBehindInfo) detail else null) {
+      if (!detailBehindInfo) {
+        Text(
+          text = detail,
+          modifier = Modifier.widthIn(max = PickerDimens.MessageMaxWidth),
+          style = MaterialTheme.typography.bodyLarge,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          textAlign = TextAlign.Center,
+        )
+      }
       if (action != null && onAction != null) {
         FluidButton(text = action, onClick = onAction, size = FluidButtonSize.Large, style = FluidButtonStyle.Filled, loading = loading, enabled = !loading)
       }

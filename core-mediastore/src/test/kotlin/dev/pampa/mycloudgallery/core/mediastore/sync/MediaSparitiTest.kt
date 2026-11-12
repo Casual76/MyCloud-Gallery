@@ -171,7 +171,9 @@ class MediaSparitiTest : PhoneSyncTestBase() {
 
   @Test
   fun permessoRidottoMentreSiLeggonoGliIdNonTogliNiente() = runBlocking<Unit> {
-    val rows = photos(1L..5L)
+    // Quattro: le due fuori dalla selezione sono sotto la soglia diretta, quindi senza la guardia si segnerebbero subito (con di piu' deciderebbe
+    // la scansione completa, che ricontrolla l'accesso da se').
+    val rows = photos(1L..4L)
     newSync().syncNow(SyncReason.APP_START)
     // L'utente passa a "foto selezionate" proprio mentre l'app legge gli _ID: il MediaStore risponde con la sola selezione.
     val flipping = object : MediaStoreSource by store {

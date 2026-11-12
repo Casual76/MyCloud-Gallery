@@ -62,6 +62,14 @@ allprojects {
         details.useVersion(engineValue('lifecycle'))
         details.because('navigation-compose dell\'engine 3.0: allineata alle altre librerie lifecycle dell\'engine')
       }
+      // Pacchetto U (12/11/2026): con :feature-update (engine-update dentro il grafo) Gradle visitava androidx.annotation 1.8.0 (la chiede
+      // navigation-compose 2.9.8) e 1.7.1 (hilt-android: il suo file JVM, annotation-jvm 1.7.1) prima di scegliere la 1.9.1: metadati da leggere e senza
+      // impronta, e la verifica cadeva in tutto il build. Nessuna delle due vince mai (i loro file JVM non hanno impronte in verification-metadata.xml,
+      // quindi nessun grafo le sceglieva): la richiesta va diretta alla 1.8.1, che le ha. Le versioni risolte restano quelle di prima (1.8.1 o piu').
+      if (details.requested.group == 'androidx.annotation' && details.requested.name == 'annotation' && details.requested.version in ['1.7.1', '1.8.0']) {
+        details.useVersion('1.8.1')
+        details.because('androidx.annotation 1.7.1 e 1.8.0 non vincono mai: niente metadati senza impronta da visitare (pacchetto U)')
+      }
     }
   }
 }
@@ -129,6 +137,8 @@ ext.galleryModules = [
   ':core-release',
   ':core-describe',
   ':feature-widget',
+  // Pacchetto U (12/11/2026): l'aggiornamento dentro l'app
+  ':feature-update',
 ]
 
 tasks.register('galleryTest') {

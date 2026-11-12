@@ -125,6 +125,10 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   @Inject
   lateinit var appIconLazy: dagger.Lazy<dev.pampa.mycloudgallery.appicon.AppIconSwitcher>
 
+  // Pacchetto U (12/11/2026): l'aggiornamento dentro l'app. Pigro: nasce al primo controllo (dopo il primo disegno) o alla prima schermata che lo guarda.
+  @Inject
+  lateinit var updatesLazy: dagger.Lazy<dev.pampa.mycloudgallery.feature.update.AppUpdates>
+
   private lateinit var graph: AppGraph
   private lateinit var gallery: GalleryGraph
   private lateinit var notifications: AppNotifications
@@ -213,6 +217,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     // I5: l'icona dell'app a scelta. Prima di qualunque activity (conta quelle avviate per cambiare l'ingresso del launcher solo in secondo piano);
     // il riallineamento con il PackageManager gira fuori dal thread principale.
     AvvioTrace.section("MCG:app:icona") { appIconLazy.get().install(this) }
+    // Pacchetto U: un APK lasciato nella cache da un aggiornamento di prima (riuscito: Android ha chiuso il processo prima della fine) lo cancella
+    // AppUpdates appena nasce, fuori dal thread principale e prima di ogni scaricamento (giro 1: qui avrebbe potuto correre insieme a una ripresa).
   }
 
   /**
@@ -341,6 +347,9 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
         val ready = started && graph.onboardingStore.snapshotOrNull()?.commonShare != null
         dev.pampa.mycloudgallery.release.ReleaseWiring.reads(graph).atAppStart(ready)
       }
+      // Pacchetto U: all'apertura, dopo il primo disegno, il controllo silenzioso degli aggiornamenti (al piu' uno ogni 24 ore: lo decide AppUpdates). Anche
+      // con la versione fermata o la famiglia non pronta: l'aggiornamento e' proprio il rimedio. Mai nelle varianti di misura (dataset sintetico, niente rete).
+      if (gallery.backgroundWorkAllowed) AfterFirstDraw.launchAfter(graph.scope) { updatesLazy.get().checkIfDue() }
     }
 
     override fun onBackground() {

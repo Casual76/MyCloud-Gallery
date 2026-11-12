@@ -150,8 +150,12 @@ class Phase10ArchitectureTest {
   fun ilManifestStaDentroCoreReleaseESoloSulNas() {
     assertWithMessage("core-release nomina altri moduli o la rete").that(mentionsIn(RELEASE, RELEASE_FORBIDDEN, PRODUCTION_SETS)).isEmpty()
     assertWithMessage("core-release dipende da altro che le fondamenta").that(direct(RELEASE) - setOf("core-common", "core-model")).isEmpty()
-    val internet = mentions(MANIFEST_FROM_INTERNET, PRODUCTION_SETS).map { it.second }
+    // Pacchetto U (12/11/2026, decisione dell'utente): l'ELENCO DEGLI AGGIORNAMENTI (non firmato, non il manifest dei blocchi) si legge da Internet, e il suo
+    // indirizzo sta in un solo file di feature-update. Il manifest firmato dei blocchi resta solo sul NAS: altrove l'host resta vietato.
+    val internet = mentions(MANIFEST_FROM_INTERNET, PRODUCTION_SETS).map { it.second }.filter { it != UPDATE_SOURCE_FILE }
     assertWithMessage("il manifest letto da Internet (Q8 (a): solo dal NAS)").that(internet).isEmpty()
+    assertWithMessage("core-release o i suoi contratti nominati dalla sorgente degli aggiornamenti")
+      .that(RELEASE_FORBIDDEN_IN_UPDATES.containsMatchIn(code(File(root, UPDATE_SOURCE_FILE)))).isFalse()
     val outside = mentions(MANIFEST_INTERNALS, PRODUCTION_SETS).filter { (module, path) -> module != RELEASE && !path.startsWith("app/src/debug/") }
     assertWithMessage("campi del manifest, chiavi o verificatore nominati fuori da core-release").that(outside.map { it.second }).isEmpty()
     val keysBuilt = modules.flatMap { module ->
@@ -198,7 +202,8 @@ class Phase10ArchitectureTest {
   @Test
   fun nessunPacchettoDiReteNuovo() {
     val withException = modules.filter { mentionsIn(it, NETWORK_EXCEPTION, listOf("test")).isNotEmpty() }.toSet()
-    assertWithMessage("moduli con un'eccezione di rete").that(withException).isEqualTo(setOf("core-common", "core-models", "feature-map"))
+    // Pacchetto U (12/11/2026, decisione dell'utente): l'aggiornamento dentro l'app e' la terza eccezione, dichiarata (Phase6ArchitectureTest regola 5).
+    assertWithMessage("moduli con un'eccezione di rete").that(withException).isEqualTo(setOf("core-common", "core-models", "feature-map", "feature-update"))
   }
 
   /** 7. D32, L559: nessun sharedUserId e nessun permesso definito dall'app (un'altra app Pampa con la stessa firma non ottiene niente). */
@@ -303,6 +308,12 @@ class Phase10ArchitectureTest {
       """\bdev\.pampa\.mycloudgallery\.(core\.(?!common\b|model\b|release\b)\w+|feature\.\w+)\b|\bjava""" + """x?\.n""" + """et\b|\bokht""" + """tp3\b|\bandroid""" + """x?\.""",
     )
     val MANIFEST_FROM_INTERNET = Regex("""raw\.github""" + """usercontent|\bManifest\w*Ht""" + """tps\b""")
+
+    /** Pacchetto U: l'unico file di produzione con l'host dell'elenco degli aggiornamenti (le costanti della sorgente). */
+    const val UPDATE_SOURCE_FILE = "feature-update/src/main/kotlin/dev/pampa/mycloudgallery/feature/update/source/UpdateSource.kt"
+
+    /** Il manifest firmato e le sue chiavi non c'entrano con l'elenco degli aggiornamenti: la sorgente non li nomina. */
+    val RELEASE_FORBIDDEN_IN_UPDATES = Regex("""\bdev\.pampa\.mycloudgallery\.core\.rel""" + """ease\b|\bRelease""" + """Manifest\b|\bPinned""" + """Key\b""")
     val MANIFEST_INTERNALS = Regex("""\b(Release""" + """Manifest|Version""" + """Block|Model""" + """Hint|Pinned""" + """Key|Release""" + """Keys|Manifest""" + """Verifier|Manifest""" + """Codec)\b""")
     val PINNED_KEY_BUILT = Regex("""\bPinned""" + """Key\s*\(""")
     val PINNED_KEY_DECLARED = Regex("""\bclass\s+Pinned""" + """Key\b""")

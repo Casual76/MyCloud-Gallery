@@ -74,7 +74,7 @@
   <string name="backup_footer_writes_stopped_detail">I dettagli sono nella pagina Backup.</string>
   <!-- CA-1 (Fase 10): le scritture ferme per il manifest firmato (questa versione e' in sola lettura). -->
   <string name="backup_footer_release_read_only">Versione da aggiornare</string>
-  <string name="backup_footer_release_read_only_hint">Il backup è fermo: aggiorna dal Pampa Store.</string>
+  <string name="backup_footer_release_read_only_hint">Il backup è fermo: aggiorna l\'app.</string>
   <string name="backup_footer_test_only_label">In pausa</string>
   <string name="backup_footer_test_only_detail">Il backup vero non è ancora acceso</string>
   <string name="backup_footer_lost_before_backup_label">Cancellati prima del backup</string>

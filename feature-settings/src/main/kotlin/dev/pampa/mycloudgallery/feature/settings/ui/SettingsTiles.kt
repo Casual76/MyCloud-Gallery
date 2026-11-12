@@ -2,8 +2,6 @@ package dev.pampa.mycloudgallery.feature.settings.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -35,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChoiceMark
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
@@ -155,15 +154,11 @@ internal fun DescribedRow(
 /**
  * Il segno di una scelta fra piu' opzioni (giro 1 della fase I, CU-16: prima un interruttore per riga, e sembrava che se ne potessero accendere
  * piu' d'uno): il tondo vuoto, e la spunta piena dell'accento sulla scelta di adesso. Decorativo: la riga dice a TalkBack che e' una scelta.
+ * Dal pacchetto U e' quello comune del design system ([GalleryChoiceMark]), lo stesso della pagina Aggiornamenti.
  */
 @Composable
 internal fun ChoiceMark(selected: Boolean) {
-  Icon(
-    imageVector = if (selected) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
-    contentDescription = null,
-    tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-    modifier = Modifier.size(SettingsDimens.ChoiceMark),
-  )
+  GalleryChoiceMark(selected)
 }
 
 /** Una condizione di una scelta: il glifo e la parola che lo legge a voce. */

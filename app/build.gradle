@@ -59,8 +59,10 @@ def releaseVersion = {
   def rows = file.readLines('UTF-8').collect { it.trim() }.findAll { it && !it.startsWith('#') }
   if (rows.isEmpty()) throw new GradleException("release/versions.txt non ha nessuna riga di versione.")
   def columns = rows.last().split(/\s+/)
-  if (columns.length < 2 || !(columns[0] ==~ /\d+\.\d+\.\d+(-beta\.\d+)?/) || !(columns[1] ==~ /[1-9]\d{0,8}/)) {
-    throw new GradleException("Ultima riga di release/versions.txt non valida: servono '<versione> <versionCode>' (per esempio '1.0.0 1').")
+  // Pacchetto U, giro 1: la forma che l'aggiornamento dentro l'app accetta (UpdateRules.VERSION): la beta con due cifre (1.1.0-beta.02), niente v.
+  // Giro 2: [0-9] come in UpdateRules.VERSION e in release-lib-core.ps1 (le tre regole si leggono uguali).
+  if (columns.length < 2 || !(columns[0] ==~ /(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})(-beta\.[0-9]{2})?/) || !(columns[1] ==~ /[1-9][0-9]{0,8}/)) {
+    throw new GradleException("Ultima riga di release/versions.txt non valida: servono '<versione> <versionCode>' (per esempio '1.0.0 1', '1.1.0-beta.01 2').")
   }
   return [name: columns[0], code: columns[1] as int]
 }.call()
@@ -330,6 +332,9 @@ dependencies {
   // (`MediaDescribers.install` con le porte vere di persone e testo letto). `:app` vede di core-release solo stato, fabbrica e fiducia opaca (Phase10ArchitectureTest).
   implementation project(':core-release')
   implementation project(':core-describe')
+  // Pacchetto U (12/11/2026, decisione dell'utente; docs/aggiornamenti-in-app.md): l'aggiornamento dentro l'app (engine-update sotto). Porta nel manifest fuso
+  // REQUEST_INSTALL_PACKAGES e il ricevitore NON esportato degli esiti dell'installazione (elenco chiuso di releaseManifestPolicy, docs/sicurezza.md 4-bis).
+  implementation project(':feature-update')
 
   // --- Il design system (engine-ui porta Compose, Material 3, activity-compose e lifecycle) ----------
   implementation project(':engine-ui')

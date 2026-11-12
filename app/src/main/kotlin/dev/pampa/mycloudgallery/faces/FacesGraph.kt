@@ -31,7 +31,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import dev.pampa.mycloudgallery.feature.people.crops.GuardedPeopleCrops
 
 /**
  * IL MONTAGGIO DI UNA COSA SOLA PER PROCESSO (le persone, [FacesGraph]) e il suo stop (Fase 8, P13; la stessa regola degli album, Fase 7 I11): lo stop
@@ -308,15 +307,14 @@ class FacesGraph internal constructor(
    * Fase 6: in primo piano `RUNNING_LOW` e `RUNNING_CRITICAL`, in cache `MODERATE` e `COMPLETE`; non per il solo passaggio in secondo piano, che e' dove il
    * calcolo notturno gira) e si riaprono da soli al prossimo bisogno; le copertine in memoria si buttano appena l'app non si vede piu'.
    *
-   * I6: e' uno svuotamento **per memoria** ([GuardedPeopleCrops.trim]), non una revoca: le Raccolte tengono i volti che hanno (nessun ritaglio rifatto
-   * ad app nascosta, nessun lampo in primo piano con poca memoria). Con l'interfaccia nascosta i ritagli nuovi aspettano lo **stato** "visibile"
-   * dell'app (`MutableAppContext.foreground`, letto da [GuardedPeopleCrops]: nessun fronte da non perdere). Le revoche restano quelle di privacy:
-   * cancellazione (`clear`), Persone spenta o rimontata (persone montate diverse).
+   * I6: e' uno svuotamento **per memoria** (`GuardedPeopleCrops.trim`), non una revoca: le Raccolte tengono i volti che hanno (nessun ritaglio rifatto
+   * ad app nascosta, nessun lampo in primo piano con poca memoria). Lo svuotamento non fa ritagliare niente: un ritaglio chiesto dopo si serve come
+   * sempre. Le revoche restano quelle di privacy: cancellazione (`clear`), Persone spenta o rimontata (persone montate diverse).
    */
   fun onTrimMemory(level: Int) {
     val live = mount.current ?: return
     if (releasesEnginesAt(level)) live.scope.launch { runCatching { live.releaseEngines() } }
-    if (dropsCoversAt(level)) live.crops.trim(uiHidden = level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)
+    if (dropsCoversAt(level)) live.crops.trim()
   }
 
   // --- Fine -----------------------------------------------------------------------------------------------------------------------------

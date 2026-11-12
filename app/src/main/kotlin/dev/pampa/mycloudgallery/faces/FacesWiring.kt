@@ -398,12 +398,7 @@ object FacesWiring {
         history = history,
       )
       peopleRef[0] = people
-      // I6: dopo uno svuotamento per memoria ad app nascosta i ritagli aspettano il primo piano, letto come livello (`MutableAppContext.foreground`).
-      val crops = GuardedPeopleCrops(
-        AppPeopleCropSource(cells, ai.ai.buffer, catalogOf, CutoutSources(context.contentResolver, gallery.intents::uriOf, nas.imageOrigin, ReplicaHq(nas.blobs, nas.locations))),
-        people,
-        visible = graph.appContext.foreground,
-      )
+      val crops = GuardedPeopleCrops(AppPeopleCropSource(cells, ai.ai.buffer, catalogOf, CutoutSources(context.contentResolver, gallery.intents::uriOf, nas.imageOrigin, ReplicaHq(nas.blobs, nas.locations))), people)
       cropsRef[0] = crops
 
       started.complete(Unit)

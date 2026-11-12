@@ -8,10 +8,10 @@
     <string name="analysis_badge_queued">Da analizzare</string>
     <string name="analysis_badge_first_photo">Prima in coda</string>
     <string name="analysis_badge_first_video">Primo in coda</string>
-    <string name="analysis_badge_analyzing">Analisi in corso</string>
+    <string name="analysis_badge_analyzing">In analisi adesso</string>
     <string name="analysis_badge_unsupported">Non si può analizzare</string>
-    <string name="analysis_badge_model_missing">Serve il modello di analisi</string>
-    <string name="analysis_badge_not_here">L’analisi la fa un altro dispositivo</string>
+    <string name="analysis_badge_model_missing">Manca il modello</string>
+    <string name="analysis_badge_not_here">La analizza un altro dispositivo</string>
     <string name="analysis_hold_hot">Telefono caldo: parte appena si raffredda</string>
     <string name="analysis_hold_nas">Aspetta il NAS</string>
     <string name="analysis_hold_preparation">Si sta preparando</string>

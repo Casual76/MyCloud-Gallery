@@ -85,6 +85,8 @@ fun syntheticLibraryState(
   layoutDispatcher: CoroutineDispatcher = Dispatchers.Default,
   today: LocalDate = SyntheticToday,
   commands: LibraryCommands = SyntheticCommands,
+  /** Grafica XU: lo stato dell'analisi delle foto (la riga nel pop-up della nuvola). */
+  analysis: dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus = dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus.Idle,
 ): LibraryTabState {
   val holder = SyntheticHolder(SyntheticLibrary(seed = seed, count = count, placeIds = FakePlaceData.IDS, mix = mix))
   val repository = FakeTimelineRepository(edit(holder.library.snapshot))
@@ -136,6 +138,7 @@ fun syntheticLibraryState(
     debug = debug,
     nas = MutableStateFlow(nas),
     backup = MutableStateFlow(backup),
+    analysis = MutableStateFlow(analysis),
   )
 }
 

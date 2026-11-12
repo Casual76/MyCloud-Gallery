@@ -1,0 +1,184 @@
+package dev.pampa.mycloudgallery.feature.library.library
+
+import android.app.Application
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.Density
+import com.github.takahirom.roborazzi.captureRoboImage
+import dev.antigravity.fluidengine.foundation.EngineSettings
+import dev.antigravity.fluidengine.foundation.ThemeMode
+import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalHost
+import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidGlassModalHostState
+import dev.antigravity.fluidengine.ui.fluid.fluidGlassModalObscured
+import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidGlassModalHostState
+import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTab
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBar
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarDefaults
+import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
+import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
+import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisWait
+import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
+import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
+import dev.pampa.mycloudgallery.feature.library.grid.RegisterComponentActivity
+import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.RuleChain
+import org.junit.runner.RunWith
+import org.robolectric.ParameterizedRobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+/**
+ * Grafica XU (12/11/2026): la riga dell'analisi delle foto nel pop-up della nuvola, nella scena di produzione (pop-up alla radice, sopra la Libreria
+ * e la pillola), come gli screenshot di G1/I4. In corso (anello, conto, tempo, frecce sull'anello), in coda, in pausa con il perche', un problema;
+ * chiaro e scuro, telefono (360 x 780 dp, il S25) e tablet, piu' il testo a 1,3x. Scrive in docs/screenshots/beta-grafica/X-indice-visibile.
+ */
+internal abstract class LibraryCloudAnalysisScreenshotBase(private val dark: Boolean, private val device: String) {
+
+  val composeRule = createComposeRule()
+
+  @get:Rule
+  val rules: RuleChain = RuleChain.outerRule(RegisterComponentActivity()).around(composeRule)
+
+  private val look: String get() = if (dark) "scuro" else "chiaro"
+
+  private object CloudCommands : LibraryCommands {
+    override val canDeleteFromPhone: Boolean get() = true
+    override val canFreeSpace: Boolean get() = true
+    override suspend fun nasSpace(): LibraryNasSpace = LibraryNasSpace.Ready(usedBytes = 1_250_000_000_000L, totalBytes = 3_600_000_000_000L)
+  }
+
+  private fun shoot(name: String, analysis: LibraryAnalysisStatus, fontScale: Float = 1f) {
+    val state = syntheticLibraryState(
+      nas = LibraryNasStatus.UpToDate(atNasMillis = System.currentTimeMillis()),
+      backup = LibraryBackupStatus.AllSafe(atNasMillis = System.currentTimeMillis()),
+      commands = CloudCommands,
+      analysis = analysis,
+    )
+    composeRule.setContent {
+      MyCloudGalleryTheme(settings = EngineSettings(themeMode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT)) {
+        val density = LocalDensity.current
+        CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) { Scaffolded(state) }
+      }
+    }
+    settle()
+    composeRule.onAllNodesWithContentDescription("Stato della sincronizzazione", substring = true)[0].performClick()
+    settle()
+    val suffix = if (fontScale != 1f) "-testo-grande" else ""
+    composeRule.onRoot().captureRoboImage("$DIR/nuvola-$name-$look-$device$suffix.png")
+  }
+
+  private fun settle() {
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(SETTLE_MILLIS)
+    composeRule.waitForIdle()
+  }
+
+  @Composable
+  private fun Scaffolded(state: LibraryTabState) {
+    var backdrop by remember { mutableStateOf<GlassBackdropState?>(null) }
+    val modal = rememberFluidGlassModalHostState()
+    val rootBackdrop = rememberGlassBackdrop()
+    CompositionLocalProvider(LocalFluidGlassModalHostState provides modal) {
+      Box(modifier = Modifier.fillMaxSize()) {
+        val rootSource = if (modal.isOnScreen) Modifier.glassBackdropSource(rootBackdrop) else Modifier
+        Box(modifier = Modifier.fillMaxSize().then(rootSource).fluidGlassModalObscured()) {
+          LibraryTab(
+            contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
+            backdropOut = { backdrop = it },
+            onOpenViewer = {},
+            onOpenSettings = {},
+            state = state,
+            network = null,
+          )
+          GalleryTabBar(
+            selected = GalleryTab.Library,
+            onSelect = {},
+            backdrop = backdrop,
+            modifier = Modifier
+              .align(Alignment.BottomCenter)
+              .navigationBarsPadding()
+              .padding(horizontal = FluidFloatingTabBarDefaults.HorizontalMargin)
+              .padding(bottom = FluidFloatingTabBarDefaults.BottomMargin),
+          )
+        }
+        FluidGlassModalHost(state = modal, backdrop = rootBackdrop)
+      }
+    }
+  }
+
+  @Test
+  fun inCorso() = shoot("analisi-in-corso", LibraryAnalysisStatus.Running(remaining = 13_760, etaMinutes = 95, ready = 12_300, total = 15_000))
+
+  @Test
+  fun inCorsoTestoGrande() {
+    org.junit.Assume.assumeTrue(device == "telefono" && !dark)
+    shoot("analisi-in-corso", LibraryAnalysisStatus.Running(remaining = 13_760, etaMinutes = 95, ready = 12_300, total = 15_000), fontScale = LARGE_TEXT)
+  }
+
+  @Test
+  fun inPausa() = shoot("analisi-in-pausa", LibraryAnalysisStatus.Paused(LibraryAnalysisWait.THERMAL, remaining = 13_760, ready = 12_300, total = 15_000))
+
+  @Test
+  fun inCoda() {
+    org.junit.Assume.assumeTrue(device == "telefono")
+    shoot("analisi-in-coda", LibraryAnalysisStatus.Queued(remaining = 13_760, ready = 12_300, total = 15_000))
+  }
+
+  @Test
+  fun unProblema() {
+    org.junit.Assume.assumeTrue(device == "telefono")
+    shoot("analisi-problema", LibraryAnalysisStatus.Problem("AI_STORAGE_LOW"))
+  }
+
+  companion object {
+    const val DIR = "../docs/screenshots/beta-grafica/X-indice-visibile"
+    const val SETTLE_MILLIS = 1_500L
+    const val LARGE_TEXT = 1.3f
+
+    fun looks(): List<Array<Any>> = listOf(arrayOf<Any>(false), arrayOf<Any>(true))
+  }
+}
+
+@RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(application = Application::class, qualifiers = "w360dp-h780dp-xhdpi")
+internal class LibraryCloudAnalysisPhoneScreenshotTest(dark: Boolean) : LibraryCloudAnalysisScreenshotBase(dark, "telefono") {
+  companion object {
+    @JvmStatic
+    @ParameterizedRobolectricTestRunner.Parameters(name = "scuro={0}")
+    fun data(): List<Array<Any>> = looks()
+  }
+}
+
+@RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(application = Application::class, qualifiers = "w1280dp-h800dp-xhdpi")
+internal class LibraryCloudAnalysisTabletScreenshotTest(dark: Boolean) : LibraryCloudAnalysisScreenshotBase(dark, "tablet") {
+  companion object {
+    @JvmStatic
+    @ParameterizedRobolectricTestRunner.Parameters(name = "scuro={0}")
+    fun data(): List<Array<Any>> = looks()
+  }
+}

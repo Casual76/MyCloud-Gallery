@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.feature.viewer.details.ViewerFormat
 import dev.pampa.mycloudgallery.feature.viewer.info.analysisNote
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -48,5 +49,17 @@ class AnalysisActionTest {
     val nas = analysisNote(format, MediaAnalysis(MediaAnalysisKind.FIRST, MediaAnalysisHold.NAS), video = true)
     assertThat(nas?.label).isEqualTo("Primo in coda")
     assertThat(nas?.detail).contains("NAS")
+  }
+
+  /** Grafica XU: un vocabolario solo di segni (lo stesso della testata dell'analisi e della nuvola). */
+  @Test
+  fun ogniCasoHaIlSuoSegno() {
+    assertThat(dev.pampa.mycloudgallery.feature.viewer.info.analysisMark(MediaAnalysisKind.READY)).isEqualTo(GalleryIconStatus.Done)
+    assertThat(dev.pampa.mycloudgallery.feature.viewer.info.analysisMark(MediaAnalysisKind.QUEUED)).isEqualTo(GalleryIconStatus.Waiting)
+    assertThat(dev.pampa.mycloudgallery.feature.viewer.info.analysisMark(MediaAnalysisKind.FIRST)).isEqualTo(GalleryIconStatus.Waiting)
+    assertThat(dev.pampa.mycloudgallery.feature.viewer.info.analysisMark(MediaAnalysisKind.ANALYZING)).isEqualTo(GalleryIconStatus.Running)
+    assertThat(dev.pampa.mycloudgallery.feature.viewer.info.analysisMark(MediaAnalysisKind.NOT_HERE)).isEqualTo(GalleryIconStatus.Stopped)
+    assertThat(dev.pampa.mycloudgallery.feature.viewer.info.analysisMark(MediaAnalysisKind.UNSUPPORTED)).isEqualTo(GalleryIconStatus.Stopped)
+    assertThat(dev.pampa.mycloudgallery.feature.viewer.info.analysisMark(MediaAnalysisKind.MODEL_MISSING)).isEqualTo(GalleryIconStatus.Attention)
   }
 }

@@ -2,7 +2,7 @@ package dev.pampa.mycloudgallery.feature.viewer.menu
 
 import android.content.res.Resources
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.ImageSearch
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.viewer.R
@@ -75,7 +75,7 @@ interface ViewerAnalysis {
 /** La voce "Analizza adesso" del menu: c'e' solo quando il media e' in coda (gia' pronto o gia' chiesto: nessun tasto inutile). */
 internal fun analysisMenuEntries(resources: Resources, media: MediaAnalysis, onAnalyze: () -> Unit): List<GalleryMenuEntry> =
   if (media.kind == MediaAnalysisKind.QUEUED) {
-    listOf(GalleryMenuEntry.Item(resources.getString(R.string.analysis_now), onAnalyze, Icons.Rounded.AutoAwesome))
+    listOf(GalleryMenuEntry.Item(resources.getString(R.string.analysis_now), onAnalyze, Icons.Rounded.ImageSearch))
   } else {
     emptyList()
   }

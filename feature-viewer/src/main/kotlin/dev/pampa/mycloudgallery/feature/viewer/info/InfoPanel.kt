@@ -482,7 +482,7 @@ internal fun InfoContent(
   accent: Color? = null,
   backupPending: Boolean = false,
   /** Pacchetto X: la capsula dell'analisi sotto quella del backup; [onAnalysis] la rende il tasto "Analizza adesso" quando e' in coda. */
-  analysis: GalleryFooterNote? = null,
+  analysis: AnalysisBadge? = null,
   onAnalysis: (() -> Unit)? = null,
 ) {
   val scheme = MaterialTheme.colorScheme
@@ -530,7 +530,8 @@ internal fun InfoContent(
       backupPending -> FluidSkeleton(modifier = Modifier.width(CapsuleSkeletonWidth), height = CapsuleSkeletonHeight, shape = FluidCapsuleShape)
     }
     // 2b. Pacchetto X: l'analisi per la ricerca, con lo stato prima del tocco (in coda, la capsula e' "Analizza adesso").
-    if (analysis != null) GalleryFooterEntry(note = analysis, onClick = onAnalysis, alignment = Alignment.Start)
+    // Grafica XU: la piastrella dell'analisi con il segno di stato (lo stesso vocabolario della testata), in coda il tasto.
+    if (analysis != null) AnalysisCapsule(badge = analysis, onClick = onAnalysis, actionLabel = stringResource(R.string.analysis_now))
 
     // 3. Le persone: le facce, subito sotto la testa.
     if (leading.isNotEmpty()) InfoSections(leading)

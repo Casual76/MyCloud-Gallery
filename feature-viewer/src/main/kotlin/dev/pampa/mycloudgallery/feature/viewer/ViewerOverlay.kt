@@ -135,7 +135,7 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.backupMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.menu.similarMenuEntries
 import dev.antigravity.fluidengine.ui.haptics.FluidHapticEvent
 import dev.antigravity.fluidengine.ui.haptics.LocalFluidHaptics
-import dev.pampa.mycloudgallery.feature.viewer.info.analysisNote
+import dev.pampa.mycloudgallery.feature.viewer.info.analysisBadge
 import dev.pampa.mycloudgallery.feature.viewer.menu.AnalysisFeedback
 import dev.pampa.mycloudgallery.feature.viewer.menu.AnalysisObserved
 import dev.pampa.mycloudgallery.feature.viewer.menu.MediaAnalysis
@@ -1232,7 +1232,7 @@ private fun ViewerOverlays(
     val backupNote = remember(backupState, onPhone, format) { backupState?.let { backupNote(format, it, onPhone) } }
     // Pacchetto X: la capsula dell'analisi (mai dai Nascosti); in coda e' lei il tasto "Analizza adesso".
     val analysisNote = remember(analysisMedia, kind, format) {
-      if (request.secure) null else analysisNote(format, analysisMedia, video = kind == MediaKind.VIDEO)
+      if (request.secure) null else analysisBadge(format, analysisMedia, video = kind == MediaKind.VIDEO)
     }
     val onAnalysisNow: (() -> Unit)? = if (!request.secure && analysisMedia.kind == MediaAnalysisKind.QUEUED) {
       { analysisFeedback.asked(currentId); services.analysis?.analyzeNow(currentId) }

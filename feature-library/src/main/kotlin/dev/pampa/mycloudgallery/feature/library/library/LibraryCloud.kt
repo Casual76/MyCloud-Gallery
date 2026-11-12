@@ -20,7 +20,7 @@ import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.Key
-import androidx.compose.material.icons.rounded.Memory
+import androidx.compose.material.icons.rounded.ImageSearch
 import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Sync
@@ -41,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -74,6 +75,7 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoGlyph
 import dev.pampa.mycloudgallery.core.designsystem.design.glyph
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryStatusMark
 import dev.pampa.mycloudgallery.core.designsystem.icon.glyph
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRing
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRingDefaults
@@ -429,7 +431,7 @@ internal fun LibraryCloudPanel(
       )
     }
     for (item in cloud.activity) {
-      ActivityRow(note = noteOf(item), gauge = gaugeOf(item), onClick = {
+      ActivityRow(note = noteOf(item), gauge = gaugeOf(item), mark = markOf(item), onClick = {
         close()
         actionOf(item, actions)()
       })
@@ -539,16 +541,12 @@ private fun gaugeOf(item: CloudItem): CloudGauge? = when (item) {
     }
     else -> null
   }
-  is CloudItem.Analysis -> {
-    val s = item.status
-    val (ready, total, eta) = when (s) {
-      is LibraryAnalysisStatus.Running -> Triple(s.ready, s.total, s.etaMinutes)
-      is LibraryAnalysisStatus.Queued -> Triple(s.ready, s.total, null)
-      is LibraryAnalysisStatus.Paused -> Triple(s.ready, s.total, null)
-      else -> Triple(null, null, null)
-    }
+  // Grafica XU: il conto solo mentre analizza; in coda o in pausa la riga dice lo stato e il perche' (l'anello tiene comunque il percento).
+  is CloudItem.Analysis -> (item.status as? LibraryAnalysisStatus.Running)?.let { s ->
+    val ready = s.ready
+    val total = s.total
     if (ready != null && total != null && total > 0) {
-      CloudGauge(Icons.Rounded.Memory, ofTotal(GalleryNumbers.format(ready), GalleryNumbers.format(total)), eta?.let { stringResource(R.string.library_cloud_analysis_eta, it) })
+      CloudGauge(AnalysisGlyph, ofTotal(GalleryNumbers.format(ready), GalleryNumbers.format(total)), s.etaMinutes?.let { stringResource(R.string.library_cloud_analysis_eta, it) })
     } else {
       null
     }
@@ -568,7 +566,7 @@ private fun etaText(etaMillis: Long?): String? = etaMillis?.let { withEta(null, 
  * freccia. Per TalkBack una descrizione sola, la frase intera di prima.
  */
 @Composable
-private fun ActivityRow(note: GalleryFooterNote, gauge: CloudGauge?, onClick: () -> Unit) {
+private fun ActivityRow(note: GalleryFooterNote, gauge: CloudGauge?, onClick: () -> Unit, mark: GalleryIconStatus? = null) {
   val ink = MaterialTheme.colorScheme.onSurface
   // CU-30: lo stesso avanzamento ha lo stesso colore ovunque, quello del backup.
   val accent = galleryRingColor(GalleryIconFamily.Backup)
@@ -601,6 +599,16 @@ private fun ActivityRow(note: GalleryFooterNote, gauge: CloudGauge?, onClick: ()
           GalleryProgressRing(progress = 0f, modifier = Modifier.fillMaxSize(), color = accent, strokeWidth = GaugeStroke)
           Icon(imageVector = note.glyph ?: Icons.Rounded.HourglassTop, contentDescription = null, tint = accent, modifier = Modifier.size(GaugeGlyph))
         }
+      }
+      // Grafica XU: il segno di stato appoggiato sull'anello, come nella testata dell'analisi (solo per le voci che lo passano).
+      if (mark != null) {
+        GalleryStatusMark(
+          status = mark,
+          size = RowMark,
+          ring = MaterialTheme.colorScheme.surfaceContainerHigh,
+          contentDescription = null,
+          modifier = Modifier.align(Alignment.BottomEnd).offset(x = RowMarkOverhang, y = RowMarkOverhang),
+        )
       }
     }
     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(LineGapTight)) {
@@ -783,6 +791,18 @@ private fun actionLabel(item: CloudItem): String = stringResource(
 )
 
 /** Il segno del tasto sotto un problema: la Diagnostica lo stetoscopio, WireGuard la VPN, la password la chiave, il backup la nuvola. */
+/** Il segno di stato sull'anello di una riga di lavoro: per ora solo l'analisi (lo stesso vocabolario della sua testata). */
+private fun markOf(item: CloudItem): GalleryIconStatus? = when (item) {
+  is CloudItem.Analysis -> when (val s = item.status) {
+    is LibraryAnalysisStatus.Running -> GalleryIconStatus.Running
+    is LibraryAnalysisStatus.Queued -> GalleryIconStatus.Waiting
+    is LibraryAnalysisStatus.Paused -> if (s.reason == LibraryAnalysisWait.PREPARATION) GalleryIconStatus.Waiting else GalleryIconStatus.Paused
+    is LibraryAnalysisStatus.Problem -> GalleryIconStatus.Problem
+    else -> null
+  }
+  else -> null
+}
+
 private fun actionGlyph(item: CloudItem): ImageVector = when (item) {
   is CloudItem.Network -> when (item.status.action) {
     LibraryNetworkAction.DIAGNOSTICS -> Icons.Rounded.MonitorHeart
@@ -791,7 +811,7 @@ private fun actionGlyph(item: CloudItem): ImageVector = when (item) {
   }
   is CloudItem.Nas -> Icons.Rounded.MonitorHeart
   is CloudItem.Backup -> Icons.Rounded.Backup
-  is CloudItem.Analysis -> Icons.Rounded.Memory
+  is CloudItem.Analysis -> AnalysisGlyph
 }
 
 /** Vero se la frase dice le stesse parole del tasto (a meno di maiuscole e punto finale): sotto la capsula non si ripete. */
@@ -869,7 +889,11 @@ internal const val SpaceRowTag: String = "nuvola-spazio"
 internal const val ProblemDetailTag: String = "nuvola-frase"
 internal const val PauseTitleTag: String = "nuvola-titolo-pausa"
 
-/** Pacchetto X: la riga dell'analisi nel pannello: due parole, quante restano (o il motivo della pausa), l'anello dalle foto pronte. */
+/**
+ * Pacchetto X, grafica XU: la riga dell'analisi nel pannello. In corso: l'anello con il percento, il conto delle pronte e il tempo (come il backup);
+ * in coda o in pausa: due parole e il perche' in una riga, l'anello che tiene il percento e il segno dello stato sull'arco. L'icona e' quella
+ * dell'analisi (la foto con la lente), la stessa della pagina "Analisi delle foto" e del visore.
+ */
 @Composable
 private fun analysisNoteOf(status: LibraryAnalysisStatus): GalleryFooterNote {
   val remaining = when (status) {
@@ -883,7 +907,7 @@ private fun analysisNoteOf(status: LibraryAnalysisStatus): GalleryFooterNote {
     is LibraryAnalysisStatus.Running -> GalleryFooterNote(
       tone = GalleryFooterTone.Working,
       label = stringResource(R.string.library_cloud_analysis_running),
-      glyph = Icons.Rounded.Memory,
+      glyph = AnalysisGlyph,
       detail = rest,
       progress = status.progressOrNull(),
       busy = status.progressOrNull() == null,
@@ -891,25 +915,33 @@ private fun analysisNoteOf(status: LibraryAnalysisStatus): GalleryFooterNote {
     is LibraryAnalysisStatus.Queued -> GalleryFooterNote(
       tone = GalleryFooterTone.Waiting,
       label = stringResource(R.string.library_cloud_analysis_queued),
-      glyph = Icons.Rounded.Memory,
-      detail = rest,
+      glyph = AnalysisGlyph,
+      detail = stringResource(R.string.library_cloud_analysis_queued_line),
       progress = status.progressOrNull(),
+      description = listOfNotNull(stringResource(R.string.library_cloud_analysis_queued), rest).joinToString(". "),
     )
-    is LibraryAnalysisStatus.Paused -> GalleryFooterNote(
-      tone = GalleryFooterTone.Waiting,
-      label = stringResource(analysisWaitRes(status.reason)),
-      glyph = Icons.Rounded.Memory,
-      detail = rest,
-      progress = status.progressOrNull(),
-    )
+    is LibraryAnalysisStatus.Paused -> {
+      val why = stringResource(analysisWaitRes(status.reason))
+      GalleryFooterNote(
+        tone = GalleryFooterTone.Waiting,
+        label = stringResource(R.string.library_cloud_analysis_paused),
+        glyph = AnalysisGlyph,
+        detail = why,
+        progress = status.progressOrNull(),
+        description = listOfNotNull(stringResource(R.string.library_cloud_analysis_paused), why, rest).joinToString(". "),
+      )
+    }
     is LibraryAnalysisStatus.Problem -> GalleryFooterNote(
       tone = GalleryFooterTone.Attention,
       label = stringResource(R.string.library_cloud_analysis_problem),
-      glyph = Icons.Rounded.Memory,
+      glyph = AnalysisGlyph,
     )
-    else -> GalleryFooterNote(tone = GalleryFooterTone.Calm, label = stringResource(R.string.library_cloud_analysis_queued), glyph = Icons.Rounded.Memory)
+    else -> GalleryFooterNote(tone = GalleryFooterTone.Calm, label = stringResource(R.string.library_cloud_analysis_queued), glyph = AnalysisGlyph)
   }
 }
+
+/** L'icona dell'analisi delle foto: la foto con la lente (la stessa di Ricerca e modelli e del visore). */
+private val AnalysisGlyph: ImageVector get() = Icons.Rounded.ImageSearch
 
 private fun analysisWaitRes(reason: LibraryAnalysisWait): Int = when (reason) {
   LibraryAnalysisWait.NIGHT_WINDOW -> R.string.library_cloud_analysis_wait_window
@@ -924,3 +956,7 @@ private fun analysisWaitRes(reason: LibraryAnalysisWait): Int = when (reason) {
   LibraryAnalysisWait.PREPARATION -> R.string.library_cloud_analysis_wait_preparation
   LibraryAnalysisWait.ANDROID_LIMIT, LibraryAnalysisWait.PROFILE, LibraryAnalysisWait.OTHER -> R.string.library_cloud_analysis_wait_other
 }
+
+/** Il segno di stato sull'anello di una riga di lavoro, e quanto sporge oltre l'anello. */
+private val RowMark: Dp = 18.dp
+private val RowMarkOverhang: Dp = 3.dp

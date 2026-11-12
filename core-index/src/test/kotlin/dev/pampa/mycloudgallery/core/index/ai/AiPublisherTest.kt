@@ -174,8 +174,8 @@ class AiPublisherTest {
 
     // Un file cambia (scansione: timbro nuovo) mentre aspetta.
     ai.content.remove(real, files[3].contentKey)
-    // L'utente spegne D31 (fine della 4A): processo nuovo con le regole nuove, stesso database.
-    phone.flags = FeatureFlags.forBuild(debugBuild = true, indexPublishTestSharesOnly = false)
+    // L'utente spegne D31 (il passo unico del 12/11/2026): processo nuovo con i valori di release di adesso, stesso database.
+    phone.flags = FeatureFlags.RELEASE
     publisher = phone.publisher()
     publisher.recover()
     assertThat(publisher.pending.value.waitingForShare).isEqualTo(8)

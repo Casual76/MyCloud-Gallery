@@ -225,7 +225,7 @@ class PersonalWorld {
     share: String = privateShare(account),
     signer: Signer = trust.approveNewDevice(name = "Telefono $account", nasUser = account),
     gate: MapWriteGate = MapWriteGate(),
-    flags: FeatureFlags = FeatureFlags.RELEASE,
+    flags: FeatureFlags = FencedFlags.of(),
     limits: SyncLimits = SyncLimits(),
   ): PersonalDevice = PersonalDevice(this, signer, account, skewMillis, projection, ledger, share, gate, flags, limits)
 }

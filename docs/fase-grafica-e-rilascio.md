@@ -77,7 +77,7 @@ Il giudizio dell'utente: la grafica della Libreria e' debole. I punti principali
 
 In ordine:
 1. **L'utente** crea K1 e K2 (`tools\release\manifest-tool.ps1 keys`, K2 offline). Poi un agente mette `PROVISIONAL = false`. La firma `pampa.jks` e' gia' configurata e l'impronta e' in `sicurezza.md` par. 5.6.
-2. **Le recinzioni** D12, D30, D34 e F4-D31 si spengono **tutte insieme**, solo con il si' dell'utente: vedi `decisioni.md`, "Decisioni dell'utente del 31/10", e `tools/release/recinzioni.json`. Il passaggio alle share vere (par. 2.10) vuole un si' con i numeri della "Simulazione del passo".
+2. **Le recinzioni** D12, D30, D34 e F4-D31: **spente insieme il 12/11/2026** con il si' dell'utente (il passo unico, par. 2.10; `decisioni.md`, "Il passo unico: le quattro recinzioni spente", e `tools/release/recinzioni.json` con il consenso). Restano: `check.ps1` sulla release con le quattro "spenta", la build sull'S25, il primo backup e la fotografia "dopo" con il confronto.
 3. **Finestra con l'S25**: benchmark e riferimento fresco. Va decisa con l'utente quanta sicurezza sul campo rifare prima della beta. La proposta minima e' S7: le buste del manifest, cioe' il kill switch, verificate con un lettore della Diagnostica completo.
 4. **Decisione dell'utente su 5B I3**: "Elimina dal telefono" dalla selezione della Libreria passa dal foglio "Prima mettilo al sicuro" quando il backup e' attivo.
 5. **L'utente toglie** dal registro della famiglia vera il dispositivo della release candidata del 02/11.

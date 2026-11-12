@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.faces.sync
 
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
+import dev.pampa.mycloudgallery.core.faces.FencedFlags
 import dev.pampa.mycloudgallery.core.faces.contract.AssignOrigin
 import dev.pampa.mycloudgallery.core.faces.contract.FaceBody
 import dev.pampa.mycloudgallery.core.faces.contract.FaceEntry
@@ -42,7 +43,7 @@ import kotlin.time.Duration.Companion.hours
  * replica e il suo pubblicatore veri sopra `NasFacesRemote`. Dove stanno archivio e store lo dice [storage]: in memoria (P3, il riferimento)
  * o sul database dei volti cifrato (P6, `store/RoomSyncStorage`) con le stesse prove. Solo identita' sintetiche, nomi inventati.
  */
-class FacesSyncWorld(val flags: FeatureFlags = FeatureFlags.RELEASE, val storage: SyncStorage = SyncStorage.Memory) {
+class FacesSyncWorld(val flags: FeatureFlags = FencedFlags.of(), val storage: SyncStorage = SyncStorage.Memory) {
   val clock = FakeFacesClock()
   val family = FacesTestFamily(clock)
   val generation: FaceGeneration = FaceGeneration.fromBytes(ByteArray(16) { (it * 13 + 1).toByte() })

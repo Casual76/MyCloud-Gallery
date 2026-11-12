@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.index.ai
 
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
+import dev.pampa.mycloudgallery.core.index.FencedFlags
 import dev.pampa.mycloudgallery.core.index.contract.FlushReason
 import dev.pampa.mycloudgallery.core.index.contract.IndexWriteGate
 import dev.pampa.mycloudgallery.core.index.contract.MetaChange
@@ -147,7 +148,7 @@ class AiDevice(val ai: AiWorld, val base: TestDevice) {
   val share: String = "test-comune"
 
   var gate: MapWriteGate = MapWriteGate()
-  var flags: FeatureFlags = FeatureFlags.RELEASE
+  var flags: FeatureFlags = FencedFlags.of()
   val counters = AiIndexCounters()
 
   // Pubblicazione `ai` (database) e dell'indice (database e pacco dei blob).

@@ -71,8 +71,8 @@ class AppFacesClock(
 }
 
 /**
- * Il cancello delle scritture dei volti (§1.4, D34, D35): la recinzione D34 (`FeatureFlags.facesSyncMayUse`, accesa **anche in release** fino al
- * consenso Q5), la recinzione D33 delle prove sul campo (`ShareFence`, **solo debug**: [guard] null in release) e i cancelli delle teste dell'indice
+ * Il cancello delle scritture dei volti (§1.4, D34, D35): la recinzione D34 (`FeatureFlags.facesSyncMayUse`, spenta dal passo unico del
+ * 12/11/2026 con il consenso), la recinzione D33 delle prove sul campo (`ShareFence`, **solo debug**: [guard] null in release) e i cancelli delle teste dell'indice
  * ([index]: emergenza, fiducia, congelamento, salto dell'ora, sola lettura). Non quello di F4-D31 (l'indice "solo locale"): i dati dei volti hanno la
  * loro recinzione e il loro consenso. Senza NAS o senza account: [FacesWriteBlock.NO_NAS]. Vale per la pubblicazione, le prenotazioni e la
  * cancellazione sul NAS (con il congelamento questa **aspetta**, quella locale no).

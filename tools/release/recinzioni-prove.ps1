@@ -3,10 +3,12 @@
   Prove del controllo delle recinzioni (Fase 10 P10, tools\release\recinzioni.ps1) con COPIE TEMPORANEE sotto build\prova-recinzioni\.
 
 .DESCRIPTION
-  Non cambia mai FeatureFlags.kt ne' recinzioni.json veri: le quattro recinzioni "spente" esistono solo in copie sotto build\. Prova:
-  il lettore del sorgente (accese, spente, miste, forma illeggibile), il lettore del bytecode su due dump veri di dexdump della classe
-  FeatureFlags di una release con le recinzioni accese e di una con le quattro spente (tools\release\fixtures\), il consenso unico
-  (riga di docs\decisioni.md, data, quattro id) e il ritorno indietro parziale. Codice di uscita 0 solo se tutte le prove passano.
+  Non cambia mai FeatureFlags.kt ne' recinzioni.json veri: gli stati provati (accese, spente, miste) esistono solo in copie in memoria o
+  sotto build\, ricavate da quelli veri. Prova: il lettore del sorgente (accese, spente, miste, forma illeggibile), il lettore del bytecode
+  su due dump veri di dexdump della classe FeatureFlags di una release con le recinzioni accese e di una con le quattro spente
+  (tools\release\fixtures\), il consenso unico (riga di docs\decisioni.md, data, quattro id), il ritorno indietro parziale e i file veri
+  del repository nello stato che dichiarano (dal passo unico del 12/11/2026: le quattro spente, con il consenso). Codice di uscita 0 solo
+  se tutte le prove passano.
 #>
 [CmdletBinding()]
 param()
@@ -37,24 +39,36 @@ $realJson = Join-Path $PSScriptRoot "recinzioni.json"
 $realFlags = Join-Path $root "core-common\src\main\kotlin\dev\pampa\mycloudgallery\core\common\featureflags\FeatureFlags.kt"
 $realDecisions = Join-Path $root "docs\decisioni.md"
 $flagsText = [System.IO.File]::ReadAllText($realFlags, $utf8)
+$jsonText = [System.IO.File]::ReadAllText($realJson, $utf8)
 
-function New-Config() { return (Read-RecinzioniJson $realJson) }
 function Set-Declared($cfg, [string[]]$off) { foreach ($r in $cfg.recinzioni) { $r.stato = $(if ($off -contains $r.id) { "spenta" } else { "accesa" }) } }
+# La forma di recinzioni.json vero, riportata allo stato "tutte accese, consenso vuoto, nessun ritorno parziale": le prove partono sempre
+# da qui, qualunque sia lo stato del repository (prima o dopo il passo unico).
+function New-Config() {
+  $cfg = Read-RecinzioniJson $realJson
+  Set-Declared $cfg @()
+  $cfg.consenso.data = ""; $cfg.consenso.marcatore = ""
+  $cfg.ritornoParziale.dichiarato = $false; $cfg.ritornoParziale.data = ""; $cfg.ritornoParziale.marcatore = ""; $cfg.ritornoParziale.motivo = ""
+  return $cfg
+}
 function Set-Consent($cfg) { $cfg.consenso.data = $date; $cfg.consenso.marcatore = $marker }
 function Set-Partial($cfg) { $cfg.ritornoParziale.dichiarato = $true; $cfg.ritornoParziale.data = "2026-11-04"; $cfg.ritornoParziale.marcatore = $partialMarker; $cfg.ritornoParziale.motivo = "prova" }
 
-# Il sorgente con le recinzioni indicate spente (la copia vive solo in memoria o sotto build\).
+# Il sorgente con le recinzioni indicate spente e tutte le altre accese, qualunque sia lo stato del file vero (la copia vive solo in
+# memoria o sotto build\).
 function Get-FlippedFlags([string]$text, [string[]]$off) {
   $map = @{
-    "F4-D31" = @('(?m)^(\s+)indexPublishTestSharesOnly = true,', '${1}indexPublishTestSharesOnly = false,')
-    "F5-D12" = @('(private const val BACKUP_TEST_SHARES_ONLY: Boolean = )true', '${1}false')
-    "F7-D30" = @('(private const val SHARED_ALBUMS_TEST_SHARES_ONLY: Boolean = )true', '${1}false')
-    "F8-D34" = @('(private const val FACES_SYNC_TEST_SHARES_ONLY: Boolean = )true', '${1}false')
+    "F4-D31" = '(?m)^(\s+indexPublishTestSharesOnly = )(true|false),'
+    "F5-D12" = '(private const val BACKUP_TEST_SHARES_ONLY: Boolean = )(true|false)\b'
+    "F7-D30" = '(private const val SHARED_ALBUMS_TEST_SHARES_ONLY: Boolean = )(true|false)\b'
+    "F8-D34" = '(private const val FACES_SYNC_TEST_SHARES_ONLY: Boolean = )(true|false)\b'
   }
-  foreach ($id in $off) {
-    $new = [regex]::Replace($text, $map[$id][0], $map[$id][1])
-    if ($new -eq $text) { throw "FeatureFlags.kt non ha la forma attesa per $id" }
-    $text = $new
+  foreach ($id in $script:FenceIds) {
+    $rx = [regex]$map[$id]
+    if ($rx.Matches($text).Count -ne 1) { throw "FeatureFlags.kt non ha la forma attesa per $id" }
+    $value = $(if ($off -contains $id) { "false" } else { "true" })
+    $suffix = $(if ($id -eq "F4-D31") { "," } else { "" })
+    $text = $rx.Replace($text, '${1}' + $value + $suffix)
   }
   return $text
 }
@@ -69,7 +83,8 @@ $consentLine = "| consenso | $marker | $date | F4-D31 F5-D12 F7-D30 F8-D34 passo
 $partialLine = "| ritorno | $partialMarker | 2026-11-04 | F5-D12 torna accesa |"
 
 $all = $script:FenceIds
-$srcOn = Get-FlagsSourceStates $flagsText
+$flagsOn = Get-FlippedFlags $flagsText @()
+$srcOn = Get-FlagsSourceStates $flagsOn
 $srcOff = Get-FlagsSourceStates (Get-FlippedFlags $flagsText $all)
 $dexOn = Get-DexStatesOf "featureflags-accesa.dexdump.txt"
 $dexOff = Get-DexStatesOf "featureflags-spenta.dexdump.txt"
@@ -79,7 +94,7 @@ Assert-That "accese: le quattro 'accesa'" (@($all | Where-Object { $srcOn[$_] -e
 Assert-That "spente (copia in memoria): le quattro 'spenta'" (@($all | Where-Object { $srcOff[$_] -eq "spenta" }).Count -eq 4)
 $srcMixed = Get-FlagsSourceStates (Get-FlippedFlags $flagsText @("F5-D12"))
 Assert-That "una sola spenta: solo F5-D12 'spenta'" ($srcMixed["F5-D12"] -eq "spenta" -and $srcMixed["F4-D31"] -eq "accesa" -and $srcMixed["F7-D30"] -eq "accesa" -and $srcMixed["F8-D34"] -eq "accesa")
-$srcOdd = Get-FlagsSourceStates ($flagsText -replace '(?m)^(\s+)indexPublishTestSharesOnly = true,', '${1}indexPublishTestSharesOnly = unaAltraCosa,')
+$srcOdd = Get-FlagsSourceStates ($flagsOn -replace '(?m)^(\s+)indexPublishTestSharesOnly = true,', '${1}indexPublishTestSharesOnly = unaAltraCosa,')
 Assert-That "forma illeggibile: 'ignota', mai indovinata" ($srcOdd["F4-D31"] -eq "ignota" -and $srcOdd["F5-D12"] -eq "accesa")
 
 Write-Host "Lettore del bytecode (dump veri di una release accesa e di una con le quattro spente)"
@@ -95,13 +110,23 @@ Assert-That "getter tolto da R8: 'incerta' con il motivo" ($noGetter["F8-D34"].S
 $empty = Get-FenceDexStates (Get-FlagsDexFacts @())
 Assert-That "classe non letta: 'incerta' per tutte" (@($all | Where-Object { $empty[$_].Stato -eq "incerta" }).Count -eq 4)
 
-Write-Host "Stato 'tutte accese' (com'e' oggi)"
+Write-Host "I file veri del repository (dal passo unico del 12/11/2026: le quattro spente, un consenso)"
+$realCfg = Read-RecinzioniJson $realJson
+$realSrc = Get-FlagsSourceStates $flagsText
+Assert-That "recinzioni.json di oggi: quattro spente, consenso con data e marcatore, nessun ritorno parziale" (@($realCfg.recinzioni | Where-Object { $_.stato -eq "spenta" }).Count -eq 4 -and $realCfg.consenso.data -and $realCfg.consenso.marcatore -and -not $realCfg.ritornoParziale.dichiarato)
+Assert-That "FeatureFlags.kt di oggi: le quattro 'spenta'" (@($all | Where-Object { $realSrc[$_] -eq "spenta" }).Count -eq 4)
+# Il bytecode che avrebbe la release costruita da questi file: per ogni recinzione il dump dello stato che il sorgente dichiara.
+$realDex = @{}
+foreach ($id in $all) { $realDex[$id] = $(if ($realSrc[$id] -eq "spenta") { $dexOff[$id] } else { $dexOn[$id] }) }
+$real = Invoke-RecinzioniCheck $realJson $realFlags $realDecisions $realDex (Get-Date)
+Assert-That "i file veri del repository con il bytecode del loro stato: nessun problema" ($real.Count -eq 0) ($real -join "; ")
+$real = Invoke-RecinzioniCheck $realJson $realFlags $realDecisions $dexOn (Get-Date)
+Assert-That "i file veri del repository con il bytecode di una release ancora accesa: il controllo fallisce per ognuna" (@($real | Where-Object { $_ -match "il bytecode della release la ha accesa" }).Count -eq 4) ($real -join "; ")
+
+Write-Host "Stato 'tutte accese' (prima del passo, o dopo un ritorno indietro completo)"
 $cfg = New-Config
-Assert-That "recinzioni.json di oggi: quattro accese e consenso vuoto" (@($cfg.recinzioni | Where-Object { $_.stato -eq "accesa" }).Count -eq 4 -and -not $cfg.consenso.data -and -not $cfg.consenso.marcatore -and -not $cfg.ritornoParziale.dichiarato)
 Assert-That "tutte accese, solo sorgente: nessun problema" ((Test-RecinzioniStato $cfg $srcOn $null (Get-Decisions @()) $today).Count -eq 0)
 Assert-That "tutte accese, sorgente e bytecode: nessun problema" ((Test-RecinzioniStato $cfg $srcOn $dexOn (Get-Decisions @()) $today).Count -eq 0)
-$real = Invoke-RecinzioniCheck $realJson $realFlags $realDecisions $dexOn $today
-Assert-That "i file veri del repository (accese) con il bytecode accesa: nessun problema" ($real.Count -eq 0) ($real -join "; ")
 $c = New-Config; Set-Consent $c
 Assert-That "accese con un consenso scritto: problema" (Test-Has (Test-RecinzioniStato $c $srcOn $dexOn (Get-Decisions @($consentLine)) $today) "non e' vuoto")
 
@@ -181,11 +206,13 @@ $c = New-Config; Set-Declared $c $all; Set-Consent $c
 [System.IO.File]::WriteAllLines($tmpDec, (Get-Decisions @($consentLine)), $utf8)
 $p = Invoke-RecinzioniCheck $tmpJson $tmpFlags $tmpDec $dexOff $today
 Assert-That "quattro spente su file temporanei, consenso e bytecode spenti: nessun problema" ($p.Count -eq 0) ($p -join "; ")
-$p = Invoke-RecinzioniCheck $tmpJson $realFlags $tmpDec $dexOff $today
-Assert-That "stessi file ma FeatureFlags.kt vero (accese): il controllo fallisce" ($p.Count -eq 4)
+$tmpFlagsOn = Join-Path $work "FeatureFlags-accese.kt"
+[System.IO.File]::WriteAllText($tmpFlagsOn, $flagsOn, $utf8)
+$p = Invoke-RecinzioniCheck $tmpJson $tmpFlagsOn $tmpDec $dexOff $today
+Assert-That "stessi file ma FeatureFlags.kt con le quattro accese: il controllo fallisce" (@($p | Where-Object { $_ -match "FeatureFlags.kt la ha accesa" }).Count -eq 4) ($p -join "; ")
 $flagsAfter = [System.IO.File]::ReadAllText($realFlags, $utf8)
 Assert-That "FeatureFlags.kt vero non e' stato toccato dalle prove" ($flagsAfter -eq $flagsText)
-Assert-That "recinzioni.json vero non e' stato toccato dalle prove" (@((Read-RecinzioniJson $realJson).recinzioni | Where-Object { $_.stato -eq "accesa" }).Count -eq 4)
+Assert-That "recinzioni.json vero non e' stato toccato dalle prove" ([System.IO.File]::ReadAllText($realJson, $utf8) -eq $jsonText)
 
 if ($failures.Count -gt 0) {
   Write-Host ("recinzioni: {0} prove, {1} fallite" -f $count, $failures.Count) -ForegroundColor Red

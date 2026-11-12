@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.faces.sync
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
 import dev.pampa.mycloudgallery.core.faces.contract.FacesPublishOutcome
 import dev.pampa.mycloudgallery.core.faces.contract.FacesPublishRules
 import dev.pampa.mycloudgallery.core.faces.contract.FacesState
@@ -148,7 +149,10 @@ open class FacesPublisherTest {
     assertThat(phone.written).isNotEmpty()
   }
 
-  /** D34, Q5: sulle share vere niente sul NAS (ne' letture ne' scritture) finche' l'utente non dice di si'; sulle share di prova si'. */
+  /**
+   * D34, Q5: con la recinzione accesa (il mondo di serie, `FencedFlags`: com'era la release prima del passo unico del 12/11/2026) sulle share vere
+   * niente sul NAS, ne' letture ne' scritture; sulle share di prova si'.
+   */
   @Test
   fun recinzioneDelleShareVere() = runTest {
     val world = newWorld()
@@ -169,6 +173,16 @@ open class FacesPublisherTest {
     assertThat(test.publisher.flush(FlushReason.UNIT_FINISHED)).isEqualTo(FacesPublishOutcome.Blocked(FacesWriteBlock.TEST_SHARES_ONLY))
     test.switch.state.value = FacesState.On(world.generation, HereState.ACTIVE)
     assertThat(test.publisher.flush(FlushReason.UNIT_FINISHED)).isInstanceOf(FacesPublishOutcome.Published::class.java)
+  }
+
+  /** Il passo unico del 12/11/2026 (D35): con i valori di release di adesso una share vera riceve i dati dei volti; gli altri cancelli sono provati sopra. */
+  @Test
+  fun passoUnico_conLaReleaseDiAdessoUnaShareVeraSiPubblica() = runTest {
+    val world = FacesSyncWorld(FeatureFlags.RELEASE)
+    val real = world.device("Telefono", "mamma", share = "foto-mamma")
+    real.compute(1)
+    assertThat(real.publisher.flush(FlushReason.UNIT_FINISHED)).isInstanceOf(FacesPublishOutcome.Published::class.java)
+    assertThat(real.share.writes).isNotEmpty()
   }
 
   /** D35: i cancelli delle scritture (congelamento, emergenza, salto dell'ora, fiducia, sola lettura) e il dispositivo non piu' approvato. */

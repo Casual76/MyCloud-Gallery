@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.faces.chaos
 
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
+import dev.pampa.mycloudgallery.core.faces.FencedFlags
 import dev.pampa.mycloudgallery.core.faces.contract.ClusterSnapshot
 import dev.pampa.mycloudgallery.core.faces.contract.FacesComputeLimits
 import dev.pampa.mycloudgallery.core.faces.contract.FacesState
@@ -90,7 +91,7 @@ internal class ChaosSnapshots(private val world: ChaosWorld, private val verifie
     val archive = InMemoryFacesArchive(generation)
     val sync = NasFacesSync(
       first.identity, switch, world.nas.observer(first), FacesArchives { archive }, InMemoryFacesReplicaStore(), FacesWriteGate { null }, world.clock,
-      NoFacesPublisher, FeatureFlags.RELEASE,
+      NoFacesPublisher, FencedFlags.of(),
     )
     return Watch(sync, archive, LongBox(), IdsBox())
   }

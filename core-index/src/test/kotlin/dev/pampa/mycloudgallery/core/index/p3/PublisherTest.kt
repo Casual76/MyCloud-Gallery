@@ -79,9 +79,9 @@ open class PublisherTest {
     assertThat(publisher.pending.value.records).isEqualTo(0)
     assertThat(phone.replica.locate(file.contentKey.short, SegmentClass.THUMB_S)).isNotNull()
 
-    // In debug, con la protezione spenta dall'utente, non c'e' un arretrato vecchio da pubblicare: cio' che si prepara da
-    // adesso si pubblica (e la preparazione rifa' i media che gli altri non trovano nell'indice).
-    phone.flags = FeatureFlags.forBuild(debugBuild = true, indexPublishTestSharesOnly = false)
+    // Con la protezione spenta dall'utente (i valori di release di adesso, passo unico del 12/11/2026) non c'e' un arretrato vecchio da
+    // pubblicare: cio' che si prepara da adesso si pubblica (e la preparazione rifa' i media che gli altri non trovano nell'indice).
+    phone.flags = FeatureFlags.RELEASE
     val open = phone.publisher()
     assertThat(open.flush(real, FlushReason.UNIT_FINISHED)).isEqualTo(PublishOutcome.NothingPending)
     open.stage(real, listOf(file.put()), listOf(file.thumb()))

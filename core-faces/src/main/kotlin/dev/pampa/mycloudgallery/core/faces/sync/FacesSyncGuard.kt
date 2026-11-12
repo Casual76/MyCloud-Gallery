@@ -17,7 +17,7 @@ import java.util.Locale
 // un solo byte sotto `faces/`, e di nuovo prima di pubblicare una testa:
 // - registro accettato e questo dispositivo approvato (un dismesso, revocato o perso non scrive e non legge dati dei volti);
 // - la share e' l'area privata dichiarata, **mai** l'area comune del registro (L23);
-// - la recinzione delle share vere (D34, `FeatureFlags.facesSyncTestSharesOnly`, accesa anche in release fino al si' dell'utente, Q5): sulle
+// - la recinzione delle share vere (D34, `FeatureFlags.facesSyncTestSharesOnly`, spenta dal passo unico del 12/11/2026): accesa, sulle
 //   share vere niente sul NAS, ne' letture ne' scritture; sulle share di prova si';
 // - Persone attiva per l'account e attiva QUI (`On(G, ACTIVE)`: niente in attesa dell'avviso, esclusione, cancellazione, voce sconosciuta);
 // - lo stato **fresco** (D30): un giro completo dei dati personali in questo processo da meno di 15 minuti che dica `On(G)`. Senza, la

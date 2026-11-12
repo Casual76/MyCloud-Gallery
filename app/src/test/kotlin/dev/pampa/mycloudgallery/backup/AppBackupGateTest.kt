@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.backup
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.FencedFlags
 import dev.pampa.mycloudgallery.core.backup.contract.BackupGateState
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
@@ -14,6 +15,11 @@ import org.junit.Test
  *
  * Revisione di sicurezza della 5A: **R2** (in release un account di prova non scrive in nessuna share, tutte le combinazioni), **R4** (la
  * pausa dell'utente e' un cancello, dopo le ragioni piu' gravi) e **R7** (la share chiesta deve essere l'area privata di adesso).
+ *
+ * **Dal passo unico del 12/11/2026** (D35) D12 e' spenta in `FeatureFlags`: le prove di D12 qui sotto usano flag con la recinzione accesa
+ * ([FencedFlags], solo nelle prove) e dimostrano che il cancello, se la si riaccende, blocca come prima. Le prove `passoUnico_*` in fondo usano
+ * i valori di release di adesso: una share vera con un account vero si apre, un account di prova continua a non scrivere, e tutte le altre
+ * ragioni (emergenza, congelamento, sola lettura, pausa, area privata) restano.
  */
 class AppBackupGateTest {
 
@@ -25,7 +31,7 @@ class AppBackupGateTest {
     var frozen: Set<String> = emptySet(),
     var readOnly: Set<String> = emptySet(),
     var paused: Boolean = false,
-    val flags: FeatureFlags = FeatureFlags.forBuild(debugBuild = false),
+    val flags: FeatureFlags = FencedFlags.of(),
   ) {
     val gate = AppBackupGate(
       BackupGateInputs(
@@ -41,8 +47,9 @@ class AppBackupGateTest {
     )
   }
 
-  private val release = FeatureFlags.forBuild(debugBuild = false)
-  private val debug = FeatureFlags.forBuild(debugBuild = true)
+  /** La release com'era prima del passo unico (D12 accesa) e la debug con D12 accesa: le prove di D12 e R2 con la recinzione. */
+  private val release = FencedFlags.of(FeatureFlags.forBuild(debugBuild = false))
+  private val debug = FencedFlags.of(FeatureFlags.forBuild(debugBuild = true))
 
   @Test
   fun unaShareDiProvaConTuttoAPostoEAperta() {
@@ -52,9 +59,9 @@ class AppBackupGateTest {
 
   @Test
   fun d12UnaShareVeraNonSiScriveMaiEStatoTestOnlyAncheInRelease() {
-    // La release: `forBuild(debugBuild = false)`; ma D12 vale anche con `debugBuild = true` (non si spegne da nessuna parte).
+    // Con la recinzione accesa, in release e in debug (la costante e' una sola).
     for (debug in listOf(false, true)) {
-      val rig = Rig(privateShare = "famiglia-rossi", flags = FeatureFlags.forBuild(debugBuild = debug))
+      val rig = Rig(privateShare = "famiglia-rossi", flags = FencedFlags.of(FeatureFlags.forBuild(debugBuild = debug)))
       val state = rig.gate.stateOf("famiglia-rossi")
       assertWithMessage("debug=$debug").that(state).isEqualTo(BackupGateState.TEST_ONLY)
       assertWithMessage("debug=$debug").that(state.open).isFalse()
@@ -194,5 +201,43 @@ class AppBackupGateTest {
     assertThat(state.problem).isNull()
     rig.paused = false
     assertThat(rig.gate.stateOf("test")).isEqualTo(BackupGateState.OPEN)
+  }
+
+  // --- Il passo unico (12/11/2026): i valori di release di adesso ----------------------------------------------------------------
+
+  private val now = FeatureFlags.RELEASE
+
+  @Test
+  fun passoUnico_unaShareVeraConUnAccountVeroSiApre() {
+    assertThat(now.backupTestSharesOnly).isFalse()
+    for (share in listOf("alessio", "famiglia-rossi", "mario")) {
+      val rig = Rig(privateShare = share, account = share, flags = now)
+      assertWithMessage(share).that(rig.gate.stateOf(share)).isEqualTo(BackupGateState.OPEN)
+    }
+    // Lo stesso cancello con la recinzione accesa: "Backup in prova".
+    assertThat(Rig(privateShare = "alessio", account = "alessio", flags = FencedFlags.of(now)).gate.stateOf("alessio")).isEqualTo(BackupGateState.TEST_ONLY)
+  }
+
+  @Test
+  fun passoUnico_unAccountDiProvaContinuaANonScrivere() {
+    for (account in listOf("test", "test2", "TEST")) {
+      assertWithMessage(account).that(Rig(privateShare = "alessio", account = account, flags = now).gate.stateOf("alessio")).isEqualTo(BackupGateState.TEST_ONLY)
+      assertWithMessage(account).that(Rig(privateShare = "test", account = account, flags = now).gate.stateOf("test")).isEqualTo(BackupGateState.TEST_ONLY)
+    }
+    assertThat(Rig(privateShare = "alessio", account = null, flags = now).gate.stateOf("alessio")).isEqualTo(BackupGateState.TEST_ONLY)
+  }
+
+  @Test
+  fun passoUnico_leAltreRagioniRestanoTutte() {
+    fun rig() = Rig(privateShare = "alessio", account = "alessio", flags = now)
+    assertThat(rig().apply { familyReady = false }.gate.stateOf("alessio")).isEqualTo(BackupGateState.NOT_READY)
+    // R7: solo l'area privata di adesso, mai l'area comune o la share di un altro.
+    assertThat(rig().gate.stateOf("Public")).isEqualTo(BackupGateState.NO_PRIVATE_AREA)
+    assertThat(rig().gate.stateOf("mamma")).isEqualTo(BackupGateState.NO_PRIVATE_AREA)
+    // "Ferma le scritture sul NAS" (e il manifest che le tiene ferme) resta la prima delle ragioni temporanee.
+    assertThat(rig().apply { writesStopped = true; frozen = setOf("alessio") }.gate.stateOf("alessio")).isEqualTo(BackupGateState.WRITES_STOPPED)
+    assertThat(rig().apply { frozen = setOf("alessio") }.gate.stateOf("alessio")).isEqualTo(BackupGateState.FROZEN)
+    assertThat(rig().apply { readOnly = setOf("alessio") }.gate.stateOf("alessio")).isEqualTo(BackupGateState.READ_ONLY_AREA)
+    assertThat(rig().apply { paused = true }.gate.stateOf("alessio")).isEqualTo(BackupGateState.PAUSED)
   }
 }

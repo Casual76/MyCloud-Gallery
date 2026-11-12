@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.faces.chaos
 
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
+import dev.pampa.mycloudgallery.core.faces.FencedFlags
 import dev.pampa.mycloudgallery.core.faces.compute.ComputeStore
 import dev.pampa.mycloudgallery.core.faces.compute.ComputeStoreOpen
 import dev.pampa.mycloudgallery.core.faces.compute.FacesAreas
@@ -187,9 +188,9 @@ internal class ChaosDevice(val world: ChaosWorld, val index: Int, val name: Stri
     leases = ChaosLeases(kit.leases, world, this)
     val archives = fence.archives(FacesArchives { g -> local.archive(g, create = true) })
     val publishStore = ChaosPublishStore(local.publishStore, inj, index)
-    publisher = NasFacesPublisher(identity, publishSwitch, kit.remote, archives, publishStore, FacesAttestation { it.toSet() }, gate, world.clock, FeatureFlags.RELEASE)
+    publisher = NasFacesPublisher(identity, publishSwitch, kit.remote, archives, publishStore, FacesAttestation { it.toSet() }, gate, world.clock, FencedFlags.of())
     replica = NasFacesSync(
-      identity, publishSwitch, kit.remote, archives, ChaosReplicaStore(local.replicaStore, inj, index), gate, world.clock, publisher, FeatureFlags.RELEASE,
+      identity, publishSwitch, kit.remote, archives, ChaosReplicaStore(local.replicaStore, inj, index), gate, world.clock, publisher, FencedFlags.of(),
     )
     grouping = CustodianGrouping(
       archives = {

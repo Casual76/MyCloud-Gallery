@@ -49,8 +49,8 @@ object AppModule {
     AppLockSettingsStore.getInstance(context).settings
 
   /**
-   * In release valgono i valori di `FeatureFlags.RELEASE` (`wol` spento, il NAS nella Libreria acceso dalla 4A, D31 attivo):
-   * `forBuild` ignora le richieste. In debug il NAS nella Libreria e' acceso e D31 resta attivo.
+   * In release valgono i valori di `FeatureFlags.RELEASE` (`wol` spento, il NAS nella Libreria acceso dalla 4A, D31 spenta dal passo unico
+   * del 12/11/2026): `forBuild` ignora le richieste. In debug il NAS nella Libreria e' acceso e D31 resta accesa (il parametro di serie).
    */
   @Provides
   @Singleton

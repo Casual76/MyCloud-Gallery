@@ -849,7 +849,7 @@ class NasGraph(
   fun analysisSink(): dev.pampa.mycloudgallery.core.prepare.contract.AnalysisSink =
     ai?.analysisSink?.invoke() ?: dev.pampa.mycloudgallery.core.prepare.contract.AnalysisSink.NONE
 
-  /** Pubblica cio' che aspetta nell'outbox (fine giro, periodico): nelle share di prova, mai sulle vere (D31). */
+  /** Pubblica cio' che aspetta nell'outbox (fine giro, periodico): con D31 accesa solo nelle share di prova, mai sulle vere. */
   suspend fun flushOutbox() {
     val rt = runtimeFlow.value ?: return
     for (area in rt.areas) runCatching { rt.publisher.flush(area.share, dev.pampa.mycloudgallery.core.index.contract.FlushReason.PERIODIC) }

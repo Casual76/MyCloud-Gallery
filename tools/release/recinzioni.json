@@ -1,15 +1,22 @@
 {
   "versione": 1,
-  "descrizione": "Fase 10 P10, D35 e Q6 (b): lo stato atteso delle quattro recinzioni che si spengono in UN solo passo, con un solo consenso. Lo legge tools/check.ps1 (passi delle recinzioni) e tools/release/share-snapshot.ps1 (le aree). OGGI sono tutte accese e il consenso e' vuoto. Questo file lo cambia solo l'orchestratore, nello stesso commit che cambia FeatureFlags, con il si' dell'utente (docs/fase10-progetto.md par. 2.10).",
+  "descrizione": "Fase 10 P10, D35 e Q6 (b): lo stato atteso delle quattro recinzioni che si spengono in UN solo passo, con un solo consenso. Lo legge tools/check.ps1 (passi delle recinzioni) e tools/release/share-snapshot.ps1 (le aree). Dal passo unico del 12/11/2026 sono tutte spente, con il consenso qui sotto. Questo file lo cambia solo l'orchestratore, nello stesso commit che cambia FeatureFlags, con il si' dell'utente (docs/fase10-progetto.md par. 2.10).",
+  "scrittureSceltedallUtente": {
+    "nota": "Due funzioni scrivono FUORI dalle cartelle attese delle aree, ma solo dopo un tocco e una conferma dell'utente e passando dai loro cancelli: il passo toglie solo il limite 'solo share di prova'. Un loro uso fra la fotografia 'prima' e la 'dopo' fa uscire il confronto di share-snapshot.ps1 con il codice 3 senza essere un'anomalia: si riconosce perche' i percorsi FUORI sono quelli che l'utente ha scelto (Salva sul NAS) o la cartella d'origine dei suoi media (Riporta nelle mie cartelle). Fino alla fotografia 'dopo' meglio non usarle.",
+    "funzioni": [
+      { "nome": "Salva sul NAS", "recinzione": "F5-D12", "dove": "la cartella scelta dall'utente nell'area privata o comune (anche con il trascinamento sulla Libreria o su una cartella NAS); mai in .mycloudgallery/ ne' in Versioni/", "cancello": "IncomingGate (D12, R2, emergenza, congelamento, sola lettura, pausa)" },
+      { "nome": "Smetti di condividere -> Riporta nelle mie cartelle", "recinzione": "F7-D30", "dove": "la cartella d'origine dei propri media nell'area privata (o Backup/<dispositivo>/AAAA/MM/), dall'area comune", "cancello": "AlbumWriteGate (D30, emergenza, congelamento, sola lettura, fiducia)" }
+    ]
+  },
   "recinzioni": [
-    { "id": "F4-D31", "area": "indice", "campo": "indexPublishTestSharesOnly", "stato": "accesa" },
-    { "id": "F5-D12", "area": "backup", "campo": "backupTestSharesOnly", "stato": "accesa" },
-    { "id": "F7-D30", "area": "album", "campo": "sharedAlbumsTestSharesOnly", "stato": "accesa" },
-    { "id": "F8-D34", "area": "volti", "campo": "facesSyncTestSharesOnly", "stato": "accesa" }
+    { "id": "F4-D31", "area": "indice", "campo": "indexPublishTestSharesOnly", "stato": "spenta" },
+    { "id": "F5-D12", "area": "backup", "campo": "backupTestSharesOnly", "stato": "spenta" },
+    { "id": "F7-D30", "area": "album", "campo": "sharedAlbumsTestSharesOnly", "stato": "spenta" },
+    { "id": "F8-D34", "area": "volti", "campo": "facesSyncTestSharesOnly", "stato": "spenta" }
   ],
   "consenso": {
-    "data": "",
-    "marcatore": "",
+    "data": "2026-11-12",
+    "marcatore": "PASSO-UNICO-2026-11-12",
     "nota": "Con le quattro recinzioni spente: data (AAAA-MM-GG) e un marcatore che compare in UNA sola riga di docs/decisioni.md; quella riga porta la stessa data e i quattro id (un consenso solo, Q6 (b)). Con tutte accese deve restare vuoto."
   },
   "ritornoParziale": {

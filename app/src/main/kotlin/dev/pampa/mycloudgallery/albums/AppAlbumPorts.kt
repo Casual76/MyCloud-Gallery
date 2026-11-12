@@ -102,8 +102,8 @@ class FlagsAlbumReadGate(private val flags: FeatureFlags) : AlbumReadGate {
 }
 
 /**
- * Il cancello delle scritture degli album (§1.4, D30, D38): la recinzione D30 (`FeatureFlags.sharedAlbumsMayUse`, accesa anche in release fino al
- * consenso Q7), la recinzione D33 delle prove sul campo (`ShareFence`, **solo debug**: [guard] null in release) e i cancelli delle teste dell'indice
+ * Il cancello delle scritture degli album (§1.4, D30, D38): la recinzione D30 (`FeatureFlags.sharedAlbumsMayUse`, spenta dal passo unico del
+ * 12/11/2026 con il consenso), la recinzione D33 delle prove sul campo (`ShareFence`, **solo debug**: [guard] null in release) e i cancelli delle teste dell'indice
  * ([index]: emergenza, fiducia, congelamento, salto dell'ora, sola lettura). Non quello di D31 (l'indice "solo locale"): gli album condivisi hanno la
  * loro recinzione e il loro consenso (Q7 (a)). Senza NAS o senza account: [AlbumWriteBlock.NO_NAS].
  */

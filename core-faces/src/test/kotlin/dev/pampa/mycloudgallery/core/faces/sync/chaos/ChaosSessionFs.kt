@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.faces.sync.chaos
 
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
+import dev.pampa.mycloudgallery.core.faces.FencedFlags
 import dev.pampa.mycloudgallery.core.faces.contract.FacesClock
 import dev.pampa.mycloudgallery.core.faces.contract.FacesSwitch
 import dev.pampa.mycloudgallery.core.faces.contract.FacesWriteGate
@@ -49,7 +50,7 @@ internal fun sessionFsKit(
   written: MutableList<Pair<String, SharePath>>,
   attempts: MutableList<Pair<String, SharePath>>,
   onWrite: (SharePath) -> Unit,
-  flags: FeatureFlags = FeatureFlags.RELEASE,
+  flags: FeatureFlags = FencedFlags.of(),
 ): ChaosFsKit {
   val fs = RecordingShare(WatchedFs(manager.fileSystem(shareName), onWrite), deviceId, written, attempts)
   val remote = NasFacesRemote(fs, deviceId, commonShare, Dispatchers.Unconfined)

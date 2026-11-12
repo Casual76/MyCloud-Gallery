@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.FencedFlags
 import dev.pampa.mycloudgallery.backup.BackupDiagCodes
 import dev.pampa.mycloudgallery.backup.BackupDiagnostics
 import dev.pampa.mycloudgallery.core.backup.contract.BackupGateState
@@ -53,7 +54,9 @@ import org.robolectric.annotation.GraphicsMode
  *
  * - **flusso completo**: una foto nuova, un giro, la copia verificata in `Backup/<dispositivo>/AAAA/MM/`, `SAFE`, un secondo dispositivo
  *   dello stesso account senza doppioni, lo spegnimento;
- * - **D12**: su una share vera non si scrive niente e lo stato e' `TestOnly`, anche nella configurazione di release.
+ * - **D12**: con la recinzione accesa su una share vera non si scrive niente e lo stato e' `TestOnly`. Dal passo unico del 12/11/2026 D12 e'
+ *   spenta in `FeatureFlags`: la prova usa flag con la recinzione accesa (`FencedFlags`, solo nelle prove) per dimostrare che il cancello, se la
+ *   si riaccende, ferma tutto come prima. R2 (un account di prova in release) non e' cambiata e si prova con `FeatureFlags.RELEASE`.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -209,13 +212,13 @@ class BackupIntegrationTest {
 
   @Test
   fun d12UnaShareVeraNonSiScriveNienteEIlBackupEInProva() = runBlocking {
-    // Un NAS "vero": un account e due share che non sono nell'elenco delle share di prova.
+    // Un NAS "vero": un account e due share che non sono nell'elenco delle share di prova. La recinzione D12 accesa (com'era prima del passo unico).
     val backend = InMemorySmbBackend(nasTime = time::now).apply {
       addUser(REAL_USER, REAL_PASSWORD)
       addShare(REAL_COMMON, mapOf(REAL_USER to SimAccess.READ_WRITE))
       addShare(REAL_USER, mapOf(REAL_USER to SimAccess.READ_WRITE))
     }
-    val phone = device("telefono", backend)
+    val phone = device("telefono", backend, flags = FencedFlags.of(DEBUG_LIKE))
     phone.graph.start()
     phone.graph.foundFamilyOn(REAL_USER, REAL_PASSWORD, REAL_COMMON, REAL_USER)
 
@@ -247,6 +250,41 @@ class BackupIntegrationTest {
     assertThat(filesUnder(backend, REAL_USER, ".mycloudgallery/tmp").filter { "-bk-" in it }).isEmpty()
     assertThat(filesUnder(backend, REAL_COMMON, "Backup")).isEmpty()
     assertThat(backup.store.counts().open).isEqualTo(0)
+    Unit
+  }
+
+  /**
+   * Il passo unico del 12/11/2026 (D35): con i valori di **release di adesso** (D12 spenta, R2 accesa) e un account vero su share vere il cancello e'
+   * aperto e un giro carica la foto in `Backup/<dispositivo>/AAAA/MM/` dell'area privata, e da nessun'altra parte del backup (niente nell'area comune,
+   * nessun temporaneo rimasto).
+   */
+  @Test
+  fun passoUnico_conLaReleaseDiAdessoUnaShareVeraRiceveIlBackup() = runBlocking {
+    val backend = InMemorySmbBackend(nasTime = time::now).apply {
+      addUser(REAL_USER, REAL_PASSWORD)
+      addShare(REAL_COMMON, mapOf(REAL_USER to SimAccess.READ_WRITE))
+      addShare(REAL_USER, mapOf(REAL_USER to SimAccess.READ_WRITE))
+    }
+    val phone = device("telefono", backend, flags = FeatureFlags.RELEASE)
+    phone.graph.start()
+    phone.graph.foundFamilyOn(REAL_USER, REAL_PASSWORD, REAL_COMMON, REAL_USER)
+
+    val rig = rig(phone, REAL_USER, RecordingJobs())
+    val photo = BackupRig.jpeg(tone = 55)
+    BackupRig.photo(rig.store, id = 1, bytes = photo, takenAt = time.now() - 2 * HOUR)
+    val backup = rig.open()
+    rig.chooseFolder("Pixel di prova")
+
+    assertThat(backup.gate.stateOf(REAL_USER)).isEqualTo(BackupGateState.OPEN)
+    val outcome = checkNotNull(rig.round()) { "il giro non e' partito" }
+    val last = checkNotNull(outcome.last) { "tappa: ${outcome.stage}" }
+    assertWithMessage("giro: $last").that(last.done).isEqualTo(1)
+    val stored = filesUnder(backend, REAL_USER, "Backup")
+    assertThat(stored).hasSize(1)
+    assertThat(stored.single()).startsWith("Backup/Pixel di prova/")
+    assertThat(backend.bytes(REAL_USER, stored.single())!!.toList()).isEqualTo(photo.toList())
+    assertThat(filesUnder(backend, REAL_USER, ".mycloudgallery/tmp").filter { "-bk-" in it }).isEmpty()
+    assertThat(filesUnder(backend, REAL_COMMON, "Backup")).isEmpty()
     Unit
   }
 

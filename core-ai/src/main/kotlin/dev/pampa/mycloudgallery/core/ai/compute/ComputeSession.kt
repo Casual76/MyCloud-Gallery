@@ -186,6 +186,9 @@ internal class ComputeSession(
           ends += end.claim to UnitOutcome.Interrupted(end.stop.name)
           stop = end.stop
         }
+        // XS2-2: un'unita' tentata in cui ogni media e' rimasto in attesa (anteprima non pronta) non ha dato lavoro: chi sceglie le unita' la mette in fondo
+        // per un po', cosi' le richieste non servibili non fermano l'avanzamento.
+        end.computed == 0 && end.failed == 0 && end.waiting > 0 -> ends += end.claim to UnitOutcome.Interrupted(UnitOutcome.Interrupted.STALLED)
         else -> ends += end.claim to UnitOutcome.Completed(end.computed, end.failed)
       }
       if (stop != null) break
@@ -230,13 +233,14 @@ internal class ComputeSession(
     }
   }
 
-  private class UnitEnd(val claim: UnitClaim, val stop: AiStop?, val lost: Boolean, val computed: Int, val failed: Int)
+  private class UnitEnd(val claim: UnitClaim, val stop: AiStop?, val lost: Boolean, val computed: Int, val failed: Int, val waiting: Int = 0)
 
   private suspend fun unit(share: String, first: UnitClaim): UnitEnd {
     var claim = first
     var renewedAt = nanos()
     val computedBefore = tally.computed
     val failedBefore = tally.failed
+    val waitingBefore = tally.waiting
     val keys = claim.items.map { it.contentKey }
     val others = othersOf(share, keys)
     val sources = try {
@@ -322,7 +326,7 @@ internal class ComputeSession(
     }
     flush(share, FlushReason.UNIT_FINISHED)
     evictUnlessKept(tally.finished)
-    return UnitEnd(claim, stop, lost = false, tally.computed - computedBefore, tally.failed - failedBefore)
+    return UnitEnd(claim, stop, lost = false, tally.computed - computedBefore, tally.failed - failedBefore, tally.waiting - waitingBefore)
   }
 
   private suspend fun othersOf(share: String, keys: List<ContentKey>): Map<ContentKey, Set<AiClass>> = try {
@@ -374,7 +378,10 @@ internal class ComputeSession(
   private suspend fun bufferOnly(share: String): AiRunResult {
     val list = parts.candidates.forShare(share, recipe.version, config.localBatchLimit, urgentKeys().toSet())
     val others = othersOf(share, list.map { it.contentKey })
-    val stop = local(share, list, others) { candidate -> parts.buffer.get(candidate.contentKey, inputClassOf(candidate)) != null }
+    val stop = local(
+      share, list, others,
+      refetch = { asked -> parts.candidates.forShare(share, recipe.version, config.localBatchLimit, asked) },
+    ) { candidate -> parts.buffer.get(candidate.contentKey, inputClassOf(candidate)) != null }
     if (stop != null && stop != AiStop.BUFFER_ONLY) return finish(stop)
     restLive()
     state.value = AiStatus.BufferOnlyDone(tally.computed)
@@ -386,14 +393,22 @@ internal class ComputeSession(
     gate()?.let { return finish(it) }
     pruneFinished(null)
     val list = parts.candidates.phoneOnly(recipe.version, config.localBatchLimit, urgentKeys().toSet())
-    return finish(local(null, list, emptyMap()) { true })
+    return finish(local(null, list, emptyMap(), refetch = { asked -> parts.candidates.phoneOnly(recipe.version, config.localBatchLimit, asked) }) { true })
   }
 
-  private suspend fun local(share: String?, list: List<AiCandidate>, others: Map<ContentKey, Set<AiClass>>, usable: suspend (AiCandidate) -> Boolean): AiStop? {
+  private suspend fun local(
+    share: String?,
+    list: List<AiCandidate>,
+    initialOthers: Map<ContentKey, Set<AiClass>>,
+    /** XS2-4: la lista di nuovo, con le richieste di adesso: una richiesta sopraggiunta per un candidato **fuori** dalla lista limitata entra da qui. */
+    refetch: suspend (Set<ContentKey>) -> List<AiCandidate>,
+    usable: suspend (AiCandidate) -> Boolean,
+  ): AiStop? {
+    var others = initialOthers
     // Pacchetto X: i media chiesti adesso dall'utente davanti anche nelle liste locali (solo telefono, solo buffer). XS-4: l'ultimo chiesto
     // per primo, e le richieste si rileggono al confine del lotto; con [only] solo i chiesti.
     var asked = urgentKeys()
-    val usableList = list.filter { usable(it) }
+    var usableList = list.filter { usable(it) }
     var chosen = ordered(usableList, asked) { it.contentKey }
     var chosenKeys = chosen.map { it.contentKey }
     var doneInList = 0
@@ -406,6 +421,19 @@ internal class ComputeSession(
         if (again != asked) {
           asked = again
           val worked = chosen.take(index).mapTo(HashSet()) { it.contentKey }
+          // XS2-4: i candidati chiesti che la lista (limitata) non aveva entrano adesso, senza rifare quelli gia' lavorati ne' ripetere quelli gia' in lista.
+          val known = usableList.mapTo(HashSet()) { it.contentKey }
+          val fresh = try {
+            refetch(asked.toSet()).filter { it.contentKey !in known && it.contentKey !in worked && usable(it) }
+          } catch (e: CancellationException) {
+            throw e
+          } catch (e: IOException) {
+            emptyList()
+          }
+          if (fresh.isNotEmpty()) {
+            usableList = usableList + fresh
+            if (share != null) others = others + othersOf(share, fresh.map { it.contentKey })
+          }
           chosen = chosen.take(index) + ordered(usableList.filter { it.contentKey !in worked }, asked) { it.contentKey }
           chosenKeys = chosen.map { it.contentKey }
           if (index >= chosen.size) break
@@ -443,6 +471,9 @@ internal class ComputeSession(
 
   /** Le ultime finite qui (le piu' recenti prima), da una tappa all'altra dello stesso processo. */
   private val recentKeys: ArrayDeque<ContentKey> = ArrayDeque(live.value.recent)
+
+  /** Quanti media sono usciti dal lavoro da che il processo e' nato (contatore monotono, da una tappa all'altra): chi stima il residuo lo usa, non la testa di [recentKeys]. */
+  private var finishedTotal: Long = live.value.finished
 
   /** Le urgenze di adesso, **l'ultima chiesta per prima**; un guasto del registro non ferma mai il calcolo (vale come nessuna). */
   private fun urgentKeys(): List<ContentKey> = try {
@@ -489,6 +520,7 @@ internal class ComputeSession(
     if (end == ItemEnd.WAITING) reportWaiting(key, UrgentWait.PREVIEW)
     if (end == ItemEnd.RETRY) reportWaiting(key, UrgentWait.RETRY)
     if (end == ItemEnd.COMPUTED || end == ItemEnd.SKIPPED || end == ItemEnd.FAILED) {
+      finishedTotal++
       try {
         parts.urgent.done(key)
       } catch (e: CancellationException) {
@@ -502,12 +534,12 @@ internal class ComputeSession(
   /** Il media di adesso e i prossimi della coda [keys] dopo [currentAt] (la posizione del media di adesso), per la pagina "Analisi". */
   private fun showLive(current: ContentKey?, keys: List<ContentKey>, currentAt: Int) {
     val next = if (keys.isEmpty()) emptyList() else keys.subList(minOf(currentAt + 1, keys.size), minOf(keys.size, currentAt + 1 + AiLive.NEXT))
-    live.value = AiLive(current, recentKeys.toList(), next)
+    live.value = AiLive(current, recentKeys.toList(), next, finishedTotal)
   }
 
   /** A tappa ferma: niente media di adesso ne' prossimi; le ultime finite restano (la pagina le mostra ferme). */
   private fun restLive() {
-    live.value = AiLive(null, recentKeys.toList(), emptyList())
+    live.value = AiLive(null, recentKeys.toList(), emptyList(), finishedTotal)
   }
 
   private fun running(total: Int) {

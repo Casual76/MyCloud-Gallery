@@ -187,7 +187,13 @@ sealed interface AiStatus {
  * anteprime con il cancello della Libreria (un media che la Libreria non mostrerebbe non si mostra nemmeno qui). A tappa ferma [current]
  * e [next] sono vuoti e [recent] resta: sono le ultime analizzate su questo dispositivo in questo processo.
  */
-data class AiLive(val current: ContentKey?, val recent: List<ContentKey>, val next: List<ContentKey>) {
+data class AiLive(
+  val current: ContentKey?,
+  val recent: List<ContentKey>,
+  val next: List<ContentKey>,
+  /** XS-7: quanti media sono usciti dal lavoro da che il processo e' nato (calcolati, gia' fatti da altri o non supportati): un contatore che non si perde se chi guarda salta emissioni. */
+  val finished: Long = 0L,
+) {
   override fun toString(): String = "AiLive(ora=${if (current != null) "si" else "no"}, fatte=${recent.size}, prossime=${next.size})"
 
   companion object {

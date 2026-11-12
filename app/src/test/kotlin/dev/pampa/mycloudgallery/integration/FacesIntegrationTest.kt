@@ -48,8 +48,6 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import android.content.ComponentCallbacks2
 import dev.pampa.mycloudgallery.faces.AppCollectionFaceCrops
-import kotlinx.coroutines.async
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Fase 8, P13 ("Fatto quando" della riga P13 del §4.4): Persone **sul grafo vero dell'app** e sul NAS simulato, con **due account e tre dispositivi**: il telefono e
@@ -292,61 +290,39 @@ class FacesIntegrationTest {
   }
 
   /**
-   * I6 (fase I) con la review CG-I1, sul grafo vero e con ritagli veri: lo svuotamento dei ritagli per memoria non revoca i volti delle Raccolte; un'uscita
-   * e un rientro di corsa con lo svuotamento in mezzo non fanno perdere il ritorno (CG-I1-01); ad app nascosta il ritaglio aspetta il primo piano e poi
-   * si fa una volta; con poca memoria in primo piano niente attesa ne' revoca; Persone spenta (cancellazione) mentre un ritaglio aspetta: al ritorno
-   * niente volto, ne' per chi aspettava ne' per chi chiede dopo.
+   * I6 (fase I) con la review CG-I1, sul grafo vero e con ritagli veri: lo svuotamento dei ritagli per memoria (interfaccia nascosta, poca memoria in
+   * primo piano) svuota la cache, non revoca i volti delle Raccolte e non fa ritagliare niente; chi chiede dopo e' servito subito, con un ritaglio
+   * solo. Persone spenta (cancellazione) invece e' una revoca: il segno cambia e nessuno riceve piu' il volto.
    */
   @Test
-  fun i6_svuotamentoPerMemoria_ritorno_attesa_ePersoneSpenta() = runBlocking<Unit> {
+  fun i6_svuotamentoPerMemoria_nonRevoca_ePersoneSpentaSi() = runBlocking<Unit> {
     // La scena delle altre prove: persone calcolate, raggruppate e una con il nome.
     val s = running()
     val node = s.phone
     val live = node.live()
     val face = checkNotNull(namedCards(node).first().cover)
-    val app = node.device.graph.appContext
     val collection = AppCollectionFaceCrops(node.faces)
     val px = 96
 
-    // 1. In primo piano, un ritaglio vero: la cache si riempie.
-    app.update(inForeground = true, profileActive = true)
+    // 1. Un ritaglio vero: la cache si riempie.
     assertThat(withTimeout(Attese.TETTO) { collection.crop(face, px) }).isNotNull()
     val token = withTimeout(Attese.TETTO) { collection.revocations.first() }
-    val first = live.crops.produced
-    assertThat(first).isGreaterThan(0L)
+    assertThat(live.crops.produced).isGreaterThan(0L)
     assertThat(live.crops.cachedBytes).isGreaterThan(0L)
 
-    // 2. CG-I1-01: fuori e dentro di corsa, lo svuotamento in mezzo. Nessuna revoca, e il ritorno non si perde: il ritaglio si rifa' e finisce.
-    app.update(inForeground = false, profileActive = true)
-    node.faces.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)
-    app.update(inForeground = true, profileActive = true)
-    assertThat(live.crops.cachedBytes).isEqualTo(0L)
-    assertThat(withTimeout(Attese.TETTO) { collection.revocations.first() }).isEqualTo(token)
-    assertThat(withTimeout(Attese.TETTO) { collection.crop(face, px) }).isNotNull()
-    assertThat(live.crops.produced).isEqualTo(first + 1)
+    // 2. L'interfaccia non si vede piu', poi poca memoria in primo piano: ogni volta la cache si svuota senza revoca e senza ritagli fatti per
+    // lo svuotamento; la richiesta dopo si serve subito, una volta.
+    for (level in listOf(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN, ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)) {
+      val before = live.crops.produced
+      node.faces.onTrimMemory(level)
+      assertWithMessage("livello $level: la cache si svuota").that(live.crops.cachedBytes).isEqualTo(0L)
+      assertWithMessage("livello $level: nessun ritaglio per lo svuotamento").that(live.crops.produced).isEqualTo(before)
+      assertWithMessage("livello $level: nessuna revoca").that(withTimeout(Attese.TETTO) { collection.revocations.first() }).isEqualTo(token)
+      assertThat(withTimeout(Attese.TETTO) { collection.crop(face, px) }).isNotNull()
+      assertThat(live.crops.produced).isEqualTo(before + 1)
+    }
 
-    // 3. Ad app nascosta: lo svuotamento non revoca e il ritaglio aspetta il primo piano; poi si fa, una volta.
-    app.update(inForeground = false, profileActive = true)
-    node.faces.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)
-    val pending = async(Dispatchers.Default) { collection.crop(face, px) }
-    assertThat(withTimeoutOrNull(HIDDEN_WAIT) { pending.await() }).isNull()
-    assertThat(live.crops.produced).isEqualTo(first + 1)
-    app.update(inForeground = true, profileActive = true)
-    assertThat(withTimeout(Attese.TETTO) { pending.await() }).isNotNull()
-    assertThat(live.crops.produced).isEqualTo(first + 2)
-    assertThat(withTimeout(Attese.TETTO) { collection.revocations.first() }).isEqualTo(token)
-
-    // 4. Poca memoria in primo piano: svuota, nessuna attesa, nessuna revoca.
-    node.faces.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)
-    assertThat(withTimeout(Attese.TETTO) { collection.crop(face, px) }).isNotNull()
-    assertThat(live.crops.produced).isEqualTo(first + 3)
-    assertThat(withTimeout(Attese.TETTO) { collection.revocations.first() }).isEqualTo(token)
-
-    // 5. Un ritaglio aspetta ad app nascosta; intanto Persone si spegne (cancellazione). Al ritorno: niente volto, per nessuno.
-    app.update(inForeground = false, profileActive = true)
-    node.faces.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)
-    val waiting = async(Dispatchers.Default) { collection.crop(face, px) }
-    assertThat(withTimeoutOrNull(HIDDEN_WAIT) { waiting.await() }).isNull()
+    // 3. Persone spenta (cancellazione): e' una revoca. Il segno cambia e chi chiede dopo non riceve il volto.
     val preview = live.eraser.preview()
     assertThat(live.eraser.erase(FacesEraseConfirmation(preview.digest, nowNanos()), PeopleAlbumsChoice.KEEP_PHOTOS)).isEqualTo(EraseStart.Started)
     withTimeout(Attese.TETTO) {
@@ -356,8 +332,6 @@ class FacesIntegrationTest {
         s.rig.time.advance(6.minutes.inWholeMilliseconds)
       }
     }
-    app.update(inForeground = true, profileActive = true)
-    assertWithMessage("chi aspettava non riceve il volto").that(withTimeout(Attese.TETTO) { waiting.await() }).isNull()
     assertWithMessage("chi chiede dopo non lo riceve").that(withTimeout(Attese.TETTO) { collection.crop(face, px) }).isNull()
     assertThat(withTimeout(Attese.TETTO) { collection.revocations.first() }).isNotEqualTo(token)
   }
@@ -506,9 +480,6 @@ class FacesIntegrationTest {
   private suspend fun state(node: FacesNode) = checkNotNull(node.live().switch.currentState().generationOrNull)
 
   private companion object {
-    /** I6: quanto si guarda che un ritaglio ad app nascosta resti fermo (la prova deterministica dell'attesa sta in `GuardedPeopleCropsTest`). */
-    private const val HIDDEN_WAIT = 500L
-
     /** La guardia rilegge il registro al massimo ogni 15 minuti. */
     const val PREFLIGHT_INTERVAL = 16 * 60 * 1000L
 

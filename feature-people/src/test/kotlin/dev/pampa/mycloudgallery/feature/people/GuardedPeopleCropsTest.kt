@@ -18,7 +18,6 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import com.google.common.truth.Truth.assertWithMessage
@@ -134,123 +133,56 @@ class GuardedPeopleCropsTest {
     }
   }
 
-  /** I6: svuotare per memoria non e' una revoca: la cache si svuota, [GuardedPeopleCrops.clears] non cambia (le Raccolte tengono i loro volti). */
-  @Test
-  fun svuotarePerMemoria_nonRevoca() = runBlocking {
-    val source = Counting { square(it) }
-    val crops = GuardedPeopleCrops(source, Gate())
-    crops.crop(faces[0], 96)
-    val before = crops.clears.value
-    crops.trim(uiHidden = false)
-    assertThat(crops.cachedBytes).isEqualTo(0)
-    assertThat(crops.clears.value).isEqualTo(before)
-    // In primo piano (poca memoria) si ritaglia subito di nuovo.
-    assertThat(crops.crop(faces[0], 96)).isNotNull()
-    assertThat(source.calls.get()).isEqualTo(2)
-  }
-
   /**
-   * CG-I1-01: uscita e rientro di corsa con lo svuotamento in mezzo (visibile -> nascosta -> svuotamento -> visibile, senza che niente giri fra un
-   * passo e l'altro). Il ritorno non si perde: il ritaglio guarda lo **stato** di adesso, e finisce.
+   * I6: svuotare per memoria non e' una revoca e non fa ritagliare nessuno: la cache si svuota, [GuardedPeopleCrops.clears] non cambia (le Raccolte
+   * tengono i loro volti) e la sorgente non parte. Un ritaglio chiesto dopo si serve subito, come prima.
    */
   @Test
-  fun ilRitornoVisibileNonSiPerde_ancheSeNessunoLoHaVisto() = runTest {
-    val visible = MutableStateFlow(true)
+  fun svuotarePerMemoria_nonRevoca_eNonFaRitagliare() = runBlocking {
     val source = Counting { square(it) }
-    val crops = GuardedPeopleCrops(source, Gate(), visible = visible)
-    assertThat(visible.value).isTrue()
-    visible.value = false
-    crops.trim(uiHidden = true)
-    visible.value = true
-    val job = async { crops.crop(faces[0], 96) }
-    runCurrent()
-    assertWithMessage("CG-I1-01: con l'app visibile il ritaglio non resta fermo").that(job.isCompleted).isTrue()
-    assertThat(job.await()).isNotNull()
+    val crops = GuardedPeopleCrops(source, Gate())
+    assertThat(crops.crop(faces[0], 96)).isNotNull()
+    val before = crops.clears.value
+    crops.trim()
+    crops.trim()
+    assertThat(crops.cachedBytes).isEqualTo(0)
+    assertThat(crops.clears.value).isEqualTo(before)
+    assertWithMessage("lo svuotamento non fa partire la sorgente").that(crops.produced).isEqualTo(1)
     assertThat(source.calls.get()).isEqualTo(1)
-  }
-
-  /** I6: dopo uno svuotamento per memoria con l'app nascosta non si ritaglia niente finche' l'app non torna visibile; poi una volta sola. */
-  @Test
-  fun adAppNascosta_nonSiRitagliaFinoAlRitorno() = runTest {
-    val visible = MutableStateFlow(false)
-    val gate = Gate()
-    val source = Counting { square(it) }
-    val crops = GuardedPeopleCrops(source, gate, visible = visible)
-    crops.trim(uiHidden = true)
-    val job = async { crops.crop(faces[0], 96) }
-    runCurrent()
-    // Il primo cancello e' passato e il ritaglio e' fermo sullo stato "visibile": niente sorgente.
-    assertThat(gate.asked.get()).isEqualTo(1)
-    assertThat(job.isCompleted).isFalse()
-    assertThat(source.calls.get()).isEqualTo(0)
-    assertThat(crops.produced).isEqualTo(0)
-    visible.value = true
-    runCurrent()
-    assertThat(job.await()).isNotNull()
-    assertThat(source.calls.get()).isEqualTo(1)
-    // Un altro svuotamento con l'app nascosta: si aspetta di nuovo (gli svuotamenti ripetuti non si sommano ne' si perdono).
-    visible.value = false
-    crops.trim(uiHidden = true)
-    crops.trim(uiHidden = true)
-    val again = async { crops.crop(faces[1], 96) }
-    runCurrent()
-    assertThat(again.isCompleted).isFalse()
-    visible.value = true
-    runCurrent()
-    assertThat(again.await()).isNotNull()
+    assertThat(crops.crop(faces[0], 96)).isNotNull()
     assertThat(source.calls.get()).isEqualTo(2)
-  }
-
-  /** I6: una foto nascosta mentre il ritaglio aspetta l'app: al ritorno il cancello si richiede e non si ritaglia (sempre, non per caso). */
-  @Test
-  fun unaFotoNascostaDuranteLAttesa_nonDaRitaglio() = runTest {
-    val visible = MutableStateFlow(false)
-    val gate = Gate()
-    val source = Counting { square(it) }
-    val crops = GuardedPeopleCrops(source, gate, visible = visible)
-    crops.trim(uiHidden = true)
-    val job = async { crops.crop(faces[0], 96) }
-    runCurrent()
-    assertWithMessage("il primo cancello e' gia' passato").that(gate.asked.get()).isEqualTo(1)
-    assertThat(job.isCompleted).isFalse()
-    gate.open = false
-    visible.value = true
-    runCurrent()
-    assertThat(job.await()).isNull()
-    assertThat(gate.asked.get()).isEqualTo(2)
-    assertThat(source.calls.get()).isEqualTo(0)
+    assertThat(crops.produced).isEqualTo(2)
   }
 
   /**
    * CG-I1-02: uno svuotamento per memoria mentre la sorgente lavora (l'app va in secondo piano a meta' ritaglio). Il ritaglio torna a chi l'ha
-   * chiesto (vale), ma non rientra nella cache liberata; la richiesta dopo, ad app nascosta, aspetta invece di trovarlo in memoria.
+   * chiesto (vale), ma non rientra nella cache liberata: la richiesta dopo lo rifa' dalla sorgente, e solo quella riempie la cache.
    */
   @Test
   fun unoSvuotamentoDuranteIlRitaglio_nonRiempieLaCache() = runTest {
-    val visible = MutableStateFlow(true)
     val source = Barrier(96)
-    val crops = GuardedPeopleCrops(source, Gate(), visible = visible)
+    val crops = GuardedPeopleCrops(source, Gate())
+    val before = crops.clears.value
     val job = async { crops.crop(faces[0], 96) }
     runCurrent()
     assertThat(source.entered.isCompleted).isTrue()
-    visible.value = false
-    crops.trim(uiHidden = true)
+    crops.trim()
     source.release.complete(Unit)
     runCurrent()
     assertThat(job.await()).isNotNull()
     assertWithMessage("CG-I1-02: la cache liberata resta libera").that(crops.cachedBytes).isEqualTo(0)
+    assertThat(crops.clears.value).isEqualTo(before)
     val next = async { crops.crop(faces[0], 96) }
-    runCurrent()
-    assertThat(next.isCompleted).isFalse()
-    assertThat(source.calls.get()).isEqualTo(1)
-    visible.value = true
     runCurrent()
     assertThat(next.await()).isNotNull()
     assertThat(source.calls.get()).isEqualTo(2)
     assertThat(crops.cachedBytes).isGreaterThan(0)
   }
 
-  /** CG-I1-02: una revoca vera (cancellazione, Persone spenta) mentre la sorgente lavora: il ritaglio non torna a nessuno e non entra in cache. */
+  /**
+   * CG-I1-02: una revoca vera (cancellazione, Persone spenta) mentre la sorgente lavora: il ritaglio non torna a nessuno e non entra in cache (la
+   * privacy prima del segnaposto; CG-I1-05 resta un limite noto, docs/decisioni.md).
+   */
   @Test
   fun unaRevocaDuranteIlRitaglio_nonTornaANessuno() = runTest {
     val source = Barrier(96)
@@ -263,22 +195,6 @@ class GuardedPeopleCropsTest {
     runCurrent()
     assertThat(job.await()).isNull()
     assertThat(crops.cachedBytes).isEqualTo(0)
-  }
-
-  /** I6: una revoca mentre il ritaglio aspetta l'app: al ritorno non si ritaglia (la revoca vale anche se il cancello di adesso direbbe si'). */
-  @Test
-  fun unaRevocaDuranteLAttesa_nonDaRitaglio() = runTest {
-    val visible = MutableStateFlow(false)
-    val source = Counting { square(it) }
-    val crops = GuardedPeopleCrops(source, Gate(), visible = visible)
-    crops.trim(uiHidden = true)
-    val job = async { crops.crop(faces[0], 96) }
-    runCurrent()
-    crops.clear()
-    visible.value = true
-    runCurrent()
-    assertThat(job.await()).isNull()
-    assertThat(source.calls.get()).isEqualTo(0)
   }
 
   @Test

@@ -18917,6 +18917,39 @@ di I4 (`f329e9c3`: stato vuoto, «i», anello), la scheda di copertina corretta 
   ora deterministico), attesa su un fronte invece che sullo stato (N4, il difetto di CG-I1-01 rimesso: cade la prova del ritorno non visto e quella
   sul grafo), generazione tolta (N5), barriera di revoca tolta (N6), `availability` tolta dal cancello (N7), `dropRevoked` vuoto (N8).
 
+#### I1, I6 giro 3 (12/11/2026): l'attesa ad app nascosta tolta
+
+- **Tolta l'attesa** dopo uno svuotamento per memoria ad app nascosta: in `GuardedPeopleCrops` il flag `heldWhileHidden`, lo stato `visible`,
+  l'attesa `first { it }` e il secondo cancello dopo l'attesa; `MutableAppContext.foreground` e il collegamento in `FacesWiring` (tornano come prima
+  di I6). **Perche'**: le gare della review venivano da li' (CG-I1-01, poi CG-I1-04: un risveglio vecchio cancellava la pausa di uno svuotamento
+  nuovo), e l'attesa non serve piu': lo svuotamento per memoria non revoca, quindi nessuno ritaglia a causa sua (le Raccolte tengono i volti che
+  hanno). Una richiesta ad app nascosta si serve come prima di I6. `trim()` svuota la cache e apre una generazione, senza cambiare il segno delle
+  revoche; `onTrimMemory` chiama `trim()`.
+- **Resta**: la generazione (letta sotto il lock prima di avviare la sorgente, `put` sotto lo stesso lock solo se invariata: la cache liberata resta
+  libera), la barriera di revoca (una `clear` mentre la sorgente lavora: `null` e niente cache), 4a (cancello chiuso con Persone non attiva qui) e
+  4b (`dropRevoked` lanciato dal `CollectionsLayoutViewModel`). CG-I1-04 sparisce con l'attesa; il "Resta" del giro 2 (un ritaglio ammesso che
+  trova l'app appena nascosta) non e' piu' un caso: ad app nascosta si ritaglia come prima.
+- **Limite noto, lo switch asincrono (non toccato).** Il cancello legge `ArchivePeople.availability`, uno `stateIn` dello switch aggiornato in modo
+  asincrono, prima di letture sospendibili: Persone che si spegne subito dopo quella lettura non ferma da sola una richiesta gia' ammessa; la ferma
+  la barriera di `clear` se la cancellazione arriva mentre la sorgente lavora.
+- **Limite noto, CG-I1-05 (funzionale, non di privacy).** Dopo una revoca durante il ritaglio la richiesta torna `null`: un avatar o un chip del
+  viewer con le stesse chiavi resta sul segnaposto se la pulizia non lo riguardava; si riprende uscendo e rientrando. Scelto: la privacy prima del
+  segnaposto. **Proposta per dopo la beta (strada C)**: rileggere lo switch in modo sincrono (`switch.currentState().activeHere`) e richiedere il
+  cancello invece di restituire `null`.
+- **Prove** (deterministiche, barriere e `runCurrent`, nessun `delay`): tolte le quattro dell'attesa. `GuardedPeopleCropsTest`: svuotare per memoria
+  non revoca e non fa partire la sorgente (contatore `produced` fermo), e la richiesta dopo si serve subito; uno svuotamento mentre la sorgente
+  lavora restituisce il ritaglio ma lascia la cache vuota, e la richiesta dopo ritaglia di nuovo; una revoca mentre la sorgente lavora da' `null`.
+  `FacesIntegrationTest.i6_svuotamentoPerMemoria_nonRevoca_ePersoneSpentaSi` sul grafo vero: `UI_HIDDEN` e `RUNNING_LOW` svuotano senza revoca e
+  senza ritagli, la richiesta dopo ne fa uno solo; la cancellazione cambia il segno e chi chiede dopo non riceve il volto. Le prove di 4a e 4b
+  restano.
+- **Mutazioni** (tre corse, I1-35/36/37; codice rimesso da copia dopo ciascuna e confrontato per hash; ogni mutazione cade sulla sua prova): foto
+  d'origine al disegno (E1: `CollectionCoversGiro2Test.laFotoDOrigineNascosta…`), segno delle revoche nelle Raccolte (E2: `…unaRevocaConLaStessaVista…`),
+  `clear` senza revoca (E3: la prova della cache e quella della revoca durante il ritaglio), primo cancello (E4: tre prove di `GuardedPeopleCropsTest`),
+  `onTrimMemory` che revoca (N1: `FacesIntegrationTest.i6_…`, «nessuna revoca»), generazione ignorata al `put` (N5) e `trim` che non apre la
+  generazione (N10: entrambe `unoSvuotamentoDuranteIlRitaglio…`), barriera di revoca tolta (N6), `availability` tolta dal cancello (N7:
+  `PeopleVisibilityTest`), `dropRevoked` vuoto (N8: `…unaRevocaSenzaLaSchedaComposta…`), `trim` che revoca (N9: `svuotarePerMemoria…` e lo
+  svuotamento durante il ritaglio), `trim` che non svuota (N11: `svuotarePerMemoria…`).
+
 ### I4, il resto dell'app con meno testo (fase I, 11/11 notte)
 
 Il metro dell'utente: «se non sapessi leggere o sentire, potrei usare l'app?». Censimento in `docs/i4-censimento.md`, prima e dopo in

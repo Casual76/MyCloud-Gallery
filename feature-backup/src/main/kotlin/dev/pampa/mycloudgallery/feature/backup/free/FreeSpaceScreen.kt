@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.feature.backup.free
 
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.icon.glyph
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Arrangement
@@ -185,7 +187,8 @@ internal fun FreeSpaceScreen(
           is FreeSpaceUi.Confirming -> item(key = "confirming") {
             BackupCard(
               tone = BackupTone.Working,
-              glyph = Icons.Rounded.Schedule,
+              // I6 (CU-33): aspetto la risposta al dialogo del telefono: l'attesa e' la clessidra comune.
+              glyph = GalleryIconStatus.Waiting.glyph(),
               title = stringResource(R.string.backup_free_confirming_title),
               detail = stringResource(R.string.backup_free_confirming_detail, state.batch, state.of),
               busy = true,
@@ -487,11 +490,13 @@ private fun blockedText(reason: FreeSpaceBlockedBy): BlockedText = when (reason)
     BackupTone.Attention, Icons.Rounded.Warning, R.string.backup_free_blocked_rejected_title, R.string.backup_free_blocked_rejected_detail,
     R.string.backup_free_blocked_retry to { actions -> actions.reload() },
   )
+  // I6 (CU-33): le due attese (il backup non ancora pronto, il telefono che non puo') con la clessidra comune; la verifica scaduta resta l'orologio
+  // (e' una questione di tempo, non un'attesa).
   FreeSpaceBlockedBy.NOT_AVAILABLE -> BlockedText(
-    BackupTone.Waiting, Icons.Rounded.Schedule, R.string.backup_free_blocked_unavailable_title, R.string.backup_free_blocked_unavailable_detail,
+    BackupTone.Waiting, GalleryIconStatus.Waiting.glyph(), R.string.backup_free_blocked_unavailable_title, R.string.backup_free_blocked_unavailable_detail,
   )
   FreeSpaceBlockedBy.NO_SYSTEM_DIALOG -> BlockedText(
-    BackupTone.Waiting, Icons.Rounded.Schedule, R.string.backup_free_blocked_dialog_title, R.string.backup_free_blocked_dialog_detail,
+    BackupTone.Waiting, GalleryIconStatus.Waiting.glyph(), R.string.backup_free_blocked_dialog_title, R.string.backup_free_blocked_dialog_detail,
   )
   FreeSpaceBlockedBy.EXPIRED -> BlockedText(
     BackupTone.Attention, Icons.Rounded.Schedule, R.string.backup_free_blocked_expired_title, R.string.backup_free_blocked_expired_detail,

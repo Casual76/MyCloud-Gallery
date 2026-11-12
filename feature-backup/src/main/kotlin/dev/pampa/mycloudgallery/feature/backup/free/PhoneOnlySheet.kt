@@ -1,10 +1,11 @@
 package dev.pampa.mycloudgallery.feature.backup.free
 
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.icon.glyph
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.PhoneAndroid
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
@@ -304,7 +305,8 @@ internal fun PhoneOnlyContent(
             title = stringResource(R.string.backup_free_phone_unavailable_title),
             subtitle = stringResource(R.string.backup_free_phone_unavailable_detail),
             tone = FluidTone.Neutral,
-            leading = { Icon(imageVector = Icons.Rounded.Schedule, contentDescription = null) },
+            // I6 (CU-33): si accende quando il backup e' pronto: un'attesa, la clessidra comune.
+            leading = { Icon(imageVector = GalleryIconStatus.Waiting.glyph(), contentDescription = null) },
             disclosure = false,
           )
         }
@@ -465,7 +467,7 @@ private fun adviceLook(advice: PhoneOnlyAdvice): AdviceLook = when (advice) {
   PhoneOnlyAdvice.FREE -> AdviceLook(R.plurals.backup_free_phone_free, FluidTone.Success, Icons.Rounded.CheckCircle)
   PhoneOnlyAdvice.GUARD_FIRST -> AdviceLook(R.plurals.backup_free_phone_guard, FluidTone.Info, Icons.Rounded.Shield)
   PhoneOnlyAdvice.SAFE_FIRST -> AdviceLook(R.plurals.backup_free_phone_safe_first, FluidTone.Warning, Icons.Rounded.Warning)
-  PhoneOnlyAdvice.WAIT -> AdviceLook(R.plurals.backup_free_phone_wait, FluidTone.Info, Icons.Rounded.Schedule)
+  PhoneOnlyAdvice.WAIT -> AdviceLook(R.plurals.backup_free_phone_wait, FluidTone.Info, GalleryIconStatus.Waiting.glyph())
   PhoneOnlyAdvice.FROZEN -> AdviceLook(R.plurals.backup_free_phone_frozen, FluidTone.Danger, Icons.Rounded.Warning)
   PhoneOnlyAdvice.UNAVAILABLE -> AdviceLook(R.plurals.backup_free_phone_unavailable, FluidTone.Neutral, Icons.Rounded.CloudOff)
   PhoneOnlyAdvice.OUTSIDE_TEST_FENCE -> AdviceLook(R.plurals.backup_free_phone_fence, FluidTone.Neutral, Icons.Rounded.Warning)

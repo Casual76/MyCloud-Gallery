@@ -1,5 +1,8 @@
 package dev.pampa.mycloudgallery.feature.backup.page
 
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.runtime.remember
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -115,11 +118,20 @@ internal fun SourceGrid(sources: List<SourceStatus>, halt: SourcesHalt?) {
     val minCell = BackupDimens.CoverMinCell * maxOf(1f, scale)
     val columns = maxOf(minColumns, ((maxWidth + gap) / (minCell + gap)).toInt())
     val cell = (maxWidth - gap * (columns - 1)) / columns
+    // I6 (CS-27): una riga riserva due righe al nome solo se almeno un nome della riga ne ha bisogno (a quella larghezza e con quel testo): le barre
+    // della stessa riga restano allineate, e una riga di nomi corti non ha il vuoto sotto.
+    val names = sources.map { sourceName(it.source) }
+    val style = MaterialTheme.typography.labelLarge
+    val measurer = rememberTextMeasurer()
+    val cellPx = with(LocalDensity.current) { cell.roundToPx() }
+    val lines = remember(names, cellPx, style, columns) {
+      coverNameLines(names.map { measurer.measure(it, style, maxLines = NameLines, constraints = Constraints(maxWidth = cellPx)).lineCount }, columns)
+    }
     Column(verticalArrangement = Arrangement.spacedBy(BackupDimens.CoverRowGap)) {
       sources.indices.chunked(columns).forEach { row ->
         Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
           row.forEach { index ->
-            SourceCard(source = sources[index], halt = halt, cell = cell, showMark = coverMarkShown(states[index], states))
+            SourceCard(source = sources[index], halt = halt, cell = cell, showMark = coverMarkShown(states[index], states), nameLines = lines[index])
           }
         }
       }
@@ -133,7 +145,7 @@ internal fun SourceGrid(sources: List<SourceStatus>, halt: SourcesHalt?) {
  * sicuro, la nuvola barrata quando la cartella non si salva. Nessuna frase: per TalkBack la copertina dice nome, stato e numeri in una frase.
  */
 @Composable
-private fun SourceCard(source: SourceStatus, halt: SourcesHalt?, cell: Dp, showMark: Boolean) {
+private fun SourceCard(source: SourceStatus, halt: SourcesHalt?, cell: Dp, showMark: Boolean, nameLines: Int = NameLines) {
   val name = sourceName(source.source)
   val problems = source.problems.values.sum()
   val state = sourceState(source, problems, halt)
@@ -163,8 +175,9 @@ private fun SourceCard(source: SourceStatus, halt: SourcesHalt?, cell: Dp, showM
       text = name,
       style = MaterialTheme.typography.labelLarge,
       color = MaterialTheme.colorScheme.onSurface,
-      // Giro 2 (CS-18): due righe riservate al nome in ogni copertina, cosi' barre e numeri della stessa riga stanno alla stessa altezza.
-      minLines = NameLines,
+      // Giro 2 (CS-18) e I6 (CS-27): le righe del nome sono quelle della riga di copertine (due se un nome ne ha bisogno), cosi' barre e numeri
+      // della stessa riga stanno alla stessa altezza senza un vuoto dove i nomi sono corti.
+      minLines = nameLines,
       maxLines = NameLines,
       overflow = TextOverflow.Ellipsis,
       modifier = Modifier.clearAndSetSemantics {},
@@ -184,6 +197,16 @@ private fun SourceCard(source: SourceStatus, halt: SourcesHalt?, cell: Dp, showM
  */
 internal fun coverMarkShown(state: SourceState, all: List<SourceState>): Boolean =
   (state == SourceState.Problem || state == SourceState.Off) && all.any { it != state }
+
+/**
+ * I6 (CS-27): le righe da riservare al nome di ogni copertina, da [lines] (quante ne usa ciascun nome, al piu' [NameLines]) e dalle [columns] della
+ * griglia: in ogni riga di copertine il massimo della riga. Pura, per la prova.
+ */
+internal fun coverNameLines(lines: List<Int>, columns: Int): List<Int> =
+  lines.indices.chunked(maxOf(1, columns)).flatMap { row ->
+    val most = row.maxOf { lines[it] }.coerceIn(1, NameLines)
+    row.map { most }
+  }
 
 /** Il numero che conta di una copertina: il glifo (che dice di che numero si tratta) e il numero. */
 private class CountLine(val icon: ImageVector, val value: Int, val mark: GalleryIconStatus)

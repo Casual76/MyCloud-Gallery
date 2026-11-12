@@ -55,7 +55,6 @@
   <string name="nas_folders_pick_subtitle">Scegli la cartella di arrivo</string>
   <string name="nas_folders_pick_here">Sposta qui</string>
   <string name="nas_folders_pick_cancel">Annulla</string>
-  <string name="nas_folders_pick_blocked">Qui non si può spostare: la cartella è in sola lettura o il NAS non risponde.</string>
 
   <!-- Operazioni in corso: la striscia in cima -->
   <plurals name="nas_folders_ops_strip">

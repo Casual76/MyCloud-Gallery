@@ -100,7 +100,6 @@
   </plurals>
   <string name="nas_ops_detail_cancelled">Annullata dopo %1$s di %2$s: il resto non è stato fatto. Quello che era già fatto resta fatto.</string>
   <string name="nas_ops_detail_failed">%1$s</string>
-  <string name="nas_ops_detail_failed_progress">%1$s Fatti %2$s di %3$s: quelli fatti restano fatti.</string>
 
   <!-- Perché è in pausa -->
   <string name="nas_ops_pause_nas_unreachable">Il NAS non risponde: riprende da sola appena torna raggiungibile.</string>

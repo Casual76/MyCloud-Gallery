@@ -32,7 +32,6 @@
   <!-- Il riepilogo -->
   <string name="nas_confirm_row_skipped">Restano dove sono</string>
   <string name="nas_confirm_folders_and_files">%1$s e %2$s</string>
-  <string name="nas_confirm_path_separator">%1$s / %2$s</string>
 
   <!-- Le note: cosa succede, in una riga ciascuna -->
   <string name="nas_confirm_common_title">Le vedranno tutti i familiari</string>
@@ -86,7 +85,6 @@
   <string name="nas_confirm_action_restore">Ripristina</string>
   <string name="nas_confirm_action_purge_continue">Continua</string>
   <string name="nas_confirm_action_purge_now">Elimina subito</string>
-  <string name="nas_confirm_action_back">Indietro</string>
   <string name="nas_confirm_action_nothing_to_move">Niente da spostare</string>
 
   <!-- Nome di una cartella o di un file (crea, rinomina) -->
@@ -101,7 +99,6 @@
   <string name="nas_name_ok">Il nome va bene.</string>
   <string name="nas_name_invalid">Nel nome ci sono caratteri che il NAS non ammette (come \\ / : * ? \" &lt; &gt; |) o spazi e punti alla fine.</string>
   <string name="nas_name_suggestion">Prova con «%1$s»</string>
-  <string name="nas_name_use_suggestion">Usa questo nome</string>
   <string name="nas_name_exists">Esiste già qualcosa con questo nome.</string>
   <string name="nas_name_same">È il nome di adesso.</string>
 </resources>

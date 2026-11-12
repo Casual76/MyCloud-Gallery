@@ -24,12 +24,13 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.family.contract.AreaCandidate
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProblem
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
@@ -225,6 +226,7 @@ private fun AreaGroup(
         selected = selected == candidate.share,
         onSelect = { onSelect(candidate.share) },
         icon = if (state == AreaState.READ_WRITE) icon else Icons.Rounded.Folder,
+        family = GalleryIconFamily.Backup,
         enabled = enabled,
         labels = if (candidate.isPublic == true || candidate.hasFamily) {
           {

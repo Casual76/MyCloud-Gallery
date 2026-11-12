@@ -4,9 +4,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.Density
+import com.github.takahirom.roborazzi.checkRoboAccessibility
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.designsystem.testing.A11yAssertions
@@ -14,7 +15,6 @@ import dev.pampa.mycloudgallery.core.designsystem.testing.A11yConfig
 import dev.pampa.mycloudgallery.core.designsystem.testing.A11yRule
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolderState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasSpaceState
-import dev.pampa.mycloudgallery.core.nasops.contract.NasTrashState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpErrorCode
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.feature.nas.folders.FolderWhere
@@ -26,11 +26,6 @@ import dev.pampa.mycloudgallery.feature.nas.operations.NasOperationsScreen
 import dev.pampa.mycloudgallery.feature.nas.operations.operationsUi
 import dev.pampa.mycloudgallery.feature.nas.space.NasSpaceScreen
 import dev.pampa.mycloudgallery.feature.nas.space.SpaceUi
-import dev.pampa.mycloudgallery.feature.nas.trash.NasTrashScreen
-import dev.pampa.mycloudgallery.feature.nas.trash.TrashActions
-import dev.pampa.mycloudgallery.feature.nas.trash.TrashUi
-import dev.pampa.mycloudgallery.feature.nas.trash.key
-import com.github.takahirom.roborazzi.checkRoboAccessibility
 import org.junit.Test
 
 /**
@@ -62,8 +57,7 @@ class NasA11yRulesTest : ComposeNasTest() {
       hidden = HiddenFiles.Known(emptySet()),
     )
 
-  private fun trash(list: NasTrashState = NasTrashState.Ready(NasFixtures.trashItems(), NasFixtures.NOW, writable = true), selecting: Boolean = false, selection: Set<String> = emptySet()) =
-    TrashUi(areas = areas, list = list, selecting = selecting, selection = selection, confirm = null, notice = null)
+
 
   private fun space(space: NasSpaceState) = SpaceUi(areas = areas, share = "test", space = space)
 
@@ -112,22 +106,6 @@ class NasA11yRulesTest : ComposeNasTest() {
   fun cartelleVuota() = clean("vuota", fileNamesAreContent = true, content = foldersScreen(folders(listing = NasFolderState.Listing(emptyList(), false, null))))
 
   // --- Eliminati di recente ---------------------------------------------------------------------------------------------------
-
-  @Test
-  fun eliminati() = clean("eliminati", fileNamesAreContent = true) { NasTrashScreen(trash(), TrashActions(), { 0L }, onBack = {}) }
-
-  @Test
-  fun eliminatiInSelezione() {
-    val items = NasFixtures.trashItems()
-    clean("eliminati in selezione", fileNamesAreContent = true) {
-      NasTrashScreen(trash(selecting = true, selection = setOf(items[0].key(), items[1].key())), TrashActions(), { 0L }, onBack = {})
-    }
-  }
-
-  @Test
-  fun eliminatiVuoti() = clean("eliminati vuoti", fileNamesAreContent = true) {
-    NasTrashScreen(trash(list = NasTrashState.Ready(emptyList(), NasFixtures.NOW, writable = true)), TrashActions(), { 0L }, onBack = {})
-  }
 
   // --- Spazio e operazioni ----------------------------------------------------------------------------------------------------
 

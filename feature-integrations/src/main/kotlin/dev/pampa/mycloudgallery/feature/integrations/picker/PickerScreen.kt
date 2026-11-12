@@ -56,6 +56,7 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeIconButton
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryBadge
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryBadgeView
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryMediaCell
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustration
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
@@ -496,37 +497,31 @@ private fun PickerMessage(
   loading: Boolean = false,
   footnote: String? = null,
 ) {
+  // CS-26 (fase I): la forma comune dello stato (figura e titolo); la frase resta aperta (e' un'istruzione o un errore) e cosi' la nota.
   Column(
     modifier = Modifier.fillMaxSize().padding(24.dp),
-    horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+    verticalArrangement = Arrangement.Center,
   ) {
-    GalleryIllustration(icon = icon, tone = tone)
-    Text(
-      text = title,
-      modifier = Modifier.widthIn(max = PickerDimens.MessageMaxWidth),
-      style = MaterialTheme.typography.headlineSmall,
-      color = MaterialTheme.colorScheme.onSurface,
-      textAlign = TextAlign.Center,
-    )
-    Text(
-      text = detail,
-      modifier = Modifier.widthIn(max = PickerDimens.MessageMaxWidth),
-      style = MaterialTheme.typography.bodyLarge,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-      textAlign = TextAlign.Center,
-    )
-    if (action != null && onAction != null) {
-      FluidButton(text = action, onClick = onAction, size = FluidButtonSize.Large, style = FluidButtonStyle.Filled, loading = loading, enabled = !loading)
-    }
-    if (footnote != null) {
+    GalleryFigureState(icon = icon, title = title, tone = tone, fill = false) {
       Text(
-        text = footnote,
+        text = detail,
         modifier = Modifier.widthIn(max = PickerDimens.MessageMaxWidth),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
       )
+      if (action != null && onAction != null) {
+        FluidButton(text = action, onClick = onAction, size = FluidButtonSize.Large, style = FluidButtonStyle.Filled, loading = loading, enabled = !loading)
+      }
+      if (footnote != null) {
+        Text(
+          text = footnote,
+          modifier = Modifier.widthIn(max = PickerDimens.MessageMaxWidth),
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.error,
+          textAlign = TextAlign.Center,
+        )
+      }
     }
   }
 }

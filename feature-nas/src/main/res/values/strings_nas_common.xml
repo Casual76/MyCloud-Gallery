@@ -7,8 +7,6 @@
   <string name="nas_done">Fine</string>
   <string name="nas_cancel">Annulla</string>
   <string name="nas_retry">Riprova</string>
-  <string name="nas_close">Chiudi</string>
-  <string name="nas_select">Seleziona</string>
   <string name="nas_select_all">Seleziona tutto</string>
   <string name="nas_select_items">Seleziona elementi</string>
 
@@ -29,7 +27,6 @@
     <item quantity="one">%1$s file</item>
     <item quantity="other">%1$s file</item>
   </plurals>
-  <string name="nas_count_and_size">%1$s · %2$s</string>
 
   <!-- Aree -->
   <string name="nas_area_private">La mia area</string>
@@ -41,12 +38,10 @@
   <!-- Sola lettura (E-N9) e NAS che non risponde -->
   <string name="nas_readonly_title">Sola lettura</string>
   <string name="nas_readonly_detail">Con questo account puoi guardare ma non modificare: crea, rinomina, sposta ed elimina sono spenti qui.</string>
-  <string name="nas_readonly_pill">Sola lettura</string>
   <string name="nas_offline_title">Il NAS non risponde</string>
   <string name="nas_offline_detail">Non posso fare modifiche finché non torna raggiungibile. Quello che vedi è l\'ultimo elenco salvato.</string>
   <string name="nas_offline_detail_saved">Non posso fare modifiche finché non torna raggiungibile. Quello che vedi è l\'elenco salvato il %1$s alle %2$s.</string>
   <string name="nas_offline_detail_none">Non ho un elenco salvato di questo posto. Riprova quando il NAS è raggiungibile.</string>
-  <string name="nas_offline_pill">NAS non raggiungibile</string>
   <string name="nas_denied_title">Qui non puoi entrare</string>
   <string name="nas_denied_detail">Il NAS dice che questo account non ha accesso a questo posto. Se pensi sia un errore, chiedilo a chi gestisce la famiglia.</string>
   <string name="nas_error_title">Qualcosa non va</string>

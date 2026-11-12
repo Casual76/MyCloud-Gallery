@@ -31,7 +31,7 @@ class NasStyleTest {
   fun sorgentiTrovati() {
     assertWithMessage("src/main/kotlin non trovato dalla cartella ${File(".").absolutePath}")
       .that(sources.map { it.name })
-      .containsAtLeast("NasChrome.kt", "NasFoldersScreen.kt", "NasTrashScreen.kt", "NasSpaceScreen.kt", "NasOperationsScreen.kt", "NasConfirm.kt")
+      .containsAtLeast("NasChrome.kt", "NasFoldersScreen.kt", "NasSpaceScreen.kt", "NasOperationsScreen.kt", "NasConfirm.kt")
   }
 
   @Test

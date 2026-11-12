@@ -43,10 +43,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
-import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
@@ -65,7 +65,10 @@ import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoGlyph
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoButton
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.feature.onboarding.R
 
 // I pezzi che le schermate dell'onboarding condividono. Tutti i colori vengono da `MaterialTheme.colorScheme`
@@ -128,14 +131,13 @@ internal fun NoticeCard(
   compact: Boolean = false,
   onDismiss: (() -> Unit)? = null,
   bodyBehindInfo: Boolean = false,
+  family: GalleryIconFamily? = null,
   actions: @Composable ColumnScope.() -> Unit = {},
 ) {
   val colors = noticeColors(tone)
   // Fase I (CU-18, «l'app parla troppo»): una scheda che spiega (non che avverte) mostra il segno e il titolo; la frase sta dietro la «i» e si apre
   // con un tocco sul titolo. TalkBack la sente sempre. Gli avvertimenti (chiavi, recupero, gesti distruttivi) restano aperti: [bodyBehindInfo] falso.
   val folded = bodyBehindInfo && body != null
-  // La regola del modulo vuole niente stato salvato nelle schermate (le password): la «i» aperta si richiude a una rotazione, e va bene.
-  var open by remember(title) { mutableStateOf(false) }
   val padding = if (compact) OnboardingDimens.CompactPadding else OnboardingDimens.CardPadding
   Column(
     modifier = modifier
@@ -149,38 +151,43 @@ internal fun NoticeCard(
       horizontalArrangement = Arrangement.spacedBy(OnboardingDimens.CardGap),
       verticalAlignment = Alignment.Top,
     ) {
-      if (compact) {
+      // CU-34 (fase I): con [family] la piastrella e' quella colorata della famiglia, come nel resto dell'app; senza, quella del tono (gli avvisi).
+      val tileSide = if (compact) OnboardingDimens.CompactTile else OnboardingDimens.Tile
+      if (family != null) {
+        GalleryIconTile(icon = icon, family = family, size = tileSide)
+      } else if (compact) {
         GlyphTile(icon = icon, tone = tone, size = OnboardingDimens.CompactTile, glyph = OnboardingDimens.CompactGlyph)
       } else {
         GlyphTile(icon = icon, tone = tone)
       }
-      Column(
-        modifier = Modifier
-          .weight(1f)
-          .then(if (folded) Modifier.fluidPressable(onClick = { open = !open }, role = Role.Button) else Modifier)
-          .semantics(mergeDescendants = true) {
-            liveRegion = LiveRegionMode.Polite
-            if (folded) contentDescription = "$title. $body"
-          },
-        verticalArrangement = Arrangement.spacedBy(OnboardingDimens.TextGap),
-      ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(OnboardingDimens.TextGap)) {
+      if (folded && body != null) {
+        // CS-26 (fase I): la scheda che spiega usa la riga comune della «i» (il titolo, la «i», la frase sotto al tocco; TalkBack la sente sempre).
+        GalleryInfoRow(
+          label = title,
+          detail = body,
+          modifier = Modifier.weight(1f),
+          labelStyle = (if (compact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium).copy(fontWeight = FontWeight.SemiBold),
+        )
+      } else {
+        Column(
+          modifier = Modifier
+            .weight(1f)
+            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+          verticalArrangement = Arrangement.spacedBy(OnboardingDimens.TextGap),
+        ) {
           Text(
             text = title,
             style = if (compact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = colors.onContainer,
-            modifier = Modifier.weight(1f, fill = false).then(if (folded) Modifier.semantics { hideFromAccessibility() } else Modifier),
           )
-          if (folded) GalleryInfoGlyph(open = open)
-        }
-        if (body != null && (!folded || open)) {
-          Text(
-            text = body,
-            style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
-            color = colors.onContainer,
-            modifier = if (folded) Modifier.semantics { hideFromAccessibility() } else Modifier,
-          )
+          if (body != null) {
+            Text(
+              text = body,
+              style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+              color = colors.onContainer,
+            )
+          }
         }
       }
       if (onDismiss != null) {
@@ -266,17 +273,29 @@ internal fun ToggleRow(
   modifier: Modifier = Modifier,
   tone: FluidTone = FluidTone.Primary,
   enabled: Boolean = true,
+  family: GalleryIconFamily? = null,
+  info: String? = null,
 ) {
+  // CU-34 (fase I): con [family] la piastrella colorata della famiglia (niente piastrelle grigie); con [info] la frase lunga sta dietro una «i» accanto
+  // all'interruttore (il tocco sulla riga resta l'interruttore). TalkBack sente la frase nella descrizione della riga.
+  var open by remember(title) { mutableStateOf(false) }
   FluidListRow(
     title = title,
-    subtitle = subtitle,
+    subtitle = if (info != null) (if (open) info else "") else subtitle,
     modifier = modifier.semantics(mergeDescendants = true) {
       role = Role.Switch
       toggleableState = ToggleableState(checked)
+      if (info != null) stateDescription = info
     },
     tone = tone,
-    leading = { Icon(imageVector = icon, contentDescription = null) },
-    badge = { FluidSwitch(checked = checked, onCheckedChange = null, enabled = enabled) },
+    leading = { if (family != null) GalleryIconTile(icon = icon, family = family) else Icon(imageVector = icon, contentDescription = null) },
+    leadingTile = family == null,
+    badge = {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        if (info != null) GalleryInfoButton(label = info, open = open, onToggle = { open = !open })
+        FluidSwitch(checked = checked, onCheckedChange = null, enabled = enabled)
+      }
+    },
     onClick = if (enabled) ({ onCheckedChange(!checked) }) else null,
     disclosure = false,
   )
@@ -294,6 +313,7 @@ internal fun ChoiceRow(
   tone: FluidTone = FluidTone.Primary,
   enabled: Boolean = true,
   labels: (@Composable () -> Unit)? = null,
+  family: GalleryIconFamily? = null,
 ) {
   FluidListRow(
     title = title,
@@ -305,7 +325,9 @@ internal fun ChoiceRow(
         if (!enabled) disabled()
       },
     tone = tone,
-    leading = icon?.let { glyph -> { Icon(imageVector = glyph, contentDescription = null) } },
+    // I6 (fase I): con [family] la piastrella colorata della famiglia, come nel resto dell'app.
+    leading = icon?.let { glyph -> { if (family != null) GalleryIconTile(icon = glyph, family = family) else Icon(imageVector = glyph, contentDescription = null) } },
+    leadingTile = family == null,
     labels = labels,
     badge = if (enabled) ({ SelectionMark(selected = selected) }) else null,
     onClick = if (enabled) onSelect else null,

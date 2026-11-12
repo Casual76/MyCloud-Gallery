@@ -53,7 +53,6 @@ class HiddenSurfacesRegistryTest {
     val seen = RepoFiles.nameSurfaces(HiddenSurfaces.nameBearingTypes)
     // Controllo positivo: senza, il test di sopra passerebbe a vuoto.
     assertThat(seen.any { it.endsWith("feature/nas/space/NasSpaceScreen.kt") }).isTrue()
-    assertThat(seen.any { it.endsWith("feature/nas/trash/NasTrashScreen.kt") }).isTrue()
     assertThat(seen.any { it.endsWith("feature/library/trash/NasTrashRows.kt") }).isTrue()
     assertThat(seen.any { it.endsWith("nas/NasOrganizer.kt") }).isTrue()
     // I core-* producono i dati: non sono schermate.

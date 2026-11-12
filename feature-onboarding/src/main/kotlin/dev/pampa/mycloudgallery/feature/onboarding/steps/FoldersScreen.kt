@@ -5,8 +5,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -20,9 +20,10 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.family.contract.ExclusionReason
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.feature.onboarding.R
@@ -124,6 +125,8 @@ internal fun FoldersScreen(
           icon = Icons.Rounded.CheckCircle,
           title = stringResource(R.string.folders_none_title),
           body = stringResource(R.string.folders_none_detail),
+          bodyBehindInfo = true,
+          family = GalleryIconFamily.Backup,
         )
       }
       else -> {
@@ -143,6 +146,7 @@ internal fun FoldersScreen(
                 icon = folder.reason.icon(),
                 checked = folder.path in form.excluded,
                 onCheckedChange = { form.toggle(folder.path, it) },
+                family = GalleryIconFamily.Backup,
               )
             }
           }

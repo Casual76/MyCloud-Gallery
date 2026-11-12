@@ -36,3 +36,8 @@ scuro: il nome si legge con la sfumatura corretta di I4), `raccolte-raccolta-ape
 (`libreria-*`, `persone-elenco-vuoto/calcolo-*`, `persone-altri-volti-vuoto-*`, `persone-nascoste-vuoto-*`, `persone-pagina-nascosta-*`,
 `persone-persona-foto-nascoste-*`, `persone-controlla-*`, `tutti-i-ricordi-vuoto-*`, `pagina-sparita-*`, `presentazione-sparita-*`). Le scelte sono
 in `docs/decisioni.md`, «I1, giro di correzione 1».
+
+## Giro di correzione 2 (12/11/2026)
+La Mappa con la forma unica degli stati vuoti: `mappa-*-prima-*` (registrati il 10/11, `FluidEmptyState` con titolo e frase) e `mappa-*-dopo-*`
+(figura, titolo, «i», tasti). Scene: mappa vuota (telefono, tablet, testo grande), mappa con errore, zona vuota, zona con errore, Impostazioni ->
+Mappa non disponibile, zona attorno a un luogo senza elenco dei luoghi (solo «dopo»: la scena prima non c'era).

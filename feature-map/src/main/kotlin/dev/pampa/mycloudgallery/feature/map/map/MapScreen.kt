@@ -37,7 +37,6 @@ import dev.pampa.mycloudgallery.core.designsystem.adaptive.LocalNewWindow
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberAppWindow
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.feature.map.R
 import dev.pampa.mycloudgallery.feature.map.contract.MapNotice
@@ -48,6 +47,10 @@ import dev.pampa.mycloudgallery.feature.map.ui.MapControlButton
 import dev.pampa.mycloudgallery.feature.map.ui.MapCredit
 import dev.pampa.mycloudgallery.feature.map.ui.MapDimens
 import dev.pampa.mycloudgallery.feature.map.ui.MapText
+import androidx.compose.material.icons.rounded.LocationOff
+import androidx.compose.material.icons.rounded.WrongLocation
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
+import dev.pampa.mycloudgallery.feature.map.ui.MapFigureState
 
 // LA PAGINA DELLA MAPPA (Fase 9, P4; docs/fase9-progetto.md §1.5 `MapScreenState`, §2.10 "La schermata", D24, D28, D29, L430; "Avvio e pagine istantanei"). La carta (MapLibre o la
 // finta degli screenshot) a tutto schermo, le bolle sopra, in alto "indietro", il titolo e le Impostazioni della mappa, sotto la riga discreta dell'avviso (mai un dialogo) e in basso il
@@ -171,9 +174,11 @@ private fun StateRow(screen: MapScreenState, handlers: MapHandlers) {
         .padding(MapDimens.Inset)
         .semantics { liveRegion = LiveRegionMode.Polite },
     ) {
-      FluidEmptyState(
+      // Giro 2 (CS-17): la forma unica degli stati vuoti; quante foto sono senza posizione (o dove compaiono) dietro la «i».
+      MapFigureState(
+        icon = Icons.Rounded.LocationOff,
         title = stringResource(R.string.mappa_empty_title),
-        detail = if (screen.withoutPosition > 0) MapText.withoutPosition(resources, screen.withoutPosition) else stringResource(R.string.mappa_empty_detail),
+        why = if (screen.withoutPosition > 0) MapText.withoutPosition(resources, screen.withoutPosition) else stringResource(R.string.mappa_empty_detail),
       )
     }
     // MA-1: un errore di lettura non e' "nessuna foto con la posizione": lo dice e offre di riprovare (le foto non sono perse).
@@ -186,7 +191,12 @@ private fun StateRow(screen: MapScreenState, handlers: MapHandlers) {
         .semantics { liveRegion = LiveRegionMode.Polite },
       verticalArrangement = Arrangement.spacedBy(MapDimens.BlockGap),
     ) {
-      FluidEmptyState(title = stringResource(R.string.mappa_failed_title), detail = stringResource(R.string.mappa_failed_detail))
+      MapFigureState(
+        icon = Icons.Rounded.WrongLocation,
+        title = stringResource(R.string.mappa_failed_title),
+        why = stringResource(R.string.mappa_failed_detail),
+        tone = GalleryIllustrationTone.Caution,
+      )
       FluidButton(
         text = stringResource(R.string.mappa_retry),
         onClick = handlers::onRetry,

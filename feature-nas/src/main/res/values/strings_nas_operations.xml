@@ -11,7 +11,6 @@
   <string name="nas_ops_clock_sheet_message">Controlla l’ora dal pannello del NAS. Se è giusta, il cestino e l’indice ripartono da adesso. Se non lo è, aspetta: riprendono da soli quando l’ora resta stabile per un giorno.</string>
   <string name="nas_ops_clock_sheet_confirm">Sì, l’ora è giusta</string>
   <string name="nas_ops_clock_sheet_cancel">Aspetta</string>
-  <string name="nas_ops_subtitle_none">Nessuna operazione</string>
   <plurals name="nas_ops_subtitle_active">
     <item quantity="one">%1$s in corso</item>
     <item quantity="other">%1$s in corso</item>

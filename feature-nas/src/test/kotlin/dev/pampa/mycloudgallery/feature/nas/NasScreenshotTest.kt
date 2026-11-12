@@ -16,7 +16,6 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolderState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasSpaceState
-import dev.pampa.mycloudgallery.core.nasops.contract.NasTrashState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpErrorCode
 import dev.pampa.mycloudgallery.core.nasops.contract.OpPlan
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
@@ -39,10 +38,6 @@ import dev.pampa.mycloudgallery.feature.nas.operations.OperationsUi
 import dev.pampa.mycloudgallery.feature.nas.operations.operationsUi
 import dev.pampa.mycloudgallery.feature.nas.space.NasSpaceScreen
 import dev.pampa.mycloudgallery.feature.nas.space.SpaceUi
-import dev.pampa.mycloudgallery.feature.nas.trash.NasTrashScreen
-import dev.pampa.mycloudgallery.feature.nas.trash.TrashActions
-import dev.pampa.mycloudgallery.feature.nas.trash.TrashUi
-import dev.pampa.mycloudgallery.feature.nas.trash.key
 import dev.pampa.mycloudgallery.feature.nas.ui.NasTone
 import dev.pampa.mycloudgallery.feature.nas.ui.UiNotice
 import org.junit.Test
@@ -117,19 +112,6 @@ abstract class NasScreenshotBase(private val dark: Boolean, private val device: 
     thumbnails: NasThumbnails = NasThumbnails.None,
   ) {
     NasFoldersScreen(state = state, actions = FoldersActions(thumbnails = thumbnails), monotonicMs = { 0L }, onBack = onBack, hostPadding = hostPadding)
-  }
-
-  private fun trash(
-    list: NasTrashState = NasTrashState.Ready(NasFixtures.trashItems(), NasFixtures.NOW, writable = true),
-    selecting: Boolean = false,
-    selection: Set<String> = emptySet(),
-    notice: UiNotice? = null,
-    confirm: OpPlan? = null,
-  ) = TrashUi(areas = areas, list = list, selecting = selecting, selection = selection, confirm = confirm, notice = notice)
-
-  @Composable
-  private fun TrashPage(state: TrashUi, onBack: (() -> Unit)? = {}) {
-    NasTrashScreen(state = state, actions = TrashActions(), monotonicMs = { 0L }, onBack = onBack)
   }
 
   // --- Cartelle NAS -----------------------------------------------------------------------------------------------------------
@@ -286,47 +268,9 @@ abstract class NasScreenshotBase(private val dark: Boolean, private val device: 
   @Test
   fun spazioInCaricamento() = shoot("spazio-caricamento") { SpacePage(space(NasSpaceState.Loading)) }
 
-  // --- Eliminati di recente del NAS -------------------------------------------------------------------------------------------
-
-  @Test
-  fun eliminati() = shoot("eliminati") { TrashPage(trash()) }
-
-  @Test
-  fun eliminatiTestoGrande() = shoot("eliminati", fontScale = LARGE_TEXT) { TrashPage(trash()) }
-
-  @Test
-  fun eliminatiInSelezioneDelleProprie() {
-    val items = NasFixtures.trashItems()
-    shoot("eliminati-selezione") { TrashPage(trash(selecting = true, selection = setOf(items[0].key(), items[1].key()))) }
-  }
-
-  @Test
-  fun eliminatiInSelezioneConUnaVoceDiAltri() {
-    val items = NasFixtures.trashItems()
-    shoot("eliminati-selezione-mista") { TrashPage(trash(selecting = true, selection = setOf(items[0].key(), items[2].key()))) }
-  }
-
-  @Test
-  fun eliminatiInSelezioneTestoGrande() {
-    val items = NasFixtures.trashItems()
-    shoot("eliminati-selezione", fontScale = LARGE_TEXT) { TrashPage(trash(selecting = true, selection = setOf(items[0].key(), items[1].key()))) }
-  }
-
-  @Test
-  fun eliminatiNasNonRisponde() = shoot("eliminati-offline") {
-    TrashPage(trash(list = NasTrashState.Offline(NasFixtures.trashItems().filter { it.deletableNow })))
-  }
-
-  @Test
-  fun eliminatiInSolaLettura() = shoot("eliminati-sola-lettura") {
-    TrashPage(trash(list = NasTrashState.Ready(NasFixtures.trashItems().map { it.copy(restorable = false, deletableNow = false) }, NasFixtures.NOW, writable = false)))
-  }
-
-  @Test
-  fun eliminatiVuoti() = shoot("eliminati-vuoti") { TrashPage(trash(list = NasTrashState.Ready(emptyList(), NasFixtures.NOW, writable = true))) }
-
-  @Test
-  fun eliminatiInCaricamento() = shoot("eliminati-caricamento") { TrashPage(trash(list = NasTrashState.Loading)) }
+  // --- Eliminati di recente del NAS: niente scene (CU-32, fase I) ----------------------------------------------------------------
+  // `NasTrashScreen` non si raggiunge da nessuna rotta (ogni ingresso passa da `GatedNasTrashPage` -> gli Eliminati di recente di feature-library,
+  // `NasTrashGateTest`): i suoi screenshot sembravano veri e non lo erano. La pagina vera si fotografa in feature-library (`7-P8/eliminati-*`).
 
   // --- Operazioni in corso ----------------------------------------------------------------------------------------------------
 

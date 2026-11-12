@@ -4,24 +4,28 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.FolderOff
+import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.PhotoAlbum
+import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
-import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
 import dev.antigravity.fluidengine.ui.theme.FluidCard
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -40,6 +44,10 @@ import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.instant.InstantBlock
 import dev.pampa.mycloudgallery.core.designsystem.instant.InstantShape
 import dev.pampa.mycloudgallery.core.designsystem.instant.instantSkeleton
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRing
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRingDefaults
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryRingPercent
+import dev.pampa.mycloudgallery.core.designsystem.media.galleryRingColor
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.library.contract.DragOrigin
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
@@ -52,6 +60,7 @@ import dev.pampa.mycloudgallery.feature.albums.contract.AlbumPageState
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumUnavailableReason
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumDimens
+import dev.pampa.mycloudgallery.feature.albums.ui.AlbumFigureState
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumText
 import dev.pampa.mycloudgallery.feature.albums.ui.SectionNote
 import dev.pampa.mycloudgallery.feature.albums.ui.StripRow
@@ -141,42 +150,48 @@ private fun PlainPage(title: String, handlers: AlbumPageHandlers, modifier: Modi
 
 private fun LazyListScope.recomputing(page: AlbumPageState.Recomputing) {
   item(key = "recomputing") {
-    Column(verticalArrangement = Arrangement.spacedBy(AlbumDimens.BlockGap)) {
-      if (page.total <= 0) {
-        // AS-2: il motore sta cercando le foto di uno smart nuovo e non sa quante ne guardera': niente numeri e niente barra a zero.
-        FluidEmptyState(title = stringResource(R.string.album_recomputing_title), detail = stringResource(R.string.album_recomputing_wait))
-      } else {
-        FluidEmptyState(title = stringResource(R.string.album_recomputing_title), detail = stringResource(R.string.album_recomputing_progress, GalleryNumbers.format(page.done), GalleryNumbers.format(page.total)))
-        FluidProgressBar(progress = { (page.done.toFloat() / page.total).coerceIn(0f, 1f) })
-      }
+    // CS-17: la forma comune; l'avanzamento e' l'anello comune (senza misura gira: AS-2, niente numeri e niente barra a zero).
+    val fraction = if (page.total > 0) (page.done.toFloat() / page.total).coerceIn(0f, 1f) else null
+    val spoken = if (page.total <= 0) {
+      stringResource(R.string.album_recomputing_wait)
+    } else {
+      stringResource(R.string.album_recomputing_progress, GalleryNumbers.format(page.done), GalleryNumbers.format(page.total))
+    }
+    AlbumFigureState(icon = Icons.Rounded.HourglassTop, title = stringResource(R.string.album_recomputing_title)) {
+      GalleryProgressRing(
+        progress = fraction,
+        modifier = Modifier.size(GalleryProgressRingDefaults.Card).semantics { contentDescription = spoken },
+        color = galleryRingColor(GalleryIconFamily.Photos),
+        strokeWidth = GalleryProgressRingDefaults.stroke(GalleryProgressRingDefaults.Card),
+        animate = true,
+      ) { if (fraction != null) GalleryRingPercent(fraction) }
     }
   }
 }
 
 private fun LazyListScope.closed(page: AlbumPageState.Closed, handlers: AlbumPageHandlers) {
   item(key = "closed") {
-    Column(verticalArrangement = Arrangement.spacedBy(AlbumDimens.BlockGap)) {
-      FluidEmptyState(
-        title = stringResource(R.string.album_closed_title),
-        detail = stringResource(R.string.album_closed_detail, page.notice.title) + page.notice.keptCopy?.let { " " + stringResource(R.string.album_closed_copy) }.orEmpty(),
-      )
+    AlbumFigureState(
+      icon = Icons.Rounded.FolderOff,
+      title = stringResource(R.string.album_closed_title),
+      detail = stringResource(R.string.album_closed_detail, page.notice.title) + page.notice.keptCopy?.let { " " + stringResource(R.string.album_closed_copy) }.orEmpty(),
+    ) {
       val copy = page.notice.keptCopy
-      if (copy != null) FluidButton(text = stringResource(R.string.album_closed_open_copy), onClick = { handlers.onOpenCopy(copy) }, fillWidth = true)
-      FluidButton(text = stringResource(R.string.album_back_to_list), onClick = handlers::onBackToList, style = FluidButtonStyle.Tinted, fillWidth = true)
+      if (copy != null) FluidButton(text = stringResource(R.string.album_closed_open_copy), onClick = { handlers.onOpenCopy(copy) })
+      FluidButton(text = stringResource(R.string.album_back_to_list), onClick = handlers::onBackToList, style = FluidButtonStyle.Tinted)
     }
   }
 }
 
 private fun LazyListScope.unavailable(reason: AlbumUnavailableReason, handlers: AlbumPageHandlers) {
   item(key = "unavailable") {
-    Column(verticalArrangement = Arrangement.spacedBy(AlbumDimens.BlockGap)) {
-      val (title, detail) = when (reason) {
-        AlbumUnavailableReason.NOT_FOUND -> R.string.album_unavailable_not_found_title to R.string.album_unavailable_not_found_detail
-        AlbumUnavailableReason.LEFT -> R.string.album_unavailable_left_title to R.string.album_unavailable_left_detail
-        AlbumUnavailableReason.NO_FAMILY -> R.string.album_unavailable_family_title to R.string.album_unavailable_family_detail
-      }
-      FluidEmptyState(title = stringResource(title), detail = stringResource(detail))
-      FluidButton(text = stringResource(R.string.album_back_to_list), onClick = handlers::onBackToList, style = FluidButtonStyle.Tinted, fillWidth = true)
+    val (title, detail) = when (reason) {
+      AlbumUnavailableReason.NOT_FOUND -> R.string.album_unavailable_not_found_title to R.string.album_unavailable_not_found_detail
+      AlbumUnavailableReason.LEFT -> R.string.album_unavailable_left_title to R.string.album_unavailable_left_detail
+      AlbumUnavailableReason.NO_FAMILY -> R.string.album_unavailable_family_title to R.string.album_unavailable_family_detail
+    }
+    AlbumFigureState(icon = Icons.Rounded.SearchOff, title = stringResource(title), detail = stringResource(detail)) {
+      FluidButton(text = stringResource(R.string.album_back_to_list), onClick = handlers::onBackToList, style = FluidButtonStyle.Tinted)
     }
   }
 }

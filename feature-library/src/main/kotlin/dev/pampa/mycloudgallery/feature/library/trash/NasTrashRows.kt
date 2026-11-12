@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -26,8 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,7 +33,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -47,12 +43,10 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidPressGrip
-import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidLoading
 import dev.antigravity.fluidengine.ui.theme.FluidTone
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoGlyph
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
@@ -225,25 +219,10 @@ private fun TrashSectionMessage(
   }
 }
 
-/** Una riga che si tocca: il segno, due parole, la «i»; la frase sotto quando e' aperta. TalkBack la sente intera, senza tocco. */
+/** Una riga che si tocca: il segno, due parole, la «i»; la frase sotto (la riga comune della «i», CS-21). */
 @Composable
 internal fun TrashInfoLine(glyph: ImageVector, label: String, detail: String, modifier: Modifier = Modifier, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
-  var open by rememberSaveable(label) { mutableStateOf(false) }
-  Column(modifier = modifier) {
-    Row(
-      modifier = Modifier
-        .defaultMinSize(minHeight = GalleryDimens.MinTouchTarget)
-        .fluidPressable(onClick = { open = !open }, role = Role.Button)
-        .clearAndSetSemantics { contentDescription = "$label. $detail" },
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(UtilityDimens.RowGap),
-    ) {
-      Icon(imageVector = glyph, contentDescription = null, tint = tint, modifier = Modifier.size(CollectionsDimens.PillGlyph * 2))
-      Text(text = label, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-      GalleryInfoGlyph(open = open)
-    }
-    GalleryInfoDetail(text = detail, visible = open, color = MaterialTheme.colorScheme.onSurfaceVariant)
-  }
+  GalleryInfoRow(label = label, detail = detail, modifier = modifier, glyph = glyph, glyphTint = tint)
 }
 
 /** Una voce del cestino del NAS: il nome, da dove veniva e quanto pesa, i giorni rimasti e chi l'ha eliminata. */

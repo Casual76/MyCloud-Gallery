@@ -208,7 +208,6 @@
   <string name="permissions_reduced_partial">Con «Foto selezionate» il backup copre solo le foto che scegli tu, una per una. Per metterle al sicuro tutte, concedi l’accesso completo.</string>
   <string name="permissions_reduced_notifications">Senza notifiche non ti avviso quando un familiare chiede di entrare: dovrai aprire l’app per vederlo.</string>
   <string name="permissions_set_screen_lock">Imposta il blocco schermo</string>
-  <string name="permissions_footnote">I permessi si cambiano in qualsiasi momento dalle impostazioni di Android.</string>
 
   <!-- 10. Batteria -->
   <string name="battery_title">Il backup di notte</string>
@@ -224,6 +223,7 @@
   <string name="battery_unused_pause_detail">Impostazioni → App → MyCloud Gallery → disattiva «Metti in pausa l’attività dell’app se non utilizzata».</string>
   <string name="battery_state_verified">Verificato</string>
   <string name="battery_state_todo">Da fare</string>
+  <string name="battery_state_checking">Controllo in corso</string>
   <string name="battery_state_unknown">Non verificabile</string>
   <string name="battery_state_confirmed">Fatto</string>
   <string name="battery_manual_section">Conferme a mano</string>

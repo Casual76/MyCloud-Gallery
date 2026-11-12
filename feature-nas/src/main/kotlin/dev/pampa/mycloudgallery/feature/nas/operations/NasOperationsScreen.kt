@@ -320,9 +320,10 @@ private fun ClosedRow(op: NasOperationState) {
 
 /** Il segno dello stato nell'angolo della piastrella: in corso, in pausa, in attesa, fatto, fermata, annullata. */
 private fun iconStatus(op: NasOperationState): GalleryIconStatus = when (op) {
-  is NasOperationState.Planned -> GalleryIconStatus.Paused
+  // CU-33 (fase I): in coda e in attesa del NAS o delle condizioni giuste = la clessidra (riparte da sola); annullata in corso = il trattino.
+  is NasOperationState.Planned -> GalleryIconStatus.Waiting
   is NasOperationState.Running -> GalleryIconStatus.Running
-  is NasOperationState.Paused -> GalleryIconStatus.Paused
+  is NasOperationState.Paused -> if (op.reason.code == "user") GalleryIconStatus.Stopped else GalleryIconStatus.Waiting
   is NasOperationState.WaitingLocked -> GalleryIconStatus.Attention
   is NasOperationState.Done -> if (op.summary.failed > 0) GalleryIconStatus.Attention else GalleryIconStatus.Done
   is NasOperationState.Failed -> GalleryIconStatus.Problem
@@ -336,6 +337,8 @@ private fun shortDetailOf(op: NasOperationState): String = when (op) {
   is NasOperationState.Running -> stringResource(R.string.nas_ops_short, NasText.count(op.done), NasText.count(op.total))
   is NasOperationState.Paused -> stringResource(R.string.nas_ops_short, NasText.count(op.done), NasText.count(op.total))
   is NasOperationState.WaitingLocked -> stringResource(R.string.nas_ops_short, NasText.count(op.done), NasText.count(op.total))
+  // CU-35: in coda il conto e' gia' nel titolo e lo stato nel segno: sotto resta il peso.
+  is NasOperationState.Planned -> NasText.size(op.summary.totalBytes)
   else -> detailOf(op)
 }
 

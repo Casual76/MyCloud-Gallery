@@ -1,5 +1,8 @@
 package dev.pampa.mycloudgallery.feature.library.trash
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -84,8 +87,17 @@ internal fun TrashGrid(
   purgeBlocked: Boolean,
   topPadding: Dp,
   bottomPadding: Dp,
+  startAtNas: Boolean = false,
 ) {
   val gridState = rememberLazyGridState()
+  // CU-31 (fase I): aperta dal «Cestino del NAS» delle Raccolte la pagina comincia dalla sezione del NAS (una volta: poi si scorre liberi).
+  var placedAtNas by rememberSaveable { mutableStateOf(false) }
+  LaunchedEffect(startAtNas, nas is NasTrashSection.None, entries.isEmpty()) {
+    if (!startAtNas || placedAtNas || nas is NasTrashSection.None) return@LaunchedEffect
+    val phoneHeader = if (entries.isNotEmpty()) 1 else 0
+    gridState.scrollToItem(1 + phoneHeader + entries.size)
+    placedAtNas = true
+  }
   val selecting = selection.isNotEmpty()
 
   // Come la griglia della Libreria: le miniature le chiede la finestra visibile, non la cella (D5).

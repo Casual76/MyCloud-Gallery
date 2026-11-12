@@ -78,9 +78,11 @@ fun RecentlyDeletedRoute(
   onBack: (() -> Unit)? = null,
   contentPadding: PaddingValues = PaddingValues(),
   backdropOut: ((GlassBackdropState) -> Unit)? = null,
+  startAtNas: Boolean = false,
   viewModel: RecentlyDeletedViewModel = hiltViewModel(),
 ) {
   RecentlyDeletedHost(
+    startAtNas = startAtNas,
     controller = viewModel.controller,
     loader = viewModel.environment.loader,
     keepRecentsHidden = viewModel::keepRecentsHidden,
@@ -109,6 +111,7 @@ internal fun RecentlyDeletedHost(
   contentPadding: PaddingValues = PaddingValues(),
   backdropOut: ((GlassBackdropState) -> Unit)? = null,
   monotonicMs: () -> Long = SystemClock::elapsedRealtime,
+  startAtNas: Boolean = false,
 ) {
   val state by controller.state.collectAsState()
   val selection by controller.selection.collectAsState()
@@ -140,6 +143,7 @@ internal fun RecentlyDeletedHost(
     state = state,
     selection = selection,
     loader = loader,
+    startAtNas = startAtNas,
     onToggle = controller::toggle,
     onSelectAll = controller::selectAll,
     onClearSelection = controller::clearSelection,
@@ -199,6 +203,7 @@ internal fun RecentlyDeletedScreen(
   onBack: (() -> Unit)? = null,
   contentPadding: PaddingValues = PaddingValues(),
   backdropOut: ((GlassBackdropState) -> Unit)? = null,
+  startAtNas: Boolean = false,
   canPurge: Boolean = false,
   onPurge: () -> Unit = {},
   purgeBlocked: Boolean = false,
@@ -262,6 +267,7 @@ internal fun RecentlyDeletedScreen(
             purgeBlocked = purgeBlocked,
             topPadding = barHeight,
             bottomPadding = gridBottom,
+            startAtNas = startAtNas,
           )
         }
         TrashUiState.Locked, TrashUiState.Authenticating, is TrashUiState.Denied -> Unit

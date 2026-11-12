@@ -21,24 +21,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
-import dev.antigravity.fluidengine.ui.navigation.FluidNavHost
-import dev.antigravity.fluidengine.ui.navigation.composable
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.navigation.FluidNavHost
+import dev.antigravity.fluidengine.ui.navigation.composable
 import dev.antigravity.fluidengine.ui.theme.FluidCard
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.pampa.mycloudgallery.R
-import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustration
-import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.LocalWritesHeldByRelease
 import dev.pampa.mycloudgallery.core.release.contract.ReleaseMessage
 import dev.pampa.mycloudgallery.core.release.contract.ReleaseStatus
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsGraphRoute
 import dev.pampa.mycloudgallery.feature.diagnostics.diagnosticsGraph
+import dev.pampa.mycloudgallery.root.BlockingText
 import javax.inject.Inject
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
@@ -124,9 +123,11 @@ fun ReleaseStoppedScreen(message: ReleaseMessage, onDiagnostics: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
-        GalleryIllustration(icon = Icons.Rounded.NewReleases, tone = GalleryIllustrationTone.Brand)
-        FluidEmptyState(title = stringResource(R.string.release_stopped_title), detail = stringResource(stoppedText(message)))
-        FluidButton(text = stringResource(R.string.release_open_diagnostics), onClick = onDiagnostics, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
+        // CS-17 (fase I): la forma comune; la frase resta aperta (dice che cosa resta fermo).
+        GalleryFigureState(icon = Icons.Rounded.NewReleases, title = stringResource(R.string.release_stopped_title), fill = false) {
+          BlockingText(stringResource(stoppedText(message)))
+          FluidButton(text = stringResource(R.string.release_open_diagnostics), onClick = onDiagnostics, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
+        }
       }
     }
   }

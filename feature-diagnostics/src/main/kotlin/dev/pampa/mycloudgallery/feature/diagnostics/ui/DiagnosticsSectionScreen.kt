@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -14,12 +15,12 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidScreenDefaults
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagAction
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagSection
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.feature.diagnostics.ConnectionTestUiState
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsUiState
 import dev.pampa.mycloudgallery.feature.diagnostics.R
@@ -61,9 +62,12 @@ fun DiagnosticsSectionScreen(
       }
     } else if (section != DiagSection.CONNECTION_TEST) {
       item {
-        FluidEmptyState(
+        // CS-17 (fase I): la forma comune dello stato vuoto; la frase dietro la «i».
+        GalleryFigureState(
+          icon = Icons.Rounded.TaskAlt,
           title = stringResource(R.string.diagnostics_no_items),
-          detail = stringResource(R.string.diagnostics_no_items_detail),
+          fill = false,
+          why = stringResource(R.string.diagnostics_no_items_detail),
         )
       }
     }

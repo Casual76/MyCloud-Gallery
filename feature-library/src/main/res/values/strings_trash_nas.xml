@@ -39,7 +39,6 @@
   </plurals>
   <string name="trash_nas_expires_today">Scade oggi</string>
   <string name="trash_nas_days_unknown">Scadenza non nota</string>
-  <string name="trash_nas_pill_soon">Scade presto</string>
   <string name="trash_nas_state_selected">selezionato</string>
   <string name="trash_nas_state_not_selected">non selezionato</string>
 

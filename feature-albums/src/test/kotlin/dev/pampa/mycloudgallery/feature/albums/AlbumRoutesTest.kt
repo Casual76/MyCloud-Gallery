@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.albums
 
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -200,7 +201,8 @@ class AlbumRoutesTest : AlbumsComposeTest() {
     scenes.world.albums.status.value = dev.pampa.mycloudgallery.core.albums.contract.AlbumsStatus.Recomputing(0, 0)
     show(content = pageRoute(scenes.oslo))
     composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText("Cerco le foto dell", substring = true).fetchSemanticsNodes().isNotEmpty() }
-    assertThat(composeRule.onAllNodesWithText("Le foto compaiono man mano", substring = true).fetchSemanticsNodes()).isNotEmpty()
+    // CS-17 (fase I): l'attesa e' l'anello comune che gira; la frase la dice la sua descrizione.
+    assertThat(composeRule.onAllNodesWithContentDescription("Le foto compaiono man mano", substring = true).fetchSemanticsNodes()).isNotEmpty()
     assertThat(composeRule.onAllNodesWithText("guardate", substring = true).fetchSemanticsNodes()).isEmpty()
   }
 

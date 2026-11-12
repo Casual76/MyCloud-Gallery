@@ -75,7 +75,7 @@ class FullScanTest : PhoneSyncTestBase() {
   }
 
   @Test
-  fun leAssenzeSiSegnanoSoloAFineScansioneEConIlTetto() = runBlocking<Unit> {
+  fun leAssenzeNonSiSegnanoAFineScansioneMaAlConfrontoDopoEConIlTetto() = runBlocking<Unit> {
     val rows = (1L..5L).map { store.put(photo(id = it, taken = T0 + it * MINUTE)) }
     newSync().syncNow(SyncReason.APP_START)
     assertThat(mediaCount()).isEqualTo(5)
@@ -84,10 +84,18 @@ class FullScanTest : PhoneSyncTestBase() {
     store.supportsDeletedFiles = false
     listOf(1L, 3L, 5L).forEach { store.remove(PRIMARY, it) }
     store.bumpVersion(PRIMARY, "v2")
-    now += 60 * MINUTE
-    val report = newSync().syncNow(SyncReason.APP_START)
+    advance(60 * MINUTE)
+    val sync = newSync()
+    val scan = sync.syncNow(SyncReason.APP_START)
 
-    assertThat(report.fullScan).isTrue()
+    // Pacchetto F (FS-1): la fine della lettura non scrive assenze; le non viste sono annotate.
+    assertThat(scan.fullScan).isTrue()
+    assertThat(scan.vanished).isEqualTo(0)
+    rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
+
+    // Seconda osservazione, cinque minuti dopo: il controllo puntuale non le trova.
+    advance(6 * MINUTE)
+    val report = sync.syncNow(SyncReason.FOREGROUND)
     assertThat(report.vanished).isEqualTo(3)
     // Tetto di 2 per chiamata: tre assenze in due chiamate, ognuna con la sua transazione.
     assertThat(stateAt(rows[0])).isEqualTo(LocationState.ABSENT)
@@ -116,20 +124,22 @@ class FullScanTest : PhoneSyncTestBase() {
   }
 
   @Test
-  fun unOndataDiAssenzeSospetteSiFerma() = runBlocking<Unit> {
+  fun unOndataDiAssenzeSospetteNonScriveNiente() = runBlocking<Unit> {
     // 50 posizioni, ne restano vive 3: la soglia e' max(10, vivi) = 10.
     val rows = (1L..50L).map { store.put(photo(id = it, taken = T0 + it * MINUTE)) }
     newSync().syncNow(SyncReason.APP_START)
     store.supportsDeletedFiles = false
     (4L..50L).forEach { store.remove(PRIMARY, it) }
     store.bumpVersion(PRIMARY, "v2")
-    now += MINUTE
+    advance(MINUTE)
     val sync = newSync()
-    val report = sync.syncNow(SyncReason.APP_START)
+    assertThat(sync.syncNow(SyncReason.APP_START).vanished).isEqualTo(0)
+    advance(6 * MINUTE)
+    val report = sync.syncNow(SyncReason.FOREGROUND)
 
-    // Si ferma alla soglia invece di segnare 47 assenze in un colpo.
-    assertThat(report.vanished).isEqualTo(10)
+    // Pacchetto F (FS-1): prima si fermava dopo averne segnate 10; adesso l'ondata si guarda prima di scrivere, e non si scrive niente.
+    assertThat(report.vanished).isEqualTo(0)
     assertThat(sync.stats.snapshot.value.absencesBlocked).isEqualTo(1)
-    rows.take(3).forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
+    rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
   }
 }

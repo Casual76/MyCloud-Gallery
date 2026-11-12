@@ -46,6 +46,8 @@ enum class SyncFailure {
  * @property deletedFilesAvailable se l'accelerazione `deleted_files` ha risposto all'ultimo incrementale (null: non usata).
  * @property absencesBlocked quante volte un'ondata di assenze sospette e' stata fermata (MediaStore vuoto o assenze piu'
  *   dei file vivi).
+ * @property suspectedAbsences pacchetto F: le posizioni che il MediaStore non mostra, annotate e in attesa della seconda
+ *   osservazione (dopo l'ultimo giro).
  */
 data class PhoneLibrarySnapshot(
   val lastRunAtMs: Long? = null,
@@ -58,6 +60,7 @@ data class PhoneLibrarySnapshot(
   val fullScansCompleted: Int = 0,
   val reconcileVanished: Int = 0,
   val purgedAbsences: Int = 0,
+  val suspectedAbsences: Int = 0,
   val metaDone: Long = 0,
   val metaFailed: Long = 0,
   val metaWaitingForLocation: Int = 0,

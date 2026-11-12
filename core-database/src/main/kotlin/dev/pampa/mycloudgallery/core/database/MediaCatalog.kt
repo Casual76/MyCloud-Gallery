@@ -349,12 +349,20 @@ class MediaCatalog(
    *
    * [cap]: al massimo tante posizioni per giro, le assenti da piu' tempo prima (E-P9: un salto in avanti
    * dell'orologio non svuota la libreria in un colpo; la manutenzione quotidiana passa [cap]).
+   *
+   * Pacchetto F (FS-4): la posizione del telefono di un media "perso prima del backup" (`lost_before_backup`) **resta** finche' il problema
+   * c'e': e' la prova che il telefono l'ha avuto, e senza di lei il media e il suo avviso uscirebbero dalle righe del backup dopo 60 giorni
+   * (la pagina direbbe "Tutto al sicuro" per una foto mai salvata). Quando il problema se ne va (la foto torna, l'utente lo archivia) la
+   * posizione si dimentica al giro dopo.
    */
   suspend fun purgeExpiredAbsences(cap: Int = Int.MAX_VALUE): Int = write { tx ->
     require(cap > 0) { "Il tetto e' positivo." }
     val now = clock()
     val shortest = minOf(LocationRules.PHONE_ABSENCE_TOLERANCE_MILLIS, LocationRules.NAS_ABSENCE_TOLERANCE_MILLIS)
-    val expired = locationDao.absentSince(now - shortest).map { it.toDomain() }.filter { LocationRules.isExpired(it, now) }.take(cap)
+    val expired = locationDao.absentSince(now - shortest).map { it.toDomain() }
+      .filter { LocationRules.isExpired(it, now) }
+      .filterNot { it.isPhone && problemDao.get(mediaOf(it.id).value)?.code == LOST_BEFORE_BACKUP }
+      .take(cap)
     expired.forEach { tx.touch(mediaOf(it.id)) }
     expired.forEach { locationDao.delete(it.id.value) }
     expired.size
@@ -987,22 +995,6 @@ class MediaCatalog(
    * scaduto ([phoneRefs]).
    */
   suspend fun saveMediaStoreCursor(cursor: MediaStoreCursor): Unit = write { tx -> saveCursor(tx, cursor) }
-
-  /**
-   * Pacchetto F (12/11): chiede **una volta sola** per [tag] una scansione completa dei volumi del telefono gia' letti (il cursore torna a
-   * "scansione completa da fare", come quando la riconciliazione trova troppe righe sparite). Serve dopo un aggiornamento che corregge la
-   * lettura: le cancellazioni che le versioni di prima non avevano visto si vedono alla prima apertura, senza reinstallare e senza toccare
-   * altro (la scansione completa ha le sue protezioni: accesso completo a ogni lotto, MediaStore vuoto, ondate sospette). Una scansione gia'
-   * in corso resta com'e'. Vero se l'ha chiesta adesso; il segno sta in `catalog_meta`, nella stessa transazione.
-   */
-  suspend fun requestPhoneFullScanOnce(tag: String): Boolean = write { tx ->
-    if (metaDao.get(tag) != null) return@write false
-    cursorDao.all().map { it.toDomain() }
-      .filter { it.scanEpoch == null && it.generation != null }
-      .forEach { saveCursor(tx, it.copy(generation = null)) }
-    metaDao.put(tag, clock())
-    true
-  }
 
   /** La versione del dataset dei luoghi con cui sono stati calcolati i `place_id` (`catalog_meta`). */
   suspend fun setPlacesDataset(dataset: Int): Unit = write { metaDao.put(PLACES_DATASET, dataset.toLong()) }

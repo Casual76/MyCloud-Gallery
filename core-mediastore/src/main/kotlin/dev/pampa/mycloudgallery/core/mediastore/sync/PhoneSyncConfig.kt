@@ -12,11 +12,13 @@ import kotlin.time.Duration.Companion.seconds
  * @property batchSize righe per lotto: una transazione del catalogo e un salvataggio del cursore per lotto.
  * @property fullHashMaxBytes oltre questa dimensione l'hash completo non si calcola durante la lettura: il media resta
  *   separato (`KEEP_SEPARATE`) e lo completa la manutenzione. Nessuna lettura a file interi grandi durante lo scorrimento.
- * @property vanishCap il tetto di `markVanishedNotSeenSince` per chiamata.
- * @property vanishAlarmMin quante assenze, in una scansione completa, bastano a fermarsi se sono anche piu' dei file
- *   vivi del volume: un MediaStore che risponde a meta' non deve svuotare la Libreria (E-P1, E-P15).
- * @property reconcileMaxDirect oltre questo numero di `_ID` mancanti la riconciliazione non segna assenze da sola: chiede
- *   una scansione completa, che ha le sue protezioni.
+ * @property vanishCap quante assenze confermate per transazione (l'accesso si ricontrolla prima di ognuna).
+ * @property vanishAlarmMin l'ondata sospetta: se le posizioni che il MediaStore non mostra sono almeno tante e anche almeno
+ *   quanti i file vivi del volume, non si scrive **nessuna** assenza (un MediaStore che risponde a meta' non deve svuotare
+ *   la Libreria, E-P1, E-P15); restano annotate.
+ * @property absenceConfirmAfter pacchetto F (FS-1): una posizione che il MediaStore non mostra (un `_ID` che manca, una posizione
+ *   non vista da una scansione completa) diventa assente solo a un confronto successivo, almeno dopo questo tempo, se manca ancora
+ *   e il controllo puntuale non la trova. Un provider in ricostruzione (riavvio, aggiornamento) non fa sparire foto vere.
  * @property quickReconcileEvery ogni quanto, al massimo, un incrementale con cancellazioni non spiegate (la generazione sale
  *   piu' delle righe viste e di quelle in `deleted_files`) confronta subito gli `_ID` con la cache; null = solo la
  *   manutenzione quotidiana. Serve perche' `deleted_files` puo' rispondere vuoto alle app (emulatore API 37).
@@ -34,7 +36,7 @@ data class PhoneSyncConfig(
   val fullHashMaxBytes: Long = 64L * 1024 * 1024,
   val vanishCap: Int = 500,
   val vanishAlarmMin: Int = 2_000,
-  val reconcileMaxDirect: Int = 500,
+  val absenceConfirmAfter: Duration = 5.minutes,
   val quickReconcileEvery: Duration? = 2.minutes,
   val purgeCap: Int = 500,
   val maxCandidateHashesPerBatch: Int = 20,
@@ -47,7 +49,8 @@ data class PhoneSyncConfig(
   init {
     require(batchSize in 1..2_000) { "Lotto fuori misura." }
     require(fullHashMaxBytes >= 0) { "Soglia dell'hash completo negativa." }
-    require(vanishCap > 0 && vanishAlarmMin > 0 && reconcileMaxDirect >= 0 && purgeCap > 0) { "Tetti non validi." }
+    require(vanishCap > 0 && vanishAlarmMin > 0 && purgeCap > 0) { "Tetti non validi." }
+    require(!absenceConfirmAfter.isNegative()) { "Attesa delle assenze negativa." }
     require(maxCandidateHashesPerBatch >= 0 && metaBatch > 0 && metaMaxSkips > 0) { "Limiti non validi." }
     require(!foregroundMetaPause.isNegative()) { "Pausa negativa." }
   }

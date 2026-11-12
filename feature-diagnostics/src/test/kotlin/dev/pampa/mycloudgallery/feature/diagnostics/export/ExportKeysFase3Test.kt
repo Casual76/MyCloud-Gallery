@@ -19,7 +19,7 @@ class ExportKeysFase3Test {
     "media", "mediaLocation", "volumes", "granted", "pendingPhotos", "metaWaiting", "state", "pauseReason", "lastReason",
     "lastFailure", "seen", "added", "updated", "vanished", "fullScan", "completed", "deletedFiles", "fullScansCompleted",
     "reconcileVanished", "purgedAbsences", "metaDone", "metaFailed", "mounted", "known", "unavailable",
-    "fullScanInProgress", "fullScanPending", "zeroBytes", "notMedia", "invalidName", "unreadable", "times",
+    "fullScanInProgress", "fullScanPending", "zeroBytes", "notMedia", "invalidName", "unreadable", "times", "suspectedAbsences",
   )
 
   /** Le chiavi del contributore di `:app` (`LibraryDiagnostics`). */

@@ -6,8 +6,11 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreRow
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreSource
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
 import dev.pampa.mycloudgallery.core.mediastore.contract.RowType
+import dev.pampa.mycloudgallery.core.mediastore.sync.MediaStorePointCheck
 import dev.pampa.mycloudgallery.core.mediastore.sync.MediaStoreRowLookup
 import dev.pampa.mycloudgallery.core.mediastore.sync.OriginalBytesUnavailableException
+import dev.pampa.mycloudgallery.core.mediastore.sync.PhonePlace
+import dev.pampa.mycloudgallery.core.mediastore.sync.PointRow
 import dev.pampa.mycloudgallery.core.metadata.contract.MediaBytes
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import java.io.FileNotFoundException
@@ -34,7 +37,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
  * dipende da posto, dimensione e data di modifica. Lo stesso file rimesso uguale ha gli stessi byte; un file modificato
  * (altra dimensione o data) ha byte diversi.
  */
-class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
+class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup, MediaStorePointCheck {
 
   private sealed interface Content {
     val size: Long
@@ -546,6 +549,24 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
     if (accessRevoked) return emptyList()
     val wanted = ids.toSet()
     return visible(v).filter { it.id in wanted }
+  }
+
+  /** Pacchetto F: quante volte e' stato chiesto il controllo puntuale prima di un'assenza. */
+  var pointChecks: Int = 0
+    private set
+
+  /** Come il MediaProvider: le righe con quegli `_ID` o in quei posti, anche `IS_PENDING`, mai cestinate; con la selezione, solo quella. */
+  override suspend fun stillThere(volume: String, ids: Collection<Long>, places: Collection<PhonePlace>): List<PointRow> {
+    pointChecks++
+    val v = mounted(volume)
+    if (accessRevoked) return emptyList()
+    val wantedIds = ids.toSet()
+    val wantedPlaces = places.toSet()
+    val selection = v.selection
+    return v.rows.values
+      .filter { it.id !in v.trashed && it.id !in v.oneUiTrashed && (selection == null || it.id in selection) }
+      .filter { it.id in wantedIds || PhonePlace(it.relativePath, it.displayName) in wantedPlaces }
+      .map { PointRow(it, pending = it.id in v.pending) }
   }
 
   override suspend fun open(row: MediaStoreRow): MediaBytes {

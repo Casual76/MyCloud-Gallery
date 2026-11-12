@@ -47,6 +47,8 @@ object ExportKeys {
     "added", "updated", "vanished", "fullScan", "completed", "deletedFiles", "fullScansCompleted", "reconcileVanished",
     "purgedAbsences", "metaDone", "metaFailed", "mounted", "known", "unavailable", "fullScanInProgress",
     "fullScanPending", "zeroBytes", "notMedia", "invalidName", "unreadable", "times",
+    // Pacchetto F (12/11): le posizioni che il MediaStore non mostra, annotate e in attesa della seconda osservazione (un numero).
+    "suspectedAbsences",
     // Libreria del telefono (:app, LibraryDiagnostics): anche qui solo numeri (conteggi e byte), flag ed enumerati;
     // mai una stringa con un dato dell'utente (un luogo, un percorso, un nome di file).
     "places", "placesFailure", "dataset", "items", "rebuilds", "patches", "snapshotWrites", "reconciled",

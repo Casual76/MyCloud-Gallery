@@ -19,8 +19,11 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.DeletedRow
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreRow
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreSource
 import dev.pampa.mycloudgallery.core.mediastore.contract.RowType
+import dev.pampa.mycloudgallery.core.mediastore.sync.MediaStorePointCheck
 import dev.pampa.mycloudgallery.core.mediastore.sync.MediaStoreRowLookup
 import dev.pampa.mycloudgallery.core.mediastore.sync.OriginalBytesUnavailableException
+import dev.pampa.mycloudgallery.core.mediastore.sync.PhonePlace
+import dev.pampa.mycloudgallery.core.mediastore.sync.PointRow
 import dev.pampa.mycloudgallery.core.metadata.contract.MediaBytes
 import dev.pampa.mycloudgallery.core.model.isValidMediaStoreVolume
 import java.io.IOException
@@ -63,7 +66,7 @@ class AndroidMediaStoreSource(
       PackageManager.PERMISSION_GRANTED
   },
   private val changeWindow: Duration = 1500.milliseconds,
-) : MediaStoreSource, MediaStoreRowLookup {
+) : MediaStoreSource, MediaStoreRowLookup, MediaStorePointCheck {
 
   private val appContext = context.applicationContext
   private val resolver: ContentResolver = appContext.contentResolver
@@ -127,6 +130,24 @@ class AndroidMediaStoreSource(
       val selection = StringBuilder(BASE_SELECTION).append(" AND $COL_ID IN ($placeholders)")
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) selection.append(" AND ").append(COL_IS_PENDING).append(" = 0")
       out += queryRows(volume, selection.toString(), chunk.map { it.toString() }, null, null, matchTrashed = MATCH_EXCLUDE_VALUE)
+    }
+    return out
+  }
+
+  /**
+   * Pacchetto F (FS-1): il controllo puntuale prima di un'assenza. Le righe con quegli `_ID` o in quei posti (percorso relativo e nome), **anche
+   * in scrittura** (`IS_PENDING`: su Android 10 con `setIncludePending`), mai le cestinate. A blocchi: SQLite su API 29 accetta 999 variabili.
+   */
+  override suspend fun stillThere(volume: String, ids: Collection<Long>, places: Collection<PhonePlace>): List<PointRow> {
+    requireVolume(volume)
+    val out = ArrayList<PointRow>()
+    for (chunk in ids.distinct().chunked(MAX_IDS_PER_QUERY)) {
+      val selection = "$BASE_SELECTION AND $COL_ID IN (${chunk.joinToString(",") { "?" }})"
+      out += queryPointRows(volume, selection, chunk.map { it.toString() })
+    }
+    for (chunk in places.distinct().chunked(MAX_PLACES_PER_QUERY)) {
+      val selection = "$BASE_SELECTION AND (" + chunk.joinToString(" OR ") { "($COL_RELATIVE_PATH = ? AND $COL_DISPLAY_NAME = ?)" } + ")"
+      out += queryPointRows(volume, selection, chunk.flatMap { listOf(it.relativePath, it.displayName) })
     }
     return out
   }
@@ -254,6 +275,24 @@ class AndroidMediaStoreSource(
       while (c.moveToNext()) {
         if (limit != null && out.size >= limit) break
         columns.read(c, volume)?.let { out += it }
+      }
+      return out
+    }
+  }
+
+  @Suppress("DEPRECATION")
+  private fun queryPointRows(volume: String, selection: String, args: List<String>): List<PointRow> {
+    // Android 10 non conosce QUERY_ARG_MATCH_PENDING: le righe in scrittura si chiedono con l'URI.
+    val uri = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) MediaStore.setIncludePending(filesUri(volume)) else filesUri(volume)
+    val bundle = queryArgs(selection, args, null, null, MATCH_EXCLUDE_VALUE, matchPending = MATCH_INCLUDE_VALUE)
+    val cursor = resolver.query(uri, projection() + COL_IS_PENDING, bundle, null) ?: throw IOException("Il MediaStore non ha risposto.")
+    cursor.use { c ->
+      val columns = Columns(c)
+      val pending = c.getColumnIndexOrThrow(COL_IS_PENDING)
+      val out = ArrayList<PointRow>(c.count)
+      while (c.moveToNext()) {
+        val row = columns.read(c, volume) ?: continue
+        out += PointRow(row, pending = !c.isNull(pending) && c.getInt(pending) != 0)
       }
       return out
     }
@@ -421,6 +460,9 @@ class AndroidMediaStoreSource(
     internal const val MATCH_ONLY_VALUE = 3
 
     private const val MAX_IDS_PER_QUERY = 400
+
+    /** Pacchetto F: posti (percorso e nome, due variabili ciascuno) per query del controllo puntuale. */
+    private const val MAX_PLACES_PER_QUERY = 200
     private const val KEY_CACHE = 64
 
     private val PROJECTION = arrayOf(

@@ -179,8 +179,8 @@ class AndroidMediaStoreSourceDeviceTest {
         access = AndroidPhoneAccessReader(context),
         catalog = catalog,
         reads = reads,
-        // Riconciliazione rapida sempre ammessa: qui i giri sono a pochi secondi di distanza.
-        config = PhoneSyncConfig(batchSize = 20, quickReconcileEvery = Duration.ZERO),
+        // Riconciliazione rapida sempre ammessa e seconda osservazione senza attesa: qui i giri sono a pochi secondi di distanza.
+        config = PhoneSyncConfig(batchSize = 20, quickReconcileEvery = Duration.ZERO, absenceConfirmAfter = Duration.ZERO),
       )
       // Una fixture che resta: un MediaStore che dopo la cancellazione risponde vuoto e' trattato come sospetto (nessuna
       // assenza), e su questo emulatore l'app di prova vede solo i propri file.
@@ -198,12 +198,15 @@ class AndroidMediaStoreSourceDeviceTest {
       val mediaId = checkNotNull(reads.mediaIdAt(place.key))
       assertEquals(LocationState.PRESENT.code, db.locationDao().byKey(place.key.value)!!.state)
 
-      // Cancellata: anche se deleted_files risponde vuota, la riconciliazione rapida la rende assente.
+      // Cancellata: anche se deleted_files risponde vuota, la riconciliazione rapida la annota e (pacchetto F) la seconda osservazione,
+      // con il controllo puntuale, la rende assente.
       assertEquals(1, resolver.delete(uri, null, null))
       inserted -= uri
-      val gone = sync.syncNow(SyncReason.CONTENT_CHANGE)
+      val noted = sync.syncNow(SyncReason.CONTENT_CHANGE)
+      assertTrue(noted.completed)
+      val gone = sync.syncNow(SyncReason.FOREGROUND)
       assertTrue(gone.completed)
-      assertEquals(1, gone.vanished)
+      assertEquals(1, noted.vanished + gone.vanished)
       assertEquals(LocationState.ABSENT.code, db.locationDao().byKey(place.key.value)!!.state)
       assertEquals(mediaId, reads.mediaIdAt(place.key))
     } finally {

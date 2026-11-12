@@ -46,7 +46,10 @@ class AccessTest : PhoneSyncTestBase() {
     now += MINUTE
     val full = sync.syncNow(SyncReason.PERMISSION_CHANGED)
     assertThat(full.fullScan).isTrue()
-    assertThat(full.vanished).isEqualTo(1)
+    // Pacchetto F (FS-1): la scansione la annota, la seconda osservazione la rende assente.
+    assertThat(full.vanished).isEqualTo(0)
+    advance(6 * MINUTE)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(1)
     assertThat(stateAt(rows[0])).isEqualTo(LocationState.PRESENT)
     assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
     assertThat(stateAt(rows[2])).isEqualTo(LocationState.ABSENT)

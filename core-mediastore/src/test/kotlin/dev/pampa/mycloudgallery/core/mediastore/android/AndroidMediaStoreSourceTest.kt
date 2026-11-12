@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.SyncReason
 import dev.pampa.mycloudgallery.core.mediastore.sync.DefaultPhoneLibrarySync
 import dev.pampa.mycloudgallery.core.mediastore.sync.InlineDispatchers
 import dev.pampa.mycloudgallery.core.mediastore.sync.OriginalBytesUnavailableException
+import dev.pampa.mycloudgallery.core.mediastore.sync.PhonePlace
 import dev.pampa.mycloudgallery.core.mediastore.sync.PhoneSyncConfig
 import dev.pampa.mycloudgallery.core.mediastore.sync.RoomPhoneCatalogReads
 import dev.pampa.mycloudgallery.core.mediastore.testing.FakeMediaContent
@@ -218,6 +219,26 @@ class AndroidMediaStoreSourceTest {
     provider.insertRow(4, mediaType = 3)
     assertThat(source.allIds("external_primary").toList()).containsExactly(1L, 4L)
     assertThat(source.rowsById("external_primary", listOf(1L, 2L, 3L, 4L, 5L)).map { it.id }).containsExactly(1L, 4L)
+  }
+
+  /** Pacchetto F (FS-1): il controllo puntuale prima di un'assenza vede anche le righe in scrittura, mai le cestinate, per _ID e per posto. */
+  @Test
+  fun ilControlloPuntualeVedeLeRigheInScritturaMaiLeCestinate() = runBlocking<Unit> {
+    provider.insertRow(1)
+    provider.insertRow(2, pending = true)
+    provider.insertRow(3, trashed = true)
+    provider.insertRow(4, name = "Screenshot_4.png", path = "DCIM/Screenshots/")
+    provider.insertRow(5, name = "Screenshot_5.png", path = "DCIM/Screenshots/", pending = true)
+    provider.insertRow(6, name = "Screenshot_6.png", path = "DCIM/Screenshots/", trashed = true)
+
+    val byId = source.stillThere("external_primary", listOf(1L, 2L, 3L, 9L), emptyList())
+    assertThat(byId.map { it.row.id to it.pending }).containsExactly(1L to false, 2L to true)
+
+    val places = listOf("Screenshot_4.png", "Screenshot_5.png", "Screenshot_6.png", "Screenshot_9.png").map { PhonePlace("DCIM/Screenshots/", it) }
+    val byPlace = source.stillThere("external_primary", emptyList(), places)
+    assertThat(byPlace.map { it.row.id to it.pending }).containsExactly(4L to false, 5L to true)
+    // Il percorso conta: lo stesso nome in un'altra cartella non e' quel posto.
+    assertThat(source.stillThere("external_primary", emptyList(), listOf(PhonePlace("Pictures/", "Screenshot_4.png")))).isEmpty()
   }
 
   @Test

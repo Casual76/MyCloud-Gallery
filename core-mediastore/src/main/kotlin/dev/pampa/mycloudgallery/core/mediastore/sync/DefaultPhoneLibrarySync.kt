@@ -25,6 +25,7 @@ import dev.pampa.mycloudgallery.core.metadata.contract.SourceClassifier
 import dev.pampa.mycloudgallery.core.model.FileStamp
 import dev.pampa.mycloudgallery.core.model.Fingerprint
 import dev.pampa.mycloudgallery.core.model.Location
+import dev.pampa.mycloudgallery.core.model.LocationKey
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.domain.ContentCandidate
@@ -59,11 +60,17 @@ import kotlinx.coroutines.withContext
  * - *Scansione completa* (prima lettura, `getVersion` cambiata, volume tornato, API 29 senza generazioni): dai piu'
  *   recenti, a lotti, con la **scorciatoia del timbro** (stesso posto, dimensione e data di modifica: nessun byte letto)
  *   e la generazione ignorata (E-P22). Il cursore salva l'ultimo `_ID` fatto **dopo** il lotto: dopo un riavvio si
- *   riprende da li' con lo stesso `scan_epoch` (E-P4, E-P8). A fine volume, **solo con accesso completo per tutta la
- *   scansione**, le posizioni non viste diventano assenti con il tetto del catalogo.
+ *   riprende da li' con lo stesso `scan_epoch` (E-P4, E-P8). A fine volume, solo con accesso completo anche dopo l'ultima
+ *   lettura, con il volume e la versione di prima e con gli `_ID` che rispondono, la scansione si chiude; le posizioni non
+ *   viste **non** diventano assenti qui: le giudica il confronto degli `_ID` (pacchetto F).
+ * - *Assenze dedotte* (un `_ID` che manca, una posizione non vista): in due tempi. Alla prima osservazione si annotano; diventano
+ *   assenti solo a un confronto successivo, dopo [PhoneSyncConfig.absenceConfirmAfter], se mancano ancora, se il controllo
+ *   puntuale ([MediaStorePointCheck], anche le righe `IS_PENDING`) non le trova e se non sono un'ondata sospetta. Una posizione
+ *   assente che ricompare con lo stesso `_ID` torna presente anche a generazione ferma.
  * - *Incrementale*: le righe con `GENERATION_MODIFIED` oltre quella salvata; la generazione si legge **prima** della
  *   query e si salva dopo il commit. Poi `deleted_files` come **accelerazione**: ogni riga cancellata (e non ricomparsa)
- *   diventa assente; la verita' resta la riconciliazione quotidiana degli `_ID` ([SyncReason.MAINTENANCE]).
+ *   diventa assente; la verita' resta il confronto degli `_ID`: al ritorno in primo piano, con "Aggiorna", quando la generazione
+ *   sale piu' delle righe viste e nella manutenzione quotidiana ([SyncReason.MAINTENANCE]).
  * - *Accesso parziale* (E-P1): si leggono solo le righe selezionate, **mai** un'assenza; il cursore torna a "scansione
  *   completa da fare" per quando l'accesso tornera' completo. [partialSelection] dice alla Libreria cosa e' accessibile.
  *
@@ -80,6 +87,7 @@ import kotlinx.coroutines.withContext
  * @param monotonicMs l'orologio dei budget, che non salta.
  * @param metadataPass la fase META, lanciata in primo piano dopo ogni giro ([attach]).
  * @param storageReady falso prima del primo sblocco (E-P2, E-P10, E-P13): `Paused(STORAGE_LOCKED)`.
+ * @param pointCheck il controllo puntuale prima di un'assenza dedotta (pacchetto F, FS-1); senza, nessuna assenza dedotta.
  */
 class DefaultPhoneLibrarySync(
   private val source: MediaStoreSource,
@@ -94,6 +102,7 @@ class DefaultPhoneLibrarySync(
   private val metadataPass: MetadataPass? = null,
   private val priority: MetaPriority = NoMetaPriority,
   private val storageReady: () -> Boolean = { true },
+  private val pointCheck: MediaStorePointCheck? = source as? MediaStorePointCheck,
 ) : PhoneLibrarySync {
 
   private val statusFlow = MutableStateFlow<SyncStatus>(SyncStatus.Idle(atMs = 0))
@@ -108,6 +117,18 @@ class DefaultPhoneLibrarySync(
   val partialSelection: StateFlow<Set<MediaId>?> = selectionFlow.asStateFlow()
 
   private val runLock = Mutex()
+
+  /**
+   * Pacchetto F (FS-1): le posizioni che il MediaStore non mostra piu', in attesa della seconda osservazione, per volume. Solo dentro un giro
+   * (sotto [runLock]). In memoria di proposito: un processo nuovo ricomincia dalla prima osservazione (un fantasma in piu', mai una foto in meno).
+   */
+  private val suspects = HashMap<String, HashMap<LocationKey, Suspect>>()
+
+  /** Il numero del giro: una sospetta si conferma solo in un giro dopo quello che l'ha annotata. */
+  private var runNumber = 0L
+
+  private class Suspect(val firstAtMs: Long, val run: Long, val msVersion: String)
+
   private val attachLock = Any()
   private var attached: Job? = null
 
@@ -219,6 +240,9 @@ class DefaultPhoneLibrarySync(
       }
       access.refresh()
       val start = access.state.value
+      runNumber++
+      // Pacchetto F: le sospette valgono solo finche' l'accesso resta completo; con un accesso ridotto si ricomincia da capo.
+      if (start.media != MediaAccess.FULL) suspects.clear()
       if (start.media == MediaAccess.NONE) {
         // E-P15: permessi ritirati non vuol dire "il telefono e' vuoto". Nessuna lettura, nessuna scrittura.
         pause = PauseReason.NO_PERMISSION
@@ -229,9 +253,6 @@ class DefaultPhoneLibrarySync(
       mediaLocation = start.mediaLocation
       if (start.media == MediaAccess.PARTIAL) selection = HashSet()
       try {
-        // Pacchetto F (12/11): alla prima apertura di questa versione, una scansione completa dei volumi gia' letti, una volta sola (le
-        // cancellazioni che le versioni di prima non avevano visto). Solo con l'accesso completo: e' l'unico che puo' dedurre assenze.
-        if (start.media == MediaAccess.FULL) catalog.requestPhoneFullScanOnce(FULL_SCAN_ONCE_TAG)
         val mounted = source.volumes().filter(::isValidMediaStoreVolume).sortedWith(PRIMARY_FIRST)
         handleUnmounted(mounted.toSet())
         for (volume in mounted) {
@@ -298,6 +319,7 @@ class DefaultPhoneLibrarySync(
           fullScansCompleted = s.fullScansCompleted + fullScansCompleted,
           reconcileVanished = s.reconcileVanished + reconcileVanished,
           purgedAbsences = s.purgedAbsences + purged,
+          suspectedAbsences = suspects.values.sumOf { it.size },
         )
       }
       return report
@@ -309,6 +331,7 @@ class DefaultPhoneLibrarySync(
     private suspend fun handleUnmounted(mounted: Set<String>) {
       for (cursor in catalog.mediaStoreCursors()) {
         if (cursor.volume in mounted) continue
+        suspects.remove(cursor.volume)
         catalog.markVolumeUnavailable(cursor.volume)
         if (cursor.generation != null || cursor.deletedGeneration != null || cursor.scanEpoch != null) {
           catalog.saveMediaStoreCursor(cursor.copy(generation = null, deletedGeneration = null, scanEpoch = null, scanResumeAfterId = null))
@@ -337,7 +360,7 @@ class DefaultPhoneLibrarySync(
       }
     }
 
-    /** Scansione completa, riprendibile; le assenze solo alla fine e solo con accesso completo. */
+    /** Scansione completa, riprendibile; nessuna assenza scritta qui (pacchetto F): le non viste le giudica il confronto degli _ID. */
     private suspend fun fullScan(volume: String, version: String, previous: MediaStoreCursor?): VolumeOutcome {
       fullScan = true
       var cursor = if (previous != null && previous.scanEpoch != null && previous.msVersion == version) {
@@ -379,46 +402,42 @@ class DefaultPhoneLibrarySync(
         cursor = next.copy(generation = lower(next.generation, floor))
         statusFlow.value = SyncStatus.Scanning(seen, total, full = true)
       }
-      if (!stillFullAccess()) return interrupted()
-      if (!vanishNotSeen(volume, epoch)) return interrupted()
+      // Pacchetto F (FS-1, FS-2, FS-5): la fine della lettura **non scrive assenze**. Prima di chiudere la scansione gli _ID del volume devono
+      // rispondere, non vuoti, e DOPO quella lettura l'accesso deve essere ancora completo e il volume montato con la stessa versione; se no
+      // la scansione resta aperta (non conclusa: il giro dopo ripete solo questa parte). Le posizioni non viste le giudica il confronto degli
+      // _ID, in due tempi: la prima osservazione e' subito dopo.
+      val live = liveIdsOrNull(volume) ?: return interrupted()
+      if (live.isEmpty()) {
+        absencesBlocked++
+        return interrupted()
+      }
+      if (!stillFullAccess() || !stillSameVolume(volume, version)) return interrupted()
       catalog.saveMediaStoreCursor(cursor.copy(scanEpoch = null, scanResumeAfterId = null, lastFullScanAt = clock()))
       fullScansCompleted++
+      reconcile(volume)
       return VolumeOutcome.CONTINUE
     }
 
-    /**
-     * Fine di una scansione completa: le posizioni non viste diventano assenti, a tetti. Mai se il MediaStore dice di non
-     * avere nulla (un provider che risponde vuoto non e' un telefono svuotato) e mai oltre un'ondata sospetta. Falso se
-     * il budget e' finito: la scansione resta aperta e il prossimo giro ripete solo questa parte.
-     */
-    private suspend fun vanishNotSeen(volume: String, epoch: Long): Boolean {
-      val live = try {
-        source.allIds(volume)
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: SecurityException) {
-        throw e
-      } catch (e: Exception) {
-        return false
-      }
-      if (live.isEmpty()) {
-        absencesBlocked++
-        return true
-      }
-      val alarm = maxOf(config.vanishAlarmMin, live.size)
-      var total = 0
-      while (true) {
-        if (overBudget()) return false
-        val n = catalog.markVanishedNotSeenSince(volume, epoch, config.vanishCap)
-        total += n
-        vanished += n
-        if (n < config.vanishCap) break
-        if (total >= alarm) {
-          absencesBlocked++
-          break
-        }
-      }
-      return true
+    /** Gli `_ID` del volume, o null se il MediaStore non risponde (un errore non e' "nessuna riga"). */
+    private suspend fun liveIdsOrNull(volume: String): LongArray? = try {
+      source.allIds(volume)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: SecurityException) {
+      throw e
+    } catch (e: Exception) {
+      null
+    }
+
+    /** Pacchetto F (FS-1, FS-2): il volume e' ancora montato e con la stessa versione del MediaStore (un errore vale "no"). */
+    private suspend fun stillSameVolume(volume: String, version: String): Boolean = try {
+      volume in source.volumes() && source.version(volume) == version
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: SecurityException) {
+      throw e
+    } catch (e: Exception) {
+      false
     }
 
     /** Le righe cambiate dopo la generazione salvata, poi le cancellazioni come accelerazione. */
@@ -432,7 +451,10 @@ class DefaultPhoneLibrarySync(
       // salita piu' delle righe viste" sbaglia quando una transazione porta piu' righe (Quick Share, WhatsApp), e il giro in background puo'
       // aver gia' portato avanti la generazione. Prima restava solo la manutenzione notturna in carica.
       val onReturn = reason in RETURN_REASONS
-      if (now == since) return if (onReturn && quickReconcileDue(cursor)) reconcileNow(volume, version) else VolumeOutcome.CONTINUE
+      if (now == since) {
+        if (onReturn && quickReconcileDue(cursor)) reconcile(volume)
+        return VolumeOutcome.CONTINUE
+      }
       val seenIds = HashSet<Long>()
       var after: Long? = null
       var floor: Long? = null
@@ -487,18 +509,8 @@ class DefaultPhoneLibrarySync(
       // La generazione e' salita piu' di quanto spieghino le righe viste e quelle tolte: probabilmente cancellazioni che
       // `deleted_files` non dice (sull'emulatore API 37 risponde vuoto alle app). Si confrontano gli _ID con la cache
       // subito, al massimo ogni [PhoneSyncConfig.quickReconcileEvery], invece di aspettare la manutenzione quotidiana.
-      if ((now - since > explained || onReturn) && quickReconcileDue(cursor)) return reconcileNow(volume, version)
+      if ((now - since > explained || onReturn) && quickReconcileDue(cursor)) reconcile(volume)
       return VolumeOutcome.CONTINUE
-    }
-
-    /**
-     * Il confronto degli `_ID` dentro un giro: se le righe sparite sono troppe per segnarle una a una, la scansione completa (che ha le sue
-     * protezioni: accesso completo a ogni lotto, MediaStore vuoto, ondate sospette) parte subito, non al giro dopo.
-     */
-    private suspend fun reconcileNow(volume: String, version: String): VolumeOutcome {
-      if (!reconcile(volume)) return VolumeOutcome.CONTINUE
-      val reset = catalog.mediaStoreCursor(volume) ?: return VolumeOutcome.CONTINUE
-      return fullScan(volume, version, reset)
     }
 
     private fun quickReconcileDue(cursor: MediaStoreCursor): Boolean {
@@ -548,41 +560,105 @@ class DefaultPhoneLibrarySync(
       purged += catalog.purgeExpiredAbsences(config.purgeCap)
     }
 
-    /** Vero se le righe sparite erano troppe e ha chiesto una scansione completa (il cursore e' gia' salvato cosi'). */
-    private suspend fun reconcile(volume: String): Boolean {
-      val cursor = catalog.mediaStoreCursor(volume) ?: return false
-      if (cursor.scanEpoch != null || cursor.generation == null) return false
+    /**
+     * Il confronto degli `_ID` con la cache (la verita' dietro `deleted_files`), **in due tempi** (pacchetto F, FS-1):
+     * - prima le posizioni del catalogo, poi gli `_ID` del MediaStore (un file salvato dall'app in mezzo non sembra sparito); con una risposta
+     *   vuota, un accesso non piu' completo o il volume cambiato DOPO la lettura non si conclude niente;
+     * - **recupero**: una posizione assente il cui `_ID` (della stessa versione) e' di nuovo vivo si rilegge e torna presente, anche a
+     *   generazione ferma;
+     * - una posizione presente con un `_ID` che manca, o con un `_ID` di un'altra versione (non vista dall'ultima scansione completa), alla
+     *   prima osservazione si **annota** e basta;
+     * - diventa assente solo se: e' stata annotata in un giro precedente, da almeno [PhoneSyncConfig.absenceConfirmAfter], con la stessa
+     *   versione; manca ancora adesso; non fa parte di un'ondata sospetta (controllata **prima** di ogni scrittura); il controllo puntuale (per
+     *   `_ID` e per posto, anche `IS_PENDING`) non la trova; dopo quel controllo l'accesso e' ancora completo e il volume lo stesso.
+     */
+    private suspend fun reconcile(volume: String) {
+      val cursor = catalog.mediaStoreCursor(volume) ?: return
+      if (cursor.scanEpoch != null) return
+      // Una scansione completa da fare (dopo l'accesso parziale, un volume tornato) viene prima. Su API 29 la generazione non c'e' mai: li'
+      // ogni giro e' una scansione completa, e il confronto viene dopo.
+      if (cursor.generation == null && source.generation(volume) != null) return
       val version = source.version(volume)
-      if (cursor.msVersion != version) return false
-      // Pacchetto F: prima la cache, poi il MediaStore. Una posizione registrata (dalla lettura o da un salvataggio dell'app) c'era gia' nel
-      // MediaStore quando si leggono gli _ID; nell'ordine opposto un file salvato in mezzo sembrerebbe sparito.
-      val cached = reads.presentWithCache(volume, version)
+      if (cursor.msVersion != version) return
+      val positions = reads.phonePositions(volume)
       val live = source.allIds(volume)
       if (live.isEmpty()) {
         absencesBlocked++
-        return false
+        return
       }
-      // Pacchetto F: un permesso ridotto mentre si leggevano gli _ID ("foto selezionate") li riduce alla selezione: nessuna assenza.
-      if (!stillFullAccess()) {
+      // Un permesso ridotto mentre si leggevano gli _ID ("foto selezionate") li riduce alla selezione; un volume tolto li svuota a meta'.
+      if (!stillFullAccess() || !stillSameVolume(volume, version)) {
         completed = false
-        return false
+        return
       }
       val liveSet = HashSet<Long>(live.size * 2)
       live.forEach { liveSet += it }
-      val missing = cached.filter { it.mediaStoreId !in liveSet }
-      if (missing.size > config.reconcileMaxDirect) {
-        // Troppe: decide una scansione completa, che ha le sue protezioni contro le ondate sospette.
-        catalog.saveMediaStoreCursor(cursor.copy(generation = null, lastReconcileAt = clock()))
-        return true
-      }
-      for (row in missing) {
-        if (catalog.markVanished(row.key)) {
-          vanished++
-          reconcileVanished++
+
+      val back = positions.filter { !it.present && it.idFor(version)?.let { id -> id in liveSet } == true }
+      if (back.isNotEmpty()) recover(volume, version, back.mapNotNull { it.idFor(version) })
+
+      val missing = positions.filter { it.present && it.idFor(version).let { id -> id == null || id !in liveSet } }
+      val noted = suspects.getOrPut(volume) { HashMap() }
+      val missingKeys = missing.mapTo(HashSet()) { it.key }
+      noted.entries.removeIf { it.key !in missingKeys || it.value.msVersion != version }
+      val nowMs = monotonicMs()
+      val due = ArrayList<PhonePosition>()
+      for (p in missing) {
+        val first = noted[p.key]
+        when {
+          first == null -> noted[p.key] = Suspect(nowMs, runNumber, version)
+          first.run < runNumber && nowMs - first.firstAtMs >= config.absenceConfirmAfter.inWholeMilliseconds -> due += p
         }
       }
       catalog.saveMediaStoreCursor(cursor.copy(lastReconcileAt = clock()))
-      return false
+      if (due.isEmpty()) return
+      // Un'ondata sospetta (piu' mancanti dei vivi, oltre la soglia) non scrive niente: ne' adesso ne' a pezzi. Restano annotate.
+      if (missing.size >= maxOf(config.vanishAlarmMin, live.size)) {
+        absencesBlocked++
+        return
+      }
+      confirmGone(volume, version, due, noted)
+    }
+
+    /** La seconda osservazione: il controllo puntuale, poi le assenze, a lotti e con l'accesso ricontrollato a ogni lotto. */
+    private suspend fun confirmGone(volume: String, version: String, due: List<PhonePosition>, noted: MutableMap<LocationKey, Suspect>) {
+      // Senza controllo puntuale nessuna assenza dedotta: meglio un fantasma in piu'.
+      val check = pointCheck ?: return
+      val found = check.stillThere(volume, due.mapNotNull { it.idFor(version) }, due.map { it.place })
+      val foundIds = found.mapTo(HashSet()) { it.row.id }
+      val foundPlaces = found.mapTo(HashSet()) { PhonePlace(it.row.relativePath, it.row.displayName) }
+      val there = due.filterTo(HashSet()) { p -> p.idFor(version)?.let { it in foundIds } == true || p.place in foundPlaces }
+      there.forEach { noted.remove(it.key) }
+      // Chi c'e' e non e' in scrittura si rilegge: una posizione con l'_ID di un'altra versione impara quello nuovo.
+      val readable = found.filter { !it.pending }.map { it.row }.distinctBy { it.id }
+      if (readable.isNotEmpty()) processBatch(version, readable, seenAt = clock(), ignoreGeneration = true) { null }
+      val gone = due.filter { it !in there }
+      if (gone.isEmpty()) return
+      // Dopo l'ultima lettura (il controllo puntuale): accesso completo, stesso volume, stessa versione.
+      if (!stillFullAccess() || !stillSameVolume(volume, version)) {
+        completed = false
+        return
+      }
+      for (chunk in gone.chunked(config.vanishCap)) {
+        if (overBudget() || !stillFullAccess()) {
+          completed = false
+          return
+        }
+        for (p in chunk) {
+          noted.remove(p.key)
+          if (catalog.markVanished(p.key)) {
+            vanished++
+            reconcileVanished++
+          }
+        }
+      }
+    }
+
+    /** FS-1: posizioni assenti il cui `_ID` e' di nuovo vivo. Si rileggono le righe e la registrazione le rimette presenti (stesso media). */
+    private suspend fun recover(volume: String, version: String, ids: List<Long>) {
+      val check = pointCheck ?: return
+      val rows = check.stillThere(volume, ids, emptyList()).filter { !it.pending }.map { it.row }.distinctBy { it.id }
+      if (rows.isNotEmpty()) processBatch(version, rows, seenAt = clock(), ignoreGeneration = true) { null }
     }
 
     // --- Un lotto ----------------------------------------------------------------------------------------
@@ -810,9 +886,6 @@ class DefaultPhoneLibrarySync(
 
   private companion object {
     const val TAG = "PhoneSync"
-
-    /** Il segno in `catalog_meta` della scansione completa chiesta una volta dal pacchetto F ([MediaCatalog.requestPhoneFullScanOnce]). */
-    const val FULL_SCAN_ONCE_TAG = "phone_full_scan_once_f1"
 
     /** I giri dopo i quali gli `_ID` si confrontano con la cache anche a generazione ferma: l'app torna davanti all'utente. */
     val RETURN_REASONS: Set<SyncReason> = setOf(SyncReason.APP_START, SyncReason.FOREGROUND, SyncReason.MANUAL)

@@ -83,7 +83,9 @@
                                 `URL.openConnection`/`openStream`/`getContent`, ogni `URLConnection`, `Network.openConnection`,
                                 `HttpEngine`, `DownloadManager`, `WebView`, i socket TLS; I3 della revisione di Fase 6: anche dal
                                 codice dell'engine, `Ldev/antigravity/fluidengine/`) solo da `core-models/.../download/https/` e
-                                (P11) almeno una da li' (`ModelFetchers` montato da `:app`); I2: la variante "Play services" di ML Kit non
+                                (P11) almeno una da li' (`ModelFetchers` montato da `:app`); dal pacchetto U (12/11/2026) anche da
+                                `feature/update/net/` (l'aggiornamento dentro l'app, almeno una chiamata) e dal client dell'engine che
+                                avvolge (`fluidengine/net/`); I2: la variante "Play services" di ML Kit non
                                 entra nella release (nessun meta-data `com.google.mlkit.*DEPENDENCIES`, i tre registri di ML Kit noti, i due
                                 descrittori `dynamite` del testo, il modello OCR integrato nell'APK, soli artefatti noti nei metadati di
                                 verifica). FALLISCE se non legge l'APK
@@ -1553,7 +1555,7 @@ public static class DexCallScanner {
         if (rest.Contains("$$ExternalSyntheticApiModelOutline")) {
           try { if (R8Provenance.PlatformOutline(rest)) continue; }
           catch (Exception e) { throw new InvalidOperationException(R8Provenance.Origin(dexPath, line) + ": " + e.Message); }
-          rest += " " + R8Provenance.OutlineBody(rest);
+          rest = R8Provenance.OutlineCall(rest);
         }
         foreach (var target in targets) {
           if (rest.Contains(target)) { if (target == "Landroidx/glance/" && R8Provenance.SignatureOnlyArtifact(rest, target)) continue; facts.Calls.Add(target + "|" + String.Join("\n", R8Provenance.Origins(dexPath, line, target))); facts.Insns.Add(originalRest); }
@@ -1768,9 +1770,12 @@ Step "motori on-device nella release: librerie native (ABI, 16 KB), manifest (ML
         if (-not ($caller.StartsWith("Ldev/pampa/mycloudgallery/core/ai/ocr/MlKitBootstrap;") -or $caller.StartsWith("Ldev/pampa/mycloudgallery/core/ai/ocr/MlKitBootstrap$"))) {
           $problems += "MlKit.initialize chiamato fuori dal cancello: $caller"
         }
-      } elseif (-not ($caller.StartsWith("Ldev/pampa/mycloudgallery/core/models/download/https/") -or $caller.StartsWith("Ldev/pampa/mycloudgallery/feature/map/net/"))) {
+      } elseif (-not ($caller.StartsWith("Ldev/pampa/mycloudgallery/core/models/download/https/") -or $caller.StartsWith("Ldev/pampa/mycloudgallery/feature/map/net/") -or
+          $caller.StartsWith("Ldev/pampa/mycloudgallery/feature/update/net/") -or $caller.StartsWith("Ldev/antigravity/fluidengine/net/"))) {
         # Fase 9 (D23): la seconda eccezione dichiarata, il client delle tessere della mappa (`MapTileHttp`); le regole sue sono nel passo 7h.
-        $problems += "client HTTPS fuori da core-models/.../download/https/ e feature/map/net/: $caller ($($parts[0]))"
+        # Pacchetto U (12/11/2026, decisione dell'utente): la terza, l'aggiornamento dentro l'app (`feature/update/net/`, il client avvolto) e il client
+        # dell'engine che quel pacchetto avvolge (`fluidengine/net/EngineHttp`, i cui metodi di rete sono riscritti; feature-update/consumer-rules.pro).
+        $problems += "client HTTPS fuori da core-models/.../download/https/, feature/map/net/ e feature/update/net/: $caller ($($parts[0]))"
       }
     }
   }
@@ -1778,6 +1783,9 @@ Step "motori on-device nella release: librerie native (ABI, 16 KB), manifest (ML
   # positivo: un passo che non vede niente non prova niente).
   $httpsOk = @($facts.Calls | Where-Object { (Test-R8EveryOrigin ($_ -split '\|', 2)[1] { param($o) $o.StartsWith("Ldev/pampa/mycloudgallery/core/models/download/https/") }) })
   if ($httpsOk.Count -eq 0) { $problems += "nessuna chiamata HTTPS da core-models/.../download/https/ nel dex: ModelFetchers non e' montato da :app (o la lettura non e' affidabile)" }
+  # Pacchetto U: :app monta l'aggiornamento (AppUpdates), quindi il client avvolto e' raggiunto e R8 lo tiene: il controllo deve vederlo.
+  $updateOk = @($facts.Calls | Where-Object { (Test-R8EveryOrigin ($_ -split '\|', 2)[1] { param($o) $o.StartsWith("Ldev/pampa/mycloudgallery/feature/update/net/") }) })
+  if ($updateOk.Count -eq 0) { $problems += "nessuna chiamata HTTPS da feature/update/net/ nel dex: l'aggiornamento non e' montato da :app (o la lettura non e' affidabile)" }
   # I2: i moduli che Play services consegnerebbe (descrittori `dynamite`): solo i due del testo (insieme alle loro librerie obbligatorie).
   $knownDescriptors = @(
     "Lcom/google/android/gms/dynamite/descriptors/com/google/mlkit/dynamite/text/common/ModuleDescriptor;",

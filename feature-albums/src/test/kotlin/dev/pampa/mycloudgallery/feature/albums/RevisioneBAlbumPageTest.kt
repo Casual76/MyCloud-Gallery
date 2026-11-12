@@ -162,10 +162,11 @@ class RevisioneBAlbumPageTest {
       resources, readyWith(paused), dev.pampa.mycloudgallery.feature.albums.contract.SuggestionsState.None, null, heldByRelease = held,
     ).single { it.id == "sharing" }.detail
     assertThat(detail(held = false)).contains("Riprendo da sola")
-    assertThat(detail(held = true)).contains("Pampa Store")
+    // Pacchetto U (12/11): l'app si aggiorna da sola, le frasi non mandano piu' al Pampa Store: dicono di aggiornarla.
+    assertThat(detail(held = true)).contains("aggiorn")
     assertThat(detail(held = true)).doesNotContain("Riprendo")
     val blocked = resources.getString(dev.pampa.mycloudgallery.feature.albums.ui.AlbumText.blocked(dev.pampa.mycloudgallery.feature.albums.contract.WhyBlocked.WRITES_PAUSED, true))
-    assertThat(blocked).contains("Pampa Store")
+    assertThat(blocked).contains("aggiorn")
     assertThat(blocked).doesNotContain("Riprovo")
   }
 

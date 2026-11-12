@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.backup
 
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
+import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.rules.estimate.BackupCosts
 import dev.pampa.mycloudgallery.core.rules.estimate.DeviceMeasures
 import dev.pampa.mycloudgallery.core.rules.estimate.Workload
@@ -32,6 +33,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * 2,5 GB in coda la pagina diceva "109 kB di 111 kB · meno di un minuto" per dieci minuti, e il totale scendeva quando cambiava la media.
  */
 internal class RunProgress {
+
+  /** Fase I (BF-2): l'ultima durata mostrata del primo backup (per non farla saltare a ogni lettura); non si salva, si rifa' in un processo nuovo. */
+  private var shownEta: Long? = null
 
   private var done = 0
   private var base = NONE
@@ -94,6 +98,11 @@ internal class RunProgress {
     changedSinceSnapshot = true
 
     val total = done + queued
+    if (running.trigger == BackupTrigger.FIRST_BACKUP) {
+      // Fase I (BF-2): il primo backup dice una durata solo dal ritmo misurato per media, e solo quando ce n'e' abbastanza.
+      val bytesTotal = if (remainingBytes != null) bytesDone + remainingBytes.coerceAtLeast(0L) else bytesDone + (running.bytesTotal - running.bytesDone).coerceAtLeast(0L)
+      return running.copy(done = done, total = total, bytesDone = bytesDone, bytesTotal = bytesTotal, etaMillis = firstBackupEta(queued))
+    }
     if (remainingBytes != null) {
       // D-11: i byte veri e il tempo dal modello del riepilogo, tarato su cio' che si e' visto.
       val left = remainingBytes.coerceAtLeast(0L)
@@ -102,6 +111,22 @@ internal class RunProgress {
     val eta = if (activeDone >= MIN_SAMPLES && activeMs > 0L && queued > 0) activeMs * queued / activeDone else null
     val bytesTotal = if (done > 0 && bytesDone > 0L) maxOf(bytesDone, bytesDone * total / done) else bytesDone + (running.bytesTotal - running.bytesDone).coerceAtLeast(0L)
     return running.copy(done = done, total = total, bytesDone = bytesDone, bytesTotal = bytesTotal, etaMillis = eta)
+  }
+
+  /**
+   * **Fase I (12/11, BF-2)**: la durata del primo backup. Sul telefono dell'utente il primo backup andava a 65 media al minuto costanti e la stima saliva da
+   * 2 h 12 a 7 h 27: il modello contava i 37 GB gia' sul NAS come caricamenti (si rileggono soltanto) e la taratura vedeva solo i byte caricati, non i
+   * collegamenti. Qui niente modello: **nessuna durata** finche' non si sono visti almeno [FIRST_MIN_ACTIVE_MS] di lavoro e [FIRST_MIN_DONE] media fatti;
+   * poi il ritmo misurato **per media** (tempo di lavoro / media fatti) per i media in coda, arrotondato ([roundEta]: 5 minuti, mezz'ore sopra le 2 ore).
+   * Non salta a ogni lettura: una stima piu' alta di quella mostrata di meno di un quinto non la sostituisce (una piu' bassa si'). Null se non c'e' da dirla.
+   */
+  internal fun firstBackupEta(queued: Int): Long? {
+    if (queued <= 0 || activeMs < FIRST_MIN_ACTIVE_MS || activeDone < FIRST_MIN_DONE) return null
+    val rounded = roundEta(activeMs * queued / activeDone)
+    val previous = shownEta
+    val shown = if (previous != null && rounded > previous && rounded - previous < previous / STEADY_PART) previous else rounded
+    shownEta = shown
+    return shown
   }
 
   /**
@@ -162,6 +187,7 @@ internal class RunProgress {
   }
 
   private fun reset() {
+    shownEta = null
     done = 0
     base = NONE
     bytesDone = 0L
@@ -193,5 +219,24 @@ internal class RunProgress {
     /** D-11: la taratura resta fra un quarto e quattro volte il modello (un inizio lento o una raffica non stravolgono la stima). */
     private const val MIN_PACE = 0.25
     private const val MAX_PACE = 4.0
+
+    /** Fase I (BF-2): il primo backup dice una durata solo dopo almeno 15 minuti di lavoro visto... */
+    internal const val FIRST_MIN_ACTIVE_MS: Long = 15L * 60_000L
+
+    /** ...e almeno 100 media fatti. */
+    internal const val FIRST_MIN_DONE: Int = 100
+
+    /** Una stima piu' alta di quella mostrata di meno di un quinto non la sostituisce. */
+    private const val STEADY_PART = 5L
+
+    private const val FIVE_MINUTES_MS: Long = 5L * 60_000L
+    private const val HALF_HOUR_MS: Long = 30L * 60_000L
+    private const val TWO_HOURS_MS: Long = 2L * 60L * 60_000L
+
+    /** Fase I (BF-2): una durata arrotondata come la direbbe una persona: ai 5 minuti, alla mezz'ora sopra le 2 ore; mai meno di 5 minuti. */
+    internal fun roundEta(ms: Long): Long {
+      val step = if (ms >= TWO_HOURS_MS) HALF_HOUR_MS else FIVE_MINUTES_MS
+      return maxOf(step, (ms + step / 2) / step * step)
+    }
   }
 }

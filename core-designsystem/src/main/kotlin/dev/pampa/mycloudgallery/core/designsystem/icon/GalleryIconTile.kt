@@ -14,6 +14,7 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PriorityHigh
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -125,6 +126,12 @@ enum class GalleryIconStatus {
 
   /** Un problema: la croce su rosso. */
   Problem,
+
+  /**
+   * Tocca a te: e' pronto e aspetta un tuo gesto (il primo backup da avviare). Il dito sull'accento dell'app, il colore dei tasti: non e' un allarme
+   * (non il «!» arancione) ne' un'attesa che finisce da sola (non la clessidra).
+   */
+  YourTurn,
 }
 
 /** Le taglie della piastrella. Il raggio, il glifo e il segno di stato scalano con il lato. */
@@ -336,6 +343,7 @@ fun GalleryIconStatus.glyph(): ImageVector = when (this) {
   GalleryIconStatus.Stopped -> Icons.Rounded.Remove
   GalleryIconStatus.Attention -> Icons.Rounded.PriorityHigh
   GalleryIconStatus.Problem -> Icons.Rounded.Close
+  GalleryIconStatus.YourTurn -> Icons.Rounded.TouchApp
 }
 
 /** L'etichetta corta di uno stato, per il lettore dello schermo (e per chi la vuole scrivere accanto). */
@@ -349,6 +357,7 @@ fun GalleryIconStatus.label(): String = stringResource(
     GalleryIconStatus.Stopped -> R.string.icon_status_stopped
     GalleryIconStatus.Attention -> R.string.icon_status_attention
     GalleryIconStatus.Problem -> R.string.icon_status_problem
+    GalleryIconStatus.YourTurn -> R.string.icon_status_your_turn
   },
 )
 
@@ -409,6 +418,7 @@ object GalleryIconPalette {
     GalleryIconStatus.Stopped -> colors(GalleryIconFamily.Security, scheme, dark)
     GalleryIconStatus.Attention -> tile(preset(ORANGE).resolve(dark))
     GalleryIconStatus.Problem -> colors(GalleryIconFamily.Danger, scheme, dark)
+    GalleryIconStatus.YourTurn -> tile(scheme.primary)
   }
 
   /** La sfumatura di un colore pieno con il glifo bianco sopra. */

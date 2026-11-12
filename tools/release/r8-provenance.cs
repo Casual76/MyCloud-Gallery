@@ -403,4 +403,13 @@ public static class R8Provenance {
     if(!methods.TryGetValue(call.Groups[1].Value+"."+call.Groups[2].Value+":"+call.Groups[3].Value,out m)) throw new InvalidOperationException("HK: corpo outline assente");
     return String.Join(" ",m.Instructions.ToArray());
   }
+  // 12/11: il testo che i passi cercano quando l'istruzione chiama un outline NON di sola piattaforma. La classe che ospita l'outline porta un nome scelto da R8
+  // fra quelli delle classi che ne usano uno (`Lorg/maplibre/android/geometry/VisibleRegion$$ExternalSyntheticApiModelOutline0;` ospitava l'outline di
+  // `NsdManager.discoverServices` di core-network): quel nome non dice chi viene chiamato, e il passo 7h lo leggeva come una chiamata a MapLibre. Si toglie SOLO
+  // il nome della classe ospite; la firma dell'outline (i tipi veri dei parametri) e tutto il suo corpo restano nel testo, quindi una chiamata vera a una
+  // libreria dentro l'outline continua a essere attribuita al chiamante.
+  public static string OutlineCall(string rest) {
+    string body=OutlineBody(rest);
+    return Regex.Replace(rest,@"L[^;\s]+\$\$ExternalSyntheticApiModelOutline\d+;","Lr8/outline;")+" "+body;
+  }
 }

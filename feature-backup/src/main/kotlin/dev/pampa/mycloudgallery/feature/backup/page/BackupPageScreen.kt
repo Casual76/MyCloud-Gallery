@@ -108,8 +108,8 @@ internal fun BackupPageScreen(
   val settingsLabel = stringResource(R.string.backup_settings_open)
   val sourceList = remember(state.sources) { state.sources.map { it.source } }
   BackupCoverWindow(LocalBackupCovers.current, sourceList)
-  val hero = heroModel(state.status, actions)
   val share = remember(state.status, state.sources) { SafeShare.of(state.status, state.sources) }
+  val hero = heroModel(state.status, actions, share)
   BackupPage(
     label = BackupLabel(title = stringResource(R.string.backup_title), subtitle = null),
     modifier = modifier,
@@ -124,7 +124,8 @@ internal fun BackupPageScreen(
         contentPadding = PaddingValues(start = GalleryDimens.Gutter, end = GalleryDimens.Gutter, top = insets.top, bottom = insets.bottom),
         verticalArrangement = Arrangement.spacedBy(BackupDimens.BlockGap),
       ) {
-        item(key = "status") { BackupHero(model = hero, share = share) }
+        // Punto 3: con il foglio del primo backup aperto la testata non si anima (il foglio sfoca la pagina: ogni fotogramma dietro costa).
+        item(key = "status") { BackupHero(model = hero, share = share, still = state.sheetOpen) }
         toCheckSection(state, actions)
         sourcesSection(state.sources, sourcesHalt(state.status))
         deviceSection(state, actions)

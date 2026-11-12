@@ -110,6 +110,9 @@
   <string name="diag_test_auth_skipped_guide">L\'interruttore di sicurezza è aperto o la password non si legge: il test non autentica, per non far bloccare l\'account.</string>
 
   <!-- Attività -->
+  <!-- Fase I (12/11, BF-8, BF-9): i titoli dei motivi d'attesa sono la formula comune di core-designsystem (`gallery_wait_*`, la stessa del foglio del primo
+       backup, della testata e del piede), per riferimento. Rete e roaming non promettono una ripartenza («appena torna una rete»): i lavori del NAS non
+       si riprogrammano per la rete, ripartono al giro dopo o all'apertura dell'app. -->
   <string name="diag_act_running_title">Può girare adesso</string>
   <string name="diag_act_local_buffer_only_title">Lavora solo sul buffer locale</string>
   <string name="diag_act_local_buffer_only_guide">Senza una rete utile il calcolo AI elabora ciò che ha già sul telefono, poi si ferma.</string>
@@ -120,29 +123,29 @@
   <string name="diag_act_disabled_title">Attività disattivata nelle impostazioni</string>
   <string name="diag_act_app_not_visible_title">Parte solo con l\'app aperta</string>
   <string name="diag_act_roaming_title">Roaming: attività sospese</string>
-  <string name="diag_act_roaming_guide">Nessuna attività automatica parte in roaming. Tornata una rete normale, riprendono da sole.</string>
+  <string name="diag_act_roaming_guide">Nessuna attività automatica parte in roaming.</string>
   <string name="diag_act_offline_title">Nessuna connessione</string>
-  <string name="diag_act_offline_guide">Il lavoro riprende appena torna una rete.</string>
+  <string name="diag_act_offline_guide">Il lavoro aspetta una rete.</string>
   <string name="diag_act_network_not_trusted_title">Rete non riconosciuta</string>
   <string name="diag_act_network_not_trusted_guide">Servono il Wi-Fi di casa o la VPN di casa.</string>
   <string name="diag_act_poor_network_title">Rete lenta o instabile</string>
   <string name="diag_act_poor_network_guide">I lavori automatici aspettano che la rete migliori; l\'uso interattivo continua.</string>
-  <string name="diag_act_outside_window_title">In attesa della fascia oraria</string>
+  <string name="diag_act_outside_window_title">@string/gallery_wait_night_window</string>
   <string name="diag_act_outside_window_guide">Il preset Notte lavora solo di notte, con il telefono collegato. Puoi scegliere un altro preset nelle regole delle attività.</string>
-  <string name="diag_act_needs_power_title">In attesa della corrente</string>
+  <string name="diag_act_needs_power_title">@string/gallery_wait_charging</string>
   <string name="diag_act_needs_power_guide">Basta il cavo collegato: la Protezione batteria che ferma la carica all\'80% va bene.</string>
-  <string name="diag_act_battery_low_title">Batteria sotto la soglia</string>
-  <string name="diag_act_power_saver_title">Risparmio energetico attivo</string>
+  <string name="diag_act_battery_low_title">@string/gallery_wait_battery</string>
+  <string name="diag_act_power_saver_title">@string/gallery_wait_power_saver</string>
   <string name="diag_act_power_saver_guide">Il lavoro in background resta in pausa finché non lo spegni; l\'uso interattivo è normale.</string>
-  <string name="diag_act_thermal_title">Il telefono è troppo caldo</string>
+  <string name="diag_act_thermal_title">@string/gallery_wait_thermal</string>
   <string name="diag_act_thermal_guide">Il lavoro riprende da solo dopo qualche minuto dal raffreddamento.</string>
   <string name="diag_act_network_not_allowed_title">Questa rete non è ammessa per l\'attività</string>
   <string name="diag_act_heavy_needs_home_title">Attività pesante: solo sul Wi-Fi di casa</string>
-  <string name="diag_act_cap_reached_title">Tetto dati del mese raggiunto</string>
+  <string name="diag_act_cap_reached_title">@string/gallery_wait_data_cap</string>
   <string name="diag_act_cap_reached_guide">Si azzera all\'inizio del prossimo ciclo. Puoi alzarlo nelle regole delle attività, oppure usare «Fai ora» con conferma.</string>
   <string name="diag_act_android_limit_title">Limite di Android raggiunto</string>
   <string name="diag_act_android_limit_guide">Il lavoro riprende la notte dopo, dal punto in cui si è fermato. La batteria su «Illimitata» allunga il tempo concesso.</string>
-  <string name="diag_act_nas_unreachable_title">NAS spento o non raggiungibile</string>
+  <string name="diag_act_nas_unreachable_title">@string/gallery_wait_nas</string>
   <string name="diag_act_nas_unreachable_guide">Il calcolo AI lavora sul buffer locale, il resto aspetta. Esegui il test di connessione per capire dove si ferma.</string>
   <string name="diag_act_confirmation_required_title">Serve la tua conferma</string>
   <string name="diag_act_frozen_title">Lavori sul NAS fermi: cambiamenti anomali</string>

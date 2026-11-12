@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :feature-update: nessun permesso e nessun componente suoi (pacchetto U, 12/11/2026). Il permesso REQUEST_INSTALL_PACKAGES, INTERNET e il
+      ricevitore NON esportato degli esiti dell'installazione (`dev.antigravity.fluidengine.update.AppUpdateInstallResultReceiver`) arrivano dal
+      manifest di `engine-update`, e sono nell'elenco chiuso di releaseManifestPolicy (gradle/verify-release-manifest.gradle) con la loro riga in
+      docs/sicurezza.md 4-bis (decisione dell'utente del 12/11/2026).
+  -->
+
+</manifest>

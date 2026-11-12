@@ -10,6 +10,8 @@
   <string name="settings_backup_up_to_date">Al sicuro</string>
   <string name="settings_backup_waiting">%1$s in coda</string>
   <string name="settings_backup_running">%1$s / %2$s</string>
+  <!-- Giro 2 (BF2-4): le stesse parole della pagina Backup e del piede, per riferimento. -->
+  <string name="settings_backup_starting">@string/gallery_starting</string>
   <string name="settings_backup_stopped">Fermo</string>
   <!-- R4 della revisione 5A: «Ferma» è una pausa; la pagina Backup, la notifica e questa voce dicono la stessa cosa. -->
   <string name="settings_backup_paused">In pausa</string>

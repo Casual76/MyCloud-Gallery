@@ -121,6 +121,12 @@ ext.releaseManifestPolicy = [
     // Fase 5A (P7, D11): lo stesso permesso serve al backup avviato dall'utente ("Inizia ora", "Fai ora") nel BackupJobService, con le
     // stesse due garanzie (non esportato, BIND_JOB_SERVICE: `verify` le pretende per ogni `*JobService`). Nessun permesso nuovo.
     'android.permission.RUN_USER_INITIATED_JOBS',
+
+    // --- Pacchetto U (12/11/2026, DECISIONE DELL'UTENTE: supera D33 per questa sola funzione; docs/sicurezza.md 4-bis e C480-C486). -----------
+    // engine-update (sotto :feature-update): l'aggiornamento dentro l'app installa il PROPRIO APK con PackageInstaller. Permesso "speciale": Android
+    // chiede all'utente, una volta, di consentire l'installazione da questa app (la pagina lo chiede quando serve, con una riga). Nessuna installazione
+    // parte senza un tocco su «Aggiorna»; prima della sessione l'app controlla sha256, pacchetto, versionCode crescente e firma uguale.
+    'android.permission.REQUEST_INSTALL_PACKAGES',
   ],
   // Permessi che l'app ha deciso di NON chiedere mai (il motivo e' nel messaggio): nessuna libreria deve portarli in silenzio. Gia' fuori
   // dall'elenco qui sopra; qui il rifiuto ha un nome e una ragione (Fase 5B, P0-B, D19 e docs/sicurezza.md §4-bis "Non richiesti").
@@ -179,6 +185,9 @@ ext.releaseManifestPolicy = [
     'com.google.ai.edge.',
     // Fase 10 (P3, D10, D40): Glance (il widget). Elenco chiuso come per ML Kit: una versione nuova che porta un componente in piu' fa fallire il controllo.
     'androidx.glance.',
+    // Pacchetto U (12/11/2026): i componenti del Fluid Engine. Elenco chiuso anche per l'engine: oggi l'unico e' il ricevitore degli esiti
+    // dell'installazione di engine-update; un engine nuovo che ne porta un altro fa fallire il controllo.
+    'dev.antigravity.fluidengine.',
   ],
   allowedThirdPartyComponents: [
     // ML Kit: il registro dei suoi componenti interni (Firebase Components). Lo legge MlKitContext quando ML Kit si inizializza.
@@ -199,6 +208,9 @@ ext.releaseManifestPolicy = [
     'androidx.glance.appwidget.action.ActionCallbackBroadcastReceiver',
     'androidx.glance.appwidget.UnmanagedSessionReceiver',
     'androidx.glance.appwidget.MyPackageReplacedReceiver',
+    // Pacchetto U (12/11/2026; engine-update 3.0.4): il ricevitore degli esiti della sessione di PackageInstaller, **non esportato** (lo dichiara il
+    // manifest del modulo). Riceve solo il PendingIntent esplicito che la sessione dell'app gli manda; al «serve la conferma» apre la finestra di Android.
+    'dev.antigravity.fluidengine.update.AppUpdateInstallResultReceiver',
   ],
   // Fase 10 (P3, D10, D40; docs/sicurezza.md 4-bis): i componenti che una libreria dichiara e che l'app NON vuole, tolti dal manifest fuso di ogni variante da
   // `filter<Variante>NativeLibraries` (sotto) prima di `verifyReleaseManifest`. Glance 1.1.1 dichiara **un** componente esportato, `GlanceRemoteViewsService` (con
@@ -556,7 +568,7 @@ abstract class VerifyReleaseManifest extends DefaultTask {
           // Fase 6 (D41, L49): i componenti delle librerie di Google portate da ML Kit e da LiteRT: elenco chiuso, mai esportati.
           if (name != null && thirdPartyComponentPrefixes.get().any { name.startsWith(it) }) {
             if (!(name in allowedThirdPartyComponents.get())) {
-              problems << "componente di una libreria di Google NON nell'elenco chiuso: <${kind}> ${name} (potrebbe avviarsi da solo: docs/sicurezza.md 4-bis)".toString()
+              problems << "componente di una libreria (Google, Glance o Fluid Engine) NON nell'elenco chiuso: <${kind}> ${name} (potrebbe avviarsi da solo: docs/sicurezza.md 4-bis)".toString()
             } else if (exported == 'true') {
               problems << "<${kind}> ${name} e' nell'elenco chiuso ma e' ESPORTATO".toString()
             }

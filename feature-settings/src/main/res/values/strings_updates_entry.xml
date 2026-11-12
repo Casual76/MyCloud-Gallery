@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La voce "Aggiornamenti" delle Impostazioni (pacchetto U, 12/11/2026): la pagina e' di feature-update. -->
+<resources>
+  <string name="settings_updates">Aggiornamenti</string>
+  <string name="settings_updates_available">versione %1$s disponibile</string>
+</resources>

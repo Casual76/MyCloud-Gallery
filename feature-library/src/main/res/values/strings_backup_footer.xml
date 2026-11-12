@@ -4,13 +4,22 @@
        lo stato del backup (LibraryBackupStatus). La capsula dice la frase breve, sotto il dettaglio. Solo numeri e codici: mai nomi
        di file, cartelle o share. I problemi hanno una riga per codice di BackupProblemCode: nome backup_footer_<codice>_label e
        backup_footer_<codice>_detail (un test confronta questo file con l'elenco dei codici). -->
-  <string name="backup_footer_comparing">Sto confrontando con il NAS…</string>
-  <string name="backup_footer_comparing_search">Sto cercando cosa c’è già sul NAS…</string>
-  <!-- Fase I (12/11): la ricerca sul NAS prima del primo backup e' ferma per una regola; sotto, quale (backup_footer_wait_*). -->
+  <!-- Fase I (12/11, BF-7): la ricerca sul NAS prima del primo backup, con le parole della pagina e del foglio. -->
+  <string name="backup_footer_comparing">Cerco cosa c’è già sul NAS</string>
+  <string name="backup_footer_search_of">%1$s di %2$s file guardati</string>
+  <plurals name="backup_footer_search_seen">
+    <item quantity="one">%1$s file guardato</item>
+    <item quantity="other">%1$s file guardati</item>
+  </plurals>
+  <string name="backup_footer_search_soon">Inizia fra poco.</string>
+  <string name="backup_footer_search_elsewhere">Il motivo è nella Diagnostica.</string>
+  <!-- La ricerca ferma per una regola; sotto, quale (backup_footer_wait_*). -->
   <string name="backup_footer_comparing_paused">Ricerca sul NAS in pausa</string>
-  <plurals name="backup_footer_comparing_count">
-    <item quantity="one">Sto confrontando %1$s foto con le copie sul NAS…</item>
-    <item quantity="other">Sto confrontando %1$s foto con le copie sul NAS…</item>
+  <!-- Fase I (BF-6): il primo backup pronto aspetta il tocco dell'utente. -->
+  <string name="backup_footer_first_ready">Primo backup da avviare</string>
+  <plurals name="backup_footer_first_ready_detail">
+    <item quantity="one">%1$s foto o video da caricare</item>
+    <item quantity="other">%1$s foto e video da caricare</item>
   </plurals>
 
   <string name="backup_footer_all_safe">Tutto al sicuro</string>
@@ -18,23 +27,27 @@
   <string name="backup_footer_all_safe_day">%1$s alle %2$s</string>
 
   <string name="backup_footer_queued">%1$s in coda</string>
-  <string name="backup_footer_wait_charging">Attesa carica</string>
-  <string name="backup_footer_wait_wifi">Attesa Wi-Fi</string>
-  <string name="backup_footer_wait_home_wifi">Attesa Wi-Fi di casa</string>
-  <string name="backup_footer_wait_night_window">Attesa della notte</string>
-  <string name="backup_footer_wait_battery">Attesa batteria</string>
+  <!-- Fase I (BF-8): una formula sola per motivo, quella di core-designsystem (`gallery_wait_*`, la stessa del foglio, della testata e dei titoli della
+       Diagnostica), per riferimento; nessuna promessa di ripartenza. -->
+  <string name="backup_footer_wait_charging">@string/gallery_wait_charging</string>
+  <string name="backup_footer_wait_wifi">@string/gallery_wait_wifi</string>
+  <string name="backup_footer_wait_home_wifi">@string/gallery_wait_home_wifi</string>
+  <string name="backup_footer_wait_night_window">@string/gallery_wait_night_window</string>
+  <string name="backup_footer_wait_battery">@string/gallery_wait_battery</string>
   <!-- FAB-4: nella nuvola, sotto «N in coda»: il risparmio energetico di Android e' acceso (non la batteria bassa).
        GF-24: le frasi di dettaglio dei lavori fermi hanno tutte il punto finale, come «Android ha fermato il lavoro: riprende da solo.» e come i dettagli dei
        problemi di questo file (`backup_footer_*_detail`); le attese brevi («Attesa carica», «Al prossimo giro») sono etichette, senza punto. -->
-  <string name="backup_footer_wait_power_saver">Risparmio energetico acceso: riprende quando lo spegni.</string>
-  <!-- Fase I (12/11): le stesse parole della Diagnostica (Attivita'); prima il caldo e i dati del mese dicevano «Attesa delle regole». -->
-  <string name="backup_footer_wait_thermal">Telefono troppo caldo: riprende da solo quando si raffredda.</string>
-  <string name="backup_footer_wait_data_cap">Tetto dati del mese raggiunto.</string>
-  <string name="backup_footer_wait_nas">Attesa NAS</string>
+  <string name="backup_footer_wait_power_saver">@string/gallery_wait_power_saver</string>
+  <string name="backup_footer_wait_thermal">@string/gallery_wait_thermal</string>
+  <string name="backup_footer_wait_data_cap">@string/gallery_wait_data_cap</string>
+  <string name="backup_footer_wait_nas">@string/gallery_wait_nas</string>
   <string name="backup_footer_wait_next_run">Al prossimo giro</string>
   <!-- D-13: il NAS tiene ancora occupato un file del backup (una connessione caduta che il NAS non ha ancora chiuso): si riprova da soli. -->
   <string name="backup_footer_wait_nas_busy">File occupato sul NAS, riprovo tra poco.</string>
-  <string name="backup_footer_wait_other">Attesa delle regole</string>
+  <!-- Giro 2 (BF2-11): niente gergo («le regole»): il motivo sta nella Diagnostica. -->
+  <string name="backup_footer_wait_other">Il motivo è nella Diagnostica</string>
+  <string name="backup_footer_starting">@string/gallery_starting</string>
+  <string name="backup_footer_wait_not_on_phone">@string/gallery_wait_not_on_phone</string>
 
   <string name="backup_footer_first">Primo backup: %1$s di %2$s</string>
   <string name="backup_footer_running">Backup in corso: %1$s di %2$s</string>
@@ -74,7 +87,7 @@
   <string name="backup_footer_writes_stopped_detail">I dettagli sono nella pagina Backup.</string>
   <!-- CA-1 (Fase 10): le scritture ferme per il manifest firmato (questa versione e' in sola lettura). -->
   <string name="backup_footer_release_read_only">Versione da aggiornare</string>
-  <string name="backup_footer_release_read_only_hint">Il backup è fermo: aggiorna dal Pampa Store.</string>
+  <string name="backup_footer_release_read_only_hint">Il backup è fermo: aggiorna l\'app.</string>
   <string name="backup_footer_test_only_label">In pausa</string>
   <string name="backup_footer_test_only_detail">Il backup vero non è ancora acceso</string>
   <string name="backup_footer_lost_before_backup_label">Cancellati prima del backup</string>

@@ -41,9 +41,10 @@ abstract class BackupPowerSaverShotsBase(private val dark: Boolean, private val 
     show(dark = dark) { BackupPageScreen(state = waiting(WaitReason.POWER_SAVER), actions = BackupPageActions(), onBack = {}) }
 
     // I3 (fase I): l'attesa e' un'etichetta corta nella riga della testata.
-    composeRule.onAllNodesWithText("risparmio energetico acceso", substring = true).onFirst().assertExists()
-    // Non e' la batteria bassa: la frase vecchia non c'e' piu'.
-    composeRule.onAllNodesWithText("aspetta più batteria", substring = true).assertCountEquals(0)
+    // Fase I (BF-8): la formula comune («Risparmio energetico attivo», come la Diagnostica).
+    composeRule.onAllNodesWithText("Risparmio energetico attivo", substring = true).onFirst().assertExists()
+    // Non e' la batteria bassa.
+    composeRule.onAllNodesWithText("Batteria sotto la soglia", substring = true).assertCountEquals(0)
     composeRule.onRoot().captureRoboImage("$DIR/pagina-backup-in-coda-risparmio-energetico-$look-$device.png")
   }
 
@@ -51,7 +52,7 @@ abstract class BackupPowerSaverShotsBase(private val dark: Boolean, private val 
   fun laBatteriaBassaDiceAncoraLaSuaFrase() {
     show(dark = dark) { BackupPageScreen(state = waiting(WaitReason.BATTERY), actions = BackupPageActions(), onBack = {}) }
 
-    composeRule.onAllNodesWithText("aspetta più batteria", substring = true).onFirst().assertExists()
+    composeRule.onAllNodesWithText("Batteria sotto la soglia", substring = true).onFirst().assertExists()
     composeRule.onAllNodesWithText("Risparmio energetico", substring = true).assertCountEquals(0)
   }
 

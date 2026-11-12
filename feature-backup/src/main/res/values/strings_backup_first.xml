@@ -1,48 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <!-- Il foglio del primo backup (Fase 5A, docs/fase5-progetto.md §2.11, D11): i tre numeri, il peso, la stima e le due scelte. -->
+  <!-- Il foglio del primo backup (Fase 5A, docs/fase5-progetto.md §2.11, D11): i tre numeri, il peso e le due scelte. -->
   <string name="backup_first_title">Primo backup</string>
   <string name="backup_first_headline">Da caricare: %1$s foto e video, %2$s.</string>
-  <string name="backup_first_headline_eta">Stanotte: %1$s.</string>
   <string name="backup_first_headline_never">Con le regole di adesso il backup non parte.</string>
-  <!-- Fase I (12/11): finche' si cerca sul NAS le scelte aspettano e il foglio dice perche' si cerca, in positivo. -->
-  <string name="backup_first_headline_search">Prima cerco cosa c’è già sul NAS, così non lo ricarico.</string>
+  <!-- Fase I (12/11): finche' si cerca sul NAS le scelte aspettano e il foglio dice che cosa fa, in positivo. -->
+  <string name="backup_first_headline_search">Prima guardo cosa c’è già sul NAS.</string>
   <string name="backup_first_tonight">Stanotte</string>
   <string name="backup_first_now">Inizia ora</string>
   <string name="backup_first_later">Non ora</string>
 
-  <!-- Fase I (12/11): la riga della ricerca sul NAS (con la barra) e quella piccola del confronto delle copie simili, che non ferma niente. -->
+  <!-- Fase I (12/11): la riga della ricerca sul NAS (il numero, la barra sotto) e quella piccola del confronto delle copie simili, che non ferma
+       niente. «Riprende da sola» solo per le attese che riprendono davvero da sole (fascia, carica, batteria, risparmio energetico, caldo: BF-9). -->
   <string name="backup_first_searching">Cerco cosa c’è già sul NAS</string>
   <plurals name="backup_first_search_seen">
     <item quantity="one">%1$s file del NAS guardato</item>
     <item quantity="other">%1$s file del NAS guardati</item>
   </plurals>
   <string name="backup_first_search_of">%1$s di %2$s file del NAS guardati</string>
-  <string name="backup_first_search_detail">Può durare qualche minuto.</string>
-  <string name="backup_first_search_held">La ricerca riprende da sola.</string>
+  <string name="backup_first_search_count_of">%1$s di %2$s</string>
+  <plurals name="backup_first_search_files">
+    <item quantity="one">file del NAS guardato</item>
+    <item quantity="other">file del NAS guardati</item>
+  </plurals>
+  <string name="backup_first_search_soon">Inizia fra poco.</string>
+  <string name="backup_first_search_resumes">La ricerca riprende da sola.</string>
+  <!-- Giro 2 (BF2-1): con il risparmio energetico acceso i tentativi ritrovano lo stesso blocco: riprende quando lo si spegne, non da sola. -->
+  <string name="backup_first_search_resumes_power_saver">La ricerca riprende quando lo spegni.</string>
+  <string name="backup_first_search_paused">Ricerca in pausa</string>
+  <string name="backup_paused_elsewhere">Il motivo è nella Diagnostica.</string>
+  <string name="backup_hero_search_held">%1$s: la ricerca riprende da sola</string>
+  <string name="backup_hero_search_held_power_saver">%1$s: la ricerca riprende quando lo spegni</string>
+  <string name="backup_hero_search_soon">Cerco cosa c’è già sul NAS · inizia fra poco</string>
   <plurals name="backup_first_compare">
     <item quantity="one">Ancora %1$s foto da confrontare</item>
     <item quantity="other">Ancora %1$s foto da confrontare</item>
   </plurals>
-  <string name="backup_first_compare_detail">Il confronto continua da solo. Non cambia cosa si carica.</string>
-  <string name="backup_first_compare_held">%1$s: il confronto riprende da solo. Non cambia cosa si carica.</string>
-
-  <!-- Fase I (12/11): perche' un lavoro e' fermo adesso (una regola delle attivita'), con le parole della Diagnostica. -->
-  <string name="backup_held_charging">In attesa della corrente</string>
-  <string name="backup_held_wifi">In attesa di una rete</string>
-  <string name="backup_held_home_wifi">In attesa del Wi-Fi di casa</string>
-  <string name="backup_held_night_window">In attesa della fascia oraria</string>
-  <string name="backup_held_battery">Batteria sotto la soglia</string>
-  <string name="backup_held_power_saver">Risparmio energetico attivo</string>
-  <string name="backup_held_thermal">Telefono troppo caldo</string>
-  <string name="backup_held_data_cap">Tetto dati del mese raggiunto</string>
-  <string name="backup_held_nas">NAS non raggiungibile</string>
-  <string name="backup_held_nas_busy">NAS occupato</string>
-  <string name="backup_held_other">In pausa</string>
-  <string name="backup_hero_search_held">%1$s: la ricerca riprende da sola</string>
+  <string name="backup_first_compare_detail">Continua da solo. Si carica lo stesso.</string>
+  <!-- Giro 2 (BS2-4, BF2-6): il confronto aspetta anteprime che non ci sono ancora. Non si dice perche' (non sempre e' la Preparazione: puo' mancare solo la
+       copia sul telefono) ne' che ripartono da sole: una frase neutra e corta. -->
+  <string name="backup_first_compare_waiting">Alcune anteprime non sono ancora pronte. Si carica lo stesso.</string>
 
   <string name="backup_first_linked">%1$s già sul NAS</string>
-  <string name="backup_first_linked_detail">Identici byte per byte: si collegano, non si ricaricano.</string>
+  <!-- BF-2: i file gia' sul NAS non si caricano ma si rileggono, byte per byte: costano tempo di lettura. -->
+  <string name="backup_first_linked_detail">Già uguali: si controllano, non si ricaricano.</string>
   <string name="backup_first_similar">%1$s con una copia simile sul NAS</string>
   <string name="backup_first_similar_detail">Si caricano e si vedranno insieme in una cella sola.</string>
   <string name="backup_first_fresh">%1$s nuovi</string>
@@ -52,25 +53,20 @@
     <item quantity="other">%1$s sono già nell’area comune: non si ricaricano e non sono ancora «al sicuro».</item>
   </plurals>
 
+  <!-- Fase I (BF-2): niente durata prima di partire. Il modello di serie (core-rules) era ottimista di circa tre volte (sul telefono: «Stanotte: circa
+       50 min» per un lavoro di oltre due ore): il foglio dice le quantita', la durata la dice la pagina quando il backup lavora (dal ritmo misurato). -->
+  <!-- Giro 2 (BF2-5, BF2-6): nessun numero (il modello di serie e' ottimista), ma una frase sola quando il lavoro e' grande (almeno 2.000 foto e video o
+       10 GB, contando anche quelli gia' sul NAS da rileggere): nel foglio prima di partire e nella pagina finche' la durata misurata non c'e'. -->
+  <string name="backup_first_long">Con tanti file ci vogliono alcune ore.</string>
   <string name="backup_first_total">Da caricare</string>
   <string name="backup_first_total_detail">I nuovi e quelli con una copia simile.</string>
   <string name="backup_first_total_value">%1$s · %2$s</string>
-  <string name="backup_first_time">Tempo</string>
   <string name="backup_first_never">Con le regole di adesso il backup non parte: controlla le attività.</string>
-  <string name="backup_first_now_detail">Parte subito, anche fuori dalla notte e senza carica.</string>
   <string name="backup_first_now_mobile">Parte subito; %1$s passano dai dati mobili e chiedo conferma.</string>
-  <string name="backup_first_time_unknown">La stima arriva quando ho finito di confrontare.</string>
   <string name="backup_first_none">—</string>
-  <plurals name="backup_first_nights">
-    <item quantity="one">In %1$s notte, con le regole di adesso.</item>
-    <item quantity="other">In circa %1$s notti, con le regole di adesso.</item>
-  </plurals>
   <string name="backup_first_traffic">Traffico</string>
   <string name="backup_first_traffic_wifi_only">Tutto sul Wi-Fi, compresa la rilettura per controllare le copie.</string>
   <string name="backup_first_traffic_mobile">Sul Wi-Fi, e %1$s sui dati mobili.</string>
-  <string name="backup_first_battery">Batteria</string>
-  <string name="backup_first_battery_detail">Se il telefono non è in carica.</string>
-  <string name="backup_first_battery_value">circa %1$d%%</string>
 
   <string name="backup_first_warning_on_battery">Meglio in carica e sul Wi-Fi di casa.</string>
   <string name="backup_first_warning_mobile_data">Sui dati mobili chiedo conferma con la stima.</string>

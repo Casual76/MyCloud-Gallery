@@ -45,7 +45,8 @@ class BackupFooterProblemsTest {
     val label = Regex("""<string name="backup_footer_release_read_only">([^<]*)<""").find(xml)?.groupValues?.get(1).orEmpty()
     val hint = Regex("""<string name="backup_footer_release_read_only_hint">([^<]*)<""").find(xml)?.groupValues?.get(1).orEmpty()
     assertThat(label.lowercase()).contains("aggiornare")
-    assertThat(hint).contains("Pampa Store")
+    // Pacchetto U (12/11): l'app si aggiorna da sola, il piede non manda piu' al Pampa Store: dice di aggiornarla.
+    assertThat(hint.lowercase()).contains("aggiorna")
   }
 
   @Test

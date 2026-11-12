@@ -52,7 +52,9 @@ abstract class BackupScreenshotBase(private val dark: Boolean, private val devic
 
   private fun page(
     status: BackupStatus,
-    sources: List<dev.pampa.mycloudgallery.core.backup.contract.SourceStatus> = BackupSamples.sources,
+    // BF-12: prima del primo backup niente e' ancora al sicuro (l'anello parte da zero), come sul telefono.
+    sources: List<dev.pampa.mycloudgallery.core.backup.contract.SourceStatus> =
+      if (status is BackupStatus.FirstBackupReady) BackupSamples.firstBackupSources else BackupSamples.sources,
     folder: Boolean = true,
     sheetOpen: Boolean = false,
   ) = BackupPageUi(status, sources, if (folder) BackupSamples.deviceFolder else null, sheetOpen)
@@ -159,6 +161,83 @@ abstract class BackupScreenshotBase(private val dark: Boolean, private val devic
   /** Fase I (punto 5): la ricerca ferma per il caldo. */
   @Test
   fun foglioPrimoBackupCercaInPausa() = shoot("foglio-primo-backup-cerca-in-pausa") { SheetOverPage(BackupSamples.heldSummary) }
+
+  // BF-12: i nuovi stati anche con il testo grande (il titolo della ricerca e la riga della clessidra sono quelli che vanno a capo).
+
+  @Test
+  fun foglioPrimoBackupCercaConNumeroTestoGrande() =
+    shoot("foglio-primo-backup-cerca-numero", fontScale = LARGE_TEXT) { SheetOverPage(BackupSamples.searchingSummary) }
+
+  @Test
+  fun foglioPrimoBackupCercaInPausaTestoGrande() =
+    shoot("foglio-primo-backup-cerca-in-pausa", fontScale = LARGE_TEXT) { SheetOverPage(BackupSamples.heldSummary) }
+
+  @Test
+  fun foglioPrimoBackupMentreConfrontaTestoGrande() =
+    shoot("foglio-primo-backup-confronto", fontScale = LARGE_TEXT) { SheetOverPage(BackupSamples.comparingSummary) }
+
+  @Test
+  fun paginaCercaInPausaTestoGrande() = shoot("pagina-cerca-in-pausa", fontScale = LARGE_TEXT) {
+    Page(page(BackupStatus.FirstBackupReady(BackupSamples.heldSummary)))
+  }
+
+  /** BF-1: «Sto partendo» dopo «Inizia ora». Giro 2 (BF2-4): con l'anello di un primo backup vero, a zero (non il 99% di un campione qualunque). */
+  @Test
+  fun paginaStaPartendo() = shoot("pagina-sto-partendo") { Page(startingPage) }
+
+  @Test
+  fun paginaStaPartendoTestoGrande() = shoot("pagina-sto-partendo", fontScale = LARGE_TEXT) { Page(startingPage) }
+
+  private val startingPage: BackupPageUi
+    get() = page(
+      BackupStatus.Running(BackupKind.PHOTOS, 0, 8_445, 0L, 40_000_000_000, null, BackupTrigger.FIRST_BACKUP, starting = true),
+      sources = BackupSamples.firstBackupSources,
+    )
+
+  /** Giro 2 (BF2-5): il primo backup grande nei primi 15 minuti (nessuna durata misurata): la frase delle ore. */
+  @Test
+  fun paginaPrimoBackupPrimiMinuti() = shoot("pagina-primo-backup-primi-minuti") {
+    Page(page(BackupStatus.Running(BackupKind.PHOTOS, 40, 8_445, 80_000_000, 40_000_000_000, null, BackupTrigger.FIRST_BACKUP), sources = BackupSamples.firstBackupSources))
+  }
+
+  /** Giro 2 (BF2-2, BF2-7): appena aperta l'app, il riepilogo non ancora calcolato: il nome e l'anello, nessun segno ne' riga. */
+  @Test
+  fun paginaAFreddo() = shoot("pagina-a-freddo") { Page(page(BackupStatus.FirstBackupReady(BackupSummary.COUNTING))) }
+
+  /** Giro 2 (BF2-7): la ricerca ferma per un motivo che il backup non nomina: la pausa e «Vedi perche'». */
+  @Test
+  fun paginaCercaInPausaSenzaMotivo() = shoot("pagina-cerca-in-pausa-senza-motivo") {
+    Page(page(BackupStatus.FirstBackupReady(BackupSamples.pausedSearchSummary)))
+  }
+
+  @Test
+  fun paginaCercaInPausaSenzaMotivoTestoGrande() = shoot("pagina-cerca-in-pausa-senza-motivo", fontScale = LARGE_TEXT) {
+    Page(page(BackupStatus.FirstBackupReady(BackupSamples.pausedSearchSummary)))
+  }
+
+  @Test
+  fun paginaProntoTestoGrande() = shoot("pagina-pronto-per-il-primo-backup", fontScale = LARGE_TEXT) {
+    Page(page(BackupStatus.FirstBackupReady(BackupSamples.firstBackupSummary), folder = false))
+  }
+
+  @Test
+  fun paginaCercaSulNasTestoGrande() = shoot("pagina-cerca-sul-nas", fontScale = LARGE_TEXT) {
+    Page(page(BackupStatus.FirstBackupReady(BackupSamples.searchingSummary)))
+  }
+
+  /** Giro 2 (BF2-7): il foglio con la ricerca ferma per un motivo che il backup non nomina. */
+  @Test
+  fun foglioPrimoBackupCercaInPausaSenzaMotivo() = shoot("foglio-primo-backup-cerca-in-pausa-senza-motivo") {
+    SheetOverPage(BackupSamples.pausedSearchSummary)
+  }
+
+  /** Giro 2 (BS2-4, BF2-7): il confronto che aspetta anteprime non ancora pronte, con la frase neutra. */
+  @Test
+  fun foglioPrimoBackupConfrontoInPausa() = shoot("foglio-primo-backup-confronto-in-pausa") { SheetOverPage(BackupSamples.comparingWaitingSummary) }
+
+  @Test
+  fun foglioPrimoBackupConfrontoInPausaTestoGrande() =
+    shoot("foglio-primo-backup-confronto-in-pausa", fontScale = LARGE_TEXT) { SheetOverPage(BackupSamples.comparingWaitingSummary) }
 
   @Test
   fun foglioPrimoBackupCercaSulNas() = shoot("foglio-primo-backup-cerca-sul-nas") {

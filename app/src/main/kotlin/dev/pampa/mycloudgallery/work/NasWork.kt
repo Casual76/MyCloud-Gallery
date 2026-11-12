@@ -4,12 +4,16 @@ import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ListenableWorker
+import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
@@ -23,6 +27,7 @@ import dev.pampa.mycloudgallery.core.prepare.contract.PrepVerdict
 import dev.pampa.mycloudgallery.feature.diagnostics.recording.DiagJob
 import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
 import dev.pampa.mycloudgallery.core.rules.NetworkClass
+import dev.pampa.mycloudgallery.core.rules.WaitReason
 import dev.pampa.mycloudgallery.core.rules.WorkRequest
 import dev.pampa.mycloudgallery.release.ReleaseWiring
 import dev.pampa.mycloudgallery.core.rules.run.BatchResult
@@ -37,6 +42,7 @@ import dev.pampa.mycloudgallery.nas.NasGraph
 import dev.pampa.mycloudgallery.nas.NoUnitPriority
 import dev.pampa.mycloudgallery.notify.NasDailySummaryWorker
 import java.io.File
+import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
@@ -85,6 +91,22 @@ object NasWorkScheduling {
   const val PERSONAL_WORK = "nas-personal-sync"
   const val PERSONAL_NOW_WORK = "nas-personal-sync-now"
   const val TAG = "nas"
+
+  // Fase I (12/11, punto 7): la ripresa dopo un'attesa delle regole, **una per lavoro** e con un nome suo: mai sulla coda del periodico ne' su quella
+  // della tappa dopo (`*_NOW_WORK`), cosi' non sposta niente e si sostituisce solo con se stessa.
+  const val SCAN_WAIT_WORK = "nas-scan-wait"
+  const val SYNC_WAIT_WORK = "nas-index-sync-wait"
+  const val PREP_WAIT_WORK = "nas-preparation-wait"
+  const val HQ_WAIT_WORK = "nas-hq-previews-wait"
+  const val TRASH_PURGE_WAIT_WORK = "nas-trash-purge-wait"
+  const val MAINTENANCE_WAIT_WORK = "nas-index-maintenance-wait"
+  const val PERSONAL_WAIT_WORK = "nas-personal-sync-wait"
+
+  /**
+   * Negli input della ripresa: **il nome unico** della ripresa che questo lavoro e' (BS2-1: la classe e' nel nome, [waitName]). Se aspetta ancora nella
+   * stessa classe si mette in coda dopo di se', non al posto di se'; in un'altra classe e' un produttore come gli altri.
+   */
+  const val KEY_WAIT_RESUME = "nas_wait_resume"
 
   val PERIOD: Duration = 6.hours
   val SUMMARY_PERIOD: Duration = 24.hours
@@ -144,6 +166,98 @@ object NasWorkScheduling {
   /** La tappa dopo, per un lavoro che ha lasciato altro da fare ([StageOutcome.Yielded]). */
   fun continueLater(context: Context, name: String, request: androidx.work.OneTimeWorkRequest) {
     WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(name, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+  }
+
+  /**
+   * **Fase I (12/11, punto 7): un'attesa delle regole riprogramma anche i lavori del NAS.** Prima un lavoro fermato dal caldo (o dalla carica, dalla
+   * fascia, dal risparmio energetico) aspettava il giro periodico: sul telefono dell'utente Preparazione e scansione sono rimaste a +3 h 40 mentre
+   * l'app diceva «riprende da solo». Adesso la regola unica di [RuleWaits.followUpOf], la stessa del backup, del calcolo AI e dei volti:
+   * - **cosa**: il ritardo esatto dove c'e' (l'inizio della fascia), il vincolo della carica dove la regola la chiede, altrimenti un ritardo che
+   *   **cresce** (caldo 5, 10, 20, 40, 60 minuti; risparmio energetico 15, 30, 60) **fino al tetto** di un'ora: mai un ciclo stretto che tiene sveglio
+   *   un telefono caldo. La ripresa rilegge le regole (anche l'headroom termico, che nessun ascoltatore vede);
+   * - **cosa no**: le attese che non sono una regola da aspettare (NAS spento, rete, congelamento, tetto dei dati, profilo, limiti di Android) non
+   *   programmano niente, come oggi (`followUpOf` da' null): riprendono il periodico, l'apertura dell'app, la rete;
+   * - **una sola** ripresa per lavoro **e per classe di attesa** ([waitName], BS2-1), e **nessuno la cancella**: chi non e' quella ripresa (il periodico,
+   *   la tappa dopo, «verifica adesso», una ripresa di un'altra classe) usa `KEEP` e lascia alla ripresa gia' registrata, in coda o in corso, la sua scadenza
+   *   e il suo successore (BS-2 della critica: con `REPLACE` e una lettura dello stato prima, una ripresa diventata RUNNING fra la lettura e l'accodamento
+   *   veniva cancellata a meta' tappa; la transizione di WorkManager non si puo' rendere atomica da qui). Solo la ripresa che aspetta ancora nella sua
+   *   classe si mette in coda dopo di se' (`APPEND_OR_REPLACE`);
+   * - **le classi** (BS2-1): `KEEP` conserva anche il vincolo della ripresa che c'e'. In un nome solo, una ripresa «corrente» (vincolata alla carica)
+   *   faceva scartare quella «caldo» chiesta dopo, e con il telefono mai collegato la ripresa restava in coda per sempre; una ripresa per la fascia di
+   *   prima teneva il suo ritardo lungo dopo un cambio di fascia. Ora la carica, ogni inizio di fascia e le scale (caldo, risparmio energetico) hanno
+   *   nomi diversi: si scarta solo una richiesta della stessa classe, che ha lo stesso vincolo e un ritardo dello stesso genere (nella scala al piu'
+   *   un'ora: si rinuncia all'azzeramento immediato quando una ripresa c'e' gia'). Due riprese di classi diverse dello stesso lavoro possono stare in
+   *   coda insieme: rileggono le regole, e i corpi delle tappe sono serializzati dai loro lucchetti. I vincoli restano quelli esatti. Limiti noti
+   *   (BS3-3 del critico, giro 3): una ripresa «carica» di una regola poi tolta resta in coda finche' non arriva la carica (non blocca: il lavoro
+   *   riparte dalle altre classi), e dopo piu' cambi di fascia possono scadere riprese vecchie che fanno un giro a vuoto (qualche risveglio in piu');
+   * - **vincoli**: la rete dei lavori del NAS ([LanConstraints], la stessa del periodico), piu' la carica se la regola la chiede. Mai piu' larghi.
+   *
+   * [input] sono gli input del lavoro che aspetta: il tentativo ([RuleWaits.KEY_ATTEMPT]) e quale ripresa e' ([KEY_WAIT_RESUME]).
+   * @return vero se ha chiesto una ripresa (con `KEEP` WorkManager la scarta se ce n'e' gia' una della stessa classe).
+   */
+  fun afterWait(
+    context: Context,
+    name: String,
+    worker: Class<out ListenableWorker>,
+    wait: WaitReason,
+    input: Data,
+    now: LocalDateTime = LocalDateTime.now(),
+  ): Boolean {
+    val follow = RuleWaits.followUpOf(wait, now, input.getInt(RuleWaits.KEY_ATTEMPT, 0)) ?: return false
+    val target = waitName(name, wait)
+    val fromResume = input.getString(KEY_WAIT_RESUME) == target
+    WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(target, waitPolicy(fromResume), waitRequest(worker, follow, target))
+    return true
+  }
+
+  /**
+   * Il nome unico della ripresa di [base] per [wait] (BS2-1): la **classe** dell'attesa e' nel nome. La carica (corrente, batteria: il vincolo della carica)
+   * `-power`; la fascia `-window-HHmm` con l'ora d'inizio (un cambio di fascia e' un'altra ripresa); le scale (caldo, risparmio energetico, solo ritardo) il
+   * nome di base. Pura, provata su JVM.
+   */
+  fun waitName(base: String, wait: WaitReason): String = when (wait) {
+    WaitReason.NeedsPower, is WaitReason.BatteryLow -> "$base$POWER_SUFFIX"
+    is WaitReason.OutsideWindow -> base + WINDOW_SUFFIX + wait.nextStart.hour.toString().padStart(2, '0') + wait.nextStart.minute.toString().padStart(2, '0')
+    else -> base
+  }
+
+  private const val POWER_SUFFIX = "-power"
+  private const val WINDOW_SUFFIX = "-window-"
+
+  /**
+   * Come mettere in coda la ripresa (punto 7, BS-2): la ripresa stessa, nella sua classe, dopo di se'; chiunque altro senza toccare quella che c'e'. Pura,
+   * provata su JVM.
+   */
+  fun waitPolicy(fromResume: Boolean): ExistingWorkPolicy = if (fromResume) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.KEEP
+
+  /** La richiesta della ripresa [name]: la rete dei lavori del NAS piu' i vincoli della regola, il ritardo e il tentativo della regola unica. */
+  fun waitRequest(worker: Class<out ListenableWorker>, follow: RuleWaits.FollowUp, name: String): OneTimeWorkRequest =
+    OneTimeWorkRequest.Builder(worker)
+      .setConstraints(follow.constraints(LanConstraints.builder()))
+      .setInitialDelay(follow.delay.inWholeMilliseconds, TimeUnit.MILLISECONDS)
+      .setInputData(workDataOf(RuleWaits.KEY_ATTEMPT to follow.attempt, KEY_WAIT_RESUME to name))
+      .addTag(TAG)
+      .build()
+}
+
+/** Fase I (punto 7): che cosa fa un lavoro del NAS dopo una tappa. Pura, provata su JVM. */
+sealed interface NasFollowUp {
+  /** Finito, niente da fare, o una conferma che chiede la pagina: niente. */
+  data object None : NasFollowUp
+
+  /** Altro da fare ([StageOutcome.Yielded]): la tappa dopo, come prima. */
+  data object Continue : NasFollowUp
+
+  /** Le regole non lasciano partire o hanno fermato la tappa: la ripresa, se la regola ne chiede una ([NasWorkScheduling.afterWait]). */
+  data class Wait(val reason: WaitReason) : NasFollowUp
+
+  companion object {
+    fun of(outcome: StageOutcome?): NasFollowUp = when (outcome) {
+      is StageOutcome.Yielded -> Continue
+      is StageOutcome.Waiting -> Wait(outcome.reason)
+      is StageOutcome.Stopped -> Wait(outcome.reason)
+      is StageOutcome.Finished, is StageOutcome.NeedsConfirmation, null -> None
+    }
   }
 }
 
@@ -362,6 +476,9 @@ abstract class NasWorker(
   /** Il lavoro della tappa dopo, se questa ha lasciato altro da fare. */
   protected abstract fun continuation(): Pair<String, androidx.work.OneTimeWorkRequest>?
 
+  /** Fase I (punto 7): il nome della ripresa dopo un'attesa delle regole ([NasWorkScheduling.afterWait]); ogni lavoro del NAS ha la sua. */
+  protected abstract val waitWork: String
+
   final override suspend fun doWork(): Result {
     val nas = gallery.nas ?: return Result.success()
     if (!gallery.backgroundWorkAllowed) return Result.success()
@@ -389,7 +506,18 @@ abstract class NasWorker(
       // calcolo dei volti dopo un giro con novita'»). Prima `FacesWorkScheduling.afterNews` non aveva chiamanti e le foto nuove aspettavano il periodico da 6 ore.
       FacesWorkScheduling.afterNewsIfOn(applicationContext, FacesWorkScheduling.settingOf(gallery))
     }
-    if (outcome is StageOutcome.Yielded) continuation()?.let { (name, request) -> NasWorkScheduling.continueLater(applicationContext, name, request) }
+    when (val next = NasFollowUp.of(outcome)) {
+      NasFollowUp.Continue -> continuation()?.let { (name, request) -> NasWorkScheduling.continueLater(applicationContext, name, request) }
+      // Fase I (punto 7): un'attesa delle regole riprogramma con la regola unica (prima: il giro periodico, fino a 6 ore).
+      is NasFollowUp.Wait -> try {
+        NasWorkScheduling.afterWait(applicationContext, waitWork, javaClass, next.reason, inputData)
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        GalleryLog.w(tag) { "ripresa dopo l'attesa non programmata: ${e.javaClass.simpleName}" }
+      }
+      NasFollowUp.None -> Unit
+    }
     return Result.success()
   }
 }
@@ -403,6 +531,7 @@ class NasScanWorker @AssistedInject constructor(
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "NasScanWorker"
   override val diagJob: DiagJob = DiagJob.NAS_SCAN
+  override val waitWork: String = NasWorkScheduling.SCAN_WAIT_WORK
 
   override suspend fun stage(stages: NasStages): StageOutcome = stages.scan().also { outcome ->
     // VE-10 (Fase 5B): a scansione finita le versioni ferme perche' il PC aveva cambiato il file ripartono con il lavoro del loro tipo (la
@@ -434,6 +563,7 @@ class IndexSyncWorker @AssistedInject constructor(
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "IndexSyncWorker"
   override val diagJob: DiagJob = DiagJob.INDEX_SYNC
+  override val waitWork: String = NasWorkScheduling.SYNC_WAIT_WORK
 
   override val triggersSimilarCopies: Boolean = true
 
@@ -471,6 +601,7 @@ class PreparationWorker @AssistedInject constructor(
   override val tag: String = "PreparationWorker"
   override val triggersSimilarCopies: Boolean = true
   override val diagJob: DiagJob = DiagJob.PREPARATION
+  override val waitWork: String = NasWorkScheduling.PREP_WAIT_WORK
 
   override suspend fun stage(stages: NasStages): StageOutcome = stages.prepare(gallery.similarCopies?.priority ?: NoUnitPriority)
 
@@ -487,6 +618,7 @@ class NasTrashPurgeWorker @AssistedInject constructor(
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "NasTrashPurgeWorker"
   override val diagJob: DiagJob = DiagJob.TRASH_PURGE
+  override val waitWork: String = NasWorkScheduling.TRASH_PURGE_WAIT_WORK
 
   override suspend fun stage(stages: NasStages): StageOutcome? = stages.purgeTrash()
 
@@ -506,6 +638,7 @@ class IndexMaintenanceWorker @AssistedInject constructor(
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "IndexMaintenanceWorker"
   override val diagJob: DiagJob = DiagJob.INDEX_MAINTENANCE
+  override val waitWork: String = NasWorkScheduling.MAINTENANCE_WAIT_WORK
 
   override suspend fun stage(stages: NasStages): StageOutcome? = stages.maintainIndex().also {
     try {
@@ -531,6 +664,7 @@ class PersonalSyncWorker @AssistedInject constructor(
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "PersonalSyncWorker"
   override val diagJob: DiagJob = DiagJob.PERSONAL_SYNC
+  override val waitWork: String = NasWorkScheduling.PERSONAL_WAIT_WORK
 
   override val triggersSimilarCopies: Boolean = true
 
@@ -549,6 +683,7 @@ class HqPreviewsWorker @AssistedInject constructor(
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "HqPreviewsWorker"
   override val diagJob: DiagJob = DiagJob.HQ_PREVIEWS
+  override val waitWork: String = NasWorkScheduling.HQ_WAIT_WORK
 
   override suspend fun stage(stages: NasStages): StageOutcome? = stages.hqPreviews()
 

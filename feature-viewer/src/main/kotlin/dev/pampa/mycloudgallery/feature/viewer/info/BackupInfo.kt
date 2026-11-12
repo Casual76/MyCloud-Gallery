@@ -137,7 +137,8 @@ internal fun queuedReasonRes(reason: WaitReason?): Int = when (reason) {
   WaitReason.DATA_CAP -> R.string.viewer_backup_wait_data_cap
   WaitReason.NAS -> R.string.viewer_backup_wait_nas
   WaitReason.COMPARING -> R.string.viewer_backup_wait_comparing
-  WaitReason.NEXT_RUN, null -> R.string.viewer_backup_wait_next_run
+  // T-1: la coda che l'ultimo giro non ha trovato sul telefono; il media che si guarda puo' essere sul telefono: la frase di sempre.
+  WaitReason.NEXT_RUN, WaitReason.NOT_ON_PHONE, null -> R.string.viewer_backup_wait_next_run
   WaitReason.NAS_BUSY -> R.string.viewer_backup_wait_nas_busy
 }
 

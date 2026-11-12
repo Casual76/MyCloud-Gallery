@@ -72,6 +72,8 @@ import dev.pampa.mycloudgallery.feature.settings.SettingsGraphRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsNetworkRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsPasswordRoute
 import dev.pampa.mycloudgallery.feature.settings.settingsGraph
+import dev.pampa.mycloudgallery.feature.update.ui.openUpdates
+import dev.pampa.mycloudgallery.feature.update.ui.updatesGraph
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.main.GalleryHostViewModel
 import dev.pampa.mycloudgallery.main.AlbumsTabHost
@@ -324,7 +326,11 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
             // Fase 9 (P9, P4, P13): Impostazioni -> Ricordi e notifiche (sezione "Libreria") e Impostazioni -> Mappa (sezione "Protezione").
             openMemories = if (memoriesHost != null) ({ nav.openMemoriesSettings() }) else null,
             openMap = if (mapHost != null) ({ nav.openMapSettings() }) else null,
+            // Pacchetto U (12/11/2026): Impostazioni -> Aggiornamenti (sezione "Avanzate"), la pagina di feature-update.
+            openUpdates = { nav.openUpdates() },
           )
+          // Pacchetto U: la pagina Aggiornamenti (canale, controllo, scaricamento, installazione).
+          updatesGraph(nav = nav)
           // Fase 6 (P11): la pagina Ricerca e modelli e quella di attivazione della lettura del testo.
           searchActions?.let { searchGraph(nav, it) }
           diagnosticsGraph(

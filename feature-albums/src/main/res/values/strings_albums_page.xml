@@ -137,7 +137,7 @@
   <string name="album_banner_paused">In pausa</string>
   <string name="album_banner_paused_space">Lo spazio nell’area comune è finito. Riprendo quando ce n’è.</string>
   <string name="album_banner_paused_blocked">Le scritture sul NAS sono ferme. Riprendo da sola.</string>
-  <string name="album_banner_paused_release">Questa versione dell’app va aggiornata: finché non la aggiorni dal Pampa Store la condivisione resta ferma.</string>
+  <string name="album_banner_paused_release">Questa versione dell’app va aggiornata: finché non la aggiorni la condivisione resta ferma.</string>
   <string name="album_banner_paused_locked">Alcuni file sono aperti dal computer. Riprovo più tardi.</string>
   <string name="album_banner_paused_nas">Il NAS non risponde. Riprendo appena torna.</string>
   <string name="album_banner_paused_rules">Aspetto il Wi-Fi di casa.</string>
@@ -200,7 +200,7 @@
   <string name="album_blocked_after_tests">Gli album condivisi arrivano dopo le prove.</string>
   <string name="album_blocked_read_only">Questa area è in sola lettura: non si può scrivere.</string>
   <string name="album_blocked_paused">Le scritture sul NAS sono ferme per ora. Riprovo da sola appena si può.</string>
-  <string name="album_blocked_release">Questa versione dell’app è in sola lettura: aggiornala dal Pampa Store per scrivere sul NAS.</string>
+  <string name="album_blocked_release">Questa versione dell’app è in sola lettura: aggiornala per scrivere sul NAS.</string>
   <string name="album_blocked_no_nas">Serve il NAS di famiglia: qui non è collegato.</string>
   <string name="album_blocked_too_many">L’album supera i 20.000 elementi e non si può condividere così grande.</string>
   <string name="album_blocked_not_active">Questo album non è più attivo.</string>

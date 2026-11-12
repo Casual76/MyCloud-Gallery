@@ -21,6 +21,7 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreRow
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.RowType
+import dev.pampa.mycloudgallery.core.network.link.NetworkObservation
 import dev.pampa.mycloudgallery.core.rules.ConfirmationKind
 import dev.pampa.mycloudgallery.core.rules.NetworkClass
 import dev.pampa.mycloudgallery.core.rules.RuleDecision
@@ -80,12 +81,13 @@ class VerificaFunzionaleBackupAppTest {
     devices.forEach { it.close() }
   }
 
-  /** I lavori avviati dall'utente registrati (JobScheduler non c'e'). */
-  private class RecordingJobs : BackupJobs {
+  /** I lavori avviati dall'utente registrati (JobScheduler non c'e'); [accept] = l'esito che Android darebbe (BS2-2). */
+  private class RecordingJobs(private val accept: Boolean = true) : BackupJobs {
     val started = AtomicInteger()
 
-    override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean) {
+    override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean): Boolean {
       started.incrementAndGet()
+      return accept
     }
 
     override fun cancelAll() = Unit
@@ -325,6 +327,103 @@ class VerificaFunzionaleBackupAppTest {
     actions.startFirstBackup(tonight = true)
     until("finisce la pausa") { !backup.isPaused() }
     assertThat(jobs.started.get()).isEqualTo(1)
+  }
+
+  // --- BS2-2: «Sto partendo» solo per un lavoro accettato, mai sopra un motivo che lo ferma ------------------------------------------------
+
+  /**
+   * Fase I (BS2-2), il produttore vero: «Fai ora» con le regole che lasciano partire e Android che **accetta** il lavoro: lo stato dice «sto partendo»
+   * (un `Running` senza numeri, con il segno). «Ferma» lo toglie subito: la pausa, non piu' il segno.
+   */
+  @Test
+  fun bs2_2_unLavoroAccettatoDiceStoPartendo_EFermaLoToglie() = runBlocking<Unit> {
+    val jobs = RecordingJobs(accept = true)
+    val rig = openRig(photos = 1, jobs = jobs)
+    val backup = rig.backup
+    val actions = rig.actions { _, _ -> RuleDecision.Run(network = NetworkClass.HOME_WIFI) }
+    actions.backupNow()
+    val starting = backup.await { it is BackupStatus.Running && it.starting }
+    assertThat((starting as BackupStatus.Running).done).isEqualTo(0)
+    assertThat(backup.userStartPending()).isTrue()
+    actions.stop()
+    assertThat(backup.userStartPending()).isFalse()
+    backup.await { it == BackupStatus.Stopped(StopBy.USER) }
+  }
+
+  /**
+   * Fase I (BS2-2): Android **rifiuta** il lavoro dell'utente (l'app non era in primo piano, un esito di JobScheduler): niente «sto partendo» (prima la
+   * pagina lo diceva per un minuto, con «Ferma», per un lavoro che non c'era). Lo stato resta quello vero: il media in coda con il suo motivo.
+   */
+  @Test
+  fun bs2_2_unLavoroRifiutatoNonDiceStoPartendo() = runBlocking<Unit> {
+    val jobs = RecordingJobs(accept = false)
+    val rig = openRig(photos = 1, jobs = jobs)
+    val backup = rig.backup
+    val actions = rig.actions { _, _ -> RuleDecision.Run(network = NetworkClass.HOME_WIFI) }
+    actions.backupNow()
+    until("il lavoro dell'utente e' stato chiesto") { jobs.started.get() > 0 }
+    assertThat(backup.userStartPending()).isFalse()
+    settle(backup)
+    assertWithMessage("${backup.status.value}").that(backup.status.value.isStarting()).isFalse()
+    assertThat(backup.status.value).isInstanceOf(BackupStatus.Waiting::class.java)
+  }
+
+  /**
+   * Fase I (BS2-2): il lavoro e' accettato ma **adesso** una regola ferma proprio il lavoro dell'utente (qui: nessuna rete). La pagina dice quel motivo,
+   * subito, e non «sto partendo» per un minuto: le regole di «Fai ora» (non quelle del lavoro di fondo), rilette a ogni ricalcolo dello stato.
+   */
+  @Test
+  fun bs2_2_unaRegolaCheFermaIlLavoroDellUtenteSiDiceAlPostoDiStoPartendo() = runBlocking<Unit> {
+    val jobs = RecordingJobs(accept = true)
+    val rig = openRig(photos = 1, jobs = jobs)
+    val backup = rig.backup
+    val actions = rig.actions { _, _ -> RuleDecision.Run(network = NetworkClass.HOME_WIFI) }
+    rig.device.platform.network.set(NetworkObservation.EMPTY)
+    actions.backupNow()
+    until("il lavoro dell'utente e' stato chiesto") { jobs.started.get() > 0 }
+    // Il segno c'e' (il lavoro e' stato accettato) e vivrebbe un minuto: senza la regola rilette, lo stato sarebbe «sto partendo» a ogni ricalcolo.
+    assertThat(backup.userStartPending()).isTrue()
+    settle(backup)
+    val now = backup.status.value
+    assertWithMessage("$now").that(now.isStarting()).isFalse()
+    assertThat(now).isInstanceOf(BackupStatus.Waiting::class.java)
+    assertThat((now as BackupStatus.Waiting).reason).isNotEqualTo(dev.pampa.mycloudgallery.core.backup.contract.WaitReason.NEXT_RUN)
+  }
+
+  private fun BackupStatus.isStarting(): Boolean = this is BackupStatus.Running && starting
+
+  /** Fa ricalcolare lo stato piu' volte (accorpato) e gli lascia il tempo: un «sto partendo» che durasse il suo minuto si vedrebbe alla fine. */
+  private suspend fun settle(backup: BackupGraph) {
+    repeat(SETTLE_ROUNDS) {
+      backup.kick()
+      delay(SETTLE_MS)
+    }
+  }
+
+  // --- T-1: una foto cancellata prima del backup non tiene la pagina lontana da «Al sicuro» ------------------------------------------------
+
+  /**
+   * T-1 (dal telefono vero), sul grafo vero: tre foto, una cancellata dal telefono prima del backup (nessuna copia da nessuna parte: il catalogo la segna
+   * «cancellata prima del backup»), le altre due caricate. Lo stato e' «Al sicuro», le righe contano le due (100%), la coda e' zero, e la foto persa resta
+   * nei problemi della riga: la pagina la dice fra i problemi. Prima: «Foto cancellate prima del backup» in testata e l'anello al 66% per 60 giorni.
+   */
+  @Test
+  fun t1_unaFotoCancellataPrimaDelBackupStaAParte_ETuttoIlRestoEAlSicuro() = runBlocking<Unit> {
+    val rig = openRig(photos = 3, hoursAgo = { 30L + it })
+    val backup = rig.backup
+    rig.store.remove(BackupRig.PRIMARY, 3L)
+    rig.readPhone()
+    val outcome = checkNotNull(rig.round(BackupKind.PHOTOS, BackupTrigger.FIRST_BACKUP))
+    assertThat(outcome.last?.done).isEqualTo(2)
+    backup.kick()
+    val safe = backup.await { it is BackupStatus.UpToDate }
+    assertThat((safe as BackupStatus.UpToDate).safeCount).isEqualTo(2)
+    val active = withTimeout(Attese.TETTO) {
+      backup.sources.first { list -> list.filter { it.active }.sumOf { it.problems[BackupProblemCode.LOST_BEFORE_BACKUP] ?: 0 } == 1 }
+    }.filter { it.active }
+    assertThat(active.sumOf { it.media }).isEqualTo(2)
+    assertThat(active.sumOf { it.safe }).isEqualTo(2)
+    assertThat(active.sumOf { it.queued }).isEqualTo(0)
   }
 
   // --- BK-5: l'avanzamento non torna indietro ------------------------------------------------------------------------------------
@@ -609,6 +708,8 @@ class VerificaFunzionaleBackupAppTest {
 
   private companion object {
     const val HOUR = 3_600_000L
+    const val SETTLE_ROUNDS = 5
+    const val SETTLE_MS = 200L
 
     /** Quante volte si rifa la premessa di BK-13 (nessun evento in volo) prima di dire che lo stato non sta fermo. */
     const val PREMISE_ATTEMPTS = 5

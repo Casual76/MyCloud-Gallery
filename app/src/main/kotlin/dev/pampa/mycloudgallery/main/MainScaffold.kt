@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Block
@@ -43,9 +44,12 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarInlineBehavior
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidFloatingTabBarScrollConnection
@@ -189,8 +193,17 @@ fun MainScaffold(
   val selecting = shownTab == GalleryTab.Library && libraryState.selectionActive
   // Lo spazio della pillola, che sta sopra la barra di navigazione; in selezione la pillola non c'e' e la barra delle
   // azioni prende il suo posto.
+  // Pacchetto U, giro 2 (UU2-4): mentre l'avviso dell'aggiornamento sta sopra la pillola, il fondo della Libreria cresce della sua altezza misurata: le
+  // foto piu' recenti e il conteggio («1.817 foto, 183 video») salgono sopra la scheda invece di finirci sotto. Sparita la scheda, il fondo torna com'era.
+  // Chi e' in fondo e non ha trascinato la griglia resta in fondo da solo (la griglia si riancora quando cambia lo spazio sullo schermo, `MediaGrid`);
+  // chi ha trascinato resta dov'e', come per la pillola.
+  val notice = LocalTabBarNotice.current
+  val noticeShown = notice != null && !searchOpen && !selecting && !tabBarSlot.taken
+  val noticeLift = remember { NoticeLift() }
+  val lift = if (noticeShown) noticeLift.height else 0.dp
   val pillPadding = PaddingValues(
-    bottom = navigationBottom + if (selecting) FluidFloatingTabBarDefaults.BottomMargin - FluidFloatingTabBarDefaults.Spacing else GalleryTabBarDefaults.ContentInset,
+    bottom = navigationBottom + lift +
+      if (selecting) FluidFloatingTabBarDefaults.BottomMargin - FluidFloatingTabBarDefaults.Spacing else GalleryTabBarDefaults.ContentInset,
   )
   val services = libraryViewer ?: remember(libraryState) {
     ViewerServices(
@@ -351,6 +364,18 @@ fun MainScaffold(
           modifier = Modifier.onFirstDraw { AvvioTrace.pageDrawn(AvvioTrace.PAGE_SEARCH) },
         )
       }
+    }
+
+    // Pacchetto U (UU-5): l'avviso dell'aggiornamento appoggiato sopra la pillola, solo quando la pillola c'e'. Il visore della radice gli sta sopra.
+    // La sua altezza (0 quando non c'e' niente da dire) alza il fondo della Libreria (UU2-4).
+    if (notice != null && noticeShown) {
+      val density = LocalDensity.current
+      notice(
+        Modifier
+          .align(Alignment.BottomCenter)
+          .padding(bottom = navigationBottom + GalleryTabBarDefaults.ContentInset)
+          .onSizeChanged { size -> noticeLift.height = with(density) { size.height.toDp() } },
+      )
     }
 
     if (ownViewer != null) ViewerLayer(ownViewer)

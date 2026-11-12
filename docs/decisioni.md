@@ -19280,3 +19280,205 @@ L'utente, dopo aver provato l'APK `27dd7617` sull'S25 con l'account vero: «L'un
 - **PU-3: i comandi di prova della debug** («Fai ora i lavori periodici», gli scenari dei volti che scrivono) partono solo con un account di prova: con l'account vero sono rifiutati con il motivo (`FieldProbeAccounts`, risultato 3 per `adb`).
 - **Limiti noti** (sezione 3 del critico, in `docs/sicurezza.md` L604–L607): R2 (`backupBlocksTestAccounts`) protegge backup e file in arrivo, non album, volti e indice; il cancello dell'indice non produce «sola lettura» (decidono i permessi SMB); indice, modelli e Persone già attiva scrivono per conto loro, indipendentemente dal foglio del primo backup.
 - **Le frasi**: con l'account vero, in release, non possono più comparire «Il backup vero non è ancora acceso» (pagina Backup, Impostazioni, piede e nuvola della Libreria, «Salva sul NAS», Ricevuti, versioni, correzioni, «Libera spazio»), il piede «solo locale» dell'indice, «Arriva dopo le prove» degli album condivisi e «Solo qui / Solo su questo dispositivo» di Persone con l'area privata dichiarata. Restano nel codice per il ramo «recinzione accesa». Due casi veri le possono ancora mostrare con un motivo detto male: la release con un account di prova (R2, «Il backup vero non è ancora acceso») e Persone senza un'area privata dichiarata («finché la sincronizzazione non è accesa»); per distinguerli serve uno stato in più (logica), non fatto.
+
+### Pacchetto U: l'aggiornamento dentro l'app (12 novembre 2026)
+
+**Decisione dell'utente (12/11).** «Manca l'updater in-app. I miei genitori non avranno il Pampa Store installato, ma avranno bisogno di poter
+aggiornare l'app, sia canale beta sia canale stable a loro scelta (stable default).» Alla domanda «dal NAS o da internet?»: «Da internet, come le
+altre app» (il modulo `engine-update` dell'engine, elenco pubblico + APK da GitHub), sapendo che l'app si collega a un server internet nuovo, che
+l'APK deve essere scaricabile pubblicamente e che l'elenco non e' firmato con K1. **Supera D33 («nessun installatore», niente
+`REQUEST_INSTALL_PACKAGES`) e la regola «nessun host nuovo» per questa sola funzione.** Dove stanno gli APK (seconda decisione del 12/11): il
+repository dell'app, `Casual76/MyCloud-Gallery`, diventa pubblico con la release beta; elenco `https://raw.githubusercontent.com/Casual76/
+MyCloud-Gallery/main/manifest.json` (quello che scrive `publisher.py`), APK dalle GitHub Releases dello stesso repository. Il manifest firmato dei
+blocchi (K1/K2, `core-release`, NAS) non cambia.
+
+**Che cosa c'e'** (dettagli e comando di pubblicazione in `docs/aggiornamenti-in-app.md`; sicurezza in `docs/sicurezza.md` C480-C486, L610-L614):
+- `engine-update` ed `engine-net` aggiunti con `engine-install.ps1` (nessuna dipendenza esterna nuova; `engine/` non toccato);
+- modulo nuovo `:feature-update` (scelta: un modulo e non `:app`, come la mappa: la rete in un pacchetto suo, `net/`, terza eccezione dichiarata;
+  regole pure in `policy/`; installazione in `install/`; pagina, avviso e pezzo per la pagina «versione fermata» in `ui/`); la voce «Aggiornamenti»
+  in feature-settings (porta opzionale `UpdateEntryStatus`, sezione Avanzate, con il segno quando c'e' una versione nuova); `:app` crea `AppUpdates`
+  (`di/UpdateModule.kt`), controlla in silenzio all'apertura dopo il primo disegno (al piu' ogni 24 ore, mai nelle varianti di misura), svuota la
+  cache all'avvio, mette l'avviso alla radice sotto il blocco e «Aggiorna» nella pagina «versione fermata»;
+- **pagina mia, non quella dell'engine**: `fluidUpdateSection` usa righe e frasi sue che stonano con le Impostazioni ridisegnate (fase I) e il suo
+  controllore taglia il suffisso beta e chiama `install()` dell'engine tutto d'un fiato (niente punto per versionCode e firma). Dell'engine restano
+  `EngineAppUpdater.check`, `AndroidAppUpdateInstaller.download`/`installFile`, i tipi di foundation e le funzioni pure di `FluidUpdate` (peso,
+  percento, note senza Markdown). La pagina: la figura (la piastrella con il suo segno, o l'anello comune `GalleryProgressRing`), due parole, un tasto;
+  la nota corta; il canale come due scelte con il segno; la versione installata una volta;
+- `EngineHttp` non si puo' vincolare agli host senza toccare l'engine (rimandi verso qualunque host): e' **avvolto** (`GuardedUpdateHttp`, sottoclasse
+  che riscrive `readText` e `download`), host ammessi a ogni salto: `raw.githubusercontent.com` per l'elenco; `github.com`,
+  `release-assets.githubusercontent.com` (letto il 12/11 sulla 302 di un asset pubblico), `objects.githubusercontent.com` per l'APK;
+- testi «aggiornala dal Pampa Store» tolti (versione fermata, sola lettura, album, backup, Diagnostica, integrazioni, piede della Libreria) e il
+  changelog della 1.0.0 (le due copie) con la novita' e la riga di Sicurezza riscritta.
+
+**Trovato leggendo `publisher.py` (non lanciato): non scrive lo sha256 nell'elenco** (`inspect_apk` lo calcola, `build_version_info` non lo
+riceve). Con lo sha256 obbligatorio una versione pubblicata cosi' risulta «non installabile» (fallisce chiusa, L612): serve la correzione di tre righe
+nel publisher (o lo sha256 aggiunto a mano). Da decidere all'utente/orchestratore. Tutte le altre chiavi combaciano (`PublisherManifestTest`).
+
+**Versioni.** Versione corrente = `versionName` intero. `compareVersions` confronta le pre-release come testo: al piu' nove beta per versione
+(oppure `beta.01`...), L613. La prima beta (`1.0.0`, canale beta) la vede solo chi sceglie Beta; i genitori (Stabile di serie) aspettano la prima
+stabile.
+
+**Gradle.** Con `:feature-update` nel grafo Gradle visitava `androidx.annotation` 1.8.0 (la chiede navigation-compose 2.9.8) e 1.7.1 (hilt-android;
+il suo file JVM `annotation-jvm` 1.7.1) prima di scegliere la 1.9.1: metadati senza impronta e la verifica delle dipendenze cadeva in tutto il build
+(anche `core-model`). Trovato per bisezione (senza `feature-update` passa; senza le sue dipendenze dei test passa). Rimedio nel `build.gradle` di radice,
+come la regola gia' scritta per `lifecycle-viewmodel-compose` 2.9.0: le richieste di 1.7.1 e 1.8.0 vanno alla 1.8.1 (che ha le impronte). Nessuna
+versione risolta cambia: 1.7.1 e 1.8.0 non vincevano mai (i loro file JVM non hanno impronte). `gradle/verification-metadata.xml` non cambia.
+
+**Prove e mutazioni (12/11, sul computer).** `:feature-update` 93/93 verdi (regole, client con connessioni finte, installatore con porte
+finte, `AppUpdates`, pagina e avviso con Robolectric, chiavi dell'elenco del publisher); architettura di `core-common` 102/102; `:app` 1692
+prove di prima verdi piu' `ReleaseStoppedUpdateTest` 2/2; feature-settings (voce, novita', icona, mappa) verdi; `:app:verifyReleaseManifest` verde
+(il manifest unito di release ha `REQUEST_INSTALL_PACKAGES` e il ricevitore dell'engine, e nient'altro di nuovo). 24 screenshot in
+`docs/screenshots/beta-grafica/U/` (telefono chiaro e scuro, testo 1,3x, tablet). Ogni garanzia tolta a mano fa cadere almeno una prova:
+M01 sha256 obbligatorio, M02 peso obbligatorio, M03 tetto del peso, M04 nomi di tag e file, M05 indirizzo uguale a quello delle release del
+repository, M06 stessa app, M07 versionCode strettamente maggiore, M08 stessa firma, M09 sha256 del file prima di Android, M10 permesso prima di
+scaricare, M11 host dell'elenco chiuso, M12 solo https, M13 rimando fuori elenco, M14 tetto dei byte scaricati, M15 nessun cookie, M16 al piu' un
+controllo ogni 24 ore, M17 canale salvato, M18 avviso una volta per versione, M19 nessuna installazione senza tocco, M20 domanda sui dati mobili,
+M21 sha256 obbligatorio gia' al controllo (niente avviso), M22 rete solo in `net/` (`NoNetworkSourcesTest`), M23 «Aggiorna» nella pagina
+«versione fermata» (ReleaseStoppedUpdateTest). Tutte: CADE.
+
+**Non fatto.** Niente telefono (l'aggiornamento vero, beta 1 -> beta 2, e' descritto in `docs/aggiornamenti-in-app.md`); `tools/check.ps1` intero
+non lanciato (build di release e dex: il passo 7e nuovo e' scritto ma non provato su un APK); `publisher.py` non toccato ne' lanciato.
+
+### Pacchetto U, giro 1 delle critiche (12 novembre 2026)
+
+**Le critiche.** Sicurezza (Sol): nessun modo di installare un pacchetto estraneo, ma «no» per US-1 (il publisher non scriveva lo sha256) e US-2 (il
+ritorno dal permesso valeva come consenso ai dati mobili). Interfaccia (Opus): la pagina regge, ma il percorso del genitore no (P 4): un'attesa senza
+tasti (UU-1), l'app che si chiude senza dirlo e nessun «fatto» (UU-2), il permesso senza guida e senza ripresa (UU-3), «Dopo» che voleva dire «mai»
+(UU-4), l'avviso sopra la barra delle schede (UU-5), frasi dell'engine a schermo (UU-6). L'orchestratore ha accettato tutto; l'utente ha deciso di
+correggere `publisher.py` (fatto dall'orchestratore nel repository dello store).
+
+**Sicurezza.**
+- US-2: il consenso ai dati mobili e' del **tentativo** (`Attempt.meteredConsent`); al ritorno dal permesso si riguarda la rete e, a consumo senza
+  consenso, si chiede. La prova che congelava il difetto e' sostituita dai due casi (Wi-Fi → dati mobili: chiede; consenso dato → permesso → riparte).
+- US-3: forma della versione esplicita e corta (`UpdateRules.VERSION`: tre numeri, beta `-beta.NN` a due cifre); note tagliate a 2.000 caratteri
+  **prima** di ogni trasformazione, senza caratteri di controllo, di direzione o a larghezza zero; «Dopo» rimanda di tre giorni tutte le versioni
+  (al piu' tre volte per la versione installata): due nomi alternati non fanno tornare l'avviso.
+- US-4: i certificati sono sempre `apkContentsSigners`, uguaglianza esatta degli insiemi; la rotazione resta un limite (L614).
+- Punto 7: `instanceFollowRedirects = false` (e niente cache) provati anche sullo scaricamento; `UpdateWiringTest` vieta un `EngineHttp` non avvolto
+  (costruito fuori dalla sottoclasse, preso di serie da `AndroidAppUpdateInstaller`, o fuori dalla fabbrica); il tetto dell'elenco provato anche senza
+  Content-Length. Le mutazioni, con la modifica, la prova che cade e il comando, sono in `docs/aggiornamenti-in-app-mutazioni.md`.
+- In piu': il `versionName` dell'APK deve essere quello annunciato (prima lo controllava solo l'engine, con una frase sua); il file pronto si
+  ricontrolla prima della sessione.
+- US-1: il publisher (corretto dall'orchestratore) scrive `sha256` e `sizeBytes` nella voce del canale: e' la chiave che `EngineAppUpdater` legge
+  (`PublisherManifestTest` ora con lo sha256). Nuovo `tools/release/verifica-elenco.ps1`: dopo la pubblicazione scarica esattamente l'asset della voce
+  (host ammessi a ogni salto, come l'app), lo confronta byte per byte con l'APK finale conservato, controlla firma `pampa.jks`, pacchetto,
+  `versionName` e versionCode di `release/versions.txt`, e che sha256 e peso dell'elenco siano quelli; li scrive solo se mancano e solo se l'elenco
+  non e' cambiato nel frattempo (due controlli). `-Prova` su file finti sotto `build\`; `verifica-elenco-prove.ps1` (29 prove, ogni controllo con il
+  suo caso). Non lanciato in modo vero (rete, SDK).
+- Nomi delle versioni: la regola (nome e versionCode crescenti a ogni APK nuovo, stabile solo numerica, beta a due cifre, niente `v`/`+`/quarto
+  numero) e' in `docs/aggiornamenti-in-app.md`, «Le versioni», e la controllano l'app, `release-lib-core.ps1` (`Test-VersionName`,
+  `Compare-EngineVersion`, la crescita del nome in `Test-VersionRows`), `release.ps1 -Version` e `app/build.gradle`; `versioni-prove.ps1` (36 prove).
+  **La prossima beta dopo la `1.0.0` (versionCode 1) si chiama `1.1.0-beta.01`, versionCode 2.**
+
+**Interfaccia.**
+- UU-1: l'installazione e' in due tempi (`UpdateInstaller.prepare`/`commit`). Il file verificato va alla sessione di Android solo con l'app davanti
+  (`foreground`, da `:app`: `IMPORTANCE_FOREGROUND`); altrimenti «Pronta da installare» con «Installa» e «Annulla». La finestra di Android che si
+  aspettava torna «Pronta» al ritorno davanti; «Installa» riprova senza riscaricare.
+- UU-2: prima della sessione la riga «L'app si chiude per aggiornarsi: poi riaprila»; il tentativo si salva (con `commit()`, prima della sessione) e
+  alla prima apertura con la versione nuova l'avviso dice «Aggiornata · X» una volta (confronto della versione, non l'evento `Installed`).
+- UU-3: la figura e' l'interruttore, «Serve un permesso», «Accendi l'interruttore e torna indietro», il perche' dietro la «i»; il tentativo salvato si
+  riprende anche dopo un riavvio (entro un'ora).
+- UU-4: la versione trovata si salva (`SavedOffer`) e si mostra subito; «Dopo» rimanda di tre giorni; la pagina aperta controlla se sono passate 24 ore;
+  con una versione nuova la voce «Aggiornamenti» sale in cima alle Impostazioni. Il segno sull'ingresso alle Impostazioni dalla Libreria non e'
+  fatto (toccherebbe la chrome della Libreria).
+- UU-5: l'avviso e' appoggiato sopra la pillola dallo scaffold della galleria (`LocalTabBarNotice`), solo quando la pillola c'e'; il visore e le altre
+  pagine gli stanno sopra o fuori. Entra dal basso con `FluidMotion` (fermo con le animazioni ridotte).
+- UU-6: ogni messaggio dell'engine diventa un `UpdateProblem` (`EngineMessages`), uno sconosciuto quello generico; «annullata» torna «Pronta» con la
+  riga di Play Protect; «Riprova» solo per rete, file rovinato, spazio e guasto sconosciuto (senza riscaricare se il file c'e'); per gli altri
+  «Chiudi» e «Avvisa chi ti ha dato l'app».
+- UU-7: la figura e' l'icona vera dell'app (`AppIconFigure` di feature-settings, data da `:app` con `LocalUpdateAppIcon`) con un segno solo; il titolo
+  e' «Nuova versione», il dettaglio «1.0.0 → 1.1.0 · 110 MB»; la riga «Versione installata» non c'e' piu' (la dice la figura).
+- UU-8: la pagina «versione fermata» ha una figura sola (quella dell'aggiornamento), il perche' dietro la «i», «Diagnostica» leggero; l'avviso di sola
+  lettura ha «Aggiorna» quando c'e' una versione.
+- UU-9: figure sulla scala comune (64/44), `GalleryChoiceMark` nel design system (usato da Impostazioni e Aggiornamenti), una famiglia di colore per
+  tutto l'aggiornamento (l'Ametista dell'app). `UpdatePanel` non e' costruito su `GalleryFigureState` (la figura cambia fra icona e anello): stessa
+  forma, misure comuni.
+- UU-10: «Controlla adesso» leggero con l'app aggiornata; mentre scarica l'avviso ha solo «Annulla» e la «×»; scelte del canale piu' tenui e spente.
+- UU-11: figura muta per TalkBack (le parole dicono lo stato una volta), l'anello e' una barra d'avanzamento che annuncia ogni quarto, tasti da 48 dp,
+  scelte `disabled`.
+- UU-12: «Versioni da ricevere», la «i» «Tornare a Stabile». UU-13: «110 MB», «Sto scaricando», «Quasi pronto», «Sto installando», punti delle note
+  con le righe rientrate, entrata animata. UU-14: 54 screenshot in `docs/screenshots/beta-grafica/U/` (stati nuovi, scuro, 1,3x, tablet anche in
+  orizzontale; l'avviso sopra la Libreria vera, la pagina fermata e la voce in cima alle Impostazioni da `:app`, con l'icona vera).
+- Non fatto: il tasto «Novita'» sull'«Aggiornata» (la pagina delle novita' non e' una rotta: e' un interruttore dentro «Informazioni»); la notifica
+  a `MY_PACKAGE_REPLACED`.
+
+**Prove.** Vedi il resoconto del giro e `docs/aggiornamenti-in-app.md`, «Prove e mutazioni». Mutazioni: 45 mutazioni del codice dell'app (M01-M46, senza M23 che e' diventata M46) e 16 degli strumenti di rilascio. (Correzione del giro 2, US2-5: «tutte cadono» non era vero cosi'. Il registro di quel giro dava M31, M39, M40 e M41 «non eseguite» perche' il suo generatore non leggeva i nomi con i due punti, anche se i log le davano cadute; T11 cadeva solo togliendo insieme i due confronti dell'elenco. Nel giro 2 sono tutte rieseguite e contate, sotto.)
+
+### Pacchetto U, giro 2 delle critiche (12 novembre 2026)
+
+**Le critiche.** Sicurezza (Sol, 7/10, «no»): US2-1 bloccante, il file poteva passare ad Android con l'app gia' dietro (il controllo era prima di
+verifiche lunghe, guardava l'importanza del processo e mancava su «Installa» e sul ritorno dal permesso); US2-2 e US2-3 due falsi verdi della verifica
+dell'elenco; US2-4 `\d` di PowerShell; US2-5 il registro delle mutazioni. Interfaccia (Opus, 7/10, «si' con correzioni piccole»): UU2-1 dopo il
+«si'» nella finestra di Android l'app tornava «Pronta» con «Installa» mentre Android installava; UU2-2 «Chiudi» non chiudeva; UU2-3 «Pronta» con la
+spunta di «Aggiornata»; UU2-4 la scheda copriva le foto piu' recenti; UU2-5 «Tornare a Stabile» sempre li' e come un comando; parole (UU2-10). Decisione
+dell'orchestratore: una sola macchina a stati per il passaggio ad Android; nessun adattatore proprio dell'installazione (il tratto dentro l'engine e'
+un limite dichiarato); «Dopo» al terzo tace trenta giorni e poi riparte; UU-4, UU-9 e «Novita'» restano aperti per la prima beta.
+
+**Il passaggio ad Android (US2-1, UU2-1; `docs/sicurezza.md` C490 e L616).**
+- Un solo cancello, in `GuardedUpdateInstaller.commit`, **dopo** le verifiche e subito prima di `installFile`, su tutte le strade (fine dello
+  scaricamento, «Installa», ritorno dal permesso). Il cancello e' `ForegroundGate`, aperto solo mentre l'activity e' RESUMED: lo muovono gli eventi del
+  ciclo di vita (`UpdateLifecycleEffect` alla radice: ON_RESUME apre, ON_PAUSE e l'uscita dalla composizione chiudono). Tolto `appInFront`
+  (`ActivityManager.getMyMemoryState`, l'importanza del processo). App dietro alla fine delle verifiche: «Pronta», zero passaggi.
+- Passato il cancello: «Sto installando». Al ritorno davanti senza esito resta «Sto installando» per 15 s di app davanti (`OUTCOME_WAIT_MILLIS`, il
+  tempo si ferma con l'app dietro); un esito che arriva vince (il flusso dell'engine resta vivo: «annullata» ora si vede, con la riga di Play
+  Protect); senza esito «Pronta» con «Installa» (nessun riscaricamento, file ricontrollato).
+- Il tratto dentro l'engine (copia, commit, `startActivity` della conferma) non e' dell'app: L616, con i riferimenti. La sessione lasciata dopo
+  l'attesa resta in sospeso nell'engine e in Android ma **non blocca** un nuovo «Installa» (ogni `installFile` crea una sessione nuova con il suo id);
+  la via d'uscita piu' piccola, se servisse, e' `abandonSession` delle proprie sessioni in `EngineApkTransfer`: non fatta.
+
+**Interfaccia.**
+- UU2-2: «Chiudi» sull'avviso di un guasto e' «Dopo» (chiude la scheda, rimanda di tre giorni). UU2-3: «Pronta» ha il segno «tocca qui»
+  (`Attention`, come «Nuova versione»); la spunta verde resta solo per «App aggiornata» e «Aggiornata».
+- UU2-4: mentre l'avviso c'e', il fondo della Libreria cresce della sua altezza misurata (`NoticeLift` in `MainScaffold`); chi e' in fondo e non ha
+  trascinato la griglia resta in fondo (la griglia si riancora da sola quando cambia lo spazio; uno scorrimento in piu' era superfluo, M71, tolto).
+  Solo la Libreria: Album e Raccolte si aprono in cima.
+- UU2-5: «Se torno a Stabile» (la «i») solo con Beta scelto. UU2-7: nella pagina «versione fermata», senza una versione nuova, la clessidra con «La
+  versione nuova arriva presto» e «Controlla adesso» pieno. UU2-8: in sola lettura «Aggiorna» chiude anche l'avviso in alto. UU2-9: «Sto
+  controllando» con l'anello alla misura dell'icona (la testata non salta); il tasto pieno al piu' largo 520 dp. UU2-10: «L'app si chiude: poi
+  riaprila», «Accendi l'interruttore e torna qui», «Se Android la blocca, scegli «Installa comunque»» (e l'avviso tiene quattro righe), «Il file non e'
+  originale», «Manca spazio», «Android l'ha bloccata», «Non funziona su questo dispositivo» (la parola generica dell'app, niente «telefono» sul
+  tablet), «Riprova» dopo «Non riesco a controllare adesso», tolto «Riprova domani». UU2-11: «Aggiornata» su una riga, con «Ok» al posto della «×».
+- «Dopo» (decisione dell'orchestratore, al posto di UU2-12): tre giorni; al terzo «Dopo» di fila trenta giorni di silenzio, poi il conto riparte; mai
+  spento per sempre; un «Dopo» dentro il silenzio non lo accorcia (`UpdateRules.declined`).
+- Non fatti: UU2-6 (ricordare la versione di un guasto permanente e trattarla da «non ancora pronta»): serve uno stato salvato in piu' con le sue
+  regole (quando dimenticarlo: un'altra versione, un altro canale, un aggiornamento), con prove sue; il caso e' raro (publisher e verifica
+  dell'elenco controllano firma e sha256 prima di pubblicare) e ora «Chiudi» rimanda come «Dopo», quindi l'avviso non ripropone subito la stessa
+  versione. UU-4, UU-9, «Novita'»: aperti per la prima beta (decisione dell'orchestratore).
+
+**Strumenti.** US2-2: `verifica-elenco.ps1` riconfronta l'elenco su disco anche quando non c'e' niente da scrivere (prima tornava verde su un elenco
+cambiato nel frattempo); i due confronti non sono una transazione (C489). US2-3: `app.repository` obbligatorio, con owner e nome uguali a quelli
+dell'app, letto come lo legge l'engine (`repoOwner`/`owner`, `repoName`/`name`); assente, null, vuoto o una stringa: non verde. US2-4: `[0-9]` e
+`\A`/`\z` nella forma delle versioni e nel versionCode di `release/versions.txt` (`\d` di .NET accetta qualunque cifra Unicode, `$` un a capo
+finale); `[0-9]` anche in `app/build.gradle`, per leggerle uguali.
+
+**Prove.** Vedi il resoconto del giro. Mutazioni, tutte rieseguite in questo giro sul codice nuovo e contate dagli esiti dei log
+(`docs/aggiornamenti-in-app-mutazioni.md`): 69 del codice dell'app (68 cadono; M55 no, perche' l'esito ferma l'attesa in due modi: tolti insieme cade, M72), piu' M71 eseguita due volte e non caduta (uno scorrimento superfluo: la griglia si riancora da sola; tolto); 22 degli strumenti di rilascio (21 cadono; T11b no: il secondo confronto dell'elenco copre una finestra che una prova senza un secondo processo non raggiunge).
+
+### Pacchetto U, giro 3 delle critiche, l'ultimo (12 novembre 2026)
+
+**Le critiche.** Sicurezza (Sol) e interfaccia (Sonnet): tutte e due 8/10, «si' con correzioni piccole», nessun bloccante. Da fare prima della beta
+(decisione dell'orchestratore): US3-1 (fra la lettura del cancello, su IO, e l'ingresso in `installFile` poteva cadere una pausa), US3-2 (un Boolean
+condiviso: con due finestre la pausa di una chiudeva il cancello dell'altra), US3-3 (il ritorno dal permesso non passava dall'ammissione: due ON_RESUME
+ravvicinati facevano due secondi tempi), UU3-1 (l'attesa dei 15 s partiva solo al ritorno davanti: con l'app sempre davanti, «Sto installando» senza
+tempo ne' tasti), US3-4 (L616 troppo assoluto; «circa 39 giorni» era 36).
+
+**Fatto.**
+- US3-1: dopo le verifiche (su IO) `GuardedUpdateInstaller.commit` passa al main e li', in un passo solo, legge il cancello, pubblica «Sto
+  installando» con `trySend` e chiama `installFile`. ON_PAUSE e' un compito dello stesso thread: arriva prima della lettura o dopo l'ingresso.
+- US3-2: `ForegroundGate` e' un insieme di proprietari (un gettone per composizione, cioe' per activity, in `UpdateLifecycleEffect`), uscita idempotente,
+  aperto = insieme non vuoto. L'attesa dell'esito si ferma solo quando non resta nessuno davanti.
+- US3-3: una sola ammissione per il secondo tempo (`launchCommit`): guardia sul lavoro attivo e stato attivo messo subito, prima del primo salvataggio;
+  il ritorno dal permesso passa di li'.
+- UU3-1: arrivati «Sto installando» o «in attesa dell'utente» con l'app davanti, il tempo parte gia' li'; con la finestra di Android aperta l'app e' in
+  pausa e il tempo e' fermo.
+- US3-4: L616 riscritto (le sessioni rimaste non sono per forza dello stesso APK; «nessun esito in 15 s» e' la condizione per riprovare, non la prova
+  che Android abbia smesso; la voce del registro dell'engine resta fino a un esito o alla morte del processo; niente «non blocca» assoluto); i 36
+  giorni in `UpdateRules`, C488 e `docs/aggiornamenti-in-app.md`.
+- Minori: UU3-4 (sull'avviso «Pronta» ha «Dopo» e «Installa», senza la «×» accanto ad «Annulla»), UU3-5 («Android ha bloccato l'installazione»), UU3-6
+  («Chiudi» su un guasto chiude e nasconde senza contare come «Dopo»).
+
+**Lasciati, fra i noti** (`docs/aggiornamenti-in-app.md`): UU3-2 (il salto del fondo della Libreria: un'animazione del margine ricalcolerebbe la griglia
+a ogni fotogramma, non e' senza rischio per la fluidita'; da guardare sul telefono), UU3-3 (la scheda che si accorcia mentre controlla), UU3-7 (l'avviso
+della sola lettura, di una fase precedente), la seconda proposta di UU3-5 (la riga di Play Protect anche dopo un «Annulla» voluto).
+
+**Prove.** Vedi il resoconto del giro. Mutazioni del giro 3 (`docs/aggiornamenti-in-app-mutazioni.md`, sezione «Giro 3»): 25 eseguite, 22 cadono; M55, M79 e M80 non cadono perche' ognuna toglie uno solo di due fermi indipendenti (tolti insieme cadono: M72 e M78); le 15 del giro 2 il cui codice o la cui prova e' cambiato sono fra le 25.

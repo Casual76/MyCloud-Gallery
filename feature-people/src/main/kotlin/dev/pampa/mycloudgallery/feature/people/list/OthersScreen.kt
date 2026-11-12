@@ -14,7 +14,6 @@ import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
 import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.feature.people.R
@@ -29,6 +28,8 @@ import dev.pampa.mycloudgallery.feature.people.sheets.MergeSheet
 import dev.pampa.mycloudgallery.feature.people.ui.PeopleDimens
 import dev.pampa.mycloudgallery.feature.people.ui.PeopleMessageBlock
 import dev.pampa.mycloudgallery.feature.people.ui.PeopleText
+import androidx.compose.material.icons.rounded.Group
+import dev.pampa.mycloudgallery.feature.people.ui.PeopleFigureState
 
 // "ALTRI VOLTI" (Fase 8, P9; docs/fase8-progetto.md Q2 (b) del 27/10, §1.5 `FaceReviewState` con `ReviewPurpose.OTHERS`, §2.6): i gruppi
 // senza nome con almeno 3 foto, dal piu' grande, a un tocco dalle Raccolte. Una griglia di volti rotondi, uno per gruppo, con **sotto** il conto
@@ -100,7 +101,11 @@ internal fun OthersScreen(
     when {
       grid == null -> item(key = "loading") { FluidLoadingBlock() }
       grid.faces.isEmpty() -> item(key = "empty") {
-        FluidEmptyState(title = stringResource(R.string.persone_others_empty_title), detail = stringResource(R.string.persone_others_empty_detail))
+        PeopleFigureState(
+          icon = Icons.Rounded.Group,
+          title = stringResource(R.string.persone_others_empty_title),
+          why = stringResource(R.string.persone_others_empty_detail),
+        )
       }
       else -> faceGrid("others", grid.faces, columns) { _, face, tileModifier ->
         val group = face.person?.let { ui.groups[it] }

@@ -8,9 +8,7 @@
 
   <!-- Quando non c'e' niente da mostrare -->
   <string name="collections_all_hidden_title">Nessuna sezione da mostrare</string>
-  <string name="collections_all_hidden_detail">Hai nascosto tutte le sezioni. Le rimostri da «Modifica Raccolte».</string>
   <string name="collections_detail_empty_title">Scegli una raccolta</string>
-  <string name="collections_detail_empty_message">Quello che apri dall\'elenco compare qui.</string>
 
   <!-- Modifica Raccolte -->
   <string name="collections_edit">Modifica Raccolte</string>

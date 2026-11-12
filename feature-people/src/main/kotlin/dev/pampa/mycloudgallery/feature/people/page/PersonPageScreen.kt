@@ -19,8 +19,10 @@ import androidx.compose.material.icons.rounded.CallSplit
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Face
+import androidx.compose.material.icons.rounded.HowToReg
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.semantics
@@ -40,7 +43,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -70,6 +72,16 @@ import dev.pampa.mycloudgallery.feature.people.ui.PeopleDimens
 import dev.pampa.mycloudgallery.feature.people.ui.PeopleMessageBlock
 import dev.pampa.mycloudgallery.feature.people.ui.PeopleText
 import dev.pampa.mycloudgallery.feature.people.ui.PersonAvatar
+import androidx.compose.material.icons.rounded.PersonOff
+import androidx.compose.material.icons.rounded.PersonSearch
+import androidx.compose.material.icons.rounded.HideImage
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoButton
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
+import dev.pampa.mycloudgallery.feature.people.ui.PeopleFigureState
 
 // LA PAGINA DI UNA PERSONA (Fase 8, P9; docs/fase8-progetto.md §1.5 `PersonPageState`, §2.6 "Pagina persona", D25). In stile Foto: in testa il volto
 // grande e rotondo con il nome (o l'invito "Aggiungi un nome") e il conto **sotto**; due bottoni da 50 dp ("Rinomina" e "Controlla le foto"),
@@ -123,26 +135,22 @@ internal fun PersonPageScreen(
     // NV-1: il nome c'e' ancora, sono le foto a essere tutte nascoste (non "persona dimenticata").
     is PersonPageState.AllHidden -> Plain(titleOf(page.header), handlers, modifier, listState) {
       item(key = "all-hidden") {
-        Column(verticalArrangement = Arrangement.spacedBy(PeopleDimens.BlockGap)) {
-          FluidEmptyState(title = stringResource(R.string.persone_all_hidden_title), detail = stringResource(R.string.persone_all_hidden_detail))
-          FluidButton(text = stringResource(R.string.persone_back), onClick = handlers::onBack, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true)
-        }
+        PeopleFigureState(
+          icon = Icons.Rounded.VisibilityOff,
+          title = stringResource(R.string.persone_all_hidden_title),
+          why = stringResource(R.string.persone_all_hidden_detail),
+          action = { FluidButton(text = stringResource(R.string.persone_back), onClick = handlers::onBack, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true) },
+        )
       }
     }
     PersonPageState.Forgotten -> Plain(stringResource(R.string.persone_page_title_unknown), handlers, modifier, listState) {
       item(key = "forgotten") {
-        Column(verticalArrangement = Arrangement.spacedBy(PeopleDimens.BlockGap)) {
-          FluidEmptyState(title = stringResource(R.string.persone_forgotten_title), detail = stringResource(R.string.persone_forgotten_detail))
-          FluidButton(text = stringResource(R.string.persone_back), onClick = handlers::onBack, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true)
-        }
+        PeopleFigureState(icon = Icons.Rounded.PersonOff, title = stringResource(R.string.persone_forgotten_title), action = { FluidButton(text = stringResource(R.string.persone_back), onClick = handlers::onBack, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true) })
       }
     }
     PersonPageState.NotFound -> Plain(stringResource(R.string.persone_page_title_unknown), handlers, modifier, listState) {
       item(key = "not-found") {
-        Column(verticalArrangement = Arrangement.spacedBy(PeopleDimens.BlockGap)) {
-          FluidEmptyState(title = stringResource(R.string.persone_not_found_title), detail = stringResource(R.string.persone_not_found_detail))
-          FluidButton(text = stringResource(R.string.persone_back), onClick = handlers::onBack, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true)
-        }
+        PeopleFigureState(icon = Icons.Rounded.PersonSearch, title = stringResource(R.string.persone_not_found_title), action = { FluidButton(text = stringResource(R.string.persone_back), onClick = handlers::onBack, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true) })
       }
     }
   }
@@ -207,7 +215,7 @@ private fun ReadyPage(
     header(page, crops, handlers)
     proposals(page.proposals, crops, handlers)
     if (page.view.size == 0) {
-      item(key = "empty") { FluidEmptyState(title = stringResource(R.string.persone_page_empty_title), detail = stringResource(R.string.persone_page_empty_detail)) }
+      item(key = "empty") { PeopleFigureState(icon = Icons.Rounded.HideImage, title = stringResource(R.string.persone_page_empty_title)) }
     } else {
       peopleGrid("photos", page.view, columns, thumbnails, style, interaction, actions, handlers::onOpenPhoto)
     }
@@ -224,23 +232,29 @@ private fun LazyListScope.header(page: PersonPageState.Ready, crops: PeopleCrops
     ) {
       // Il nome sta gia' nel titolo della schermata (che scorre via con la pagina): qui solo il volto, senza ripeterlo.
       PersonAvatar(page.header.cover, crops, PeopleDimens.AvatarHeader, Modifier.size(PeopleDimens.AvatarHeader))
+      // Giro 1 (CU-12): tasti con l'icona e una parola, su una riga anche a 360 dp e col testo grande; la frase intera la dice TalkBack.
       Row(horizontalArrangement = Arrangement.spacedBy(PeopleDimens.TightGap), modifier = Modifier.fillMaxWidth()) {
         if (PersonAction.RENAME in page.actions) {
+          val unnamed = page.header.name == null
+          val spoken = stringResource(if (unnamed) R.string.persone_add_name else R.string.persone_rename)
           FluidButton(
-            text = stringResource(if (page.header.name == null) R.string.persone_add_name else R.string.persone_rename),
+            text = stringResource(if (unnamed) R.string.persone_button_name else R.string.persone_rename),
             onClick = { handlers.onAction(PersonAction.RENAME) },
-            style = if (page.header.name == null) FluidButtonStyle.Filled else FluidButtonStyle.Tinted,
+            style = if (unnamed) FluidButtonStyle.Filled else FluidButtonStyle.Tinted,
             size = FluidButtonSize.Large,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).semantics { contentDescription = spoken },
+            leading = { Icon(imageVector = Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.size(PeopleDimens.ButtonGlyph)) },
           )
         }
         if (PersonAction.REVIEW in page.actions) {
+          val spoken = stringResource(R.string.persone_review)
           FluidButton(
-            text = stringResource(R.string.persone_review),
+            text = stringResource(R.string.persone_button_review),
             onClick = { handlers.onAction(PersonAction.REVIEW) },
             style = FluidButtonStyle.Tinted,
             size = FluidButtonSize.Large,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).semantics { contentDescription = spoken },
+            leading = { Icon(imageVector = Icons.Rounded.HowToReg, contentDescription = null, modifier = Modifier.size(PeopleDimens.ButtonGlyph)) },
           )
         }
       }
@@ -264,6 +278,8 @@ private fun LazyListScope.proposals(list: List<MergeProposal>, crops: PeopleCrop
           subtitle = "",
           onClick = { handlers.onOpenProposal(proposal) },
           leading = { PersonAvatar(other.cover, crops, PeopleDimens.AvatarRow, Modifier.size(PeopleDimens.AvatarRow)) },
+          // Giro 1 (CU-12): il volto tondo da solo, senza la piastrella grigia dietro.
+          leadingTile = false,
         )
       }
     }
@@ -272,13 +288,31 @@ private fun LazyListScope.proposals(list: List<MergeProposal>, crops: PeopleCrop
   item(key = "maybe-gap") { Spacer(Modifier.height(PeopleDimens.BlockGap)) }
 }
 
+/** La «i» della pagina di una persona nascosta e, aperta, la frase sotto. */
+@Composable
+private fun HiddenWhy(why: String) {
+  var open by rememberSaveable { mutableStateOf(false) }
+  Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    GalleryInfoButton(label = why, open = open, onToggle = { open = !open })
+    GalleryInfoDetail(text = why, visible = open)
+  }
+}
+
 /** Una persona nascosta: la pagina lo dice e offre di mostrarla di nuovo; le sue foto restano in Libreria (E-F28). */
 private fun LazyListScope.hidden(header: PersonHeader, crops: PeopleCrops, handlers: PersonPageHandlers, ui: PersonPageUi) {
   ui.message?.let { message -> item(key = "message") { PeopleMessageBlock(message, handlers::onDismissMessage) } }
   item(key = "hidden") {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(PeopleDimens.BlockGap), modifier = Modifier.fillMaxWidth()) {
       PersonAvatar(header.cover, crops, PeopleDimens.AvatarHeader, Modifier.size(PeopleDimens.AvatarHeader))
-      FluidEmptyState(title = stringResource(R.string.persone_hidden_title), detail = stringResource(R.string.persone_hidden_detail))
+      // Giro 1 (CU-23): la figura e' il suo volto (sopra), poi il titolo; che cosa vuol dire "nascosta" sta dietro la «i».
+      Text(
+        text = stringResource(R.string.persone_hidden_title),
+        style = MaterialTheme.typography.headlineSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.semantics { heading() },
+      )
+      HiddenWhy(stringResource(R.string.persone_hidden_detail))
       FluidButton(
         text = stringResource(R.string.persone_show_again), onClick = { handlers.onAction(PersonAction.UNHIDE) },
         size = FluidButtonSize.Large, fillWidth = true,

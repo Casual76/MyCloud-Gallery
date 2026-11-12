@@ -10,6 +10,7 @@ import dagger.hilt.components.SingletonComponent
 import dev.pampa.mycloudgallery.core.security.device.ScreenLockCheck
 import dev.pampa.mycloudgallery.core.security.lock.AppLockSettings
 import dev.pampa.mycloudgallery.core.security.lock.AppLockSettingsStore
+import dev.pampa.mycloudgallery.feature.settings.appicon.AppIconSettings
 import dev.pampa.mycloudgallery.feature.settings.library.MotionAnimationSettings
 import dev.pampa.mycloudgallery.feature.settings.port.AppLockPreferences
 import dev.pampa.mycloudgallery.feature.settings.port.NasAccountSettings
@@ -51,6 +52,10 @@ abstract class SettingsOptionalBindingsModule {
   /** "Animazione delle foto in movimento" (Fase 6, P14): `:app` la lega a `MotionPersonalSettings` di core-personal (P11). Senza, la sezione non compare. */
   @BindsOptionalOf
   abstract fun motionAnimationSettings(): MotionAnimationSettings
+
+  /** I5: l'icona dell'app a scelta. `:app` la lega ad `AppIconSwitcher` (gli ingressi del launcher del suo manifest). Senza, la voce non compare. */
+  @BindsOptionalOf
+  abstract fun appIconSettings(): AppIconSettings
 }
 
 /** [AppLockPreferences] sopra l'unico archivio del processo (`AppLockSettingsStore.getInstance`). */

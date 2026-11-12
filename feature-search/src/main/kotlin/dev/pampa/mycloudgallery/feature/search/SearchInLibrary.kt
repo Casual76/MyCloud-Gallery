@@ -64,6 +64,12 @@ interface SearchSource {
   /** I2: l'istantanea della Libreria di adesso: un'anteprima si disegna solo se il suo media c'e' (un nascosto no). Null nelle prove senza Libreria. */
   val library: TimelineSnapshot?
 
+  /**
+   * CG-1: i volti delle anteprime con il segno delle revoche (il solo posto che tiene un ritaglio); la barra li legge nel disegno. Null: le persone hanno
+   * la loro foto o il loro segno.
+   */
+  val faces: SuggestionFaces? get() = null
+
   val state: SearchScreenState
 
   val readiness: SearchReadiness
@@ -81,6 +87,7 @@ data class FixedSearchSource(
   override val queryModel: ModelState? = null,
   val items: List<SuggestionItem>? = null,
   override val library: TimelineSnapshot? = null,
+  override val faces: SuggestionFaces? = null,
 ) : SearchSource {
   override val strip: List<SuggestionItem> get() = items ?: suggestions.map { SuggestionItem(it) }
 }
@@ -95,7 +102,9 @@ fun rememberSearchSource(controller: SearchController): SearchSource {
   val state = controller.state.collectAsStateWithLifecycle()
   val readiness = controller.readiness.collectAsStateWithLifecycle()
   val model = controller.queryModel.collectAsStateWithLifecycle()
-  return remember(query, suggestions, strip, library, state, readiness, model) { StateSearchSource(query, suggestions, strip, library, state, readiness, model) }
+  return remember(query, suggestions, strip, library, state, readiness, model, controller) {
+    StateSearchSource(query, suggestions, strip, library, state, readiness, model, controller.faces)
+  }
 }
 
 private class StateSearchSource(
@@ -106,6 +115,7 @@ private class StateSearchSource(
   private val screenState: State<SearchScreenState>,
   private val readinessState: State<SearchReadiness>,
   private val modelState: State<ModelState?>,
+  override val faces: SuggestionFaces?,
 ) : SearchSource {
   override val query: String get() = queryState.value
   override val suggestions: List<Suggestion> get() = suggestionsState.value
@@ -150,7 +160,7 @@ fun SearchSuggestions(
     backdrop = backdrop,
     modifier = modifier,
     paneTitle = stringResource(R.string.search_suggestions_title),
-    leading = { index -> items.getOrNull(index)?.let { SuggestionDisc(it, library, thumbnails) } },
+    leading = { index -> items.getOrNull(index)?.let { SuggestionDisc(it, library, thumbnails, source.faces) } },
   )
 }
 

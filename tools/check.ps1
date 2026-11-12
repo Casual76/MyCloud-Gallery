@@ -22,7 +22,9 @@
                                 gira solo da un dispositivo e non entra mai nell'APK (Fase 3, D21)
     7. APK di release           ispezione dell'APK vero con aapt2: non debuggable, backup escluso, nessun
                                 componente esportato oltre quelli ammessi da gradle\verify-release-manifest.gradle
-                                (launcher e JobService di WorkManager, quest'ultimo solo con BIND_JOB_SERVICE),
+                                (MainActivity e JobService di WorkManager, quest'ultimo solo con BIND_JOB_SERVICE; (I5) i
+                                tre ingressi del launcher, alias della MainActivity, per nome e per forma: launcherAliasPolicy,
+                                tools\release\release-lib-launcher.ps1),
                                 nessun codice solo-debug dentro, (Fase 3) nessun `ProfileInstallReceiver` (il
                                 receiver del Macrobenchmark torna solo nella variante benchmarkRelease) e (Fase 4B, D29)
                                 ogni `*JobService` protetto da BIND_JOB_SERVICE: quello delle operazioni lunghe sui
@@ -345,6 +347,10 @@ function Get-AllowedExported {
   if ($allowed.Count -eq 0) { throw "allowedExported e' vuoto in gradle\verify-release-manifest.gradle" }
   return $allowed
 }
+
+# I5 (12/11/2026): gli ingressi del launcher (alias della MainActivity, uno per icona), con la stessa regola di verifyReleaseManifest e di
+# tools\release\release.ps1: Get-LauncherAliasPolicy, Test-LauncherAliasName, Test-ApkLauncherAliases.
+. (Join-Path $root "tools\release\release-lib-launcher.ps1")
 
 # Le classi definite nei classes*.dex di un APK che corrispondono a [pattern] (un'espressione regolare sui
 # descrittori, es. Ldev/pampa/mycloudgallery/core/nas/testing/FakeNasSessionManager;). Legge i byte del dex: i
@@ -755,7 +761,11 @@ Step "APK di release: non debuggable, backup escluso, nessun componente esposto"
   if ($facts.AllowBackup -ne "false") { $problems += "android:allowBackup nell'APK e' '$($facts.AllowBackup)', deve essere false" }
   $exported = @($facts.Components | Where-Object { $_.Exported })
   $allowedExported = Get-AllowedExported
+  $policyText = Read-TextFile (Join-Path $root "gradle\verify-release-manifest.gradle")
+  $launcherPolicy = Get-LauncherAliasPolicy $policyText
   foreach ($component in $exported) {
+    # I5: un ingresso del launcher dell'elenco e' ammesso per nome qui; la sua forma la guarda Test-ApkLauncherAliases qui sotto.
+    if (Test-LauncherAliasName $component $launcherPolicy) { continue }
     if (-not $allowedExported.ContainsKey($component.Name)) {
       $problems += ("componente esportato non ammesso: <{0}> {1}" -f $component.Kind, $component.Name)
     } elseif ($allowedExported[$component.Name] -and $component.Permission -ne $allowedExported[$component.Name]) {
@@ -774,8 +784,10 @@ Step "APK di release: non debuggable, backup escluso, nessun componente esposto"
     $problems += "il ProfileInstallReceiver e' nella release (<{0}>): torna solo nella variante benchmarkRelease" -f $component.Kind
   }
   if (-not ($exported | Where-Object { $_.Name -eq "dev.pampa.mycloudgallery.MainActivity" })) {
-    $problems += "la launcher activity non risulta esportata: il lettore del manifest non funziona o l'app non si avvia"
+    $problems += "la MainActivity (bersaglio degli ingressi del launcher) non risulta esportata: il lettore del manifest non funziona o l'app non si avvia"
   }
+  # I5: i tre ingressi del launcher (alias della MainActivity), per nome e per forma; nessun altro componente con la categoria LAUNCHER.
+  foreach ($problem in @(Test-ApkLauncherAliases $aapt2 $apk.FullName $policyText)) { $problems += $problem }
   # Fase 5B (P0-B): i componenti delle prove guidate (`FieldProbe*`, solo nel manifest di debug) non devono essere nel manifest di release,
   # nemmeno non esportati.
   foreach ($component in @($facts.Components | Where-Object { $_.Name -match 'debugtools\.probes\.|FieldProbe' })) {

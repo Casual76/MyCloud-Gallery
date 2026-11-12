@@ -1,34 +1,35 @@
 package dev.pampa.mycloudgallery.search
 
+import dev.pampa.mycloudgallery.core.model.FaceLocator
 import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.faces.FacesGraph
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionFaceCrops
 import dev.pampa.mycloudgallery.feature.search.contract.SearchFace
 import dev.pampa.mycloudgallery.feature.search.contract.SearchFaces
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 
 /**
- * I2 (fase I): il volto di una persona per l'anteprima di un suggerimento della ricerca, con **lo stesso cancello** dei volti delle Raccolte
- * (`AppCollectionFaceCrops`, CU-19): il volto di copertina della persona (solo persone con un nome e non nascoste, dall'elenco delle persone montate), le sue
- * foto d'origine mostrabili adesso (nessuna = niente volto) e il ritaglio dalla cache in memoria di feature-people (mai su disco). Prima del montaggio delle
- * persone: niente. [revocations] cambia quando i ritagli gia' dati non valgono piu' (Persone montata, spenta o rimontata, ritagli cancellati).
+ * I2 (fase I): il volto di una persona per l'anteprima di un suggerimento della ricerca. CG-1 (giro 1): **la stessa porta e lo stesso segno** dei volti
+ * delle Raccolte, non una copia: il ritaglio viene da [crops] (`AppCollectionFaceCrops`, CU-19: il cancello dei media mostrabili di feature-people, le
+ * foto d'origine, la cache in memoria, mai su disco) e le revoche sono le sue ([CollectionFaceCrops.revocations]: cancellazione locale, Persone spenta o
+ * rimontata, cache dei ritagli svuotata). Qui si sceglie soltanto **quale** volto ([cover]: quello di copertina, solo per le persone con un nome e non
+ * nascoste) e si scarta un ritaglio senza foto d'origine (CS-11: provato in `AppSearchFacesTest`).
  */
-@OptIn(ExperimentalCoroutinesApi::class)
-class AppSearchFaces(private val graph: FacesGraph) : SearchFaces {
+class AppSearchFaces(private val cover: (PersonId) -> FaceLocator?, private val crops: CollectionFaceCrops) : SearchFaces {
   override suspend fun face(person: PersonId, sizePx: Int): SearchFace? {
-    val live = graph.live.value ?: return null
-    val cover = live.people.list.value.named.firstOrNull { it.id == person }?.cover ?: return null
-    val origins = live.people.shownCellsOf(cover)
-    if (origins.isEmpty()) return null
-    val bitmap = live.crops.crop(cover, sizePx) ?: return null
-    return SearchFace(bitmap, origins)
+    val face = cover(person) ?: return null
+    val crop = crops.crop(face, sizePx) ?: return null
+    if (crop.origins.isEmpty()) return null
+    return SearchFace(crop.bitmap, crop.origins)
   }
 
-  override val revocations: Flow<Any?> =
-    graph.live.flatMapLatest { live -> live?.crops?.clears?.map { cleared -> System.identityHashCode(live).toLong() * 31 + cleared } ?: flowOf(null) }
+  override val revocations: Flow<Any?> get() = crops.revocations
 
   override fun toString(): String = "AppSearchFaces"
+
+  companion object {
+    /** Sulle persone montate: il volto di copertina delle persone con un nome e non nascoste (l'elenco `named`); prima del montaggio nessuno. */
+    fun of(graph: FacesGraph, crops: CollectionFaceCrops): AppSearchFaces =
+      AppSearchFaces({ person -> graph.live.value?.people?.list?.value?.named?.firstOrNull { it.id == person }?.cover }, crops)
+  }
 }

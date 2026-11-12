@@ -19,11 +19,8 @@ internal object CollectionsDimens {
   /** Il margine interno di uno stato vuoto o di un avviso a tutta pagina. */
   val StatePadding: Dp = 32.dp
 
-  /** Lo spazio fra l'illustrazione, il titolo, la frase e l'azione di uno stato. */
+  /** Lo spazio fra l'illustrazione, il titolo e l'azione di uno stato d'attesa. */
   val StateGap: Dp = 12.dp
-
-  /** La larghezza massima del testo di uno stato: oltre, una riga non si legge piu' bene. */
-  val StateTextMaxWidth: Dp = 340.dp
 
   /** Lo spazio sopra e sotto il riepilogo in fondo a una griglia. */
   val FooterPadding: Dp = 16.dp
@@ -119,9 +116,6 @@ internal object CollectionsDimens {
   /** Il numero su una piastrella (le operazioni in corso): il margine della capsula. */
   val TileBadgeHorizontal: Dp = 8.dp
   val TileBadgeVertical: Dp = 2.dp
-
-  /** L'invito di una sezione che non ha ancora niente da mostrare: alto quanto una scheda bassa. */
-  val InviteHeight: Dp = 104.dp
 
   /** Un segno di stato sotto un carosello (Altri volti, Senza posizione): la capsula, il suo margine e l'icona. */
   val ChipHeight: Dp = 40.dp

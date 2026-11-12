@@ -121,6 +121,10 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   @Inject
   lateinit var windowRegistry: dev.pampa.mycloudgallery.window.WindowRegistry
 
+  /** I5: l'icona dell'app a scelta (gli ingressi del launcher si cambiano in secondo piano). */
+  @Inject
+  lateinit var appIconLazy: dagger.Lazy<dev.pampa.mycloudgallery.appicon.AppIconSwitcher>
+
   private lateinit var graph: AppGraph
   private lateinit var gallery: GalleryGraph
   private lateinit var notifications: AppNotifications
@@ -206,6 +210,9 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
         afterFirstDraw = { AfterFirstDraw.await() },
       ).start(this)
     }
+    // I5: l'icona dell'app a scelta. Prima di qualunque activity (conta quelle avviate per cambiare l'ingresso del launcher solo in secondo piano);
+    // il riallineamento con il PackageManager gira fuori dal thread principale.
+    AvvioTrace.section("MCG:app:icona") { appIconLazy.get().install(this) }
   }
 
   /**

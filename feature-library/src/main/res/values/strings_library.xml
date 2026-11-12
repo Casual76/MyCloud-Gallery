@@ -77,7 +77,6 @@
   <!-- Fase 7 (P13): il selettore dei media degli album ("Aggiungi foto", foto d'esempio di un album smart). -->
   <string name="picker_choose">Scegli</string>
   <string name="picker_empty_title">Nessuna foto da scegliere</string>
-  <string name="picker_empty_message">Quando la Libreria avrà delle foto, le potrai scegliere da qui.</string>
   <string name="library_delete_location_phone">Telefono</string>
   <!-- D-B1: l'avviso solo per i media che non sono al sicuro; con una selezione mista, con i numeri.
        FAB-6: il titolo del foglio dice sempre «Eliminare N foto?», quindi il dettaglio parla al femminile (prima: «Hanno tutti», «mettili»). -->

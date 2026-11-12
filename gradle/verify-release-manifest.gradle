@@ -28,6 +28,13 @@
 //     deve poter ricostruire lo stato, e il blocco app non la conta come uscita), `resizeableActivity="true"`, `<layout>` con la misura minima 320 x 400 dp,
 //     `taskAffinity` vuota (StrandHogg, F13).
 //
+//   - (I5, 12/11/2026, icona dell'app a scelta) gli ingressi del launcher (`launcherAliasPolicy`): sono **solo** i tre `activity-alias` della `MainActivity`
+//     dell'elenco, ammessi come esportati **per nome e per forma**: `targetActivity` la `MainActivity`, `exported="true"`, un solo `intent-filter` con la sola
+//     azione `MAIN` e la sola categoria `LAUNCHER` (niente `data`), lo stesso `android:permission` della `MainActivity` (nessun permesso in meno), e uno solo
+//     abilitato di serie (`enabledByDefault`, gli altri `enabled="false"`). Nessun altro componente (la `MainActivity` compresa) dichiara la categoria `LAUNCHER`.
+//     Un alias fuori elenco esportato cade come ogni altro componente esposto. La stessa regola la applicano `tools/check.ps1` e `tools/release` sull'APK vero
+//     (`tools/release/release-lib-launcher.ps1`).
+//
 //   - (Fase 10, P3, D6, D8, D10, D40, Q4 (a)) il widget: il ricevitore (`widgetPolicy`) e' uno solo, non esportato, e i suoi file `appwidget-provider`
 //     dichiarano **solo la Home** (`widgetCategory="home_screen"`, mai `keyguard`) e `updatePeriodMillis="0"`; i componenti di Glance (`androidx.glance.`) sono
 //     l'elenco chiuso `allowedThirdPartyComponents`, tutti non esportati: l'unico che Glance dichiara esportato, `GlanceRemoteViewsService` (le liste, che il
@@ -207,6 +214,15 @@ ext.releaseManifestPolicy = [
     'updatePeriod'  : '0',
     'providerFiles' : 'feature-widget/src/main/res/xml/gallery_widget_info.xml|feature-widget/src/main/res/xml-v31/gallery_widget_info.xml',
   ],
+  // I5 (12/11/2026, richiesta dell'utente; docs/sicurezza.md C17): l'icona dell'app a scelta. Gli ingressi del launcher sono tre alias della `MainActivity`, uno per
+  // icona (automatica, chiara, scura), uno solo abilitato alla volta: l'app li alterna con `setComponentEnabledSetting`. Sono esportati per forza (il launcher li apre)
+  // ma NON stanno in `allowedExported`: si ammettono qui, per nome e per la forma che `verifyLauncherAliases` pretende. Elenchi separati da `|`.
+  launcherAliasPolicy: [
+    'aliases'          : 'dev.pampa.mycloudgallery.LauncherAuto|dev.pampa.mycloudgallery.LauncherLight|dev.pampa.mycloudgallery.LauncherDark',
+    'target'           : 'dev.pampa.mycloudgallery.MainActivity',
+    // L'icona che segue il tema: l'unico ingresso abilitato nel manifest (chi installa l'app la vede cosi').
+    'enabledByDefault' : 'dev.pampa.mycloudgallery.LauncherAuto',
+  ],
   // Fase 10 (P4, D14-D17, docs/sicurezza.md C434, L546): le finestre della `MainActivity`. I valori sono stringhe; gli elenchi si separano con `|` (come `configChanges`).
   mainActivityPolicy: [
     'name'                  : 'dev.pampa.mycloudgallery.MainActivity',
@@ -333,6 +349,10 @@ abstract class VerifyReleaseManifest extends DefaultTask {
   @Input
   abstract MapProperty<String, String> getMainActivityPolicy()
 
+  // I5: gli ingressi del launcher (gli alias della `MainActivity`, uno per icona).
+  @Input
+  abstract MapProperty<String, String> getLauncherAliasPolicy()
+
   // Fase 10 (P3): la politica del widget e i suoi file `appwidget-provider` (il sorgente: `widgetCategory` non e' nel manifest, e' nel file a cui il ricevitore rimanda).
   @Input
   abstract MapProperty<String, String> getWidgetPolicy()
@@ -382,6 +402,74 @@ abstract class VerifyReleaseManifest extends DefaultTask {
     } else {
       if (attr(layouts[0], 'minWidth') != policy['minWidth']) problems << "${name}: <layout> android:minWidth deve essere ${policy['minWidth']} (D15)".toString()
       if (attr(layouts[0], 'minHeight') != policy['minHeight']) problems << "${name}: <layout> android:minHeight deve essere ${policy['minHeight']} (D15)".toString()
+    }
+    return problems
+  }
+
+  // I5 (12/11/2026): gli ingressi del launcher, uno per icona (Impostazioni -> Icona dell'app). Ammessi per NOME (`aliases`) e per FORMA: alias della
+  // `MainActivity`, esportati, un solo filtro MAIN/LAUNCHER e nient'altro, lo stesso permesso della `MainActivity`, uno solo abilitato di serie; e nessun altro
+  // componente con la categoria LAUNCHER. Statico e puro: le stesse cose le provano `LauncherAliasesManifestTest` di `:app` sul manifest unito e
+  // `tools/release/test-release.ps1` sugli APK di prova (stessa regola in `tools/release/release-lib-launcher.ps1`).
+  static List<String> verifyLauncherAliases(Object application, Map<String, String> policy) {
+    def problems = []
+    def names = policy['aliases'].split('[|]') as List
+    String target = policy['target']
+    String byDefault = policy['enabledByDefault']
+    def main = application.activity.find { attr(it, 'name') == target }
+    if (main.size() == 0) {
+      problems << "gli ingressi del launcher puntano a ${target}, che nel manifest non c'e'".toString()
+      return problems
+    }
+    String targetPermission = attr(main, 'permission')
+    names.each { name ->
+      def alias = application.'activity-alias'.find { attr(it, 'name') == name }
+      if (alias.size() == 0) {
+        problems << "manca l'ingresso del launcher <activity-alias> ${name} (I5)".toString()
+        return
+      }
+      if (attr(alias, 'targetActivity') != target) {
+        problems << "<activity-alias> ${name}: android:targetActivity deve essere ${target} (trovato ${attr(alias, 'targetActivity')})".toString()
+      }
+      if (attr(alias, 'exported') != 'true') {
+        problems << "<activity-alias> ${name}: e' un ingresso del launcher, deve dichiarare android:exported=\"true\"".toString()
+      }
+      if (attr(alias, 'permission') != targetPermission) {
+        problems << "<activity-alias> ${name}: android:permission deve essere quello di ${target} (${targetPermission ?: 'nessuno'}), trovato ${attr(alias, 'permission') ?: 'nessuno'}".toString()
+      }
+      def filters = alias.'intent-filter'
+      if (filters.size() != 1) {
+        problems << "<activity-alias> ${name}: deve avere un solo intent-filter (trovati ${filters.size()})".toString()
+      } else {
+        def filter = filters[0]
+        def actions = filter.action.collect { attr(it, 'name') }
+        def categories = filter.category.collect { attr(it, 'name') }
+        if (actions != ['android.intent.action.MAIN']) {
+          problems << "<activity-alias> ${name}: il filtro deve avere la sola azione MAIN (trovate ${actions})".toString()
+        }
+        if (categories != ['android.intent.category.LAUNCHER']) {
+          problems << "<activity-alias> ${name}: il filtro deve avere la sola categoria LAUNCHER (trovate ${categories})".toString()
+        }
+        def others = filter.children().findAll { !(it.name() in ['action', 'category']) }.collect { it.name() }
+        if (!others.isEmpty()) {
+          problems << "<activity-alias> ${name}: il filtro non deve avere altro che MAIN e LAUNCHER (trovati ${others})".toString()
+        }
+      }
+      boolean enabled = attr(alias, 'enabled') != 'false'
+      if (name == byDefault && !enabled) {
+        problems << "<activity-alias> ${name}: e' l'icona di serie, deve essere abilitato".toString()
+      } else if (name != byDefault && enabled) {
+        problems << "<activity-alias> ${name}: deve essere android:enabled=\"false\" di serie (un solo ingresso del launcher alla volta)".toString()
+      }
+    }
+    // Nessun altro ingresso del launcher: ne' la MainActivity con un filtro suo, ne' un'altra activity, ne' un alias fuori elenco.
+    ['activity', 'activity-alias'].each { kind ->
+      application."${kind}".each { component ->
+        String name = attr(component, 'name')
+        boolean launcher = component.'intent-filter'.any { filter -> filter.category.any { attr(it, 'name') == 'android.intent.category.LAUNCHER' } }
+        if (launcher && !(name in names)) {
+          problems << "<${kind}> ${name} e' un ingresso del launcher fuori elenco (I5: solo ${names.join(', ')})".toString()
+        }
+      }
     }
     return problems
   }
@@ -439,14 +527,17 @@ abstract class VerifyReleaseManifest extends DefaultTask {
         problems << 'android:usesCleartextTraffic deve essere "false"'
       }
 
+      // I5: gli alias del launcher sono ammessi per nome qui e per forma da `verifyLauncherAliases` (sotto); solo come <activity-alias>.
+      def launcherAliases = launcherAliasPolicy.get()['aliases'].split('[|]') as List
       ['activity', 'activity-alias', 'service', 'receiver', 'provider'].each { kind ->
         application."${kind}".each { component ->
           String name = attr(component, 'name')
           String exported = attr(component, 'exported')
           boolean hasFilter = component.'intent-filter'.size() > 0
-          if (exported == 'true' && !(name in allowedExported.get())) {
+          boolean admitted = name in allowedExported.get() || (kind == 'activity-alias' && name in launcherAliases)
+          if (exported == 'true' && !admitted) {
             problems << "componente ESPORTATO non ammesso: <${kind}> ${name}".toString()
-          } else if (exported == null && hasFilter && !(name in allowedExported.get())) {
+          } else if (exported == null && hasFilter && !admitted) {
             problems << "<${kind}> ${name} ha un intent-filter senza android:exported esplicito".toString()
           }
           if (name in forbiddenComponents.get()) {
@@ -475,6 +566,9 @@ abstract class VerifyReleaseManifest extends DefaultTask {
 
       // Fase 10 (P4, D14-D17): le impostazioni delle finestre della MainActivity.
       problems.addAll(verifyMainActivity(application, mainActivityPolicy.get()))
+
+      // I5: gli ingressi del launcher (uno per icona), per nome e per forma.
+      problems.addAll(verifyLauncherAliases(application, launcherAliasPolicy.get()))
 
       // Fase 10 (P3, D6, D8, D10): il widget, solo Home, e il suo ricevitore non esportato.
       problems.addAll(verifyWidget(application, widgetPolicy.get(), widgetProviderFiles.files.collect { it.getText('UTF-8') }))
@@ -541,6 +635,7 @@ ext.registerVerifyReleaseManifest = { variant, mergedManifestArtifact ->
     thirdPartyComponentPrefixes.set(releaseManifestPolicy.thirdPartyComponentPrefixes)
     allowedThirdPartyComponents.set(releaseManifestPolicy.allowedThirdPartyComponents)
     mainActivityPolicy.set(releaseManifestPolicy.mainActivityPolicy)
+    launcherAliasPolicy.set(releaseManifestPolicy.launcherAliasPolicy)
     widgetPolicy.set(releaseManifestPolicy.widgetPolicy)
     widgetProviderFiles.from(releaseManifestPolicy.widgetPolicy['providerFiles'].split('[|]').collect { rootProject.file(it) })
   }

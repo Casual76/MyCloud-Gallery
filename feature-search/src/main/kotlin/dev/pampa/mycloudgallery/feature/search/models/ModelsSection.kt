@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ContentCut
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Face
+import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SdStorage
 import androidx.compose.material.icons.rounded.Warning
@@ -54,8 +56,10 @@ import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryStatusMark
 import dev.pampa.mycloudgallery.core.designsystem.icon.galleryStatusMarkSize
-import dev.pampa.mycloudgallery.core.designsystem.icon.rememberGalleryIconColors
 import dev.pampa.mycloudgallery.core.designsystem.icon.rememberGalleryStatusColors
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRing
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRingDefaults
+import dev.pampa.mycloudgallery.core.designsystem.media.galleryRingColor
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
@@ -95,6 +99,7 @@ internal fun modelTone(state: ModelState): FluidTone = when (state) {
 /** Il segno di stato di un modello sull'anello (null = nessun segno: in arrivo, l'anello stesso dice quanto). */
 internal fun modelMark(state: ModelState): GalleryIconStatus? = when (state) {
   is ModelState.Ready -> GalleryIconStatus.Done
+  // In arrivo: l'anello stesso dice quanto; in verifica l'arco gira (un lavoro senza misura).
   is ModelState.Fetching, ModelState.Verifying -> null
   is ModelState.Queued -> GalleryIconStatus.Paused
   ModelState.Absent -> GalleryIconStatus.Stopped
@@ -104,7 +109,8 @@ internal fun modelMark(state: ModelState): GalleryIconStatus? = when (state) {
 
 private fun glyphOf(role: ModelRole?): ImageVector = when (role) {
   ModelRole.QUERY_TEXT -> Icons.Rounded.Search
-  ModelRole.INDEX_MULTIMODAL -> Icons.Rounded.AutoAwesome
+  // CU-25: il chip (questo dispositivo calcola), come l'interruttore dell'analisi; le scintille sono i Ricordi.
+  ModelRole.INDEX_MULTIMODAL -> Icons.Rounded.Memory
   ModelRole.CUTOUT -> Icons.Rounded.ContentCut
   // Fase 8 (P0): i modelli dei volti stanno nell'APK e non compaiono in questa pagina (si gestiscono da Impostazioni -> Persone, P7);
   // i rami ci sono perche' il `when` resti completo.
@@ -190,7 +196,7 @@ private fun ModelTile(row: ModelRow, onOpen: () -> Unit, modifier: Modifier) {
   val label = stateLabel(state)
   val summary = listOfNotNull(name, label, sizeText(row.sizeBytes), sourceText(resources, row.source)).joinToString(" · ")
   val openLabel = stringResource(R.string.models_details)
-  val searchHue = rememberGalleryIconColors(GalleryIconFamily.Search).top
+  val searchHue = galleryRingColor(GalleryIconFamily.Search)
   val readyHue = rememberGalleryStatusColors(GalleryIconStatus.Done).top
   val (fraction, hue) = when (state) {
     is ModelState.Ready -> 1f to readyHue
@@ -211,18 +217,19 @@ private fun ModelTile(row: ModelRow, onOpen: () -> Unit, modifier: Modifier) {
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
       Box {
-        SearchRing(
-          fraction = fraction,
+        // L'anello della galleria alla misura delle schede; in verifica (senza misura) l'arco gira.
+        GalleryProgressRing(
+          progress = if (state == ModelState.Verifying) null else fraction,
           color = hue,
-          size = SearchDimens.ModelRing,
-          stroke = SearchDimens.ModelRingStroke,
-          busy = state == ModelState.Verifying,
+          strokeWidth = GalleryProgressRingDefaults.stroke(GalleryProgressRingDefaults.Card),
+          animate = true,
+          modifier = Modifier.size(GalleryProgressRingDefaults.Card),
         ) {
           Icon(glyphOf(spec?.role), contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(SearchDimens.ModelGlyph))
         }
         val mark = modelMark(state)
         if (mark != null) {
-          val side = galleryStatusMarkSize(SearchDimens.ModelRing)
+          val side = galleryStatusMarkSize(GalleryProgressRingDefaults.Card)
           GalleryStatusMark(status = mark, size = side, contentDescription = null, modifier = Modifier.align(Alignment.BottomEnd))
         }
       }
@@ -295,10 +302,10 @@ private fun ModelSheet(row: ModelRow, handlers: SearchSettingsHandlers, onDismis
       actions = {
         fun act(block: () -> Unit): () -> Unit = { onDismiss(); block() }
         when (state) {
-          ModelState.Absent -> SheetButton(R.string.models_download_now, act { handlers.onDownloadModel(row.id) })
-          is ModelState.NeedsConfirmation -> SheetButton(R.string.models_confirm_action, act { handlers.onConfirmMobileDownload(row.id) })
+          ModelState.Absent -> SheetButton(R.string.models_download_now, Icons.Rounded.Download, act { handlers.onDownloadModel(row.id) })
+          is ModelState.NeedsConfirmation -> SheetButton(R.string.models_confirm_action, Icons.Rounded.Download, act { handlers.onConfirmMobileDownload(row.id) })
           is ModelState.Failed -> for (action in SearchCodes.actions(failureCode(state.code))) {
-            SheetButton(action.label, act {
+            SheetButton(action.label, codeActionIcon(action), act {
               when (action) {
                 CodeAction.DOWNLOAD_NOW, CodeAction.RETRY -> handlers.onDownloadModel(row.id)
                 CodeAction.DIAGNOSTICS -> handlers.onOpenDiagnostics()
@@ -307,7 +314,7 @@ private fun ModelSheet(row: ModelRow, handlers: SearchSettingsHandlers, onDismis
               }
             })
           }
-          is ModelState.Ready -> if (row.removable) SheetButton(R.string.models_remove, { removing = true })
+          is ModelState.Ready -> if (row.removable) SheetButton(R.string.models_remove, Icons.Rounded.Delete, { removing = true })
           else -> Unit
         }
         FluidButton(text = stringResource(R.string.models_close), onClick = onDismiss, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true)
@@ -317,8 +324,8 @@ private fun ModelSheet(row: ModelRow, handlers: SearchSettingsHandlers, onDismis
 }
 
 @Composable
-private fun SheetButton(label: Int, onClick: () -> Unit) {
-  FluidButton(text = stringResource(label), onClick = onClick, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true, grip = FluidPressGrip.YieldsToScroll)
+private fun SheetButton(label: Int, icon: ImageVector, onClick: () -> Unit) {
+  ActionButton(stringResource(label), icon, onClick, fill = true)
 }
 
 /** "Rimuovi" dice la conseguenza prima di farlo (D20). */

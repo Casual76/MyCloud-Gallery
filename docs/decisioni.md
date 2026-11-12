@@ -18767,8 +18767,9 @@ L'utente ha messo a confronto le Raccolte con la Galleria di Samsung e ha scelto
   (`fluidPressable`), lo stato per fotogramma (scorrimento, posizioni dei segni sulla carta) si legge in lambda o in `snapshotFlow`.
 - **Lo stato in cima** alle Raccolte e' la sola capsula (`NetworkStatusEntry(compact = true)` in `MainScaffold`): la frase intera la dice TalkBack.
 - **Tablet**: a due pannelli i caroselli scorrono nel pannello stretto come sul telefono (stesse schede, il carosello sporge fino al bordo del
-  pannello); la voce scelta ha il filo dell'accento; le miniature si chiedono solo se il pannello accanto e' vuoto (con una griglia aperta la finestra e'
-  sua, e le schede usano cio' che e' in cache). Da 840 dp a un pannello solo la colonna e' larga al piu' 760 dp e i caroselli mostrano piu' schede.
+  pannello); la voce scelta ha il filo dell'accento. Con il pannello accanto vuoto le schede sono la finestra delle miniature; con una pagina aperta
+  accanto (una griglia con la sua finestra) le **tengono accanto** a quella finestra (giro 1, CS-8: vedi sotto). Da 840 dp a un pannello solo la
+  colonna e' larga al piu' 760 dp e i caroselli mostrano piu' schede.
 - **Le pagine «tutti»**: Tutte le persone e' una griglia di schede alte (3:4) con il volto e il nome sopra la sfumatura, tre per riga sul telefono,
   senza conti (li dice TalkBack); Altri volti senza la frase e senza conti; la pagina di una persona senza la frase di «Forse e' anche…»; Tutti i
   ricordi e' una griglia di schede (due per riga sul telefono) per mese, con la copertina alla taglia L chiesta solo per le righe sullo schermo e le due
@@ -18791,6 +18792,53 @@ L'utente ha messo a confronto le Raccolte con la Galleria di Samsung e ha scelto
   7. Testo grande (1,3x): i nomi sulle schede si troncano con i puntini, le piastrelle vanno a capo su due righe, niente si sovrappone.
   8. Tutte le persone: tre schede per riga, volti nitidi; selezione (pressione lunga): il filo e il segno nell'angolo. Tutti i ricordi: copertine
      nitide, scorrimento fluido.
+
+#### I1, giro di correzione 1 (12/11/2026)
+
+Dai rilievi del giro 1 della review della fase I (CU = Opus, CS = Sonnet). Unito prima `integra/beta-grafica` (`6b99fbd6`), poi i componenti comuni
+di I4 (`f329e9c3`: stato vuoto, «i», anello), la scheda di copertina corretta di I4 (`0b883af0`) e di nuovo `integra/beta-grafica` (`2214c94a`).
+
+- **CU-2, CU-21, CS-5: la scheda di una persona e' `GalleryCoverCard`** (`PersonTile` in `PeopleParts.kt`): non piu' una copia dell'etichetta, cosi'
+  la sfumatura corretta di I4 (28 dp di dissolvenza sopra le righe, scrim pieno dietro il titolo, 4,5:1 su una foto bianca) vale anche per le Persone.
+  Il volto, la scelta in selezione e il filo restano di `PersonTile`; la scheda comune non e' stata toccata. Sulle schede alte i conti con il ritaglio
+  vero (quadrato, volto = 67% centrale): nelle Raccolte (116 x 156 dp) occhi, naso e bocca restano fuori dallo scrim, il mento ci entra; nella griglia
+  di «Tutte le persone» (circa 100 x 133 dp) la bocca cade nella sfumatura. **Chiesto a I4 un `fadeHeight` compatto** (12-16 dp) per i titoli di una
+  riga sulle schede piccole: quando arriva lo passa `PersonTile`.
+- **CS-6: una sola lettura per scheda.** `labelsSpoken` falso e' ora il valore di serie di `GalleryCoverCard` (I4): le schede delle Raccolte, di
+  «Tutte le persone» e di «Tutti i ricordi» non lo passano piu'. Ognuna ha la sua descrizione; quella delle Raccolte (`CollectionEntry.spoken`) dice
+  anche la riga piccola (il mese, «Viaggio») quando la frase non la contiene, perche' il testo scritto non si rilegge (test).
+- **CS-8: sul tablet con una pagina aperta accanto le schede chiedono ancora le loro foto.** Prima non le chiedevano (la finestra delle miniature e'
+  una sola, e li' e' della griglia accanto) e le schede non ancora viste restavano sul colore con il glifo. Ora `CollectionCoverWindow` con `beside`
+  vero **tiene** le richieste accanto alla finestra della griglia (`CollectionCovers.keep`, `ThumbnailLoader.keep` con il proprietario
+  `"collections"`, lo stesso meccanismo di I2) senza sostituirla, e le lascia (`release`) quando il pannello si chiude o la scheda se ne va. Solo media
+  della Libreria visibile, come la finestra. Prova: `CollectionCoversBesideTest` (tenere/lasciare, il nascosto non si chiede, la finestra della griglia
+  non si tocca); scena `raccolte-raccolta-aperta-dopo-*-tablet`.
+- **CU-17**: il pannello vuoto del tablet e' solo la figura delle Raccolte (`GalleryIconTile` grande, al centro); «Scegli una raccolta» lo dice
+  TalkBack. La frase «Quello che apri dall'elenco compare qui» e' tolta.
+- **CU-24**: nella mappa in anteprima una foto non si appunta sotto la capsula «Mappa» ne' sotto il credito: le due capsule si misurano
+  (`onSizeChanged`) e un luogo il cui tondo le toccherebbe (`pinTouches`, test) resta nel carosello sotto.
+- **CU-22**: il cestino del NAS nelle Raccolte si chiama **«Cestino del NAS»** (corto, non troncato) con il segno della cartella con il cestino
+  (`FolderDelete`); quello del telefono resta «Eliminati di recente» con il cestino.
+- **CU-8 = CS-12**: «Altri volti» con la piastrella della famiglia Persone e «Persone nascoste» con quella dei Nascosti (`GalleryIconTile`), mai la
+  grigia di sistema; i volti tondi nelle righe («Forse e' anche…», «Persone nascoste») senza la piastrella grigia dietro.
+- **CU-12**: i tasti della pagina di una persona hanno l'icona e una parola: **«Nome»** (matita) o «Rinomina», e **«Controlla»** (persona con la
+  spunta); su una riga a 360 dp; TalkBack dice la frase intera («Aggiungi un nome», «Controlla le foto»).
+- **CU-23: una sola forma di stato vuoto** (`GalleryFigureState` di I4: la figura, il titolo, al piu' un tasto, nessuna frase in vista). Portati: le
+  raccolte-filtro (Preferiti, Video, Screenshot, Fotocamera, Messaggi), i Nascosti (vuoti, chiusi, rifiutati, senza blocco schermo, errore), il cestino
+  del telefono (vuoto, non disponibile, errore), la scelta delle foto, le Raccolte tutte nascoste, gli **inviti delle sezioni vuote delle Raccolte**
+  (figura e titolo dentro una scheda, tutta da toccare), le pagine delle Persone (elenco vuoto o in calcolo con la barra, nessuna con nome, Altri volti,
+  Persone nascoste, pagina vuota, tutte le foto nascoste, dimenticata, non trovata, «Controlla» vuoto e fatto) e dei Ricordi (Tutti i ricordi vuoto,
+  ricordo sparito o non trovato, presentazione sparita). Il **perche'** resta solo dove spiega una regola o un motivo (lo sblocco dei Nascosti e i
+  motivi di un rifiuto, il blocco schermo che manca, i 30 giorni del cestino, come si aggiunge un preferito, i tre volti di «Altri volti», che cosa fa
+  «nascondi», le foto tutte nascoste, quanti volti cambiati) e sta **dietro la «i»** comune (`GalleryInfoButton`/`GalleryInfoDetail`): un tocco lo
+  apre sotto, TalkBack lo dice nella descrizione della «i». Le altre frasi sono tolte con le loro stringhe. La pagina di una persona nascosta ha come
+  figura il suo volto (sopra), poi il titolo e la «i»: la stessa grammatica con una figura vera. Le sezioni Utility (doppioni, simili, filtri) usano lo
+  stesso stato vuoto e quindi hanno la loro frase dietro la «i»; il riquadro di spiegazione in cima al cestino del telefono non e' toccato.
+- **Screenshot nuovi**: le Raccolte e «Tutte le persone» con copertine e volti **quasi bianchi** (`*-copertine-chiare-*`, chiaro e scuro), il tablet
+  con una raccolta aperta; gli stati vuoti in `libreria-*`, `persone-*`, `tutti-i-ricordi-vuoto-*`, `pagina-sparita-*`, `presentazione-sparita-*`.
+- **Da provare sul telefono**, oltre ai punti sopra: (a) Raccolte con foto di neve o di cielo in copertina: i nomi si leggono; (b) Tab S9, aprire una
+  persona e poi scorrere le Raccolte a sinistra: le copertine arrivano anche per le schede mai viste, e la griglia accanto non perde le sue; (c) un
+  tocco sulla «i» di uno stato vuoto apre la frase sotto, un altro la chiude; TalkBack la dice senza tocco.
 
 ### I4, il resto dell'app con meno testo (fase I, 11/11 notte)
 
@@ -18929,3 +18977,64 @@ Il disegno della ricerca della fase H resta (H4). Cambia come si esprime: antepr
   Libreria (griglia condivisa, non toccata). La selezione nei risultati e' quella della Libreria (I4).
 - **Da provare sul telefono**: vedi il report di I2 (aperture ripetute, tempo delle anteprime alla prima apertura, barra della copertura che avanza,
   pagina Ricerca e modelli a 360 dp e testo grande, nessun calo del pinch e dello scorrimento con la barra aperta).
+
+### I5, l'icona dell'app a scelta (fase I, 12 novembre 2026)
+
+Ramo `fix/i3-backup-impostazioni` (dopo il merge di `integra/beta-grafica`, icona nuova `36a8b87c`). Richiesta dell'utente del 12/11: un'icona fissa per chi
+non vuole quella che segue il tema; di serie resta l'**Automatica** (scura dove il launcher non segue il tema). Prima e dopo in `docs/I5-prima-dopo.md`.
+
+- **Tre ingressi del launcher**: nel manifest di `:app` la `MainActivity` non ha piu' il filtro MAIN/LAUNCHER; ci sono tre `activity-alias` (`LauncherAuto`
+  con `@mipmap/ic_launcher`, `LauncherLight` con `@mipmap/ic_launcher_light`, `LauncherDark` con `@mipmap/ic_launcher_dark`), uno solo abilitato (di serie
+  l'automatica). Le due icone nuove hanno lo stesso primo piano (`ic_launcher_foreground`, non ridisegnato) e lo stesso livello a un colore, con lo sfondo
+  fisso (`ic_launcher_background_light` / `_dark`); `ic_launcher_background` ora rimanda a quei due colori (stessi valori di prima). La `MainActivity` resta
+  esportata: notifiche, widget, finestre, `ProcessRestart` (che passa da `getLaunchIntentForPackage`, quindi dall'alias abilitato), benchmark e strumenti
+  la aprono per nome. Un alias porta alla stessa `MainActivity` (`launchMode`, tema, finestre, blocco: invariati) e il sistema riconosce il task dalla
+  `MainActivity` vera, quindi un'apertura dall'icona riporta in primo piano il task aperto da una notifica, come prima.
+- **Il cambio** (`app/.../appicon/AppIconSwitcher.kt`): la scelta si ricorda nelle preferenze dell'app (`mcg_app_icon`, mai sincronizzata) e la pagina la
+  segna al tocco; l'ingresso del launcher cambia **quando l'app passa in secondo piano** (l'ultima activity si ferma, una rotazione non conta), perche' per
+  Android un'activity aperta da un alias porta il nome dell'alias e disabilitarlo la chiude anche con DONT_KILL_APP. Prima si abilita il nuovo, poi si
+  disabilitano gli altri, mai zero ingressi; un errore riporta all'automatica. All'avvio si riallinea: nessun ingresso abilitato -> si abilita subito quello
+  scelto (abilitare non chiude niente); uno stato diverso dalla scelta -> si corregge al primo passaggio in secondo piano. Le chiamate al PackageManager
+  girano fuori dal thread principale, una alla volta (un filo che nasce quando serve); le preferenze si leggono alla prima richiesta, non all'avvio.
+- **Le Impostazioni**: la voce «Icona dell'app» nel gruppo «Foto», dopo «Widget» (le due cose dell'app che stanno sulla Home), con l'icona scelta vera in
+  piccolo e il nome a destra; la pagina ha tre anteprime grandi disegnate con le risorse vere (`AppIconArt`, scritto da `:app`), l'anello e la spunta sulla
+  scelta, e una riga sola: «Su alcuni telefoni l'icona sparisce un attimo dalla Home e torna in un altro posto.» Per TalkBack ogni anteprima e' una scelta con
+  il nome e lo stato. La porta `AppIconSettings` e' opzionale (`@BindsOptionalOf`): senza `:app` la voce non c'e'.
+- **Il controllo della release**: i tre alias sono componenti esposti **voluti**, ammessi per nome e per forma con `launcherAliasPolicy` (fuori da
+  `allowedExported`, che resta l'elenco chiuso di `Phase5BArchitectureTest`): `verifyLauncherAliases` in `verifyReleaseManifest`, la stessa regola in
+  `tools/check.ps1` (passo dell'APK di release) e in `tools/release` (`release-lib-launcher.ps1`, usata da `release.ps1`), e la voce S13 di `tools/security`
+  li conta fra gli ammessi. Prove sintetiche: `tools/release/test-launcher-gradle.groovy` (12 casi sulla funzione Groovy vera) e sei casi cattivi nuovi in
+  `tools/release/test-release.ps1` (APK di prova costruiti con gli alias come l'app vera). Righe C17, 4-bis e registro in `docs/sicurezza.md`.
+- **Prove sul telefono** (le fa l'orchestratore; nessun dispositivo qui): (1) installata la build, sulla Home c'e' **una** icona MyCloud Gallery, che segue il
+  tema del telefono (cambia tema chiaro/scuro: lo sfondo dell'icona cambia; difetto: due icone, o nessuna); (2) Impostazioni -> Icona dell'app -> «Scura»:
+  l'anello passa subito sulla scura e l'app resta aperta (difetto: l'app si chiude o torna indietro); (3) Home: entro un paio di secondi l'icona e' quella
+  scura e c'e' **una sola** icona (annotare se cambia posto o pagina sulla Home di One UI: e' l'avviso della pagina; difetto: due icone o nessuna);
+  (4) tema del telefono chiaro: l'icona resta scura; (5) «Chiara» e poi «Automatica», uscendo ogni volta: stessa cosa; (6) aprire l'app dall'icona nuova,
+  da una notifica e dal widget: si apre come prima, nessuna seconda finestra; (7) con l'icona «Scura» scelta, chiudere l'app dai recenti e riaprirla: l'icona
+  resta la scura; (8) TalkBack sulla pagina: «Automatica, selezionato» e le altre due «non selezionato».
+
+### I2, giro 1 della review (12/11 notte)
+- **CG-1 (privacy dei volti negli esempi)**: lo stesso contratto delle Raccolte. I ritagli stanno in un posto solo (`SuggestionFaces`) con il segno
+  delle revoche e le foto d'origine; esempi, terna pronta per la prossima apertura, recenti e completamenti tengono solo la persona
+  (`SuggestionArt.Face(person, fallback)`), mai il bitmap. A ogni segno di `CollectionFaceCrops.revocations` (la stessa porta e lo stesso segno delle
+  Raccolte: `AppSearchFaces` ora sta sopra `AppCollectionFaceCrops`) si buttano tutti i volti e le persone degli esempi, che si rifanno dalle sorgenti di
+  adesso; il tondo legge lo stato e al fotogramma dopo non disegna piu' il volto; una risposta in volo con il segno vecchio non entra; il cancello
+  riconferma i volti della terna a ogni apertura (cosi' un volto torna solo se il cancello lo ripermette). Prove: `SearchFacesRevocationTest`,
+  `AppSearchFacesTest` (CS-11), e tre mutazioni (senza la revoca, senza il controllo del segno, senza il controllo delle origini) fanno cadere ciascuna
+  la sua prova.
+- **Le foto degli esempi e delle recenti** (una foto nascosta dopo che la terna e' pronta): la voce tiene solo l'id; il tondo la disegna, e il
+  caricatore la tiene, solo se e' nell'istantanea della Libreria visibile di adesso (`photoArt`, `previewRequest`), che lo stato raccolto dalla barra
+  aggiorna: sparita dall'istantanea, al disegno dopo c'e' il segno del tipo. Il filtro finale dei nascosti vale quando la terna si prepara.
+- **CU-19**: sotto l'analisi e sotto la lettura del testo **un tasto solo** con la sua icona (il rimedio di un problema, «Riprova» la misura, «Indicizza
+  ora»; «Scopri e attiva», «Leggi e conferma», «Leggi il nuovo testo», «Usa anche su questo dispositivo»); le altre scelte, con le frasi intere,
+  dietro il tocco sulla riga dello stato o della lettura (un foglio: per decidere). Lo stato dell'analisi e' un segno con il tempo che manca, non un
+  secondo anello con «1.240 / 15.000» sotto «12.300 / 15.000». Niente «0» accanto a «Cancella le ricerche recenti».
+- **CU-25 e i segni comuni**: le scintille restano ai Ricordi; la ricerca per contenuto e' la lente sull'immagine (`ImageSearch`), l'analisi il chip
+  (`Memory`), in corso il tempo che scorre. Pausa per una condizione (regole, rete, NAS, spazio, caldo) = il segno del perche' con `Paused`; attesa o
+  preparazione = la clessidra e basta (anche la riga «sto preparando la ricerca», senza barra); in corso = `Running`.
+- **Componenti comuni** (I4, `f329e9c3`): gli anelli sono `GalleryProgressRing` (testata `Hero`, modelli `Card`, il modello in verifica con l'arco che
+  gira); la «i» della copertura e' `GalleryInfoButton` e la frase si apre nella pagina (`GalleryInfoDetail`); la barra della copertura nella ricerca ha
+  il colore (`galleryRingColor(Search)`, pista al 28%) e il tratto (4 dp) dell'anello. La testata ha l'anello al centro e i numeri sotto, a tutta
+  larghezza: a 360 dp e a 1,3x non vanno a capo.
+- **CS-10 e CS-15**: tolte le stringhe orfane (`models_indexer_title`, `models_section_areas`, `models_status_title`, e quelle rese orfane qui); «foto e
+  video» al posto di «media», niente «CPU»/«GPU» («2,8 foto/s»; nelle frasi «con il processore grafico»).

@@ -29,9 +29,7 @@
   <string name="collection_empty_favorites_title">Nessun preferito</string>
   <string name="collection_empty_favorites_detail">Tocca il cuore di una foto o di un video: lo ritrovi qui.</string>
   <string name="collection_empty_videos_title">Nessun video</string>
-  <string name="collection_empty_videos_detail">I video del telefono compaiono qui.</string>
   <string name="collection_empty_screenshots_title">Nessuno screenshot</string>
-  <string name="collection_empty_screenshots_detail">Gli screenshot del telefono compaiono qui.</string>
   <string name="collection_select">Seleziona</string>
   <string name="collection_select_items">Seleziona elementi</string>
   <string name="selection_favorite">Aggiungi ai preferiti</string>
@@ -61,10 +59,8 @@
   <string name="hidden_open_security_settings">Apri le impostazioni di sicurezza</string>
   <string name="hidden_loading">Apro i Nascosti</string>
   <string name="hidden_failed_title">Non riesco ad aprire i Nascosti</string>
-  <string name="hidden_failed_detail">La lettura non è riuscita. Riprova fra poco.</string>
   <string name="hidden_retry">Riprova</string>
   <string name="hidden_empty_title">Nessun elemento nascosto</string>
-  <string name="hidden_empty_detail">Quello che nascondi dalla Libreria o dal viewer sta qui, dietro lo sblocco del telefono.</string>
   <string name="hidden_footnote">Nascondere vale solo dentro MyCloud Gallery: gli altri strumenti del telefono, come la Galleria di Samsung, continuano a vedere i file.</string>
 
   <!-- Eliminati di recente -->
@@ -109,6 +105,5 @@
     <item quantity="other">Ripristina %1$s elementi</item>
   </plurals>
   <string name="trash_error_title">Non riesco a leggere il cestino</string>
-  <string name="trash_error_detail">Riprova fra poco. Se resta così, il cestino del telefono non risponde.</string>
   <string name="trash_retry">Riprova</string>
 </resources>

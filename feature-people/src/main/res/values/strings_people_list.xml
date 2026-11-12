@@ -13,7 +13,6 @@
   </plurals>
 
   <string name="persone_empty_title">Ancora nessuna persona</string>
-  <string name="persone_empty_detail">Quando le foto saranno analizzate, le persone che compaiono più spesso arriveranno qui.</string>
   <string name="persone_none_named_title">Nessuna persona con un nome</string>
   <string name="persone_none_named_detail">Dai un nome ai volti che riconosci da «Altri volti», o dalle informazioni di una foto.</string>
   <string name="persone_header_unnamed">Senza nome</string>

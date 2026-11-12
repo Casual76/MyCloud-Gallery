@@ -42,6 +42,7 @@ internal enum class SettingsPage(val code: String, val route: Any) {
   RULES("rules", SettingsRulesRoute),
   SHARING("sharing", SettingsSharingRoute),
   WIDGET("widget", SettingsWidgetRoute),
+  APP_ICON("app_icon", SettingsAppIconRoute),
   ABOUT("about", SettingsAboutRoute),
   ;
 

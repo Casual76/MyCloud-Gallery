@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -43,6 +44,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
@@ -124,6 +126,9 @@ internal fun CollectionMapCard(entry: CollectionEntry, places: List<CollectionEn
   val placeIds = remember(placeEntries, entry) { (placeEntries.map { it.coverPlace } + entry.coverPlaces).filter { it > 0 }.distinct() }
   var size by remember { mutableStateOf(IntSize.Zero) }
   var image by remember { mutableStateOf<MapImageUi?>(null) }
+  // Giro 1 (CU-24): le due capsule in basso (il nome della voce e il credito della carta), misurate: le foto appuntate non ci vanno sotto.
+  var chip by remember { mutableStateOf(IntSize.Zero) }
+  var credit by remember { mutableStateOf(IntSize.Zero) }
   val widthDp = with(density) { size.width.toDp().value.roundToInt() }
   val heightDp = with(density) { size.height.toDp().value.roundToInt() }
   if (port != null && widthDp > 0 && heightDp > 0) {
@@ -156,7 +161,12 @@ internal fun CollectionMapCard(entry: CollectionEntry, places: List<CollectionEn
     val ready = image
     if (ready != null && covers != null) {
       Image(bitmap = ready.bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize())
-      MapPins(ready.pins, placeEntries, covers, size, bucket)
+      val pad = with(density) { CollectionsDimens.MapChipPadding.roundToPx() }
+      val keepOut = listOf(
+        IntRect(pad, size.height - pad - chip.height, pad + chip.width, size.height - pad),
+        IntRect(size.width - pad - credit.width, size.height - pad - credit.height, size.width - pad, size.height - pad),
+      )
+      MapPins(ready.pins, placeEntries, covers, size, bucket, keepOut)
       Text(
         text = ready.attribution,
         style = MaterialTheme.typography.labelSmall,
@@ -165,6 +175,7 @@ internal fun CollectionMapCard(entry: CollectionEntry, places: List<CollectionEn
         modifier = Modifier
           .align(Alignment.BottomEnd)
           .padding(CollectionsDimens.MapChipPadding)
+          .onSizeChanged { credit = it }
           .clip(FluidCapsuleShape)
           .background(scheme.surface.copy(alpha = CHIP_ALPHA))
           .padding(horizontal = CollectionsDimens.TileBadgeHorizontal, vertical = CollectionsDimens.TileBadgeVertical),
@@ -176,7 +187,7 @@ internal fun CollectionMapCard(entry: CollectionEntry, places: List<CollectionEn
         MapMosaic(covers, media, Icons.Rounded.Map, colors, Modifier.matchParentSize(), width, CollectionsDimens.MapBadgeLarge, MAP_ASPECT, bucket)
       }
     }
-    MapChip(entry.title, colors.top, Modifier.align(Alignment.BottomStart).padding(CollectionsDimens.MapChipPadding))
+    MapChip(entry.title, colors.top, Modifier.align(Alignment.BottomStart).padding(CollectionsDimens.MapChipPadding).onSizeChanged { chip = it })
   }
 }
 
@@ -197,11 +208,18 @@ private class MapImageUi(source: CollectionMapImage) {
 
 /**
  * Le foto appuntate: per ogni luogo (i piu' fotografati prima) la sua foto in un tondo con il filo chiaro, centrata sul punto; un luogo troppo vicino a uno
- * gia' appuntato si salta (le foto non si coprono). Solo i luoghi con una foto nella Libreria visibile di adesso: un luogo diventato tutto nascosto non
- * appunta niente, anche prima che la carta si rifaccia.
+ * gia' appuntato si salta (le foto non si coprono), e cosi' uno che cadrebbe sotto una delle capsule [keepOut] (giro 1, CU-24: resta nel carosello sotto).
+ * Solo i luoghi con una foto nella Libreria visibile di adesso: un luogo diventato tutto nascosto non appunta niente, anche prima che la carta si rifaccia.
  */
 @Composable
-private fun MapPins(pins: List<CollectionMapPin>, places: List<CollectionEntry>, covers: CollectionCovers, size: IntSize, bucket: dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket) {
+private fun MapPins(
+  pins: List<CollectionMapPin>,
+  places: List<CollectionEntry>,
+  covers: CollectionCovers,
+  size: IntSize,
+  bucket: dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket,
+  keepOut: List<IntRect>,
+) {
   val density = LocalDensity.current
   val pinPx = with(density) { CollectionsDimens.MapPin.roundToPx() }
   val minGap = with(density) { CollectionsDimens.MapPinMinGap.toPx() }
@@ -214,6 +232,7 @@ private fun MapPins(pins: List<CollectionMapPin>, places: List<CollectionEntry>,
     val x = (pin.x * size.width).roundToInt()
     val y = (pin.y * size.height).roundToInt()
     if (chosen.any { (_, cx, cy) -> hypot((cx - x).toFloat(), (cy - y).toFloat()) < minGap }) continue
+    if (keepOut.any { pinTouches(it, x, y, pinPx / 2) }) continue
     chosen += Triple(media, x, y)
   }
   val surface = MaterialTheme.colorScheme.surface
@@ -231,6 +250,14 @@ private fun MapPins(pins: List<CollectionMapPin>, places: List<CollectionEntry>,
       CoverImage(covers, media, Modifier.matchParentSize(), bucket)
     }
   }
+}
+
+/** Se un tondo di raggio [radius] centrato in ([x], [y]) tocca il riquadro [box] (vuoto = nessun riquadro). */
+internal fun pinTouches(box: IntRect, x: Int, y: Int, radius: Int): Boolean {
+  if (box.width <= 0 || box.height <= 0) return false
+  val nearestX = x.coerceIn(box.left, box.right)
+  val nearestY = y.coerceIn(box.top, box.bottom)
+  return hypot((x - nearestX).toFloat(), (y - nearestY).toFloat()) < radius
 }
 
 /** La capsula in basso a sinistra: il segno della mappa nel colore dei Luoghi e il nome della voce. */

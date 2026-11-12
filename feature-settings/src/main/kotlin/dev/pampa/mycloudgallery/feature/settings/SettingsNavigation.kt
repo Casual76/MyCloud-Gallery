@@ -31,6 +31,7 @@ import dev.pampa.mycloudgallery.feature.settings.security.BackupNoticeRoute
 import dev.pampa.mycloudgallery.feature.settings.security.SecurityRoute
 import dev.pampa.mycloudgallery.feature.settings.sharing.SharingRoute
 import dev.pampa.mycloudgallery.feature.settings.widget.WidgetSettingsRoute
+import dev.pampa.mycloudgallery.feature.settings.appicon.AppIconRoute
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsHost
 import kotlinx.serialization.Serializable
 
@@ -111,6 +112,10 @@ data object SettingsSharingRoute
 @Serializable
 data object SettingsWidgetRoute
 
+/** L'icona dell'app: automatica, chiara o scura (I5). */
+@Serializable
+data object SettingsAppIconRoute
+
 /** "Quando lavora l'app": preset, tetto dei dati mobili e roaming (verifica funzionale, RE-8). */
 @Serializable
 data object SettingsRulesRoute
@@ -177,6 +182,7 @@ fun NavGraphBuilder.settingsGraph(
                 openMemories = openMemories,
                 openMap = openMap,
                 openWidget = { open(SettingsPage.WIDGET) },
+                openAppIcon = { open(SettingsPage.APP_ICON) },
               ),
               openDiagnostics = openDiagnostics,
               resumeStep = resumeStep,
@@ -292,6 +298,7 @@ internal fun NavGraphBuilder.settingsPages(
   // --- Condivisioni senza posizione (Fase 5B) ---
   composable<SettingsSharingRoute>(backSwipe = backSwipe) { SettingsHost { SharingRoute(onBack = back) } }
   composable<SettingsWidgetRoute>(backSwipe = backSwipe) { SettingsHost { WidgetSettingsRoute(onBack = back) } }
+  composable<SettingsAppIconRoute>(backSwipe = backSwipe) { SettingsHost { AppIconRoute(onBack = back) } }
 
   // --- Informazioni e licenze ---
   composable<SettingsAboutRoute>(backSwipe = backSwipe) { SettingsHost { AboutRoute(onBack = back) } }

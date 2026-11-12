@@ -10,7 +10,5 @@
   <string name="collection_camera">Fotocamera</string>
   <string name="collection_messaging">Messaggistica</string>
   <string name="collection_empty_camera_title">Nessuna foto della fotocamera</string>
-  <string name="collection_empty_camera_detail">Le foto e i video scattati con questo dispositivo compaiono qui.</string>
   <string name="collection_empty_messaging_title">Niente dalle app di messaggi</string>
-  <string name="collection_empty_messaging_detail">Le foto e i video ricevuti con WhatsApp, Telegram e Signal compaiono qui.</string>
 </resources>

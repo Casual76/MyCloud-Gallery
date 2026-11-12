@@ -77,6 +77,12 @@ class SearchSettingsUiTest {
   /** Il dettaglio di un modello: si apre toccando il suo anello (TalkBack dice il nome per intero). */
   private fun openModel(name: String) = said(name).performScrollTo().performClick()
 
+  /** CU-19: la riga della lettura del testo apre il perche' e le scelte che non sono quella principale. */
+  private fun openReading() = said("Leggi il testo nelle foto").performScrollTo().performClick()
+
+  /** CU-19: la riga dello stato dell'analisi apre le frasi intere e tutte le azioni. */
+  private fun openAnalysis(sentence: String) = said(sentence).performScrollTo().performClick()
+
   @Test
   fun laCoperturaEUnAnelloConIlNumeroEIMotiviSonoSegni_I2() {
     show()
@@ -87,26 +93,45 @@ class SearchSettingsUiTest {
     said("In attesa della preparazione: 2.700").performScrollTo().assertIsDisplayed()
     // Le frasi dietro la «i»: la copertura per intero, che cosa vuol dire analizzare, «niente esce da qui».
     rule.onNodeWithContentDescription("Come funziona la copertura").performClick()
-    rule.onNode(hasText("La ricerca per contenuto copre 12.300 media su 15.000.", substring = true)).assertIsDisplayed()
+    rule.onNode(hasText("La ricerca per contenuto copre 12.300 foto e video su 15.000.", substring = true)).assertIsDisplayed()
     rule.onNode(hasText("Un dispositivo che analizza calcola una volta per tutta la famiglia", substring = true)).assertIsDisplayed()
     rule.onNode(hasText("niente esce da qui", substring = true)).assertIsDisplayed()
     // Le frasi lunghe non sono piu' sulla pagina.
-    assertThat(rule.onAllNodesWithText("La ricerca per contenuto copre 12.300 media su 15.000.").fetchSemanticsNodes()).isEmpty()
+    assertThat(rule.onAllNodesWithText("La ricerca per contenuto copre 12.300 foto e video su 15.000.").fetchSemanticsNodes()).isEmpty()
   }
 
   @Test
   fun ilRuoloSiCambiaConUnTocco_ELaPaginaDiceLaStima_D15() {
     show()
     rule.onNodeWithText("Questo dispositivo analizza").performScrollTo().assertIsDisplayed()
-    // Lo stato e la stima: numeri e segni a vista, le frasi intere per TalkBack.
-    shown("1.240 / 15.000").performScrollTo().assertIsDisplayed()
-    shown("≈ 95 min").assertIsDisplayed()
+    // Lo stato e la stima: segni e numeri a vista, le frasi intere per TalkBack. CU-19: che cosa fa adesso questo telefono e' il tempo che manca, non
+    // un secondo «quanti su quanti» sotto quello della copertura.
+    shown("≈ 95 min").performScrollTo().assertIsDisplayed()
+    assertThat(rule.onAllNodesWithText("1.240 / 15.000", useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
     shown("≈ 2 notti").performScrollTo().assertIsDisplayed()
-    said("Analizzare 13.760 media richiede circa 2 notti.").assertExists()
-    said("Analizzati 1.240 media su 15.000, mancano circa 95 minuti.").assertExists()
+    said("Analizzare 13.760 foto e video richiede circa 2 notti.").assertExists()
+    said("Analizzati 1.240 foto e video su 15.000, mancano circa 95 minuti.").assertExists()
+    // CS-15: niente sigle sotto la stima.
+    assertThat(rule.onAllNodesWithText("CPU", substring = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+    assertThat(rule.onAllNodesWithText("GPU", substring = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
     scrollClick("Questo dispositivo analizza")
     scrollClick("Indicizza ora")
     assertThat(handlers.calls).containsExactly("indexer:false", "indexNow").inOrder()
+  }
+
+  /** CU-19: sotto l'analisi un tasto solo, quello che serve adesso; le altre azioni, con le frasi intere, dietro il tocco sulla riga dello stato. */
+  @Test
+  fun unaSolaAzioneAVista_LeAltreDietroIlTocco_CU19() {
+    show(SearchSamples.settingsProblems)
+    // Il calcolo e' fermo per lo spazio: il tasto e' il rimedio, non «Indicizza ora».
+    assertThat(rule.onAllNodesWithText("Libera spazio").fetchSemanticsNodes()).hasSize(1)
+    assertThat(rule.onAllNodesWithText("Indicizza ora").fetchSemanticsNodes()).isEmpty()
+    openAnalysis("Memoria quasi piena")
+    rule.onNodeWithText("Indicizza ora").assertIsDisplayed()
+    rule.onNodeWithText("Indicizza ora").performClick()
+    assertThat(handlers.calls).containsExactly("indexNow")
+    // Senza ricerche recenti nessun «0» accanto al tasto.
+    assertThat(rule.onAllNodesWithText("0", useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
   }
 
   /** I2: «nessun dispositivo analizza quest'area» solo qui, come piastrelle con il loro segno (E-I12: un'informazione). */
@@ -136,8 +161,12 @@ class SearchSettingsUiTest {
     show(SearchSamples.settingsReadingOn)
     rule.onNodeWithText("Attiva").performScrollTo().assertIsDisplayed()
     said("Attiva per il tuo account, anche su questo dispositivo.").assertExists()
-    scrollClick("Non su questo dispositivo")
-    scrollClick("Spegni")
+    // CU-19: attiva e usata qui non c'e' niente da fare: nessun tasto a vista, le scelte dietro il tocco sulla riga.
+    assertThat(rule.onAllNodesWithText("Non su questo dispositivo").fetchSemanticsNodes()).isEmpty()
+    openReading()
+    rule.onNodeWithText("Non su questo dispositivo").performClick()
+    openReading()
+    rule.onNodeWithText("Spegni").performClick()
     rule.onNodeWithText("Spegnere la lettura del testo?").assertIsDisplayed()
     assertThat(handlers.calls).containsExactly("exclude")
     // "Spegni" nel foglio: la conseguenza e' scritta, il tocco la conferma.
@@ -154,7 +183,8 @@ class SearchSettingsUiTest {
     rule.onNodeWithText("Testo cambiato: rileggilo").performScrollTo().assertIsDisplayed()
     said("Il testo della spiegazione è cambiato: leggilo e conferma.").assertExists()
     scrollClick("Leggi il nuovo testo")
-    scrollClick("Usa anche su questo dispositivo")
+    openReading()
+    rule.onNodeWithText("Usa anche su questo dispositivo").performClick()
     assertThat(handlers.calls).containsExactly("activation", "include").inOrder()
   }
 
@@ -233,10 +263,15 @@ class SearchSettingsUiTest {
   fun iPulsantiEGliAnelliSonoDa48DpAncheAlTestoGrande() {
     show(SearchSamples.settingsReadingOn, fontScale = 1.3f)
     val density = rule.density.density
-    for (label in listOf("Indicizza ora", "Non su questo dispositivo", "Spegni")) {
-      val node = rule.onNodeWithText(label).performScrollTo().fetchSemanticsNode()
+    val indexNow = rule.onNodeWithText("Indicizza ora").performScrollTo().fetchSemanticsNode()
+    assertWithMessage("«Indicizza ora» sotto i 48 dp").that(indexNow.boundsInRoot.height / density).isAtLeast(47.5f)
+    // Le scelte della lettura stanno nel foglio dietro il tocco: anche li' 48 dp.
+    openReading()
+    for (label in listOf("Non su questo dispositivo", "Spegni")) {
+      val node = rule.onNodeWithText(label).fetchSemanticsNode()
       assertWithMessage("«$label» sotto i 48 dp").that(node.boundsInRoot.height / density).isAtLeast(47.5f)
     }
+    rule.onNodeWithText("Chiudi").performClick()
     for (said in listOf("Come funziona la copertura", "Ricerca per contenuto")) {
       val node = said(said).performScrollTo().fetchSemanticsNode()
       assertWithMessage("«$said» sotto i 48 dp").that(node.boundsInRoot.height / density).isAtLeast(47.5f)
@@ -306,7 +341,8 @@ class SearchSettingsUiTest {
     rule.onNodeWithText("Aspetta la tua conferma").performScrollTo().assertIsDisplayed()
     said("Attiva per il tuo account, ma qui aspetta la tua conferma: finché non la dai, ML Kit non parte su questo dispositivo.").assertExists()
     scrollClick("Leggi e conferma")
-    scrollClick("Non su questo dispositivo")
+    openReading()
+    rule.onNodeWithText("Non su questo dispositivo").performClick()
     assertThat(handlers.calls).containsExactly("activation", "exclude").inOrder()
   }
 
@@ -314,7 +350,9 @@ class SearchSettingsUiTest {
   @Test
   fun r8_lEsclusioneSiDaAncheDaSpenta() {
     show()
-    scrollClick("Non su questo dispositivo")
+    // CU-19: da spenta il tasto a vista e' «Scopri e attiva»; l'esclusione sta dietro il tocco sulla riga.
+    openReading()
+    rule.onNodeWithText("Non su questo dispositivo").performClick()
     assertThat(handlers.calls).containsExactly("exclude")
   }
 
@@ -339,7 +377,7 @@ class SearchSettingsUiTest {
     show(pending)
     rule.onNodeWithText("Agli altri dispositivi dopo").performScrollTo().assertIsDisplayed()
     said("La scelta vale già qui. Arriva agli altri dispositivi quando questo si collega al NAS.").assertExists()
-    rule.onNodeWithContentDescription("Come funziona la lettura del testo").performScrollTo().performClick()
+    openReading()
     rule.onNode(hasText("Se la accendi o la spegni da un altro dispositivo, su questo vale quando i dati personali si sincronizzano (a casa o con la VPN accesa).", substring = true)).assertIsDisplayed()
   }
 

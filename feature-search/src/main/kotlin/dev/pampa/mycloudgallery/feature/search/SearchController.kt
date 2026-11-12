@@ -81,6 +81,9 @@ class SearchController(
   /** I2: gli stessi suggerimenti di [topSuggestions] con la loro anteprima (la foto del primo risultato, un volto), come li mostra la barra. */
   val strip: StateFlow<List<SuggestionItem>> = mutableStrip
 
+  /** CG-1: i volti delle anteprime, con il segno delle revoche (null senza gli esempi). */
+  val faces: SuggestionFaces? get() = examples?.faceImages
+
   /** L'istantanea della Libreria di adesso: la barra disegna un'anteprima solo se il suo media c'e' ancora (un nascosto no, D29). */
   val library: StateFlow<dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot?> = data?.snapshot ?: MutableStateFlow(null)
 

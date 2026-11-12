@@ -25,7 +25,6 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -50,11 +49,19 @@ import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryCoverCard
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
 import dev.pampa.mycloudgallery.core.faces.contract.PersonCard
 import dev.pampa.mycloudgallery.core.model.FaceLocator
 import dev.pampa.mycloudgallery.feature.people.R
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleCrops
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.vector.ImageVector
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoButton
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 
 // Le PARTI COMUNI delle schermate delle persone (Fase 8, P9): l'avatar rotondo (il volto ritagliato al momento, mai salvato), la tessera di una
 // persona, la nota. Solo componenti dell'engine e del design system (G2); nessun colore, raggio o dimensione di testo scritti a mano
@@ -143,7 +150,10 @@ internal fun PersonTile(
     emptyList()
   }
   val shape = ContinuousCornerShape(FluidRadius.Card)
-  Box(
+  // Giro 1 (CU-2, CU-21, CS-5): la scheda comune delle copertine (core-designsystem), cosi' il nome sopra il volto ha la stessa sfumatura, provata
+  // su una copertina bianca, di Ricordi, Viaggi e Luoghi. La descrizione della scheda dice il nome e le foto: il nome scritto non si rilegge (il
+  // valore di serie della scheda comune).
+  GalleryCoverCard(
     modifier = modifier
       .aspectRatio(PeopleDimens.CardAspect)
       .fluidPressable(onClick = onClick, onLongClick = onLongClick, role = if (selection == TileSelection.NONE) Role.Button else Role.Checkbox)
@@ -158,23 +168,10 @@ internal fun PersonTile(
       .then(if (selection == TileSelection.ON) Modifier.border(PeopleDimens.Ring, scheme.primary, shape) else Modifier)
       .clip(shape)
       .background(scheme.surfaceContainerHigh),
+    title = card.name,
+    titleMaxLines = 1,
   ) {
     FaceImage(card.cover, crops, PeopleDimens.CardCrop)
-    card.name?.let { name ->
-      val scrim = GalleryOnPhoto.scrim()
-      Text(
-        text = name,
-        style = MaterialTheme.typography.titleSmall,
-        color = GalleryOnPhoto.Content,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier
-          .align(Alignment.BottomStart)
-          .fillMaxWidth()
-          .background(Brush.verticalGradient(listOf(scrim.copy(alpha = 0f), scrim)))
-          .padding(start = PeopleDimens.CardInset, end = PeopleDimens.CardInset, bottom = PeopleDimens.CardInset, top = PeopleDimens.CardInset * 2),
-      )
-    }
     if (selection != TileSelection.NONE) {
       Box(Modifier.align(Alignment.TopEnd).padding(PeopleDimens.CardInset)) { RadioMark(selected = selection == TileSelection.ON, onPhoto = true) }
     }
@@ -182,6 +179,42 @@ internal fun PersonTile(
 }
 
 /** Una nota piccola in fondo a un gruppo o a una pagina: nel secondario, con l'aria di una riga. */
+/**
+ * Giro 1 (CU-23): uno stato vuoto (o di fine) delle pagine delle persone nella forma unica della galleria ([GalleryFigureState]): la figura, il titolo,
+ * al piu' [action]. Il perche' ([why]), dove spiega una regola (le foto nascoste, i tre volti, che cosa fa nascondere), sta dietro la «i»
+ * ([GalleryInfoButton]): un tocco lo apre sotto, TalkBack lo dice nella descrizione della «i». Senza [why], niente «i».
+ */
+@Composable
+internal fun PeopleFigureState(
+  icon: ImageVector,
+  title: String,
+  why: String? = null,
+  action: (@Composable () -> Unit)? = null,
+) {
+  GalleryFigureState(
+    icon = icon,
+    title = title,
+    fill = false,
+    modifier = Modifier.fillMaxWidth().padding(vertical = PeopleDimens.StatePadding),
+    action = if (why == null && action == null) {
+      null
+    } else {
+      {
+        if (why != null) FigureWhy(why)
+        action?.invoke()
+      }
+    },
+  )
+}
+
+/** La «i» di uno stato e, aperta, la frase sotto. */
+@Composable
+private fun FigureWhy(why: String) {
+  var open by rememberSaveable(why) { mutableStateOf(false) }
+  GalleryInfoButton(label = why, open = open, onToggle = { open = !open })
+  GalleryInfoDetail(text = why, visible = open)
+}
+
 @Composable
 internal fun SectionNote(text: String, modifier: Modifier = Modifier) {
   Text(

@@ -3,11 +3,13 @@
 # Nessuna funzione qui legge mai pampa.jks, K1 o K2 e nessuna stampa mai una password o una chiave privata.
 
 # Il file di un ingresso del repository: se c'e' una cartella di sostituzione ($script:Overlay, solo nelle prove con -TestKeystore) e li'
-# c'e' lo stesso percorso relativo, vale quello; altrimenti il file vero del repository.
+# c'e' lo stesso percorso relativo, vale quello; altrimenti il file vero del repository. Per provare un file che MANCA quando nel
+# repository c'e', la prova mette accanto un segnaposto "<percorso>.assente": allora vale il percorso della sostituzione, che non esiste.
 function Resolve-RepoFile([string]$Relative) {
   if ($script:Overlay) {
     $candidate = Join-Path $script:Overlay $Relative
     if (Test-Path -LiteralPath $candidate) { return $candidate }
+    if (Test-Path -LiteralPath ($candidate + ".assente")) { return $candidate }
   }
   return (Join-Path $script:Root $Relative)
 }

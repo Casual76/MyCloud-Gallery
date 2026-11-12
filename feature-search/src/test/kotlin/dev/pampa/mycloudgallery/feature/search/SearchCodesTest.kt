@@ -86,8 +86,8 @@ class SearchCodesTest {
   fun ilMessaggioConUnNumeroLoMostra() {
     val needed = SearchCodes.message(resources, ModelDiag.AI_MODEL_NO_SPACE, amount = "370 MB")
     assertThat(needed).isEqualTo("Spazio insufficiente per il modello (serve 370 MB)")
-    assertThat(SearchCodes.message(resources, AiDiag.OCR_FAILED, "7")).isEqualTo("Testo non letto in 7 media")
-    assertThat(SearchCodes.message(resources, AiDiag.AI_VECTOR_INVALID, "3")).isEqualTo("3 media non analizzati (errore del motore)")
+    assertThat(SearchCodes.message(resources, AiDiag.OCR_FAILED, "7")).isEqualTo("Testo non letto in 7 foto")
+    assertThat(SearchCodes.message(resources, AiDiag.AI_VECTOR_INVALID, "3")).isEqualTo("3 foto e video non analizzati (errore del motore)")
   }
 
   @Test

@@ -2,12 +2,13 @@ package dev.pampa.mycloudgallery.feature.library.collections
 
 import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import dev.pampa.mycloudgallery.core.designsystem.instant.onFirstDraw
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Collections
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -20,18 +21,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.antigravity.fluidengine.ui.fluid.FluidDetailContent
-import dev.antigravity.fluidengine.ui.fluid.FluidDetailPlaceholder
 import dev.antigravity.fluidengine.ui.fluid.FluidListDetailScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidScreenDefaults
 import dev.antigravity.fluidengine.ui.fluid.fluidScreenPadding
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.FluidPaneSizes
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTileDefaults
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIcons
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuButton
@@ -197,15 +201,24 @@ internal fun CollectionsScreen(
           is CollectionsSelection.Kind -> detail(chosen.kind)
           // Il "Indietro" di una pagina nel pannello (album, persona, ricordo) la chiude e torna alla raccolta di prima (Fase 10, P5).
           is CollectionsSelection.Entry -> CompositionLocalProvider(LocalCollectionDetailClose provides { savedEntry = null }) { entryDetail?.invoke(chosen.entry) }
-          CollectionsSelection.None -> FluidDetailPlaceholder(
-            title = stringResource(R.string.collections_detail_empty_title),
-            message = stringResource(R.string.collections_detail_empty_message),
-            icon = Icons.Rounded.Collections,
-          )
+          // Giro 1 (CU-17): il pannello vuoto e' una figura sola, nessuna frase; "Scegli una raccolta" lo dice TalkBack.
+          CollectionsSelection.None -> CollectionsDetailFigure()
         }
       }
     },
   )
+}
+
+/** Il pannello di dettaglio vuoto del tablet: la figura delle Raccolte, grande, al centro; la frase la dice TalkBack. */
+@Composable
+private fun CollectionsDetailFigure() {
+  Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    GalleryIconTile(
+      spec = GalleryIcons.Collections,
+      size = GalleryIconTileDefaults.Large,
+      contentDescription = stringResource(R.string.collections_detail_empty_title),
+    )
+  }
 }
 
 /** Che cosa ha il pannello di dettaglio del tablet: una raccolta, una voce consegnata come dato, o niente ancora. */
@@ -260,7 +273,7 @@ private fun CollectionsList(
   val viewport = remember { CoverViewport() }
   if (covers != null && !state.editing) {
     val entries = remember(state) { state.visible.flatMap { it.coverEntries() } }
-    CollectionCoverWindow(covers, entries, viewport, requestThumbs = !twoPane || (selectedKind == null && selectedEntry == null))
+    CollectionCoverWindow(covers, entries, viewport, beside = twoPane && (selectedKind != null || selectedEntry != null))
   }
   val listState = rememberLazyListState()
   val scrolling = remember(listState) { { listState.isScrollInProgress } }
@@ -307,7 +320,6 @@ private fun CollectionsList(
         CollectionEmptyState(
           icon = Icons.Rounded.VisibilityOff,
           title = stringResource(R.string.collections_all_hidden_title),
-          detail = stringResource(R.string.collections_all_hidden_detail),
           actionLabel = stringResource(R.string.collections_edit),
           onAction = onEdit,
         )

@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.feature.search.models.visibleNow
 import dev.pampa.mycloudgallery.feature.search.models.AnalysisMediaKey
 import dev.pampa.mycloudgallery.feature.search.models.AnalysisBornKey
 import dev.pampa.mycloudgallery.feature.search.models.frameBase
+import dev.pampa.mycloudgallery.feature.search.models.LocalLaneSteps
 import dev.pampa.mycloudgallery.feature.search.contract.AnalysisThumb
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.runtime.setValue
@@ -321,6 +322,82 @@ class AnalysisScreenTest {
     flow.next.map { AnalysisThumb.Quiet },
     generation,
   )
+
+  // --- Giro 3, XU-9: il contatore dei media finiti -----------------------------------------------------------------------------------------------
+
+  /** Un nastro tutto di caselle neutre con le stesse lunghezze: lo fa avanzare solo il contatore (uno StateFlow non emetterebbe altrimenti). */
+  private fun quietRun(finished: Long, generation: Long = 1): AnalysisFlow {
+    val q = AnalysisThumb.Quiet
+    return AnalysisFlow(q, listOf(q, q, q), listOf(q, q), visibilityGeneration = generation, finished = finished)
+  }
+
+  @Test
+  fun ilContatoreDeiFinitiFaAvanzareUnNastroDiCaselleNeutre() {
+    // Cresciuto di uno o di tanti: un passo solo.
+    assertThat(laneStep(quietRun(5), quietRun(6))).isEqualTo(1)
+    assertThat(laneStep(quietRun(5), quietRun(9))).isEqualTo(1)
+    // Fermo: nessun passo, nemmeno con la generazione cambiata o la forma diversa.
+    assertThat(laneStep(quietRun(5), quietRun(5, generation = 2))).isEqualTo(0)
+    val shorter = quietRun(5, generation = 2).let { it.copy(recent = it.recent.drop(1)) }
+    assertThat(laneStep(quietRun(5), shorter)).isEqualTo(0)
+  }
+
+  private class Steps {
+    val seen = mutableListOf<Pair<Int, Boolean>>()
+    val moving: List<Pair<Int, Boolean>> get() = seen.filter { it.first > 0 }
+  }
+
+  private fun showSteps(initial: AnalysisFlow, reduced: Boolean = false): Pair<androidx.compose.runtime.MutableState<AnalysisFlow>, Steps> {
+    val state = mutableStateOf(initial)
+    val steps = Steps()
+    rule.mainClock.autoAdvance = false
+    rule.setSearchContent {
+      CompositionLocalProvider(
+        LocalFluidMotionPolicy provides FluidMotionPolicy(durationScale = if (reduced) 0f else 1f),
+        LocalLaneSteps provides { step, moves -> steps.seen += step to moves },
+      ) {
+        AnalysisScreen(AnalysisScenes.RUNNING, state.value, AnalysisScenes.thumbnails, Recording(), onBack = {})
+      }
+    }
+    rule.mainClock.advanceTimeByFrame()
+    rule.waitForIdle()
+    return state to steps
+  }
+
+  /** XU-9: piu' media finiti fra due stati del passo = un solo passo, al ritmo di sempre (non una raffica). */
+  @Test
+  fun piuFinitiDentroIlPassoSonoUnPassoSolo() {
+    val (state, steps) = showSteps(quietRun(10))
+    emit(state, quietRun(11))
+    emit(state, quietRun(12))
+    emit(state, quietRun(14))
+    // Ancora dentro il passo (1,2 s dal primo valore): niente si muove.
+    assertThat(steps.moving).isEmpty()
+    rule.mainClock.advanceTimeBy(STEP_AFTER)
+    rule.waitForIdle()
+    assertThat(steps.moving).containsExactly(1 to true)
+  }
+
+  /** XU-9: un cambio di generazione senza media finiti non e' un passo. */
+  @Test
+  fun unaGenerazioneNuovaSenzaFinitiNonEUnPasso() {
+    val (state, steps) = showSteps(quietRun(10))
+    rule.mainClock.advanceTimeBy(STEP_AFTER)
+    emit(state, quietRun(10, generation = 2))
+    rule.mainClock.advanceTimeBy(STEP_AFTER)
+    rule.waitForIdle()
+    assertThat(steps.moving).isEmpty()
+  }
+
+  /** XU-9 con il movimento ridotto: il passo si conta ma niente scorre. */
+  @Test
+  fun conIlMovimentoRidottoIlContatoreNonMuoveNiente() {
+    val (state, steps) = showSteps(quietRun(10), reduced = true)
+    emit(state, quietRun(11))
+    rule.mainClock.advanceTimeBy(STEP_AFTER)
+    rule.waitForIdle()
+    assertThat(steps.moving).containsExactly(1 to false)
+  }
 
   private companion object {
     const val STEP_INSIDE = 300L

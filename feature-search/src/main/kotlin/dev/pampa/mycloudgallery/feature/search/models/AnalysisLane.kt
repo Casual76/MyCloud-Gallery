@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
@@ -135,11 +136,13 @@ internal fun AnalysisLane(
   val shift = remember { Animatable(frozenShift ?: 0f) }
   val focus = remember { Animatable(1f) }
   val light = remember { Animatable(1f) }
+  val steps = LocalLaneSteps.current
   LaunchedEffect(paced, reduced) {
     val old = held
     val step = laneStep(old, paced)
     val arrived = paced.current != null && (step > 0 || paced.current != old.current)
     held = paced
+    steps?.invoke(step, step > 0 && !reduced && frozenShift == null)
     if (frozenShift != null) return@LaunchedEffect
     if (reduced) {
       shift.snapTo(0f)
@@ -482,8 +485,10 @@ internal fun frameBase(held: AnalysisFlow, now: AnalysisFlow): AnalysisFlow =
 /**
  * Di quanti posti e' scorsa la corsia da [old] a [new]: dalla prima anteprima di [new] che c'era anche in [old].
  *  - XU-4: dalla corsia vuota (la pagina appena aperta) alle prime anteprime, la corsia **entra da destra** di [EntrySteps] posti, una volta;
- *  - XU-9: senza anteprime in comune (una fila di caselle neutre) ma con il mirino occupato prima e dopo, il motore e' andato avanti: un posto.
- *    Non scorre se l'unica differenza e' una revoca (un'anteprima diventata casella neutra al suo posto: [sameShape]).
+ *  - XU-9: senza anteprime in comune (una fila di caselle neutre) decide il contatore dei media finiti ([AnalysisFlow.finished]): se e' cresciuto
+ *    il motore e' andato avanti e la corsia scorre di **un** posto, anche se ne sono finiti piu' d'uno fra i due stati ricevuti (lo `StateFlow` ne
+ *    salta: un passo solo, non una raffica, al ritmo di sempre); se non e' cresciuto (un cambio di generazione, una revoca, il neutro) non scorre.
+ *    Senza contatore (di serie 0, per chi non lo lega) resta la regola del giro 2: non scorre se l'unica differenza e' una revoca ([sameShape]).
  * Zero se non si sa.
  */
 internal fun laneStep(old: AnalysisFlow, new: AnalysisFlow): Int {
@@ -497,6 +502,10 @@ internal fun laneStep(old: AnalysisFlow, new: AnalysisFlow): Int {
   // Giro 3: il nastro arriva vuoto, poi neutro, poi risolto. La corsia entra da destra quando compaiono le prime anteprime vere (non con le
   // caselle neutre di passaggio): da un nastro senza anteprime (vuoto o tutto neutro) a uno con anteprime.
   if (!old.hasShown() && new.hasShown() && new.current != null) return EntrySteps
+  // XU-9 (giro 3): il contatore dei media finiti. Cresciuto = un passo (uno solo, quanti che siano i media finiti nel frattempo); fermo = nessun
+  // passo, nemmeno se la generazione e' cambiata o la forma del nastro e' diversa.
+  if (new.finished > old.finished && new.current != null) return 1
+  if (old.finished != 0L || new.finished != 0L) return 0
   // Lo stesso nastro con alcune caselle diventate anteprime o viceversa (risolto dopo il neutro, o una revoca) non e' un passo del motore.
   if (sameShape(old, new)) return 0
   if (old.current != null && new.current != null && old != new) return 1
@@ -558,6 +567,11 @@ private fun rememberPaced(flow: AnalysisFlow): MutableState<AnalysisFlow> {
 
 /** Il media di un'anteprima a schermo, per le prove di riservatezza (nessun lettore lo legge). */
 internal val AnalysisMediaKey: SemanticsPropertyKey<String> = SemanticsPropertyKey("AnalysisMedia")
+
+/**
+ * Solo per le prove (giro 3, XU-9): chi vuole sapere quali passi fa la corsia riceve (posti, si muove). Di serie nessuno: nessun costo.
+ */
+internal val LocalLaneSteps = staticCompositionLocalOf<((Int, Boolean) -> Unit)?> { null }
 
 /** La generazione in cui e' nata la composizione di un'anteprima a schermo, per le prove (giro 3). */
 internal val AnalysisBornKey: SemanticsPropertyKey<Long> = SemanticsPropertyKey("AnalysisBorn")

@@ -1,7 +1,6 @@
 package dev.pampa.mycloudgallery.feature.search
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Face
@@ -137,7 +136,8 @@ private fun noticeLineSpec(item: NoticeItem): GallerySearchLineSpec {
   val progress = SearchLines.progressOf(item)
   val percent = progress?.let { stringResource(R.string.search_line_percent, SearchLines.percentOf(it)) }
   return when (item) {
-    NoticeItem.Preparing -> GallerySearchLineSpec(description = stringResource(R.string.search_preparing), icon = Icons.Rounded.AutoAwesome, busy = true)
+    // In preparazione = la clessidra, e solo quella (regola comune del giro 1).
+    NoticeItem.Preparing -> GallerySearchLineSpec(description = stringResource(R.string.search_preparing), icon = Icons.Rounded.HourglassTop)
     is NoticeItem.ModelMissing -> item.fetching?.let { (done, total) ->
       GallerySearchLineSpec(
         description = stringResource(R.string.search_model_fetching, sizeText(done), sizeText(total)),
@@ -163,13 +163,13 @@ private fun noticeLineSpec(item: NoticeItem): GallerySearchLineSpec {
     is NoticeItem.CoveragePartial -> GallerySearchLineSpec(
       description = stringResource(R.string.search_line_coverage_description, GalleryNumbers.format(item.covered), GalleryNumbers.format(item.total)),
       text = percent,
-      icon = Icons.Rounded.AutoAwesome,
+      icon = Icons.Rounded.ImageSearch,
       progress = progress,
     )
     is NoticeItem.CoverageUpdating -> GallerySearchLineSpec(
       description = stringResource(R.string.search_coverage_updating, item.percent),
       text = percent,
-      icon = Icons.Rounded.AutoAwesome,
+      icon = Icons.Rounded.ImageSearch,
       progress = progress,
     )
     is NoticeItem.PeopleProgress -> GallerySearchLineSpec(

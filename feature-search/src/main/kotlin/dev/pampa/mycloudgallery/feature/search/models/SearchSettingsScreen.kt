@@ -2,18 +2,19 @@ package dev.pampa.mycloudgallery.feature.search.models
 
 import android.content.res.Resources
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.BrokenImage
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Download
@@ -21,15 +22,21 @@ import androidx.compose.material.icons.rounded.FamilyRestroom
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Memory
+import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.SdStorage
 import androidx.compose.material.icons.automirrored.rounded.Rule
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +55,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
@@ -57,7 +65,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -65,12 +72,17 @@ import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.AiWaitReason
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoButton
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTileDefaults
-import dev.pampa.mycloudgallery.core.designsystem.icon.rememberGalleryIconColors
 import dev.pampa.mycloudgallery.core.designsystem.icon.rememberGalleryStatusColors
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRing
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRingDefaults
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryRingPercent
+import dev.pampa.mycloudgallery.core.designsystem.media.galleryRingColor
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
@@ -90,8 +102,9 @@ import dev.pampa.mycloudgallery.feature.search.ui.SearchDimens
 //  - in testa la copertura come **un anello** che avanza, con il numero delle foto che la ricerca conosce e il segno «solo sul telefono»; sotto, i motivi
 //    di cio' che manca come segni con un numero;
 //  - **chi analizza**: le due aree (comune, privata) come piastrelle con il loro segno (✓ qualcuno le analizza, ! nessuno: qui e solo qui, non piu' nella
-//    ricerca) e l'interruttore «questo dispositivo analizza»; lo stato dell'analisi come anello o segno con un numero, la misura del dispositivo come segno;
-//  - la lettura del testo come una riga con il suo segno di stato e i suoi tasti;
+//    ricerca) e l'interruttore «questo dispositivo analizza»; che cosa fa adesso questo telefono come un segno solo (in corso, fatto, in pausa, in attesa)
+//    con due parole o il tempo che manca, la misura del dispositivo come segno; un tasto solo, le altre azioni dietro il tocco sulla riga dello stato;
+//  - la lettura del testo come una riga con il suo segno di stato e un tasto solo; le altre scelte dietro il tocco sulla riga;
 //  - i modelli come **anelli** (pronto, in arrivo con l'avanzamento, assente, problema): il dettaglio e le azioni dietro un tocco;
 //  - le ricerche recenti, con quante sono.
 // Le spiegazioni lunghe stanno dietro il segno «i». La logica (ruoli, richieste dei modelli, misura legata a STARTED, primo avvio di HR) non cambia: cambia
@@ -130,77 +143,79 @@ fun SearchSettingsScreen(
 // --- La copertura --------------------------------------------------------------------------------------------------------------------------------------
 
 /**
- * La copertura in testa alla pagina: un anello (la frazione delle foto che la ricerca per contenuto conosce) con la percentuale dentro e accanto quante
- * (grande) su quante (piccolo); sotto, un segno con un numero per ogni motivo di cio' che manca. Le frasi (la copertura per intero, «niente esce da qui»,
- * che cosa vuol dire analizzare) stanno dietro la «i» nell'angolo: una spiegazione sola per la pagina.
+ * La copertura in testa alla pagina: l'anello della galleria ([GalleryProgressRing], misura di testata come quella del Backup) con la percentuale dentro;
+ * sotto, a tutta larghezza, quante foto la ricerca conosce (grande) su quante (piccolo), cosi' i numeri non vanno mai a capo; poi un segno con un numero
+ * per ogni motivo di cio' che manca. Le frasi (la copertura per intero, che cosa vuol dire analizzare, «niente esce da qui») stanno dietro la «i»
+ * della galleria nell'angolo, che le apre **sotto, nella pagina** ([GalleryInfoDetail]): una spiegazione sola per la pagina. TalkBack sente la copertura
+ * e «niente esce da qui» dall'anello, cio' che vuol dire analizzare dall'interruttore.
  */
 @Composable
 private fun CoverageHero(coverage: SearchCoverage, explainIndexer: Boolean) {
   val resources = LocalResources.current
   var explaining by remember { mutableStateOf(false) }
-  val searchHue = rememberGalleryIconColors(GalleryIconFamily.Search).top
+  val searchHue = galleryRingColor(GalleryIconFamily.Search)
   val doneHue = rememberGalleryStatusColors(GalleryIconStatus.Done).top
   val sentence = coverageText(resources, coverage)
-  FluidListGroup {
-    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth()) {
-    Row(
-      modifier = Modifier.fillMaxWidth().padding(SearchDimens.HeroPadding),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      val (fraction, hue) = when (coverage) {
-        SearchCoverage.Complete -> 1f to doneHue
-        is SearchCoverage.Partial -> coverage.fraction to searchHue
-        is SearchCoverage.Updating -> coverage.percent / PERCENT to searchHue
-        is SearchCoverage.ModelMissing -> 0f to searchHue
-      }
-      SearchRing(
-        fraction = fraction,
-        color = hue,
-        size = SearchDimens.HeroRing,
-        stroke = SearchDimens.HeroRingStroke,
-        modifier = Modifier.clearAndSetSemantics { contentDescription = sentence },
-      ) {
-        when (coverage) {
-          SearchCoverage.Complete -> Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = doneHue, modifier = Modifier.size(SearchDimens.ModelGlyph))
-          is SearchCoverage.ModelMissing -> Icon(Icons.Rounded.Download, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(SearchDimens.ModelGlyph))
-          else -> Text(
-            text = stringResource(R.string.models_percent, (fraction * PERCENT).toInt()),
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-          )
-        }
-      }
-      Spacer(Modifier.width(SearchDimens.HeroPadding))
-      // Accanto all'anello il numero grande e, sotto, piccolo, il resto: due righe che non vanno mai a capo a 360 dp (la «i» sta nell'angolo).
-      Column(modifier = Modifier.weight(1f).padding(end = GalleryDimens.MinTouchTarget).clearAndSetSemantics { }) {
-        val (glyph, headline, detail) = when (coverage) {
-          SearchCoverage.Complete -> Triple(Icons.Rounded.PhotoLibrary, stringResource(R.string.models_coverage_all), null)
-          is SearchCoverage.Partial -> Triple(
-            Icons.Rounded.PhotoLibrary,
-            GalleryNumbers.format(coverage.covered),
-            stringResource(R.string.models_count_of_total, GalleryNumbers.format(coverage.total)),
-          )
-          is SearchCoverage.Updating -> Triple(Icons.Rounded.Sync, stringResource(R.string.models_coverage_updating_short), null)
-          // La freccia e' gia' nell'anello: qui niente segno, per non dirla due volte.
-          is SearchCoverage.ModelMissing -> Triple(null, stringResource(R.string.models_coverage_missing_short), sizeText(coverage.sizeBytes))
-        }
-        GlyphLine(glyph, headline, MaterialTheme.typography.titleLarge, MaterialTheme.colorScheme.onSurface)
-        if (detail != null) {
-          Text(
-            text = detail,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            modifier = if (glyph != null) Modifier.padding(start = SearchDimens.InlineGlyph + SearchDimens.TightGap) else Modifier,
-          )
-        }
-      }
-    }
-    InfoButton(
-      label = stringResource(R.string.models_coverage_info),
-      onClick = { explaining = true },
-      modifier = Modifier.align(Alignment.TopEnd).padding(SearchDimens.TightGap),
+  val subtitle = stringResource(R.string.models_subtitle)
+  val note = if (coverage is SearchCoverage.Partial && CoverageReason.TEXT_READING_OFF in coverage.reasons) "\n\n" + stringResource(R.string.models_reading_coverage_note) else ""
+  val indexer = if (explainIndexer) "\n\n" + stringResource(R.string.models_indexer_detail) else ""
+  val (fraction, hue) = when (coverage) {
+    SearchCoverage.Complete -> 1f to doneHue
+    is SearchCoverage.Partial -> coverage.fraction to searchHue
+    is SearchCoverage.Updating -> coverage.percent / PERCENT to searchHue
+    is SearchCoverage.ModelMissing -> 0f to searchHue
+  }
+  val (glyph, headline, detail) = when (coverage) {
+    SearchCoverage.Complete -> Triple(Icons.Rounded.PhotoLibrary, stringResource(R.string.models_coverage_all), null)
+    is SearchCoverage.Partial -> Triple(
+      Icons.Rounded.PhotoLibrary,
+      GalleryNumbers.format(coverage.covered),
+      stringResource(R.string.models_count_of_total, GalleryNumbers.format(coverage.total)),
     )
+    is SearchCoverage.Updating -> Triple(Icons.Rounded.Sync, stringResource(R.string.models_coverage_updating_short), null)
+    // La freccia e' gia' nell'anello: qui niente segno, per non dirla due volte.
+    is SearchCoverage.ModelMissing -> Triple(null, stringResource(R.string.models_coverage_missing_short), sizeText(coverage.sizeBytes))
+  }
+  FluidListGroup {
+    Box(modifier = Modifier.fillMaxWidth()) {
+      Column(modifier = Modifier.fillMaxWidth().padding(SearchDimens.HeroPadding), horizontalAlignment = Alignment.CenterHorizontally) {
+        GalleryProgressRing(
+          progress = fraction,
+          color = hue,
+          strokeWidth = GalleryProgressRingDefaults.stroke(GalleryProgressRingDefaults.Hero),
+          animate = true,
+          modifier = Modifier.size(GalleryProgressRingDefaults.Hero).clearAndSetSemantics { contentDescription = "$sentence $subtitle" },
+        ) {
+          when (coverage) {
+            SearchCoverage.Complete -> Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = doneHue, modifier = Modifier.size(SearchDimens.HeroGlyph))
+            is SearchCoverage.ModelMissing -> Icon(Icons.Rounded.Download, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(SearchDimens.HeroGlyph))
+            else -> GalleryRingPercent(fraction, MaterialTheme.typography.headlineMedium)
+          }
+        }
+        Spacer(Modifier.height(SearchDimens.TightGap))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clearAndSetSemantics { }) {
+          if (glyph != null) {
+            Icon(glyph, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(SearchDimens.InlineGlyph))
+            Spacer(Modifier.width(SearchDimens.TightGap))
+          }
+          Text(text = headline, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+          if (detail != null) {
+            Spacer(Modifier.width(SearchDimens.TightGap))
+            Text(text = detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+          }
+        }
+        GalleryInfoDetail(
+          text = sentence + note + indexer + "\n\n" + subtitle,
+          visible = explaining,
+          modifier = Modifier.fillMaxWidth().padding(top = SearchDimens.BlockGap),
+        )
+      }
+      GalleryInfoButton(
+        label = stringResource(R.string.models_coverage_info),
+        open = explaining,
+        onToggle = { explaining = !explaining },
+        modifier = Modifier.align(Alignment.TopEnd).padding(SearchDimens.TightGap),
+      )
     }
     if (coverage is SearchCoverage.Partial) {
       coverage.reasons.entries.filter { it.value > 0 }.sortedByDescending { it.value }.forEach { (reason, count) ->
@@ -208,27 +223,6 @@ private fun CoverageHero(coverage: SearchCoverage, explainIndexer: Boolean) {
         ReasonRow(reason, count, resources)
       }
     }
-  }
-  if (explaining) {
-    val note = if (coverage is SearchCoverage.Partial && CoverageReason.TEXT_READING_OFF in coverage.reasons) "\n\n" + stringResource(R.string.models_reading_coverage_note) else ""
-    val indexer = if (explainIndexer) "\n\n" + stringResource(R.string.models_indexer_detail) else ""
-    InfoSheet(
-      title = stringResource(R.string.models_section_coverage),
-      message = sentence + note + indexer + "\n\n" + stringResource(R.string.models_subtitle),
-      onDismiss = { explaining = false },
-    )
-  }
-}
-
-/** Un segno e un testo corto sulla stessa riga. */
-@Composable
-private fun GlyphLine(glyph: ImageVector?, text: String, style: androidx.compose.ui.text.TextStyle, color: androidx.compose.ui.graphics.Color) {
-  Row(verticalAlignment = Alignment.CenterVertically) {
-    if (glyph != null) {
-      Icon(glyph, contentDescription = null, tint = color, modifier = Modifier.size(SearchDimens.InlineGlyph))
-      Spacer(Modifier.width(SearchDimens.TightGap))
-    }
-    Text(text = text, style = style, color = color, maxLines = 2, overflow = TextOverflow.Ellipsis)
   }
 }
 
@@ -327,25 +321,37 @@ private fun AreaTile(area: AreaKind, uncovered: Boolean, modifier: Modifier) {
   }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Chi analizza (I2; giro 1: CU-19, CU-25 e i segni di stato comuni). L'interruttore con il segno dell'analisi (il chip: questo dispositivo calcola; le
+ * scintille sono i Ricordi). Sotto, **che cosa fa adesso questo telefono** come un segno solo (in corso, fatto, in pausa con il suo perche', in attesa con
+ * la clessidra, un problema) con due parole o il tempo che manca: il numero dell'avanzamento non si ripete, in testa c'e' gia' quanto la ricerca conosce.
+ * Poi la misura come segno. **Un tasto solo**, l'azione che serve adesso (il rimedio di un problema, «Riprova» la misura, o «Indicizza ora»); le altre,
+ * con le frasi intere, dietro il tocco sulla riga dello stato.
+ */
 @Composable
 private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handlers: SearchSettingsHandlers, probeFailed: Boolean, probeHot: Boolean, probeBusy: Boolean) {
   val indexer = state.indexer
   val resources = LocalResources.current
   val title = stringResource(R.string.models_indexer_switch)
   val detail = stringResource(R.string.models_indexer_detail)
+  var details by remember { mutableStateOf(false) }
+  val problem = (indexer.status as? AiStatus.Problem)?.code
+  val probeRetry = probeFailed && !probeHot && !probeBusy &&
+    state.models.models.any { it.id == dev.pampa.mycloudgallery.core.models.contract.ModelCatalog.INDEX_440M.id && it.state is dev.pampa.mycloudgallery.core.models.contract.ModelState.Ready }
+  val actions = buildList {
+    problem?.let { code -> SearchCodes.actions(code).forEach { add(IndexerAction.Code(it)) } }
+    if (probeRetry) add(IndexerAction.RetryProbe)
+    add(IndexerAction.IndexNow)
+  }
+  // Finita l'analisi, «Fatto» basta: la riga della misura direbbe la stessa cosa («Niente da analizzare»). Lo stato si dice una volta.
+  val allDone = indexer.toAnalyze <= 0 && !measuring && !probeFailed && !probeHot && !probeBusy &&
+    (indexer.status is AiStatus.Idle || indexer.status is AiStatus.BufferOnlyDone)
   FluidListGroup {
     FluidListRow(
       title = title,
       subtitle = "",
-      leading = {
-        GalleryIconTile(
-          icon = Icons.Rounded.AutoAwesome,
-          family = GalleryIconFamily.Search,
-          status = if (indexer.indexer) statusMarkOf(indexer.status) else null,
-          statusDescription = null,
-        )
-      },
+      // Il segno dello stato e' uno solo, sulla riga dello stato qui sotto: la piastrella dell'interruttore non lo ripete.
+      leading = { GalleryIconTile(icon = Icons.Rounded.Memory, family = GalleryIconFamily.Search) },
       leadingTile = false,
       disclosure = false,
       // Tre parole intere anche a testo grande (a 1,3x vanno su tre righe accanto all'interruttore, mai con i puntini).
@@ -361,10 +367,7 @@ private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handler
     )
     if (indexer.indexer) {
       FluidListDivider()
-      StatusRow(indexer.status, resources)
-      // Finita l'analisi, «Fatto» basta: la riga della misura direbbe la stessa cosa («Niente da analizzare»). Lo stato si dice una volta.
-      val allDone = indexer.toAnalyze <= 0 && !measuring && !probeFailed && !probeHot && !probeBusy &&
-        (indexer.status is AiStatus.Idle || indexer.status is AiStatus.BufferOnlyDone)
+      StatusRow(indexer.status, resources, onOpen = { details = true })
       if (!allDone) {
         FluidListDivider()
         MeasureRow(indexer, measuring, probeFailed, probeHot, probeBusy, resources)
@@ -373,96 +376,123 @@ private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handler
   }
   if (state.offerRemoveIndexModel) RemoveIndexModelSheet(handlers)
   if (indexer.indexer) {
-    val problem = (indexer.status as? AiStatus.Problem)?.code
-    // K4: i tasti vanno a capo interi se non entrano affiancati ("Libera spazio" a testo grande si spezzava in "Libera spazi/o").
-    FlowRow(
-      modifier = Modifier.padding(top = SearchDimens.TightGap, start = GalleryDimens.Gutter, end = GalleryDimens.Gutter),
-      horizontalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
-      verticalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
+    val primary = actions.first()
+    Row(modifier = Modifier.padding(top = SearchDimens.TightGap, start = GalleryDimens.Gutter, end = GalleryDimens.Gutter)) {
+      ActionButton(primary.label(), primary.icon(), onClick = { primary.run(handlers) })
+    }
+  }
+  if (details) {
+    val sentences = listOf(
+      statusText(resources, indexer.status),
+      when {
+        probeHot -> resources.getString(R.string.models_probe_hot)
+        probeBusy -> resources.getString(R.string.models_probe_busy)
+        probeFailed -> resources.getString(R.string.models_probe_failed)
+        else -> listOf(estimateText(resources, indexer.toAnalyze, indexer.nights, measuring), probeText(resources, indexer, measuring)).filter { it.isNotEmpty() }.joinToString(". ")
+      },
+    ).filter { it.isNotEmpty() }.joinToString("\n\n")
+    ChoiceSheet(
+      title = stringResource(R.string.models_section_indexer),
+      message = sentences,
+      onDismiss = { details = false },
+      icon = Icons.Rounded.Memory,
     ) {
-      if (probeFailed && !probeHot && !probeBusy && state.models.models.any { it.id == dev.pampa.mycloudgallery.core.models.contract.ModelCatalog.INDEX_440M.id && it.state is dev.pampa.mycloudgallery.core.models.contract.ModelState.Ready }) FluidButton(text = stringResource(R.string.models_probe_retry), onClick = handlers::onRetryProbe, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
-      FluidButton(
-        text = stringResource(R.string.models_index_now),
-        onClick = handlers::onIndexNow,
-        style = FluidButtonStyle.Tinted,
-        size = FluidButtonSize.Large,
-        leading = { Icon(Icons.Rounded.PlayArrow, contentDescription = null) },
-      )
-      if (problem != null) {
-        for (action in SearchCodes.actions(problem)) {
-          FluidButton(text = stringResource(action.label), onClick = { runCodeAction(action, handlers) }, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
-        }
-      }
+      // Tutte le azioni, la principale compresa: qui si leggono con il loro perche'.
+      actions.forEach { action -> ActionButton(action.label(), action.icon(), onClick = { details = false; action.run(handlers) }, fill = true) }
     }
   }
 }
 
-/** Il segno dello stato dell'analisi sulla piastrella dell'interruttore. */
-private fun statusMarkOf(status: AiStatus): GalleryIconStatus = when (status) {
-  is AiStatus.Running -> GalleryIconStatus.Running
-  is AiStatus.Idle, is AiStatus.BufferOnlyDone -> GalleryIconStatus.Done
-  is AiStatus.Waiting -> GalleryIconStatus.Paused
-  AiStatus.ModelMissing -> GalleryIconStatus.Attention
-  is AiStatus.Problem -> GalleryIconStatus.Problem
-  AiStatus.Off -> GalleryIconStatus.Stopped
+/** Le azioni dell'analisi: il rimedio di un codice, «Riprova» la misura, «Indicizza ora». */
+private sealed interface IndexerAction {
+  data class Code(val action: CodeAction) : IndexerAction
+
+  data object RetryProbe : IndexerAction
+
+  data object IndexNow : IndexerAction
+}
+
+@Composable
+private fun IndexerAction.label(): String = when (this) {
+  is IndexerAction.Code -> stringResource(action.label)
+  IndexerAction.RetryProbe -> stringResource(R.string.models_probe_retry)
+  IndexerAction.IndexNow -> stringResource(R.string.models_index_now)
+}
+
+private fun IndexerAction.icon(): ImageVector = when (this) {
+  is IndexerAction.Code -> codeActionIcon(action)
+  IndexerAction.RetryProbe -> Icons.Rounded.Refresh
+  IndexerAction.IndexNow -> Icons.Rounded.PlayArrow
+}
+
+private fun IndexerAction.run(handlers: SearchSettingsHandlers) = when (this) {
+  is IndexerAction.Code -> runCodeAction(action, handlers)
+  IndexerAction.RetryProbe -> handlers.onRetryProbe()
+  IndexerAction.IndexNow -> handlers.onIndexNow()
+}
+
+/** L'icona del tasto di un'azione dei codici (CU-19: ogni tasto ha la sua). */
+internal fun codeActionIcon(action: CodeAction): ImageVector = when (action) {
+  CodeAction.DIAGNOSTICS -> Icons.Rounded.MonitorHeart
+  CodeAction.FREE_SPACE -> Icons.Rounded.CleaningServices
+  CodeAction.ENABLE_INDEXER -> Icons.Rounded.PowerSettingsNew
+  CodeAction.DOWNLOAD_NOW -> Icons.Rounded.Download
+  CodeAction.RETRY -> Icons.Rounded.Refresh
 }
 
 /**
- * Lo stato dell'analisi in una riga: in corso un **anello** con fatti su quanti (e i minuti che mancano), fermo o finito un segno con due parole, un
- * problema il suo messaggio corto (i tasti sono sotto). TalkBack dice la frase intera.
+ * Il segno di uno stato dell'analisi (le regole comuni del giro 1): **in corso** = il chip con `Running`; **fatto** = `Done`; **in pausa** per una
+ * condizione (le regole, la rete, il NAS, lo spazio, il caldo) = il segno del perche' con `Paused`; **in attesa** che le foto siano preparate o della
+ * prossima tappa = la clessidra, e solo quella; il modello che manca = la freccia con `Attention`; spento = `Stopped`; un problema = `Problem`.
+ */
+internal fun statusSign(status: AiStatus): Triple<ImageVector, GalleryIconFamily, GalleryIconStatus?> = when (status) {
+  is AiStatus.Running -> Triple(Icons.Rounded.Memory, GalleryIconFamily.Search, GalleryIconStatus.Running)
+  is AiStatus.Idle, is AiStatus.BufferOnlyDone -> Triple(Icons.Rounded.Memory, GalleryIconFamily.Search, GalleryIconStatus.Done)
+  is AiStatus.Waiting -> when (status.reason) {
+    AiWaitReason.PREPARATION, AiWaitReason.NEXT_STAGE -> Triple(Icons.Rounded.HourglassTop, GalleryIconFamily.System, null)
+    AiWaitReason.RULES -> Triple(Icons.AutoMirrored.Rounded.Rule, GalleryIconFamily.Backup, GalleryIconStatus.Paused)
+    AiWaitReason.NO_NETWORK -> Triple(Icons.Rounded.WifiOff, GalleryIconFamily.Network, GalleryIconStatus.Paused)
+    AiWaitReason.NAS_UNREACHABLE -> Triple(Icons.Rounded.CloudOff, GalleryIconFamily.Network, GalleryIconStatus.Paused)
+    AiWaitReason.STORAGE_LOW -> Triple(Icons.Rounded.SdStorage, GalleryIconFamily.System, GalleryIconStatus.Paused)
+    AiWaitReason.HOT -> Triple(Icons.Rounded.Thermostat, GalleryIconFamily.System, GalleryIconStatus.Paused)
+  }
+  AiStatus.ModelMissing -> Triple(Icons.Rounded.Download, GalleryIconFamily.Search, GalleryIconStatus.Attention)
+  AiStatus.Off -> Triple(Icons.Rounded.Memory, GalleryIconFamily.Search, GalleryIconStatus.Stopped)
+  is AiStatus.Problem -> Triple(Icons.Rounded.Warning, GalleryIconFamily.Danger, GalleryIconStatus.Problem)
+}
+
+/**
+ * Che cosa fa adesso questo telefono, in una riga: il segno dello stato e due parole (in corso: il tempo che manca). Il tocco apre le frasi intere e le
+ * azioni ([IndexerBlock]). TalkBack dice la frase intera.
  */
 @Composable
-private fun StatusRow(status: AiStatus, resources: Resources) {
+private fun StatusRow(status: AiStatus, resources: Resources, onOpen: () -> Unit) {
   val sentence = statusText(resources, status)
-  val searchHue = rememberGalleryIconColors(GalleryIconFamily.Search).top
-  val (title, meta) = when (status) {
-    is AiStatus.Running -> stringResource(R.string.models_count_of, GalleryNumbers.format(status.done), GalleryNumbers.format(status.total)) to
-      status.etaMinutes?.let { stringResource(R.string.models_eta_short, it) }
-    is AiStatus.Idle -> stringResource(R.string.models_status_done_short) to null
-    is AiStatus.BufferOnlyDone -> stringResource(R.string.models_status_buffer_short, GalleryNumbers.format(status.items)) to null
-    is AiStatus.Waiting -> stringResource(waitLabel(status.reason)) to null
-    AiStatus.ModelMissing -> stringResource(R.string.models_status_model_missing_short) to null
-    AiStatus.Off -> stringResource(R.string.models_status_off_short) to null
-    is AiStatus.Problem -> SearchCodes.message(resources, status.code) to null
+  val openLabel = stringResource(R.string.models_details)
+  val (glyph, family, mark) = statusSign(status)
+  val title = when (status) {
+    is AiStatus.Running -> status.etaMinutes?.let { stringResource(R.string.models_eta_short, it) } ?: stringResource(R.string.models_status_running_short)
+    is AiStatus.Idle -> stringResource(R.string.models_status_done_short)
+    is AiStatus.BufferOnlyDone -> stringResource(R.string.models_status_buffer_short, GalleryNumbers.format(status.items))
+    is AiStatus.Waiting -> stringResource(waitLabel(status.reason))
+    AiStatus.ModelMissing -> stringResource(R.string.models_status_model_missing_short)
+    AiStatus.Off -> stringResource(R.string.models_status_off_short)
+    is AiStatus.Problem -> SearchCodes.message(resources, status.code)
   }
   FluidListRow(
     title = title,
     subtitle = "",
-    meta = meta,
-    leading = {
-      if (status is AiStatus.Running) {
-        SearchRing(
-          fraction = if (status.total > 0) status.done.toFloat() / status.total else 0f,
-          color = searchHue,
-          size = SearchDimens.RowRing,
-          stroke = SearchDimens.RowRingStroke,
-        )
-      } else {
-        GalleryIconTile(icon = statusGlyph(status), family = statusFamily(status), status = statusMarkOf(status), statusDescription = null)
-      }
-    },
+    leading = { GalleryIconTile(icon = glyph, family = family, status = mark, statusDescription = null) },
     leadingTile = false,
-    disclosure = false,
+    disclosure = true,
     titleMaxLines = 3,
-    modifier = Modifier.clearAndSetSemantics { contentDescription = sentence },
+    onClick = onOpen,
+    modifier = Modifier.clearAndSetSemantics {
+      contentDescription = sentence
+      role = Role.Button
+      onClick(label = openLabel) { onOpen(); true }
+    },
   )
-}
-
-private fun statusGlyph(status: AiStatus): ImageVector = when (status) {
-  is AiStatus.Waiting -> when (status.reason) {
-    AiWaitReason.HOT -> Icons.Rounded.Thermostat
-    AiWaitReason.NEXT_STAGE -> Icons.Rounded.HourglassTop
-    else -> Icons.Rounded.HourglassTop
-  }
-  AiStatus.ModelMissing -> Icons.Rounded.Download
-  is AiStatus.Problem -> Icons.Rounded.Warning
-  else -> Icons.Rounded.AutoAwesome
-}
-
-private fun statusFamily(status: AiStatus): GalleryIconFamily = when (status) {
-  is AiStatus.Problem -> GalleryIconFamily.Danger
-  is AiStatus.Waiting -> GalleryIconFamily.System
-  else -> GalleryIconFamily.Search
 }
 
 private fun waitLabel(reason: AiWaitReason): Int = when (reason) {
@@ -476,8 +506,8 @@ private fun waitLabel(reason: AiWaitReason): Int = when (reason) {
 }
 
 /**
- * La misura del dispositivo come segno (I2): in corso, caldo, occupato, non riuscita, o fatta (le foto al secondo) con la stima delle notti accanto a una
- * luna. TalkBack dice le frasi intere di prima.
+ * La misura del dispositivo come segno (I2): in corso (`Running`), caldo (in pausa), occupata (la clessidra), non riuscita, o fatta (le foto al secondo)
+ * con la stima delle notti accanto a una luna. Niente sigle (CS-15): il processore non si nomina. TalkBack dice le frasi intere di prima.
  */
 @Composable
 private fun MeasureRow(indexer: IndexerState, measuring: Boolean, probeFailed: Boolean, probeHot: Boolean, probeBusy: Boolean, resources: Resources) {
@@ -499,33 +529,23 @@ private fun MeasureRow(indexer: IndexerState, measuring: Boolean, probeFailed: B
     else -> stringResource(R.string.models_to_analyze_short, GalleryNumbers.format(indexer.toAnalyze)) to ""
   }
   val speed = if (!measuring && !probeHot && !probeBusy && !probeFailed && probe != null) {
-    stringResource(
-      R.string.models_probe_short,
-      "%.1f".format(java.util.Locale.ITALIAN, probe.imagesPerSecond),
-      stringResource(if (probe.backend == dev.pampa.mycloudgallery.core.ai.contract.AiBackend.GPU) R.string.models_backend_gpu_short else R.string.models_backend_cpu_short),
-    )
+    stringResource(R.string.models_probe_short, "%.1f".format(java.util.Locale.ITALIAN, probe.imagesPerSecond))
   } else {
     null
   }
   val (glyph, mark) = when {
     measuring -> Icons.Rounded.Speed to GalleryIconStatus.Running
     probeHot -> Icons.Rounded.Thermostat to GalleryIconStatus.Paused
-    probeBusy -> Icons.Rounded.HourglassTop to GalleryIconStatus.Paused
+    probeBusy -> Icons.Rounded.HourglassTop to null
     probeFailed -> Icons.Rounded.Speed to GalleryIconStatus.Problem
-    indexer.toAnalyze <= 0 -> Icons.Rounded.CheckCircle to GalleryIconStatus.Done
+    indexer.toAnalyze <= 0 -> Icons.Rounded.CheckCircle to null
     else -> Icons.Rounded.Bedtime to null
   }
   FluidListRow(
     title = title,
     subtitle = subtitle,
     meta = speed,
-    leading = {
-      if (measuring) {
-        FluidSpinner(size = GalleryIconTileDefaults.Row)
-      } else {
-        GalleryIconTile(icon = glyph, family = GalleryIconFamily.System, status = mark, statusDescription = null)
-      }
-    },
+    leading = { GalleryIconTile(icon = glyph, family = GalleryIconFamily.System, status = mark, statusDescription = null) },
     leadingTile = false,
     disclosure = false,
     titleMaxLines = 2,
@@ -619,7 +639,8 @@ private fun HistoryBlock(count: Int, handlers: SearchSettingsHandlers) {
     FluidListRow(
       title = title,
       subtitle = "",
-      meta = GalleryNumbers.format(count),
+      // CU-19: senza ricerche recenti nessun numero (un «0» accanto a un tasto spento non dice niente).
+      meta = if (count > 0) GalleryNumbers.format(count) else null,
       leading = { GalleryIconTile(icon = Icons.Rounded.History, family = GalleryIconFamily.Search) },
       leadingTile = false,
       disclosure = false,

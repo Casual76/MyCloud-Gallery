@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- I5 (12/11/2026): Impostazioni -> Icona dell'app. Tre nomi, un titolo e una riga sola di avviso. -->
+<resources>
+  <string name="app_icon_title">Icona dell’app</string>
+  <string name="app_icon_auto">Automatica</string>
+  <string name="app_icon_light">Chiara</string>
+  <string name="app_icon_dark">Scura</string>
+  <string name="app_icon_warning">Su alcuni telefoni l’icona sparisce un attimo dalla Home e torna in un altro posto.</string>
+</resources>

@@ -21,7 +21,7 @@ param([switch]$KeepWork)
 $ErrorActionPreference = "Stop"
 $script:Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $script:Overlay = $null
-foreach ($lib in @("release-lib-core.ps1", "release-lib-apk.ps1", "release-lib-check.ps1", "release-lib-verify.ps1", "release-lib-report.ps1", "test-release-lib.ps1")) {
+foreach ($lib in @("release-lib-core.ps1", "release-lib-apk.ps1", "release-lib-launcher.ps1", "release-lib-check.ps1", "release-lib-verify.ps1", "release-lib-report.ps1", "test-release-lib.ps1")) {
   . (Join-Path $PSScriptRoot $lib)
 }
 $realRoot = $script:Root
@@ -132,6 +132,13 @@ Expect-Fail "la libreria nativa a 4 KB fa fallire" (Invoke-Case (New-MiniApk $ap
 Expect-Fail "la libreria nativa non allineata nel file fa fallire" (Invoke-Case (New-MiniApk $apkDir "libnoalign" (Good @{ Lib = "unaligned" })) $base) "non e' allineata a 16 KB"
 Expect-Fail "nessuna libreria nativa fa fallire (lettura non affidabile)" (Invoke-Case (New-MiniApk $apkDir "senza-lib" (Good @{ Lib = "none" })) $base) "nessuna libreria nativa"
 Expect-Fail "un componente esportato fuori elenco fa fallire" (Invoke-Case (New-MiniApk $apkDir "esportato" (Good @{ ExportedComponents = @("dev.pampa.mycloudgallery.Intruso") })) $base) "componente esportato non ammesso"
+# I5 (12/11/2026): gli ingressi del launcher. Il caso buono (i tre alias, solo l'automatica abilitata) e' l'APK "giusto" qui sopra.
+Expect-Fail "un quarto alias del launcher fa fallire" (Invoke-Case (New-MiniApk $apkDir "alias-quarto" (Good @{ Launcher = (New-LauncherXml -ExtraAlias "Rainbow") })) $base) "ingresso del launcher fuori elenco"
+Expect-Fail "un alias con un filtro in piu' (VIEW) fa fallire" (Invoke-Case (New-MiniApk $apkDir "alias-filtro" (Good @{ Launcher = (New-LauncherXml @{ Auto = @{ Extra = '<action android:name="android.intent.action.VIEW"/>' } }) })) $base) "la sola azione MAIN"
+Expect-Fail "un alias verso un'altra attivita' fa fallire" (Invoke-Case (New-MiniApk $apkDir "alias-bersaglio" (Good @{ Launcher = (New-LauncherXml @{ Dark = @{ Target = "dev.pampa.mycloudgallery.Altra" } }) })) $base) "deve puntare a dev.pampa.mycloudgallery.MainActivity"
+Expect-Fail "due alias abilitati di serie fanno fallire" (Invoke-Case (New-MiniApk $apkDir "alias-due" (Good @{ Launcher = (New-LauncherXml @{ Light = @{ Enabled = $true } }) })) $base) "un solo ingresso del launcher alla volta"
+Expect-Fail "nessun alias abilitato di serie fa fallire" (Invoke-Case (New-MiniApk $apkDir "alias-zero" (Good @{ Launcher = (New-LauncherXml @{ Auto = @{ Enabled = $false } }) })) $base) "deve essere abilitato"
+Expect-Fail "la MainActivity con il suo filtro LAUNCHER fa fallire" (Invoke-Case (New-MiniApk $apkDir "alias-main" (Good @{ Launcher = (New-LauncherXml -MainLauncher) })) $base) "fuori elenco"
 Expect-Fail "sharedUserId fa fallire" (Invoke-Case (New-MiniApk $apkDir "shared" (Good @{ ManifestAttributes = 'android:sharedUserId="dev.pampa.altro"' })) $base) "sharedUserId"
 Expect-Fail "un permesso fuori dall'elenco chiuso fa fallire" (Invoke-Case (New-MiniApk $apkDir "permesso" (Good @{ Permissions = @("android.permission.READ_SMS") })) $base) "permesso fuori dall'elenco chiuso"
 

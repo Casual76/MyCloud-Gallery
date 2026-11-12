@@ -52,6 +52,10 @@ import dev.pampa.mycloudgallery.feature.settings.sharing.SharingEntryRow
 import dev.pampa.mycloudgallery.feature.settings.sharing.SharingEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.widget.WidgetContent
 import dev.pampa.mycloudgallery.feature.settings.widget.WidgetEntryRow
+import dev.pampa.mycloudgallery.feature.settings.appicon.AppIconArt
+import dev.pampa.mycloudgallery.feature.settings.appicon.AppIconChoice
+import dev.pampa.mycloudgallery.feature.settings.appicon.AppIconEntryRow
+import dev.pampa.mycloudgallery.feature.settings.appicon.AppIconViewModel
 import dev.pampa.mycloudgallery.feature.settings.widget.WidgetEntrySummary
 import dev.pampa.mycloudgallery.feature.settings.widget.WidgetEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.widget.WidgetRefresh
@@ -114,6 +118,8 @@ class SettingsLinks(
   val openMap: (() -> Unit)? = null,
   /** Fase 10 (P3, D3, D6): la voce "Widget" (cosa mostra, ogni quanto cambia). La pagina e' delle Impostazioni stesse, quindi `settingsGraph` la scrive sempre; null = la voce non c'e'. */
   val openWidget: (() -> Unit)? = null,
+  /** I5: la voce "Icona dell'app" (automatica, chiara, scura). La pagina e' delle Impostazioni; la voce compare solo se `:app` ha collegato l'icona. */
+  val openAppIcon: (() -> Unit)? = null,
 ) {
   companion object {
     val None = SettingsLinks()
@@ -147,6 +153,9 @@ internal fun SettingsRoute(
   val widgetPeriod by widgetViewModel.period.collectAsStateWithLifecycle()
   val mapViewModel: MapEntryViewModel = hiltViewModel()
   val mapSummary by mapViewModel.summary.collectAsStateWithLifecycle()
+  val appIconViewModel: AppIconViewModel = hiltViewModel()
+  val appIconChoice by appIconViewModel.choice.collectAsStateWithLifecycle()
+  val appIconArt = appIconViewModel.art
   SettingsScreen(
     state = state,
     onBack = onBack,
@@ -163,8 +172,12 @@ internal fun SettingsRoute(
     memoriesSummary = memoriesSummary,
     mapSummary = mapSummary,
     widgetSummary = WidgetEntrySummary(widgetContent, widgetPeriod),
+    appIcon = appIconChoice?.let { choice -> appIconArt?.let { AppIconEntry(choice, it) } },
   )
 }
+
+/** La voce "Icona dell'app" (I5): la scelta di adesso e le risorse per disegnarla. */
+data class AppIconEntry(val choice: AppIconChoice, val art: AppIconArt)
 
 /**
  * La pagina principale delle Impostazioni (P7): un'apertura con lo stato della famiglia, poi le sezioni
@@ -191,6 +204,7 @@ fun SettingsScreen(
   memoriesSummary: MemoriesEntrySummary? = null,
   mapSummary: MapEntrySummary? = null,
   widgetSummary: WidgetEntrySummary = WidgetEntrySummary(WidgetContent.DEFAULT, WidgetRefresh.DEFAULT),
+  appIcon: AppIconEntry? = null,
 ) {
   val family = familyHero(state)
   FluidScreen(
@@ -287,6 +301,13 @@ fun SettingsScreen(
         links.openWidget?.let { openWidget ->
           FluidListDivider()
           WidgetEntryRow(summary = widgetSummary, onClick = openWidget)
+        }
+        // I5: "Icona dell'app", accanto al widget (le due cose dell'app che stanno sulla Home), solo se `:app` l'ha collegata.
+        links.openAppIcon?.let { openAppIcon ->
+          if (appIcon != null) {
+            FluidListDivider()
+            AppIconEntryRow(choice = appIcon.choice, art = appIcon.art, onClick = openAppIcon)
+          }
         }
         // Fase 6 (P14, D50, Q16 (b)): "Animazione delle foto in movimento", impostazione personale sincronizzata. Null = `:app` non l'ha collegata.
         if (motionAnimation != null) {

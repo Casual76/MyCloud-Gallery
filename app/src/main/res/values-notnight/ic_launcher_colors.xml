@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Lo sfondo dell'icona dell'app con il tema chiaro del telefono (il launcher la ricarica al cambio di tema). -->
+<!-- Lo sfondo dell'icona dell'app con il tema chiaro del telefono (il launcher la ricarica al cambio di tema). Solo l'icona automatica lo segue: le due fisse no. -->
 <resources>
-  <color name="ic_launcher_background">#FFFFFF</color>
+  <color name="ic_launcher_background">@color/ic_launcher_background_light</color>
 </resources>

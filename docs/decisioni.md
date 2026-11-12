@@ -19117,3 +19117,15 @@ Rilievi del giro 1 per I3 (`TRIAGE.md`); prima e dopo, parole contate e prove su
 - Con il controllo tolto le prove cadono: il tondo che ricorda l'indice della foto senza guardare l'istantanea di adesso (`remember(media)` al posto di
   `remember(library, media)` in `photoArt`) e le richieste tenute che non seguono l'istantanea (`remember(items, thumbnails)` in
   `KeepSuggestionPreviews`).
+
+### I3, giro di correzione 2 (fase I, 12 novembre 2026)
+
+Dettagli, tabella delle mutazioni e prove sul telefono in `docs/I3-giro2.md`.
+
+- **Icona dell'app**: il cambio accodato all'uscita ricontrolla prima di ogni scrittura che l'app sia ancora fuori; se e' rientrata, la scelta
+  aspetta la prossima uscita (mai zero ingressi; un processo morto a meta' lo finisce il riallineamento dell'avvio).
+- **Un solo admin** e' «attenzione» in tutte e due le pagine (principale e Famiglia): e' un rischio vero.
+- **Componenti comuni adottati**: `GalleryInfoRow` al posto di `SettingsInfo` e `BackupInfoToggle`; `GalleryFigureState(why)` per gli stati vuoti
+  delle Impostazioni; `GalleryIconStatus.Waiting` per l'attesa.
+- **Prove di privacy con la mutazione**: sette controlli tolti uno alla volta, ognuno fa cadere almeno una prova; quella del tetto per sorgente non
+  cadeva ed e' stata corretta.

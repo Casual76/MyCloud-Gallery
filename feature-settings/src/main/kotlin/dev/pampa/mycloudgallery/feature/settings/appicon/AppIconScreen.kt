@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.settings.appicon
 
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -131,7 +132,8 @@ private fun AppIconOption(option: AppIconChoice, selected: Boolean, art: AppIcon
     }
     Text(
       text = label,
-      style = MaterialTheme.typography.titleSmall,
+      // Giro 2 (CS-22): col testo grande l'etichetta scende di un gradino, cosi' «Automatica» resta dentro il suo terzo con un po' d'aria.
+      style = if (LocalDensity.current.fontScale >= LargeLabelScale) MaterialTheme.typography.labelMedium else MaterialTheme.typography.titleSmall,
       color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
@@ -213,3 +215,6 @@ internal fun appIconLabel(choice: AppIconChoice): Int = when (choice) {
 
 /** Un'icona adattiva e' di 108 dp e se ne vedono i 72 centrali: l'anteprima ingrandisce il primo piano di 108/72. */
 private const val ADAPTIVE_LAYER_SCALE: Float = 108f / 72f
+
+/** Da questa scala del testo l'etichetta della scelta usa il corpo piu' piccolo. */
+private const val LargeLabelScale = 1.2f

@@ -27,16 +27,18 @@ internal class AiUrgentSweep(
   /** Una passata. [checkServable] chiede anche se si puo' ancora servire (a inizio tappa; a fine tappa basta il criterio di "fatto"). */
   suspend fun sweep(checkServable: Boolean) {
     urgent.expire()
-    val gone = ArrayList<ContentKey>()
-    for (key in urgent.urgent()) {
-      val media = urgent.mediaOf(key)
+    val gone = ArrayList<AiUrgentFile.Request>()
+    for (request in urgent.requests()) {
+      val key = request.key
+      val media = request.media
       if (safe { isDone(key, media) } == true) {
-        gone += key
+        gone += request
         continue
       }
-      if (checkServable && safe { servable(key, media) } == false) gone += key
+      if (checkServable && safe { servable(key, media) } == false) gone += request
     }
-    urgent.remove(gone)
+    // Solo gli esemplari esaminati: una richiesta rinnovata mentre si aspettavano le verifiche (stessa chiave, altro numero d'ordine) non si tocca.
+    urgent.removeIf(gone)
   }
 
   private suspend fun <T> safe(block: suspend () -> T): T? = try {
@@ -83,12 +85,13 @@ internal class AiDoneCheck(
 
 /**
  * Il lavoro che resta, **senza ricontare il database a ogni media** (XS-7): a fine tappa lo ricontano [AiGraph.backlog] (numero vero, [set]);
- * nel frattempo ogni media che il calcolo finisce ([onFinished], dal flusso [dev.pampa.mycloudgallery.core.ai.contract.AiLive]) lo abbassa di
- * uno, cosi' "restano N" non resta fermo durante una tappa lunga. Mai sotto zero; null (non ancora letto) resta null.
+ * nel frattempo il calcolo conta i media usciti dal lavoro con un **contatore monotono** ([onFinished], `AiLive.finished`): chi guarda puo' saltare
+ * emissioni (un `StateFlow` ne unisce piu' di una) senza perdere cosi' nessun completamento, e "restano N" non resta fermo durante una tappa lunga.
+ * E' una stima fra due riletture: a fine tappa torna il numero vero. Mai sotto zero; null (non ancora letto) resta null.
  */
 internal class RemainingTracker(initial: Int? = null) {
   private val flow = kotlinx.coroutines.flow.MutableStateFlow(initial)
-  private var lastHead: ContentKey? = null
+  private var lastFinished = 0L
 
   val state: kotlinx.coroutines.flow.StateFlow<Int?> get() = flow
 
@@ -97,16 +100,19 @@ internal class RemainingTracker(initial: Int? = null) {
     flow.value = value
   }
 
-  /** Il calcolo ha un media finito in testa a "ultime fatte": un media in meno da fare. Lo stesso media due volte non conta due volte. */
-  fun onFinished(recent: List<ContentKey>) {
-    val head = recent.firstOrNull() ?: return
-    if (head == lastHead) return
-    lastHead = head
-    flow.value = flow.value?.let { (it - 1).coerceAtLeast(0) }
+  /** Il contatore dei media finiti e' [total]: la differenza dall'ultimo visto e' lavoro in meno. Un contatore che non cresce non cambia niente. */
+  fun onFinished(total: Long) {
+    val delta = synchronized(this) {
+      val d = total - lastFinished
+      lastFinished = maxOf(lastFinished, total)
+      d
+    }
+    if (delta <= 0) return
+    flow.value = flow.value?.let { (it - delta.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()).coerceAtLeast(0) }
   }
 
-  /** La prima osservazione di un flusso gia' avviato non conta come un media finito adesso. */
-  fun observed(recent: List<ContentKey>) {
-    lastHead = recent.firstOrNull()
+  /** La prima osservazione di un flusso gia' avviato (un contatore che non parte da zero) non conta come lavoro finito adesso. */
+  fun observed(total: Long) {
+    synchronized(this) { lastFinished = total }
   }
 }

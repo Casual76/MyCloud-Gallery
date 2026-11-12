@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.feature.backup
 
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -13,6 +14,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupSummary
 import dev.pampa.mycloudgallery.core.backup.contract.ExistingCopiesState
 import dev.pampa.mycloudgallery.core.backup.contract.SummaryCount
 import dev.pampa.mycloudgallery.core.backup.contract.SummaryWarning
+import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.feature.backup.first.FirstBackupSheetContent
 import dev.pampa.mycloudgallery.feature.backup.testing.BackupSamples
@@ -104,8 +106,12 @@ class FirstBackupSheetTest : ComposeBackupTest() {
   @Test
   fun fincheSiCercaSulNasIlFoglioDicePerche_ELeScelteAspettano() {
     showSheet(BackupSamples.firstBackupSummary.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0)))
-    composeRule.onNodeWithText("Sto cercando cosa c’è già sul NAS…").assertExists()
-    composeRule.onNodeWithText("I numeri sono provvisori finché non ho finito.").assertExists()
+    // Fase I (12/11): niente «Sto ancora contando»: una riga che dice che cosa fa, e i numeri arrivano a ricerca finita.
+    composeRule.onNodeWithText("Prima cerco cosa c’è già sul NAS, così non lo ricarico.").assertExists()
+    composeRule.onNodeWithText("Cerco cosa c’è già sul NAS").assertExists()
+    composeRule.onNodeWithText("Può durare qualche minuto.").assertExists()
+    composeRule.onAllNodes(hasText("Da caricare", substring = true)).assertCountEquals(0)
+    composeRule.onAllNodes(hasText("Sto ancora contando", substring = true)).assertCountEquals(0)
     button("Stanotte").assertIsNotEnabled()
     button("Inizia ora").assertIsNotEnabled()
     button("Stanotte").performClick()
@@ -115,11 +121,50 @@ class FirstBackupSheetTest : ComposeBackupTest() {
     assertThat(later).isEqualTo(1)
   }
 
+  /** Fase I: la ricerca dice quanti file del NAS ha gia' guardato. */
   @Test
-  fun poiIlConfrontoDelleCopieSimiliDiceQuanteFoto() {
-    showSheet(BackupSamples.comparingSummary)
-    composeRule.onNodeWithText("Sto confrontando 120 foto con le copie sul NAS…").assertExists()
+  fun laRicercaDiceQuantiFileHaGuardato() {
+    showSheet(BackupSamples.searchingSummary)
+    composeRule.onNodeWithText("1.234 di 5.559 file del NAS guardati").assertExists()
+  }
+
+  @Test
+  fun senzaIlTotaleLaRicercaDiceSoloQuantiNeHaGuardati() {
+    showSheet(BackupSamples.searchingSummary.copy(existing = BackupSamples.searchingSummary.existing.copy(scanTotal = null)))
+    composeRule.onNodeWithText("1.234 file del NAS guardati").assertExists()
+  }
+
+  /** Fase I (punto 5): ferma per una regola, la riga dice quale e che riprende da sola, non «cerco». */
+  @Test
+  fun laRicercaFermaDiceIlMotivoVero() {
+    showSheet(BackupSamples.heldSummary)
+    composeRule.onNodeWithText("Telefono troppo caldo").assertExists()
+    composeRule.onNodeWithText("La ricerca riprende da sola.").assertExists()
+    composeRule.onAllNodes(hasText("Cerco cosa c’è già sul NAS")).assertCountEquals(0)
     button("Stanotte").assertIsNotEnabled()
+  }
+
+  /**
+   * Fase I (12/11, dal telefono dell'utente): a ricerca finita le scelte sono accese anche con copie simili da confrontare (si caricano comunque,
+   * D36); i numeri ci sono subito e una riga piccola dice quante foto restano da confrontare, senza fermare niente.
+   */
+  @Test
+  fun poiIlConfrontoDelleCopieSimiliNonFermaLeScelte() {
+    showSheet(BackupSamples.comparingSummary)
+    composeRule.onNodeWithText("Ancora 120 foto da confrontare").assertExists()
+    composeRule.onNodeWithText("Il confronto continua da solo. Non cambia cosa si carica.").assertExists()
+    composeRule.onAllNodes(hasText("Da caricare:", substring = true)).assertCountEquals(1)
+    button("Stanotte").assertIsEnabled()
+    button("Inizia ora").assertIsEnabled()
+    button("Stanotte").performClick()
+    assertThat(tonight).isEqualTo(1)
+  }
+
+  @Test
+  fun ilConfrontoFermoDiceIlMotivoVero() {
+    showSheet(BackupSamples.comparingSummary.copy(existing = BackupSamples.comparingSummary.existing.copy(heldBy = WaitReason.THERMAL)))
+    composeRule.onNodeWithText("Telefono troppo caldo: il confronto riprende da solo. Non cambia cosa si carica.").assertExists()
+    button("Inizia ora").assertIsEnabled()
   }
 
   @Test

@@ -6,6 +6,8 @@
        backup_footer_<codice>_detail (un test confronta questo file con l'elenco dei codici). -->
   <string name="backup_footer_comparing">Sto confrontando con il NAS…</string>
   <string name="backup_footer_comparing_search">Sto cercando cosa c’è già sul NAS…</string>
+  <!-- Fase I (12/11): la ricerca sul NAS prima del primo backup e' ferma per una regola; sotto, quale (backup_footer_wait_*). -->
+  <string name="backup_footer_comparing_paused">Ricerca sul NAS in pausa</string>
   <plurals name="backup_footer_comparing_count">
     <item quantity="one">Sto confrontando %1$s foto con le copie sul NAS…</item>
     <item quantity="other">Sto confrontando %1$s foto con le copie sul NAS…</item>
@@ -25,6 +27,9 @@
        GF-24: le frasi di dettaglio dei lavori fermi hanno tutte il punto finale, come «Android ha fermato il lavoro: riprende da solo.» e come i dettagli dei
        problemi di questo file (`backup_footer_*_detail`); le attese brevi («Attesa carica», «Al prossimo giro») sono etichette, senza punto. -->
   <string name="backup_footer_wait_power_saver">Risparmio energetico acceso: riprende quando lo spegni.</string>
+  <!-- Fase I (12/11): le stesse parole della Diagnostica (Attivita'); prima il caldo e i dati del mese dicevano «Attesa delle regole». -->
+  <string name="backup_footer_wait_thermal">Telefono troppo caldo: riprende da solo quando si raffredda.</string>
+  <string name="backup_footer_wait_data_cap">Tetto dati del mese raggiunto.</string>
   <string name="backup_footer_wait_nas">Attesa NAS</string>
   <string name="backup_footer_wait_next_run">Al prossimo giro</string>
   <!-- D-13: il NAS tiene ancora occupato un file del backup (una connessione caduta che il NAS non ha ancora chiuso): si riprova da soli. -->

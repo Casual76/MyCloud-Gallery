@@ -32,6 +32,11 @@ class BackupSamplesTest {
     assertThat(BackupSamples.problems.map { it.code }).containsExactlyElementsIn(BackupProblemCode.entries)
     assertThat(BackupSamples.mediaStates.map { it::class }.toSet()).containsExactlyElementsIn(mediaCases)
     assertThat(BackupSamples.comparingSummary.comparing).isTrue()
+    // Fase I: il confronto delle copie simili non ferma il primo backup; la ricerca sul NAS si'.
+    assertThat(BackupSamples.comparingSummary.canStart).isTrue()
+    assertThat(BackupSamples.comparingSummary.similarToCompare).isEqualTo(120)
+    assertThat(BackupSamples.searchingSummary.canStart).isFalse()
+    assertThat(BackupSamples.searchingSummary.similarToCompare).isEqualTo(0)
     assertThat(BackupSamples.firstBackupSummary.comparing).isFalse()
     assertThat(BackupSamples.firstBackupSummary.toUpload.items).isEqualTo(312 + 4_782 + 324)
   }

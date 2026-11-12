@@ -97,7 +97,8 @@ internal object BackupEntryTexts {
       is BackupStatus.NotConfigured -> res.getString(R.string.settings_backup_not_configured)
       BackupStatus.TestOnly -> res.getString(R.string.settings_backup_test_only)
       is BackupStatus.FirstBackupReady ->
-        res.getString(if (status.summary.comparing) R.string.settings_backup_first_comparing else R.string.settings_backup_first_ready)
+        // Fase I (12/11): «Preparo» solo finche' la ricerca sul NAS non e' finita; il confronto delle copie simili non ferma il primo backup.
+        res.getString(if (!status.summary.canStart) R.string.settings_backup_first_comparing else R.string.settings_backup_first_ready)
       is BackupStatus.UpToDate -> res.getString(R.string.settings_backup_up_to_date)
       is BackupStatus.Waiting -> res.getString(R.string.settings_backup_waiting, ItalianCount.format(status.items))
       is BackupStatus.Running -> res.getString(R.string.settings_backup_running, ItalianCount.format(status.done), ItalianCount.format(status.total))

@@ -46,6 +46,7 @@ import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccess
+import dev.pampa.mycloudgallery.core.nasmedia.contract.NasScanStatus
 import dev.pampa.mycloudgallery.core.nasmedia.contract.OwnChanges
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.NasArea
@@ -965,11 +966,16 @@ class BackupGraph(
     } catch (e: Exception) {
       0
     }
-    footerFlow.value = BackupStatusReducers.footer(status, similar.progress.value.pending, incomingProblems)
+    footerFlow.value = BackupStatusReducers.footer(status, incomingProblems)
     progress.snapshot()?.let { text -> if (!stopped.get()) memory.setProgress(text) }
     // BK-13: "Sto cercando cosa c'e' gia' sul NAS" e' provvisorio e il riepilogo in cache vale un minuto; se nessun altro evento arriva, lo stato
     // non diventerebbe mai "assestato". Un solo ricalcolo, fra un minuto, finche' il riepilogo e' provvisorio.
-    if (status is BackupStatus.FirstBackupReady && status.summary.comparing) recheckLater(summaryCache.recheckInMs(monotonicMs()) ?: SUMMARY_REFRESH_MS)
+    if (status is BackupStatus.FirstBackupReady && status.summary.comparing) {
+      // Fase I (12/11): mentre la scansione dell'area privata gira, il numero dei file gia' guardati e il motivo di una pausa si rileggono piu'
+      // spesso (costano poco: il riepilogo resta quello in cache).
+      val wait = summaryCache.recheckInMs(monotonicMs()) ?: SUMMARY_REFRESH_MS
+      recheckLater(if (status.summary.canStart) wait else minOf(wait, SCAN_REFRESH_MS))
+    }
   }
 
   private fun recheckLater(afterMs: Long) {
@@ -1196,8 +1202,24 @@ class BackupGraph(
     val counts = if (sources.isEmpty) SafetyCounts.ZERO else p.backupCatalog.safetyCounts(sources)
     val key = summaryKey(sources, similar.progress.value.pending, counts)
     val now = monotonicMs()
-    summaryCache.fresh(key, now)?.let { return@withLock it }
-    p.planner.summary().also { summaryCache.put(key, now, it) }
+    val base = summaryCache.fresh(key, now) ?: p.planner.summary().also { summaryCache.put(key, now, it) }
+    base.copy(existing = live(base.existing))
+  }
+
+  /**
+   * Fase I (12/11): sopra il riepilogo (anche quello in cache) quello che cambia da un minuto all'altro e non tocca i numeri: **perche'** il lavoro
+   * che si aspetta e' fermo adesso (la scansione finche' non e' finita, poi la preparazione delle anteprime per il confronto delle copie simili),
+   * dallo stesso motore delle regole della Diagnostica, e quanti file del NAS la scansione ha gia' guardato. Il piano non lo legge.
+   */
+  private suspend fun live(state: ExistingCopiesState): ExistingCopiesState {
+    val request = when {
+      !state.privateAreaScanned -> WorkRequest.Background(BackgroundActivity.INDEX_SYNC)
+      state.similarPending > 0 -> WorkRequest.Background(BackgroundActivity.PREPARATION, writesToNas = true)
+      else -> return state
+    }
+    val held = BackupStatusReducers.waitReasonOf(nasInputs.rules.evaluate(request)).takeUnless { it == WaitReason.NEXT_RUN }
+    val scan = if (state.privateAreaScanned) null else privateShare()?.let { share -> nas.runtime?.scannerOf(share)?.status?.value as? NasScanStatus.Scanning }
+    return state.copy(heldBy = held, scanSeen = scan?.filesSeen, scanTotal = scan?.filesTotal)
   }
 
   private fun summaryKey(sources: BackupSources, pending: Int, counts: SafetyCounts): String =
@@ -1280,6 +1302,9 @@ class BackupGraph(
     private val REFRESH_GAP: Duration = 1.seconds
     private const val EXCLUSIVE_POLL_MS: Long = 500L
     private const val SUMMARY_REFRESH_MS: Long = 60_000L
+
+    /** Fase I: ogni quanto si rilegge l'avanzamento della scansione dell'area privata (e il motivo di una pausa) mentre il primo backup aspetta. */
+    private const val SCAN_REFRESH_MS: Long = 10_000L
     private const val LOW_STORAGE_BYTES: Long = 1L shl 30
     private const val RETRY_LIMIT: Int = 5_000
   }

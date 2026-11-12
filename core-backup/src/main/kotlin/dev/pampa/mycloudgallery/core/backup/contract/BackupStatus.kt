@@ -251,9 +251,24 @@ data class SummaryCount(val photos: Int, val videos: Int, val photoBytes: Long, 
  * ("Sto cercando cosa c'e' gia' sul NAS…") e del confronto delle copie simili ("Sto confrontando 120 foto…"). Lo legge la porta
  * [ExistingCopiesProgress], che `:app` lega alla scansione (core-nasmedia) e al rilevatore delle copie simili (core-library, P15).
  */
-data class ExistingCopiesState(val privateAreaScanned: Boolean, val similarPending: Int) {
+data class ExistingCopiesState(
+  val privateAreaScanned: Boolean,
+  val similarPending: Int,
+  /**
+   * Fase I (12/11, aggiunta compatibile): perche' il lavoro che si aspetta e' **fermo adesso** per una regola delle attivita' (la scansione
+   * dell'area privata finche' non e' finita, poi la preparazione delle anteprime che serve al confronto delle copie simili): il telefono caldo,
+   * la batteria, la rete, i dati del mese. Null = puo' girare. La da' `:app` dal motore delle regole, lo stesso della Diagnostica; il piano
+   * non la legge.
+   */
+  val heldBy: WaitReason? = null,
+  /** Fase I: quanti file del NAS la scansione dell'area privata ha gia' guardato, mentre gira (null = non sta scandendo o non si sa). */
+  val scanSeen: Int? = null,
+  /** Fase I: quanti file ha l'area privata, se la scansione lo sa gia' (null = non si sa). */
+  val scanTotal: Int? = null,
+) {
   init {
     require(similarPending >= 0) { "Conteggio negativo." }
+    require((scanSeen ?: 0) >= 0 && (scanTotal ?: 0) >= 0) { "Conteggio negativo." }
   }
 
   /** Niente da aspettare: i numeri del riepilogo sono definitivi. */
@@ -325,8 +340,18 @@ data class BackupSummary(
    */
   val estimateNow: BackupEstimate? = null,
 ) {
-  /** "Sto ancora confrontando": i tre numeri non sono ancora definitivi. */
+  /** "Sto ancora confrontando": i tre numeri non sono ancora definitivi (la cache del riepilogo si rinfresca finche' e' vero). */
   val comparing: Boolean get() = !existing.settled
+
+  /**
+   * Fase I (12/11): il primo backup **puo' partire**: la scansione dell'area privata e' finita, lo stesso cancello del piano
+   * (`DefaultBackupPlanner.next`) e delle tappe. Il confronto delle copie simili non lo ferma: quelle foto si caricano comunque (D36), il
+   * confronto decide solo con quale copia del NAS si vedranno insieme.
+   */
+  val canStart: Boolean get() = existing.privateAreaScanned
+
+  /** Fase I: le foto che aspettano ancora il confronto con le copie simili, a scansione finita (0 prima); non fermano niente. */
+  val similarToCompare: Int get() = if (existing.privateAreaScanned) existing.similarPending else 0
 
   /** Da caricare: M + K. */
   val toUpload: SummaryCount get() = similar + fresh

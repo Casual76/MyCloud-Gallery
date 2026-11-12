@@ -62,7 +62,7 @@ class BackupPiecesTest {
     assertThat(BackupStatusReducers.footer(BackupStatus.Stopped(StopBy.SYSTEM), 0)).isEqualTo(LibraryBackupStatus.Paused(byUser = false))
     assertThat(BackupStatusReducers.footer(BackupStatus.Stopped(StopBy.RESET), 0)).isEqualTo(LibraryBackupStatus.Idle)
     // I file ricevuti e non salvati pesano piu' della pausa (e portano alla stessa pagina).
-    assertThat(BackupStatusReducers.footer(BackupStatus.Stopped(StopBy.USER), 0, incomingProblems = 2))
+    assertThat(BackupStatusReducers.footer(BackupStatus.Stopped(StopBy.USER), incomingProblems = 2))
       .isEqualTo(LibraryBackupStatus.Problem(BackupStatusReducers.INCOMING_FAILED_CODE, 2))
   }
 
@@ -73,11 +73,14 @@ class BackupPiecesTest {
       linked = SummaryCount(photos = 3, videos = 0, photoBytes = 3, videoBytes = 0),
     )
     assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(settled), 0)).isEqualTo(LibraryBackupStatus.Queued(13, LibraryBackupWait.NEXT_RUN))
+    // Fase I (12/11): a scansione finita il primo backup e' pronto anche con copie simili da confrontare (non fermano niente): il piede non dice «aspetta».
     val comparing = settled.copy(existing = ExistingCopiesState(privateAreaScanned = true, similarPending = 7))
-    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(comparing), similarPending = 7)).isEqualTo(LibraryBackupStatus.Comparing(7))
-    // Finche' la scansione dell'area privata non e' finita il numero dei confronti non si dice (non e' definitivo).
+    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(comparing))).isEqualTo(LibraryBackupStatus.Queued(13, LibraryBackupWait.NEXT_RUN))
+    // Finche' la scansione dell'area privata non e' finita si cerca; se una regola la ferma, il piede dice quale.
     val scanning = settled.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 7))
-    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(scanning), similarPending = 7)).isEqualTo(LibraryBackupStatus.Comparing(null))
+    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(scanning))).isEqualTo(LibraryBackupStatus.Comparing(null))
+    val hot = settled.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0, heldBy = BackupWait.THERMAL))
+    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(hot))).isEqualTo(LibraryBackupStatus.Comparing(null, LibraryBackupWait.THERMAL))
     assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(BackupSummary.EMPTY), 0)).isEqualTo(LibraryBackupStatus.Idle)
   }
 

@@ -111,6 +111,10 @@ internal abstract class BackupLibraryScreenshotBase(private val dark: Boolean, p
   @Test
   fun piedeConfronto() = shootFooter("piede-confronto", LibraryBackupStatus.Comparing(pending = 120))
 
+  /** Fase I (punto 5): la ricerca sul NAS ferma per il caldo dice il motivo vero, con la clessidra. */
+  @Test
+  fun piedeRicercaInPausa() = shootFooter("piede-ricerca-in-pausa", LibraryBackupStatus.Comparing(pending = null, wait = LibraryBackupWait.THERMAL))
+
   @Test
   fun piedeProblemaQuota() = shootFooter("piede-problema-quota", LibraryBackupStatus.Problem(code = "quota", count = 0))
 

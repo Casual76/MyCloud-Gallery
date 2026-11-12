@@ -23,8 +23,11 @@ sealed interface LibraryBackupStatus {
   /** D12: "Backup in prova" · "Si scrive solo nelle share di prova". */
   data object TestOnly : LibraryBackupStatus
 
-  /** §2.11: prima del primo backup si cerca cosa c'e' gia' sul NAS ("Sto cercando…", "Sto confrontando N foto…"). */
-  data class Comparing(val pending: Int?) : LibraryBackupStatus
+  /**
+   * §2.11: prima del primo backup si cerca cosa c'e' gia' sul NAS ("Sto cercando…", "Sto confrontando N foto…"). Fase I (12/11, aggiunta
+   * compatibile): [wait] = la ricerca e' ferma adesso per quella regola (il telefono caldo, la batteria…): il piede dice quella, non "sto cercando".
+   */
+  data class Comparing(val pending: Int?, val wait: LibraryBackupWait? = null) : LibraryBackupStatus
 
   /** "Tutto al sicuro" · "Oggi alle 03:12": l'ultimo giro finito all'istante [atNasMillis] (null = non noto). */
   data class AllSafe(val atNasMillis: Long?) : LibraryBackupStatus
@@ -91,6 +94,12 @@ enum class LibraryBackupWait {
 
   /** FAB-4: il risparmio energetico di Android e' acceso e l'impostazione lo rispetta: riprende quando lo si spegne. */
   POWER_SAVER,
+
+  /** Fase I (12/11): il telefono e' troppo caldo; riprende da solo quando si raffredda. */
+  THERMAL,
+
+  /** Fase I (12/11): il tetto dei dati del mese e' raggiunto. */
+  DATA_CAP,
 
   /** Un altro motivo del motore delle regole (Diagnostica → Attivita' lo dice per esteso). */
   OTHER,

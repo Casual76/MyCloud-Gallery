@@ -66,6 +66,8 @@ class LibraryCloudTest {
       // I4: il backup vero non ancora acceso e' una pausa, come nella pagina Backup.
       LibraryBackupStatus.TestOnly to GalleryCloudState.Paused,
       LibraryBackupStatus.Comparing(pending = 3) to GalleryCloudState.Syncing,
+      // Fase I (12/11): ferma per il caldo e' un'attesa.
+      LibraryBackupStatus.Comparing(pending = null, wait = LibraryBackupWait.THERMAL) to GalleryCloudState.Waiting,
       allSafe to GalleryCloudState.Saved,
       LibraryBackupStatus.Queued(items = 312, wait = LibraryBackupWait.CHARGING) to GalleryCloudState.Waiting,
       LibraryBackupStatus.FirstBackup(done = 1, total = 10, etaMillis = null) to GalleryCloudState.Syncing,

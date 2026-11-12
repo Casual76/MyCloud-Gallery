@@ -77,28 +77,28 @@ class IncomingProblemWatcherTest {
   @Test
   fun ilPiedeDiceIFileRicevutiNonSalvatiQuandoNonHaNienteDiPiuUrgente() {
     // Il piede muto, "Tutto al sicuro" e "N in coda" lasciano il posto ai file non salvati.
-    assertThat(BackupStatusReducers.footer(BackupStatus.NotConfigured(emptySet()), 0, incomingProblems = 2)).isEqualTo(problem)
-    assertThat(BackupStatusReducers.footer(BackupStatus.UpToDate(10, 5L), 0, incomingProblems = 2)).isEqualTo(problem)
-    assertThat(BackupStatusReducers.footer(BackupStatus.Waiting(312, 1L, dev.pampa.mycloudgallery.core.backup.contract.WaitReason.CHARGING), 0, incomingProblems = 2))
+    assertThat(BackupStatusReducers.footer(BackupStatus.NotConfigured(emptySet()), incomingProblems = 2)).isEqualTo(problem)
+    assertThat(BackupStatusReducers.footer(BackupStatus.UpToDate(10, 5L), incomingProblems = 2)).isEqualTo(problem)
+    assertThat(BackupStatusReducers.footer(BackupStatus.Waiting(312, 1L, dev.pampa.mycloudgallery.core.backup.contract.WaitReason.CHARGING), incomingProblems = 2))
       .isEqualTo(problem)
-    assertThat(BackupStatusReducers.footer(BackupStatus.Stopped(dev.pampa.mycloudgallery.core.backup.contract.StopBy.USER), 0, incomingProblems = 2)).isEqualTo(problem)
+    assertThat(BackupStatusReducers.footer(BackupStatus.Stopped(dev.pampa.mycloudgallery.core.backup.contract.StopBy.USER), incomingProblems = 2)).isEqualTo(problem)
   }
 
   @Test
   fun ilPiedeNonCopreUnProblemaDelBackupNeUnGiroInCorso() {
     val quota = BackupStatus.Problem(dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode.QUOTA, 0)
-    assertThat(BackupStatusReducers.footer(quota, 0, incomingProblems = 2)).isEqualTo(LibraryBackupStatus.Problem("quota", 0))
-    assertThat(BackupStatusReducers.footer(BackupStatus.TestOnly, 0, incomingProblems = 2)).isEqualTo(LibraryBackupStatus.TestOnly)
+    assertThat(BackupStatusReducers.footer(quota, incomingProblems = 2)).isEqualTo(LibraryBackupStatus.Problem("quota", 0))
+    assertThat(BackupStatusReducers.footer(BackupStatus.TestOnly, incomingProblems = 2)).isEqualTo(LibraryBackupStatus.TestOnly)
     val running = BackupStatus.Running(
       dev.pampa.mycloudgallery.core.backup.contract.BackupKind.PHOTOS, 12, 40, 1, 2, null, dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger.USER_NOW,
     )
-    assertThat(BackupStatusReducers.footer(running, 0, incomingProblems = 2)).isEqualTo(LibraryBackupStatus.Running(12, 40, null))
+    assertThat(BackupStatusReducers.footer(running, incomingProblems = 2)).isEqualTo(LibraryBackupStatus.Running(12, 40, null))
   }
 
   @Test
   fun senzaFileNonSalvatiIlPiedeEQuelloDiSempre() {
     assertThat(BackupStatusReducers.footer(BackupStatus.UpToDate(10, 5L), 0)).isEqualTo(LibraryBackupStatus.AllSafe(5L))
-    assertThat(BackupStatusReducers.footer(BackupStatus.UpToDate(10, 5L), 0, incomingProblems = 0)).isEqualTo(LibraryBackupStatus.AllSafe(5L))
-    assertThat(BackupStatusReducers.footer(BackupStatus.NotConfigured(emptySet()), 0, incomingProblems = 0)).isEqualTo(LibraryBackupStatus.Idle)
+    assertThat(BackupStatusReducers.footer(BackupStatus.UpToDate(10, 5L), incomingProblems = 0)).isEqualTo(LibraryBackupStatus.AllSafe(5L))
+    assertThat(BackupStatusReducers.footer(BackupStatus.NotConfigured(emptySet()), incomingProblems = 0)).isEqualTo(LibraryBackupStatus.Idle)
   }
 }

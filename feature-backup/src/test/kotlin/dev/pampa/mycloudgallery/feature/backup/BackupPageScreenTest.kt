@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.feature.backup
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.hasClickAction
@@ -231,10 +232,17 @@ class BackupPageScreenTest : ComposeBackupTest() {
   }
 
   @Test
-  fun ilPrimoBackupMentreConfrontaDiceChePrepara() {
-    start(BackupStatus.FirstBackupReady(BackupSamples.comparingSummary))
+  fun ilPrimoBackupMentreCercaDiceChePrepara() {
+    start(BackupStatus.FirstBackupReady(BackupSamples.searchingSummary))
     composeRule.onNodeWithText("Preparo il primo backup").assertExists()
-    composeRule.onNodeWithText("Sto confrontando 120 foto con le copie sul NAS…").assertExists()
+    composeRule.onNodeWithText("1.234 di 5.559 file del NAS guardati").assertExists()
+    // Fase I (punto 5): ferma per il caldo, la testata lo dice (e non «cerco»).
+    set(BackupStatus.FirstBackupReady(BackupSamples.heldSummary))
+    composeRule.onNodeWithText("Telefono troppo caldo: la ricerca riprende da sola").assertExists()
+    // Fase I: a ricerca finita e' pronto, anche con copie simili ancora da confrontare.
+    set(BackupStatus.FirstBackupReady(BackupSamples.comparingSummary))
+    composeRule.onNodeWithText("Pronto per partire").assertExists()
+    composeRule.onAllNodes(hasText("Preparo il primo backup")).assertCountEquals(0)
   }
 
   @Test
@@ -386,11 +394,16 @@ class BackupPageScreenTest : ComposeBackupTest() {
   }
 
   @Test
-  fun idueTastiDelFoglioSonoSpentiMentreConfronta() {
-    ui.value = page(BackupStatus.FirstBackupReady(BackupSamples.comparingSummary), sheetOpen = true)
+  fun idueTastiDelFoglioSonoSpentiSoloMentreCerca() {
+    ui.value = page(BackupStatus.FirstBackupReady(BackupSamples.searchingSummary), sheetOpen = true)
     show { BackupPageScreen(state = ui.value, actions = pageActions(), onBack = {}) }
     button("Stanotte").assertIsNotEnabled()
     button("Inizia ora").assertIsNotEnabled()
-    composeRule.onAllNodes(hasText("Sto confrontando 120 foto con le copie sul NAS…", substring = true)).assertCountEquals(2)
+    composeRule.onAllNodes(hasText("1.234 di 5.559 file del NAS guardati", substring = true)).assertCountEquals(2)
+    // Fase I (12/11): il confronto delle copie simili non spegne le scelte.
+    composeRule.runOnIdle { ui.value = page(BackupStatus.FirstBackupReady(BackupSamples.comparingSummary), sheetOpen = true) }
+    composeRule.waitForIdle()
+    button("Stanotte").assertIsEnabled()
+    button("Inizia ora").assertIsEnabled()
   }
 }

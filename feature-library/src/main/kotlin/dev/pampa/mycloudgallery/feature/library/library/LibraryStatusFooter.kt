@@ -73,7 +73,15 @@ private val Digits = Regex("[0-9.,]+")
 internal fun backupFooterNote(status: LibraryBackupStatus): GalleryFooterNote? = when (status) {
   LibraryBackupStatus.Idle -> null
   LibraryBackupStatus.TestOnly -> footerNote(BackupFooterProblems.of("test_only"), count = 0)
-  is LibraryBackupStatus.Comparing -> GalleryFooterNote(
+  // Fase I (12/11): la ricerca ferma per una regola dice quale (il telefono caldo, la batteria…) con la clessidra, non "sto cercando" con la rotella.
+  is LibraryBackupStatus.Comparing -> status.wait?.let { wait ->
+    GalleryFooterNote(
+      tone = GalleryFooterTone.Waiting,
+      label = stringResource(R.string.backup_footer_comparing_paused),
+      glyph = Icons.Rounded.HourglassTop,
+      detail = stringResource(waitRes(wait)),
+    )
+  } ?: GalleryFooterNote(
     tone = GalleryFooterTone.Working,
     label = stringResource(R.string.backup_footer_comparing),
     busy = true,
@@ -154,6 +162,8 @@ private fun waitRes(wait: LibraryBackupWait): Int = when (wait) {
   LibraryBackupWait.NIGHT_WINDOW -> R.string.backup_footer_wait_night_window
   LibraryBackupWait.BATTERY -> R.string.backup_footer_wait_battery
   LibraryBackupWait.POWER_SAVER -> R.string.backup_footer_wait_power_saver
+  LibraryBackupWait.THERMAL -> R.string.backup_footer_wait_thermal
+  LibraryBackupWait.DATA_CAP -> R.string.backup_footer_wait_data_cap
   LibraryBackupWait.NAS -> R.string.backup_footer_wait_nas
   LibraryBackupWait.NEXT_RUN -> R.string.backup_footer_wait_next_run
   LibraryBackupWait.NAS_BUSY -> R.string.backup_footer_wait_nas_busy

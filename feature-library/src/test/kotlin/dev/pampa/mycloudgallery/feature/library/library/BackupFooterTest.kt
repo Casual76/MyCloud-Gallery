@@ -152,6 +152,9 @@ class BackupFooterTest {
       LibraryBackupWait.BATTERY to "Attesa batteria",
       // FAB-4: il risparmio energetico non e' la batteria bassa e ha la sua frase.
       LibraryBackupWait.POWER_SAVER to "Risparmio energetico acceso: riprende quando lo spegni.",
+      // Fase I (12/11): il caldo e i dati del mese con le parole della Diagnostica (prima «Attesa delle regole»).
+      LibraryBackupWait.THERMAL to "Telefono troppo caldo: riprende da solo quando si raffredda.",
+      LibraryBackupWait.DATA_CAP to "Tetto dati del mese raggiunto.",
       LibraryBackupWait.NAS to "Attesa NAS",
       LibraryBackupWait.NEXT_RUN to "Al prossimo giro",
       LibraryBackupWait.NAS_BUSY to "File occupato sul NAS, riprovo tra poco.",
@@ -189,6 +192,15 @@ class BackupFooterTest {
     composeRule.onNodeWithText("Sto cercando cosa c’è già sul NAS…").assertExists()
     show(LibraryBackupStatus.Comparing(pending = 120))
     composeRule.onNodeWithText("Sto confrontando 120 foto con le copie sul NAS…").assertExists()
+  }
+
+  /** Fase I (12/11): la ricerca ferma per una regola dice quale, non «sto cercando». */
+  @Test
+  fun laRicercaFermaDiceIlMotivoVero() {
+    show(LibraryBackupStatus.Comparing(pending = null, wait = LibraryBackupWait.THERMAL))
+    composeRule.onNodeWithText("Ricerca sul NAS in pausa").assertExists()
+    composeRule.onNodeWithText("Telefono troppo caldo: riprende da solo quando si raffredda.").assertExists()
+    assertThat(composeRule.onAllNodesWithText("Sto cercando cosa c’è già sul NAS…").fetchSemanticsNodes()).isEmpty()
   }
 
   @Test

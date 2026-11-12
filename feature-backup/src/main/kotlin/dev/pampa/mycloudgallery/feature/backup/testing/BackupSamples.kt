@@ -61,9 +61,20 @@ object BackupSamples {
     warnings = setOf(SummaryWarning.LONG_FIRST_BACKUP),
   )
 
-  /** Lo stesso riepilogo mentre si confronta ancora con le copie sul NAS (§2.11 punti 1 e 6). */
+  /**
+   * Lo stesso riepilogo a ricerca finita, con 120 foto ancora da confrontare con le copie simili (§2.11 punto 6). Fase I: i numeri ci sono e le scelte
+   * sono accese (il confronto non ferma niente).
+   */
   val comparingSummary: BackupSummary =
     firstBackupSummary.copy(existing = ExistingCopiesState(privateAreaScanned = true, similarPending = 120))
+
+  /** Fase I: la ricerca sul NAS in corso, con il numero dei file gia' guardati e il totale (§2.11 punto 1). */
+  val searchingSummary: BackupSummary =
+    firstBackupSummary.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0, scanSeen = 1_234, scanTotal = 5_559))
+
+  /** Fase I: la ricerca sul NAS ferma per una regola (il telefono troppo caldo). */
+  val heldSummary: BackupSummary =
+    firstBackupSummary.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0, heldBy = WaitReason.THERMAL))
 
   /** Un esempio per ogni caso di [BackupStatus] (problemi a parte: [problems]). */
   val statuses: List<BackupStatus> = listOf(

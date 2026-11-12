@@ -19,14 +19,16 @@ object BackupStatusReducers {
    * **`BackupStatus` ridotto a `LibraryBackupStatus` per il piede** (terza voce, D16): "Tutto al sicuro", "312 in coda", "Primo backup: 1.240
    * di 6.658", il problema piu' grave, "Backup in prova". Un backup non configurato non dice niente (la pagina lo spiega).
    *
-   * @param similarPending quanti candidati aspettano il confronto delle copie simili (§2.11 punto 6).
+   * Fase I (12/11): il primo backup "si prepara" solo finche' la scansione dell'area privata non e' finita (lo stesso cancello del piano); il
+   * confronto delle copie simili non ferma niente e il piede non lo dice. Se la scansione e' ferma per una regola, il piede dice quale.
+   *
    * @param incomingProblems IN-7: quanti file ricevuti da un'altra app non si sono caricati e aspettano un "Riprova" o uno "Scarta". Il piede lo dice
    *   (porta alla pagina Backup, dove sta "Ricevuti in coda") **quando non ha niente di piu' urgente**: un problema del backup, "Backup in prova", il
    *   confronto o un giro in corso restano al loro posto; "Tutto al sicuro", "N in coda", il backup fermo e il piede muto lasciano il posto ai file non
    *   salvati (un problema pesa piu' di una pausa, e porta alla stessa pagina).
    */
-  fun footer(status: BackupStatus, similarPending: Int, incomingProblems: Int = 0): LibraryBackupStatus {
-    val base = footerOf(status, similarPending)
+  fun footer(status: BackupStatus, incomingProblems: Int = 0): LibraryBackupStatus {
+    val base = footerOf(status)
     if (incomingProblems <= 0) return base
     return when (base) {
       LibraryBackupStatus.Idle, is LibraryBackupStatus.AllSafe, is LibraryBackupStatus.Queued, is LibraryBackupStatus.Paused ->
@@ -38,12 +40,12 @@ object BackupStatusReducers {
   /** Il codice stabile con cui il piede dice "N file ricevuti non salvati" (nessun `BackupProblemCode`: non e' un problema del backup delle foto). */
   const val INCOMING_FAILED_CODE: String = "incoming_failed"
 
-  private fun footerOf(status: BackupStatus, similarPending: Int): LibraryBackupStatus = when (status) {
+  private fun footerOf(status: BackupStatus): LibraryBackupStatus = when (status) {
     is BackupStatus.NotConfigured -> LibraryBackupStatus.Idle
     BackupStatus.TestOnly -> LibraryBackupStatus.TestOnly
     is BackupStatus.FirstBackupReady ->
-      if (status.summary.comparing) {
-        LibraryBackupStatus.Comparing(similarPending.takeIf { status.summary.existing.privateAreaScanned && it > 0 })
+      if (!status.summary.canStart) {
+        LibraryBackupStatus.Comparing(pending = null, wait = status.summary.existing.heldBy?.let(::waitOf))
       } else {
         // Il primo backup aspetta il tocco dell'utente: il piede lo conta fra le cose in coda e porta alla pagina.
         val items = status.summary.toUpload.items + status.summary.linked.items
@@ -76,7 +78,10 @@ object BackupStatusReducers {
     WaitReason.NEXT_RUN -> LibraryBackupWait.NEXT_RUN
     WaitReason.NAS_BUSY -> LibraryBackupWait.NAS_BUSY
     WaitReason.POWER_SAVER -> LibraryBackupWait.POWER_SAVER
-    WaitReason.THERMAL, WaitReason.DATA_CAP, WaitReason.COMPARING -> LibraryBackupWait.OTHER
+    // Fase I (12/11): il caldo e i dati del mese hanno la loro frase (prima: "Attesa delle regole").
+    WaitReason.THERMAL -> LibraryBackupWait.THERMAL
+    WaitReason.DATA_CAP -> LibraryBackupWait.DATA_CAP
+    WaitReason.COMPARING -> LibraryBackupWait.OTHER
   }
 
   /**

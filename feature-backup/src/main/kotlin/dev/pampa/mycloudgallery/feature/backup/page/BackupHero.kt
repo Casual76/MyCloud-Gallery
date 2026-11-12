@@ -66,6 +66,8 @@ import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryStatusMark
 import dev.pampa.mycloudgallery.core.designsystem.state.LocalWritesHeldByRelease
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
+import dev.pampa.mycloudgallery.feature.backup.first.heldRes
+import dev.pampa.mycloudgallery.feature.backup.first.searchText
 import dev.pampa.mycloudgallery.feature.backup.BackupDimens
 import dev.pampa.mycloudgallery.feature.backup.R
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
@@ -178,16 +180,15 @@ internal fun heroModel(status: BackupStatus, actions: BackupPageActions): HeroMo
   )
   is BackupStatus.FirstBackupReady -> {
     val summary = status.summary
-    if (summary.comparing) {
+    // Fase I (12/11): «Preparo» solo finche' la ricerca sul NAS non e' finita (lo stesso cancello del piano); il confronto delle copie simili non
+    // ferma niente e la testata non lo dice. Ferma per una regola, dice quale con la clessidra, senza l'arco che gira.
+    if (!summary.canStart) {
+      val held = summary.existing.heldBy
       HeroModel(
-        mark = GalleryIconStatus.Running,
+        mark = if (held != null) GalleryIconStatus.Waiting else GalleryIconStatus.Running,
         label = stringResource(R.string.backup_status_first_comparing_title),
-        line = if (!summary.existing.privateAreaScanned) {
-          stringResource(R.string.backup_first_searching)
-        } else {
-          pluralStringResource(R.plurals.backup_first_comparing, summary.existing.similarPending, BackupText.count(summary.existing.similarPending))
-        },
-        busy = true,
+        line = if (held != null) stringResource(R.string.backup_hero_search_held, stringResource(heldRes(held))) else searchText(summary.existing),
+        busy = held == null,
         actions = listOf(HeroAction(stringResource(R.string.backup_status_first_see), Icons.Rounded.Checklist, actions.openSheet)),
         calmAction = true,
       )

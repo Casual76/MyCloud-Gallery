@@ -140,6 +140,9 @@ class BackupEntryTest {
       "Da controllare",
     )
     assertThat(texts.none { it.contains("prova") }).isTrue()
+    // Fase I (12/11): a ricerca finita il primo backup e' pronto anche con copie simili da confrontare.
+    val comparing = BackupStatus.FirstBackupReady(summary.copy(existing = ExistingCopiesState(privateAreaScanned = true, similarPending = 120)))
+    assertThat(BackupEntryTexts.subtitleOf(rule.activity, comparing)).isEqualTo("Pronto")
   }
 
   @Test

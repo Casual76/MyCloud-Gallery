@@ -5,17 +5,41 @@
   <string name="backup_first_headline">Da caricare: %1$s foto e video, %2$s.</string>
   <string name="backup_first_headline_eta">Stanotte: %1$s.</string>
   <string name="backup_first_headline_never">Con le regole di adesso il backup non parte.</string>
-  <string name="backup_first_headline_comparing">Sto ancora contando: quello che c’è già sul NAS non si ricarica.</string>
+  <!-- Fase I (12/11): finche' si cerca sul NAS le scelte aspettano e il foglio dice perche' si cerca, in positivo. -->
+  <string name="backup_first_headline_search">Prima cerco cosa c’è già sul NAS, così non lo ricarico.</string>
   <string name="backup_first_tonight">Stanotte</string>
   <string name="backup_first_now">Inizia ora</string>
   <string name="backup_first_later">Non ora</string>
 
-  <string name="backup_first_searching">Sto cercando cosa c’è già sul NAS…</string>
-  <plurals name="backup_first_comparing">
-    <item quantity="one">Sto confrontando %1$s foto con le copie sul NAS…</item>
-    <item quantity="other">Sto confrontando %1$s foto con le copie sul NAS…</item>
+  <!-- Fase I (12/11): la riga della ricerca sul NAS (con la barra) e quella piccola del confronto delle copie simili, che non ferma niente. -->
+  <string name="backup_first_searching">Cerco cosa c’è già sul NAS</string>
+  <plurals name="backup_first_search_seen">
+    <item quantity="one">%1$s file del NAS guardato</item>
+    <item quantity="other">%1$s file del NAS guardati</item>
   </plurals>
-  <string name="backup_first_provisional">I numeri sono provvisori finché non ho finito.</string>
+  <string name="backup_first_search_of">%1$s di %2$s file del NAS guardati</string>
+  <string name="backup_first_search_detail">Può durare qualche minuto.</string>
+  <string name="backup_first_search_held">La ricerca riprende da sola.</string>
+  <plurals name="backup_first_compare">
+    <item quantity="one">Ancora %1$s foto da confrontare</item>
+    <item quantity="other">Ancora %1$s foto da confrontare</item>
+  </plurals>
+  <string name="backup_first_compare_detail">Il confronto continua da solo. Non cambia cosa si carica.</string>
+  <string name="backup_first_compare_held">%1$s: il confronto riprende da solo. Non cambia cosa si carica.</string>
+
+  <!-- Fase I (12/11): perche' un lavoro e' fermo adesso (una regola delle attivita'), con le parole della Diagnostica. -->
+  <string name="backup_held_charging">In attesa della corrente</string>
+  <string name="backup_held_wifi">In attesa di una rete</string>
+  <string name="backup_held_home_wifi">In attesa del Wi-Fi di casa</string>
+  <string name="backup_held_night_window">In attesa della fascia oraria</string>
+  <string name="backup_held_battery">Batteria sotto la soglia</string>
+  <string name="backup_held_power_saver">Risparmio energetico attivo</string>
+  <string name="backup_held_thermal">Telefono troppo caldo</string>
+  <string name="backup_held_data_cap">Tetto dati del mese raggiunto</string>
+  <string name="backup_held_nas">NAS non raggiungibile</string>
+  <string name="backup_held_nas_busy">NAS occupato</string>
+  <string name="backup_held_other">In pausa</string>
+  <string name="backup_hero_search_held">%1$s: la ricerca riprende da sola</string>
 
   <string name="backup_first_linked">%1$s già sul NAS</string>
   <string name="backup_first_linked_detail">Identici byte per byte: si collegano, non si ricaricano.</string>

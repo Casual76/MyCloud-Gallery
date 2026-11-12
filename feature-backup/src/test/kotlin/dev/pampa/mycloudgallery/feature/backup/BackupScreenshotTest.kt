@@ -117,7 +117,19 @@ abstract class BackupScreenshotBase(private val dark: Boolean, private val devic
 
   @Test
   fun paginaCercaSulNas() = shoot("pagina-cerca-sul-nas") {
-    Page(page(BackupStatus.FirstBackupReady(BackupSamples.comparingSummary.copy(existing = dev.pampa.mycloudgallery.core.backup.contract.ExistingCopiesState(false, 0)))))
+    Page(page(BackupStatus.FirstBackupReady(BackupSamples.searchingSummary)))
+  }
+
+  /** Fase I (punto 5): la ricerca ferma per il caldo, con la clessidra. */
+  @Test
+  fun paginaCercaInPausa() = shoot("pagina-cerca-in-pausa") {
+    Page(page(BackupStatus.FirstBackupReady(BackupSamples.heldSummary)))
+  }
+
+  /** Fase I: a ricerca finita, con copie simili da confrontare, la pagina e' pronta. */
+  @Test
+  fun paginaProntaConConfronto() = shoot("pagina-pronto-con-confronto") {
+    Page(page(BackupStatus.FirstBackupReady(BackupSamples.comparingSummary)))
   }
 
   // --- Il foglio del primo backup ---------------------------------------------------------------------------------------------
@@ -139,6 +151,14 @@ abstract class BackupScreenshotBase(private val dark: Boolean, private val devic
 
   @Test
   fun foglioPrimoBackupMentreConfronta() = shoot("foglio-primo-backup-confronto") { SheetOverPage(BackupSamples.comparingSummary) }
+
+  /** Fase I: la ricerca con il numero dei file guardati e la barra. */
+  @Test
+  fun foglioPrimoBackupCercaConNumero() = shoot("foglio-primo-backup-cerca-numero") { SheetOverPage(BackupSamples.searchingSummary) }
+
+  /** Fase I (punto 5): la ricerca ferma per il caldo. */
+  @Test
+  fun foglioPrimoBackupCercaInPausa() = shoot("foglio-primo-backup-cerca-in-pausa") { SheetOverPage(BackupSamples.heldSummary) }
 
   @Test
   fun foglioPrimoBackupCercaSulNas() = shoot("foglio-primo-backup-cerca-sul-nas") {

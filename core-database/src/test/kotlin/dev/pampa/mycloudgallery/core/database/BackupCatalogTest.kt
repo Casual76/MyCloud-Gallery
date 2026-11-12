@@ -516,6 +516,57 @@ class BackupCatalogTest : CatalogTestBase() {
     assertThat(listOf(safe, unverified, common, lost)).hasSize(4)
   }
 
+  /**
+   * Pacchetto F (12/11, prove sul campo: "Screenshot · 1.340 da salvare" ma "503 in coda", anello fermo all'84%). I vecchi "Screenshot_..." dell'area
+   * privata (il tipo lo decide il nome, anche per i file del NAS) contavano nella riga "Screenshot" del backup del telefono: quelli senza un gemello sul
+   * telefono come copie mai rilette ("in coda" per sempre, mai candidati), quelli con un gemello come media rimasti senza posizioni dopo che la deduplica
+   * ha dato la loro copia al media del telefono ("da salvare" per sempre). Adesso la riga conta solo i media che il telefono ha avuto.
+   */
+  @Test
+  fun f_iVecchiScreenshotDelNasNonContanoNellaRigaDelTelefono() = runBlocking<Unit> {
+    val screenshots = setOf<CatalogSource>(CatalogSource.Screenshots)
+    fun nasScreenshot(path: String, fingerprint: Fingerprint) =
+      Observation(nasLocation(path), FileStamp(fingerprint.size, T0), fingerprint, MediaKind.PHOTO, MediaSource.SCREENSHOT)
+    val archived = "Camera Backup/Screenshots/Screenshot_1.png"
+    // Uno screenshot del telefono e la sua copia identica nel vecchio archivio: letta dal NAS ha solo l'impronta rapida, quindi e' un media a parte.
+    val phone = addPhone(1, path = "DCIM/Screenshots/", source = MediaSource.SCREENSHOT)
+    val twin = catalog.recordAll(listOf(nasScreenshot(archived, smallQuick(1))), MediaCatalog.WhenUndecided.KEEP_SEPARATE, seenAt = T0).single().mediaId!!
+    // Uno screenshot vecchio che sul telefono non c'e' piu' da tempo: solo nel vecchio archivio.
+    val old = catalog.recordAll(listOf(nasScreenshot("Camera Backup/Screenshots/Screenshot_old.png", smallQuick(50))), MediaCatalog.WhenUndecided.KEEP_SEPARATE, seenAt = T0)
+      .single().mediaId!!
+    assertThat(twin).isNotEqualTo(phone)
+    assertThat(catalog.safety(old)!!.status).isEqualTo(SafetyStatus.PRIVATE_COPY_UNVERIFIED)
+
+    // La deduplica del primo backup: la copia del vecchio archivio, riletta con lo SHA-256 del telefono, passa al media del telefono.
+    catalog.attachCopies(listOf(AttachedCopy(phone, catalog.versionOf(phone), nasLocation(archived), FileStamp(2_000, T0, null), T0)))
+    assertThat(catalog.safety(phone)!!.status).isEqualTo(SafetyStatus.SAFE)
+    // Il media del vecchio archivio resta senza posizioni (e' la deduplica, qui non toccata): invisibile nella Libreria, "perso" per i conteggi.
+    assertThat(catalog.media(twin)!!.locations).isEmpty()
+    assertThat(catalog.safety(twin)!!.status).isEqualTo(SafetyStatus.LOST)
+    assertThat(db.mediaDao().get(twin.value)!!.presence).isEqualTo("none")
+    // Nessuno dei due e' un candidato: "Fai ora" non puo' farci niente.
+    assertThat(candidates(screenshots)).isEmpty()
+
+    // Prima della correzione: 3 media, 1 al sicuro, 1 "in coda" (lo schema del telefono). Adesso solo lo screenshot del telefono, al sicuro.
+    assertThat(catalog.safetyCounts(screenshots)).isEqualTo(CatalogSafetyCounts(safe = 1, unverified = 0, onlyCommonCopy = 0, noNasCopy = 0, lost = 0, problems = emptyMap()))
+    assertThat(catalog.queuedBytes(screenshots)).isEqualTo(0L)
+    // Un problema di una copia del vecchio archivio non e' un problema del backup del telefono.
+    catalog.markBackupProblem(old, "verify_failed")
+    assertThat(catalog.safetyCounts(screenshots).problems).isEmpty()
+
+    // Uno screenshot salvato dal telefono e poi cancellato dal telefono resta nella riga, anche quando la sua posizione del telefono e' dimenticata
+    // (60 giorni dopo): l'ha caricato questo telefono (il diario lo dice).
+    val freed = addPhone(4, path = "DCIM/Screenshots/", source = MediaSource.SCREENSHOT)
+    catalog.attachCopies(listOf(AttachedCopy(freed, catalog.versionOf(freed), nasLocation("Backup/S25/2025/10/Screenshot_4.png"), FileStamp(2_000, T0, null), T0)))
+    db.backupDiaryDao().insert(backupItemEntity(freed, catalog.versionOf(freed), state = "done"))
+    assertThat(catalog.markVanished(Db.phone("IMG_4.jpg", 104, path = "DCIM/Screenshots/").key)).isTrue()
+    assertThat(catalog.safetyCounts(screenshots).safe).isEqualTo(2)
+    now += 61 * DAY
+    assertThat(catalog.purgeExpiredAbsences()).isEqualTo(1)
+    assertThat(catalog.media(freed)!!.locations.none { it.isPhone }).isTrue()
+    assertThat(catalog.safetyCounts(screenshots)).isEqualTo(CatalogSafetyCounts(safe = 2, unverified = 0, onlyCommonCopy = 0, noNasCopy = 0, lost = 0, problems = emptyMap()))
+  }
+
   // --- Lotti di copie ---------------------------------------------------------------------------------------------------------
 
   private suspend fun batchOf(count: Int, first: Int = 1): List<AttachedCopy> = (first until first + count).map { n ->

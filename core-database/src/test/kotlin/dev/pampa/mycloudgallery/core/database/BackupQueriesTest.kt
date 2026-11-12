@@ -258,7 +258,9 @@ class BackupQueriesTest : CatalogTestBase() {
     val millis = (System.nanoTime() - started) / 1_000_000
     println("safetyCounts su 100.000 media: $counts in $millis ms")
     assertThat(counts.noNasCopy).isEqualTo(350)
-    assertThat(counts.safe).isEqualTo(99_650)
+    // Pacchetto F (12/11): i 93.000 solo sul NAS il telefono non li ha mai avuti (nessuna posizione del telefono, nessun caricamento da qui):
+    // non sono delle righe del backup del telefono. Prima la riga "Fotocamera" ne contava 99.650 al sicuro per 7.000 foto sul telefono.
+    assertThat(counts.safe).isEqualTo(6_650)
     assertThat(millis).isLessThan(1_500)
   }
 

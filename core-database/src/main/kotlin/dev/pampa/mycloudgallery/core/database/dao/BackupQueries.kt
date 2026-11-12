@@ -157,9 +157,15 @@ object BackupQueries {
    * Il media appartiene a una sorgente: per `MediaSource`, o con una posizione del telefono in una delle cartelle. Con [outside] (le cartelle
    * scelte, per le righe della fotocamera e degli screenshot della pagina Backup) **non** ci appartiene un media con una posizione del telefono
    * in una di quelle cartelle: la cartella scelta vince sul tipo (O-2, come il piano), e ogni media sta in una riga sola.
+   *
+   * Pacchetto F (12/11, prove sul campo): per `MediaSource` solo i media che **questo telefono ha avuto** ([ON_THIS_PHONE], la regola del
+   * guardiano D2), come gia' per le cartelle. Il tipo si decide anche dal nome del file, e la lettura del NAS lo decide per i file del NAS: i vecchi
+   * "Screenshot_..." dell'area privata finivano nella riga "Screenshot" senza che il backup del telefono potesse salvarli (copie mai rilette,
+   * "in coda" per sempre, e media rimasti senza posizioni dopo la deduplica: sul telefono dell'utente, con ogni probabilita', i 1.340 "da salvare"
+   * contro 503 "in coda"). La riga e l'anello non arrivavano mai al 100%.
    */
   private fun inSources(filter: SourceFilter, args: MutableList<Any?>, outside: Collection<CatalogSource.Folder> = emptyList()): String {
-    val media = filter.mediaClause("m", args)
+    val media = filter.mediaClause("m", args).let { if (it == "0") it else "($it AND $ON_THIS_PHONE)" }
     val belongs = if (filter.folders.isEmpty()) {
       "($media)"
     } else {
@@ -253,11 +259,16 @@ object BackupQueries {
     )
   }
 
-  /** Campo, gruppo A (D2): il media e' stato su questo telefono (una sua posizione del telefono, anche assente, o un suo caricamento dal telefono). */
-  private const val FORMER_PHONE_MEDIA: String =
-    "AND (EXISTS (SELECT 1 FROM media_version pv JOIN media_location pl ON pl.version_id = pv.version_id " +
+  /**
+   * Campo, gruppo A (D2): il media e' stato su questo telefono (una sua posizione del telefono, anche assente, o un suo caricamento dal telefono).
+   * Sul media `m`; gli alias `pv`, `pl`, `pb` sono solo suoi.
+   */
+  private const val ON_THIS_PHONE: String =
+    "(EXISTS (SELECT 1 FROM media_version pv JOIN media_location pl ON pl.version_id = pv.version_id " +
       "WHERE pv.media_id = m.media_id AND pl.location_type = 'phone') " +
-      "OR EXISTS (SELECT 1 FROM backup_item pb WHERE pb.media_id = m.media_id AND pb.kind = 'new_copy')) "
+      "OR EXISTS (SELECT 1 FROM backup_item pb WHERE pb.media_id = m.media_id AND pb.kind = 'new_copy'))"
+
+  private const val FORMER_PHONE_MEDIA: String = "AND $ON_THIS_PHONE "
 
   /**
    * Le copie private di una share mai rilette, con l'hash della versione noto. **Mai** quelle la cui rilettura non e' tornata (segnate

@@ -71,6 +71,8 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoGlyph
 import dev.pampa.mycloudgallery.core.designsystem.design.glyph
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.icon.glyph
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRing
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRingDefaults
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
@@ -155,6 +157,10 @@ sealed interface LibraryNasSpace {
 internal sealed interface CloudItem {
   val state: GalleryCloudState
 
+  /** La pausa delle recinzioni (il backup vero non ancora acceso, l'indice solo sul telefono): non l'ha chiesta l'utente e non toglie lo spazio. */
+  val isFence: Boolean
+    get() = (this is Backup && status == LibraryBackupStatus.TestOnly) || (this is Nas && status == LibraryNasStatus.LocalOnly)
+
   data class Network(val status: LibraryNetworkStatus, override val state: GalleryCloudState) : CloudItem
 
   data class Nas(val status: LibraryNasStatus, override val state: GalleryCloudState) : CloudItem
@@ -184,14 +190,14 @@ internal data class LibraryCloud(
    * Lo spazio, l'ultima sincronizzazione e "Libera spazio": senza problemi e senza la pausa **dell'utente** (OA-10). Il backup vero non ancora acceso
    * (`TestOnly`, I4) e' una pausa che l'utente non ha chiesto e che non ferma la lettura del NAS: lo spazio resta.
    */
-  val showsSpace: Boolean get() = problems.isEmpty() && paused.all { (it as? CloudItem.Backup)?.status == LibraryBackupStatus.TestOnly }
+  val showsSpace: Boolean get() = problems.isEmpty() && paused.all { it.isFence }
 
   /**
    * I4 (fase I, «uno stato si dice una volta»): la pausa del backup quando e' l'**unica** cosa che la nuvola ha da dire. Allora la dice solo il titolo
    * («In pausa», le parole della pagina Backup), con la «i» che apre il perche'; sotto resta il tasto. Null in ogni altro caso: la pausa ha la sua capsula.
    */
-  val pauseInTitle: CloudItem.Backup?
-    get() = (paused.singleOrNull() as? CloudItem.Backup)?.takeIf { state == GalleryCloudState.Paused && problems.isEmpty() }
+  val pauseInTitle: CloudItem?
+    get() = paused.singleOrNull()?.takeIf { state == GalleryCloudState.Paused && problems.isEmpty() }
 }
 
 /**
@@ -200,7 +206,7 @@ internal data class LibraryCloud(
  * - **la rete**: a posto non dice niente; il NAS che si sveglia e' un lavoro; senza rete la nuvola e' barrata; il resto e' un problema
  *   ([LibraryNetworkStatus.severity]);
  * - **il NAS**: lettura e allineamento sono lavori, "aggiornato" e' salvato, i lavori fermi sono un allarme, le aree non raggiungibili
- *   un'attenzione, la pubblicazione di prova un'attesa;
+ *   un'attenzione, la pubblicazione limitata dalle recinzioni una pausa (CU-1: la stessa del backup, detta una volta);
  * - **il backup**: confronto e giri sono lavori, la coda e' un'attesa, il backup vero non ancora acceso e' una pausa (I4), "tutto al sicuro" e' salvato, un problema prende il
  *   tono della sua riga in [BackupFooterProblems] (allarme, attenzione, o attesa se riparte da solo). **Fermo** (OA-10) non e' mai
  *   "salvato": la pausa dell'utente ha il suo stato, il lavoro fermato da Android e' un'attesa (riprende da solo).
@@ -209,7 +215,11 @@ internal data class LibraryCloud(
  * pausa sta sopra i lavori in corso: finche' dura le foto nuove non si salvano, e solo l'utente la toglie.
  */
 internal fun libraryCloud(network: LibraryNetworkStatus?, nas: LibraryNasStatus, backup: LibraryBackupStatus): LibraryCloud? {
-  val items = listOfNotNull(network?.let(::networkItem), nasItem(nas), backupItem(backup))
+  val backupItem = backupItem(backup)
+  // CU-1 (fase I): con le recinzioni accese il NAS pubblica solo in locale **e** il backup vero non e' acceso: e' una pausa sola, detta una volta. Se il
+  // backup e' gia' in pausa (la recinzione, o la pausa dell'utente) il NAS non aggiunge una seconda voce.
+  val nasItem = nasItem(nas)?.takeUnless { nas == LibraryNasStatus.LocalOnly && backupItem?.state == GalleryCloudState.Paused }
+  val items = listOfNotNull(network?.let(::networkItem), nasItem, backupItem)
   if (items.isEmpty()) return null
   val state = items.maxBy { severityRank(it.state) }.state
   val problems = items.filter { it.state.isProblem }.sortedByDescending { severityRank(it.state) }
@@ -242,7 +252,8 @@ private fun nasItem(status: LibraryNasStatus): CloudItem? = when (status) {
   is LibraryNasStatus.UpToDate -> CloudItem.Nas(status, GalleryCloudState.Saved)
   is LibraryNasStatus.Frozen -> CloudItem.Nas(status, GalleryCloudState.Alarm)
   is LibraryNasStatus.AreasUnavailable -> CloudItem.Nas(status, GalleryCloudState.Attention)
-  LibraryNasStatus.LocalOnly -> CloudItem.Nas(status, GalleryCloudState.Waiting)
+  // CU-1: la pubblicazione limitata e' la stessa recinzione del backup vero non ancora acceso: «In pausa», come lui.
+  LibraryNasStatus.LocalOnly -> CloudItem.Nas(status, GalleryCloudState.Paused)
 }
 
 private fun backupItem(status: LibraryBackupStatus): CloudItem? = when (status) {
@@ -445,7 +456,7 @@ private fun PauseTitle(state: GalleryCloudState, title: String, detail: String?)
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(TitleGap),
     ) {
-      Icon(imageVector = state.glyph(), contentDescription = null, tint = ink, modifier = Modifier.size(TitleGlyph))
+      Icon(imageVector = GalleryIconStatus.Paused.glyph(), contentDescription = null, tint = ink, modifier = Modifier.size(TitleGlyph))
       Text(
         text = title,
         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),

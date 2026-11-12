@@ -63,7 +63,7 @@
   <string name="backup_footer_partial_access_detail">Consenti l’accesso a tutte.</string>
   <string name="backup_footer_cap_reached_label">Tetto dati raggiunto</string>
   <string name="backup_footer_cap_reached_detail">Puoi fare ora, con conferma.</string>
-  <string name="backup_footer_frozen_label">Backup fermo: cambiamenti anomali</string>
+  <string name="backup_footer_frozen_label">Lavori fermi: cambiamenti anomali</string>
   <string name="backup_footer_frozen_detail">I dettagli sono nella pagina Backup.</string>
   <string name="backup_footer_writes_stopped_label">Scritture sul NAS ferme</string>
   <string name="backup_footer_writes_stopped_detail">I dettagli sono nella pagina Backup.</string>

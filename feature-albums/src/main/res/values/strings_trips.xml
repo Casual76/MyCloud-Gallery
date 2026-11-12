@@ -13,7 +13,6 @@
   </plurals>
   <string name="trips_days">%1$s – %2$s</string>
   <string name="trips_create">Crea album</string>
-  <string name="trips_dismiss">Non mi interessa</string>
   <string name="trips_dismiss_for">Non mi interessa: %1$s</string>
   <string name="trips_creating">Creo…</string>
   <string name="trips_show_older">Mostra più vecchi</string>

@@ -17,7 +17,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -37,6 +36,8 @@ import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 
 // La chrome della griglia: i pezzi di vetro che galleggiano sopra le foto della Libreria. Pochi e piccoli, perche' ogni
@@ -87,6 +88,7 @@ fun GalleryGridNotice(
   modifier: Modifier = Modifier,
   actionLabel: String? = null,
   onAction: (() -> Unit)? = null,
+  family: GalleryIconFamily? = null,
 ) {
   val scheme = MaterialTheme.colorScheme
   val shape = ContinuousCornerShape(FluidRadius.Card)
@@ -99,22 +101,27 @@ fun GalleryGridNotice(
     horizontalArrangement = Arrangement.spacedBy(NoticeGap),
     verticalAlignment = Alignment.Top,
   ) {
-    Box(
-      modifier = Modifier
-        .size(NoticeTile)
-        .background(scheme.primaryContainer, ContinuousCornerShape(FluidRadius.Small)),
-      contentAlignment = Alignment.Center,
-    ) {
-      Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(NoticeGlyph), tint = scheme.onPrimaryContainer)
+    if (family != null) {
+      // CU-8 (fase I): la piastrella della famiglia, come in tutta l'app (niente piastrelle pallide accanto alle colorate).
+      GalleryIconTile(icon = icon, family = family, size = NoticeTile)
+    } else {
+      Box(
+        modifier = Modifier
+          .size(NoticeTile)
+          .background(scheme.primaryContainer, ContinuousCornerShape(FluidRadius.Small)),
+        contentAlignment = Alignment.Center,
+      ) {
+        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(NoticeGlyph), tint = scheme.onPrimaryContainer)
+      }
     }
-    // I4 (fase I, «l'app parla troppo»): senza frase l'avviso e' una striscia, il segno, due parole e il tasto sulla stessa riga.
-    // A testo grande la striscia non ci sta: il titolo torna sopra e il tasto sotto, come con la frase.
-    if (message.isBlank() && LocalDensity.current.fontScale <= StripMaxFontScale) {
+    // I4 (fase I, «l'app parla troppo»): senza frase l'avviso e' una striscia, il segno, due parole e il tasto sulla stessa riga, anche a testo
+    // grande (CS-13: impilate, due strisce coprivano quasi meta' dello schermo): il titolo va al piu' su due righe accanto al tasto.
+    if (message.isBlank()) {
       Text(
         text = title,
         style = MaterialTheme.typography.titleSmall,
         color = scheme.onSurface,
-        maxLines = NoticeMessageLines,
+        maxLines = StripTitleLines,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.weight(1f).align(Alignment.CenterVertically),
       )
@@ -196,7 +203,7 @@ private val NoticeActionGap = 4.dp
 private val NoticeTile = 36.dp
 private val NoticeGlyph = 20.dp
 private const val NoticeMessageLines = 3
-private const val StripMaxFontScale = 1.15f
+private const val StripTitleLines = 2
 private val JumpHeight = 40.dp
 private val JumpPadding = 14.dp
 private val JumpGap = 6.dp

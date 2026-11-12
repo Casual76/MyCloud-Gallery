@@ -46,6 +46,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarAction
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridNotice
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteLocation
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteLocationKind
@@ -427,6 +428,7 @@ internal fun LibraryNotices(
         backdrop = backdrop,
         actionLabel = stringResource(R.string.library_partial_action),
         onAction = { commands.requestMediaAccess() },
+        family = GalleryIconFamily.Photos,
       )
     }
     if (pending) {
@@ -437,6 +439,7 @@ internal fun LibraryNotices(
         backdrop = backdrop,
         actionLabel = stringResource(R.string.library_pending_action),
         onAction = { commands.requestMediaLocation() },
+        family = GalleryIconFamily.Places,
       )
     }
   }

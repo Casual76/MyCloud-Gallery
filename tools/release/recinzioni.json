@@ -8,6 +8,9 @@
       { "nome": "Smetti di condividere -> Riporta nelle mie cartelle", "recinzione": "F7-D30", "dove": "la cartella d'origine dei propri media nell'area privata (o Backup/<dispositivo>/AAAA/MM/), dall'area comune", "cancello": "AlbumWriteGate (D30, emergenza, congelamento, sola lettura, fiducia)" }
     ]
   },
+  "versioniAutomatiche": {
+    "nota": "Le versioni del backup (D17, D18, E-E7; consenso dell'utente del 12/11/2026, 'Come progettato'): una modifica fatta sul telefono sposta il file attuale nello specchio Versioni/<stesso percorso>/ con il nome '<nome> (originale)' o '<nome> (versione del ...)' (una rinomina: stessa dimensione) e pubblica la modifica al solito percorso, anche fuori da Backup/ (per esempio Foto/2024/), senza altre conferme. 'Ripristina originale' e il riallineamento dopo un ripristino del telefono scambiano i due file. Niente si cancella. Nel confronto delle fotografie una versione e' un file CAMBIATO al solito percorso (fuori dalle cartelle attese, o in Backup/) piu' un file AGGIUNTO nello specchio in Versioni/ con la dimensione di prima: share-snapshot.ps1 la riconosce e la conta a parte ('versioni', 'scambi'), non e' un'anomalia. Si riconosce dalla cartella specchiata e dalla stessa dimensione del file che c'era al solito percorso."
+  },
   "recinzioni": [
     { "id": "F4-D31", "area": "indice", "campo": "indexPublishTestSharesOnly", "stato": "spenta" },
     { "id": "F5-D12", "area": "backup", "campo": "backupTestSharesOnly", "stato": "spenta" },

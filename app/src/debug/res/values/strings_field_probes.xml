@@ -90,6 +90,7 @@
   <string name="probe_jobs_all_detail">Li accoda uno dopo l’altro, nell’ordine di questa lista.</string>
   <string name="probe_jobs_footnote">Sono gli stessi lavori del giro periodico: partono subito ma passano dalle regole delle attività, dal cancello del backup e dalle recinzioni delle share di prova come sempre. Da adb: am broadcast -a dev.pampa.mycloudgallery.debug.PERIODIC_NOW -p dev.pampa.mycloudgallery.debug --es jobs all</string>
   <string name="probe_jobs_queued">Accodato. Se le regole dicono di aspettare, il lavoro aspetta.</string>
+  <string name="probe_jobs_refused_account">Non accodato: l’account attivo non è di prova. Con l’account vero questi lavori scriverebbero sulle cartelle vere del NAS. Entra con test o test2.</string>
   <string name="probe_section_report">Resoconto</string>
   <string name="probe_report_footnote">Solo numeri, una riga per misura. Copialo in docs/android.md, sezione «Resoconto delle prove guidate».</string>
   <string name="probe_report_empty">Nessuna misura ancora.</string>

@@ -392,8 +392,13 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
             title = stringResource(jobTitle(job)),
             subtitle = stringResource(jobDetail(job)),
             onClick = {
-              FieldProbePeriodicJobs.enqueue(context, listOf(job))
-              say(Section.JOBS, R.string.probe_jobs_queued)
+              // PU-3: con l'account vero i lavori che scrivono non si accodano.
+              if (FieldProbePeriodicJobs.refusal(context, listOf(job)) != null) {
+                say(Section.JOBS, R.string.probe_jobs_refused_account)
+              } else {
+                FieldProbePeriodicJobs.enqueue(context, listOf(job))
+                say(Section.JOBS, R.string.probe_jobs_queued)
+              }
             },
           )
         }
@@ -402,8 +407,12 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
           title = stringResource(R.string.probe_jobs_all_title),
           subtitle = stringResource(R.string.probe_jobs_all_detail),
           onClick = {
-            FieldProbePeriodicJobs.enqueue(context, FieldProbePeriodicJob.ALL)
-            say(Section.JOBS, R.string.probe_jobs_queued)
+            if (FieldProbePeriodicJobs.refusal(context, FieldProbePeriodicJob.ALL) != null) {
+              say(Section.JOBS, R.string.probe_jobs_refused_account)
+            } else {
+              FieldProbePeriodicJobs.enqueue(context, FieldProbePeriodicJob.ALL)
+              say(Section.JOBS, R.string.probe_jobs_queued)
+            }
           },
         )
       }

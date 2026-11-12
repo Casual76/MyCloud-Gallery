@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.FencedFlags
 import dev.pampa.mycloudgallery.backup.BackupDiagCodes
 import dev.pampa.mycloudgallery.backup.BackupDiagnostics
 import dev.pampa.mycloudgallery.core.backup.contract.BackupGateState
+import dev.pampa.mycloudgallery.core.backup.contract.GuardScope
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
@@ -250,6 +251,34 @@ class BackupIntegrationTest {
     assertThat(filesUnder(backend, REAL_USER, ".mycloudgallery/tmp").filter { "-bk-" in it }).isEmpty()
     assertThat(filesUnder(backend, REAL_COMMON, "Backup")).isEmpty()
     assertThat(backup.store.counts().open).isEqualTo(0)
+    Unit
+  }
+
+  /**
+   * PU-2 della revisione del passo unico (12/11/2026): il guardiano del grafo vero ha il cancello del primo backup. Con il cancello del backup aperto,
+   * prima della scelta della cartella del dispositivo ("Primo backup pronto") il giro si ferma al cancello senza toccare il NAS; dopo la scelta gira.
+   * La prova del guardiano con un candidato valido e le primitive di scrittura contate e' `FirstBackupGuardianTest` (core-backup).
+   */
+  @Test
+  fun passoUnico_ilGuardianoAspettaLaSceltaDelPrimoBackup() = runBlocking {
+    val backend = TestNas.backend(time)
+    val phone = device("telefono", backend)
+    phone.graph.start()
+    phone.graph.foundFamily()
+    val rig = rig(phone, TestNas.ADMIN_USER)
+    val backup = rig.open()
+    val parts = checkNotNull(backup.parts)
+    assertThat(backup.gate.stateOf(parts.share)).isEqualTo(BackupGateState.OPEN)
+    assertThat(backup.settings.deviceFolder.value).isNull()
+    val filesBefore = backend.fileCount(TestNas.ADMIN_USER)
+
+    for (scope in listOf(GuardScope.All, GuardScope.Media(emptySet()))) {
+      assertWithMessage("$scope prima della scelta").that(parts.guardian.ensure(scope, 1.minutes).stoppedBy).isEqualTo(RunStop.GATE)
+    }
+    assertThat(backend.fileCount(TestNas.ADMIN_USER)).isEqualTo(filesBefore)
+
+    rig.chooseFolder("Pixel di prova")
+    assertThat(parts.guardian.ensure(GuardScope.All, 1.minutes).stoppedBy).isEqualTo(RunStop.COMPLETE)
     Unit
   }
 

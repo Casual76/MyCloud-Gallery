@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
@@ -26,9 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,7 +43,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
@@ -62,8 +58,6 @@ import dev.antigravity.fluidengine.ui.theme.FluidGroupSegment
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidLoading
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoButton
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryLegibility
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
@@ -170,16 +164,7 @@ internal fun NasEmptyState(
   actionLabel: String? = null,
   onAction: (() -> Unit)? = null,
 ) {
-  var open by rememberSaveable(title) { mutableStateOf(false) }
-  GalleryFigureState(icon = icon, title = title, modifier = modifier.fillMaxWidth().padding(NasDimens.StatePadding), tone = tone, fill = false) {
-    GalleryInfoButton(label = detail, open = open, onToggle = { open = !open })
-    GalleryInfoDetail(
-      text = detail,
-      visible = open,
-      modifier = Modifier.widthIn(max = NasDimens.StateTextMaxWidth),
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-      textAlign = TextAlign.Center,
-    )
+  GalleryFigureState(icon = icon, title = title, modifier = modifier.padding(NasDimens.StatePadding), tone = tone, fill = false, why = detail) {
     if (actionLabel != null && onAction != null) {
       FluidButton(text = actionLabel, onClick = onAction, size = FluidButtonSize.Large, style = FluidButtonStyle.Filled)
     }

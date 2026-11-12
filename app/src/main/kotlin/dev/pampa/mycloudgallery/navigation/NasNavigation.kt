@@ -33,7 +33,7 @@ internal fun nasScreenOf(code: String): NasScreen? = NasScreen.entries.firstOrNu
  * pannello di dettaglio del tablet ([NasEntryDetail]) e, di conseguenza, "Spazio NAS" e "Backup" che aprono `NasScreen.TRASH`.
  */
 internal val GatedNasTrashPage: NasTrashPage = { modifier, onBack, hostPadding, backdropOut ->
-  RecentlyDeletedRoute(modifier = modifier, onBack = onBack, contentPadding = hostPadding, backdropOut = backdropOut)
+  RecentlyDeletedRoute(modifier = modifier, onBack = onBack, contentPadding = hostPadding, backdropOut = backdropOut, startAtNas = true)
 }
 
 /** La pagina di una voce di Cartelle NAS nel pannello di dettaglio del tablet: senza tasto indietro, sopra la pillola. (La sezione delle Raccolte la

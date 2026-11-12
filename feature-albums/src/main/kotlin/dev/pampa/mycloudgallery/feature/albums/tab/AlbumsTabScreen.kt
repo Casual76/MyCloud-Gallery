@@ -18,9 +18,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.PhotoAlbum
@@ -29,7 +29,6 @@ import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,11 +54,11 @@ import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.albums.contract.Album
 import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumNotice
+import dev.pampa.mycloudgallery.core.designsystem.R as DesignR
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuButton
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
@@ -77,9 +76,9 @@ import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
 import dev.pampa.mycloudgallery.feature.albums.contract.SpecialAlbum
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumCoverThumb
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumDimens
+import dev.pampa.mycloudgallery.feature.albums.ui.AlbumFigureState
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumText
 import kotlinx.coroutines.flow.distinctUntilChanged
-import dev.pampa.mycloudgallery.core.designsystem.R as DesignR
 
 // LA SCHEDA ALBUM (fase grafica, G2b), in stile Galleria Samsung: una griglia di copertine, tutte con la stessa forma (la foto quadrata con l'angolo
 // continuo, sotto il nome su due righe e il numero), prima Preferiti, Fotocamera e Video, poi il resto per ultima apertura. Un album smart ha il segno dell'IA sulla
@@ -375,9 +374,11 @@ private const val SKELETON_LINE_FRACTION = 0.6f
 /** Nessun album ancora: sotto le voci speciali, l'invito a crearne uno. */
 private fun LazyListScope.noAlbumsYet(handlers: AlbumsTabHandlers) {
   item(key = "no-albums") {
-    Column(verticalArrangement = Arrangement.spacedBy(AlbumDimens.BlockGap), modifier = Modifier.padding(top = AlbumDimens.BlockGap)) {
-      FluidEmptyState(title = stringResource(R.string.albums_tab_none_title), detail = stringResource(R.string.albums_empty_detail))
-      FluidButton(text = stringResource(R.string.albums_new), onClick = handlers::onCreate, fillWidth = true)
+    Column(modifier = Modifier.padding(top = AlbumDimens.BlockGap)) {
+      // CS-17 (fase I): la forma comune; la frase sugli album smart dietro la «i».
+      AlbumFigureState(icon = Icons.Rounded.PhotoAlbum, title = stringResource(R.string.albums_tab_none_title), detail = stringResource(R.string.albums_empty_detail)) {
+        FluidButton(text = stringResource(R.string.albums_new), onClick = handlers::onCreate, leading = { Icon(imageVector = Icons.Rounded.Add, contentDescription = null) })
+      }
     }
   }
 }

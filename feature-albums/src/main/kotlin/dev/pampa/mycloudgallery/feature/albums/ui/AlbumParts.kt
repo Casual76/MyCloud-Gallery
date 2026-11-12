@@ -18,8 +18,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +46,7 @@ import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRing
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRingDefaults
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryRingPercent
 import dev.pampa.mycloudgallery.core.designsystem.media.galleryRingColor
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
 
@@ -192,4 +195,13 @@ internal fun ExplainerText(text: String, modifier: Modifier = Modifier) {
   Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(AlbumDimens.TightGap)) {
     Text(text = text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
   }
+}
+
+/**
+ * CS-17 (fase I): uno stato vuoto o d'attesa degli Album nella forma comune ([GalleryFigureState]): la figura, il titolo, il perche' dietro la «i»
+ * (TalkBack lo sente dal tasto), sotto le azioni.
+ */
+@Composable
+internal fun AlbumFigureState(icon: ImageVector, title: String, detail: String? = null, actions: @Composable () -> Unit = {}) {
+  GalleryFigureState(icon = icon, title = title, fill = false, why = detail) { actions() }
 }

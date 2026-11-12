@@ -86,3 +86,14 @@ Diagnostica «Backup in pausa» con la frase di I3; resta «Indice condiviso in 
 | Eliminati di recente | paragrafo di 37-55 parole in cima; righe del NAS con icone grigie, «Da Viaggi / Oslo 2026 · 4,8 MB», «Restano 29 giorni», capsule «Scade presto», «Senza record» | «Restano 30 giorni» con la «i»; piastrella del tipo con il segno, nome su una riga, peso, giorni come numero |
 | Onboarding, Permessi | «Da concedere» su ogni riga, scheda della modalita' ridotta con quattro righe | il segno sulla piastrella e la freccia; la scheda con il titolo e la «i» |
 | Schede di copertina (Raccolte, Ricordi, Viaggi, Persone) | nome nella parte chiara della sfumatura (2-2,6:1 su foto chiara) | scrim pieno dietro il nome (5,7:1 su una foto bianca) |
+
+## Giro di correzione 2 (12/11)
+| Pagina | Prima | Dopo |
+|---|---|---|
+| Strisce in cima alla Libreria (360 dp, 1,3x) | «12 foto…», «1 …» accanto a «Consenti posizione» | il titolo intero; il tasto sotto quando non c'e' posto |
+| Stati vuoti (Viaggi, Tutti i ricordi, Album vuoto) | figura spostata a sinistra | figura al centro |
+| Scheda Album vuota, pagine di un album, Suggerite, Diagnostica vuota | titolo e due frasi | figura, titolo, «i»; l'attesa di uno smart con l'anello che gira |
+| Pop-up e Operazioni del NAS | attesa con l'orologio o con le due barre; anelli nell'accento | attesa con la clessidra; anelli nel colore del backup |
+| Operazioni in coda | «3 elementi · 190 MB, in coda» | «190 MB» (il conto nel titolo, lo stato nel segno) |
+| Onboarding, Batteria e VPN | piastrelle pallide, «Da fare» su ogni riga, percorsi di 3-4 righe | piastrelle della famiglia, un segno per riga, percorsi dietro la «i» |
+| Cestino del NAS dalle Raccolte | si apriva sul cestino del telefono | si apre sulla sezione «Dal NAS» |

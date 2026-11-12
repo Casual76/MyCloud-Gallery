@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.GppGood
+import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.PauseCircle
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.runtime.Composable
@@ -90,7 +91,8 @@ internal fun backupFooterNote(status: LibraryBackupStatus): GalleryFooterNote? =
   is LibraryBackupStatus.Queued -> GalleryFooterNote(
     tone = GalleryFooterTone.Waiting,
     label = stringResource(R.string.backup_footer_queued, GalleryNumbers.format(status.items)),
-    glyph = Icons.Rounded.Schedule,
+    // CU-33: l'attesa e' la clessidra, sempre.
+    glyph = Icons.Rounded.HourglassTop,
     detail = stringResource(waitRes(status.wait)),
   )
   is LibraryBackupStatus.FirstBackup -> workingNote(

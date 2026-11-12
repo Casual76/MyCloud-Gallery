@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -21,9 +22,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.pampa.mycloudgallery.R
-import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustration
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import dev.pampa.mycloudgallery.core.family.contract.BlockReason
 import dev.pampa.mycloudgallery.feature.onboarding.ui.OnboardingSheetHost
@@ -48,16 +48,14 @@ fun WipedScreen(onReconfigure: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(ScreenGap),
       ) {
-        GalleryIllustration(icon = Icons.Rounded.RestartAlt, tone = GalleryIllustrationTone.Brand)
-        FluidEmptyState(
-          title = stringResource(R.string.wiped_reason_title),
-          detail = stringResource(R.string.wiped_detail),
-        )
-        FluidButton(
-          text = stringResource(R.string.wiped_reconfigure),
-          onClick = onReconfigure,
-          size = FluidButtonSize.Large,
-        )
+        GalleryFigureState(icon = Icons.Rounded.RestartAlt, title = stringResource(R.string.wiped_reason_title), fill = false) {
+          BlockingText(stringResource(R.string.wiped_detail))
+          FluidButton(
+            text = stringResource(R.string.wiped_reconfigure),
+            onClick = onReconfigure,
+            size = FluidButtonSize.Large,
+          )
+        }
       }
     }
   }
@@ -78,10 +76,9 @@ fun BlockedScreen(reason: BlockReason) {
   }
   FluidScreen(title = stringResource(R.string.blocked_title)) {
     item {
-      FluidEmptyState(
-        title = stringResource(R.string.blocked_title),
-        detail = stringResource(detail),
-      )
+      GalleryFigureState(icon = Icons.Rounded.Lock, title = stringResource(R.string.blocked_title), fill = false, tone = GalleryIllustrationTone.Caution) {
+        BlockingText(stringResource(detail))
+      }
     }
   }
 }
@@ -113,11 +110,9 @@ fun KeystoreUnavailableScreen(
           horizontalAlignment = Alignment.CenterHorizontally,
           verticalArrangement = Arrangement.spacedBy(ScreenGap),
         ) {
-          GalleryIllustration(icon = Icons.Rounded.Key, tone = GalleryIllustrationTone.Caution)
-          FluidEmptyState(
-            title = stringResource(R.string.keystore_reason_title),
-            detail = stringResource(R.string.keystore_detail),
-          )
+          GalleryFigureState(icon = Icons.Rounded.Key, title = stringResource(R.string.keystore_reason_title), fill = false, tone = GalleryIllustrationTone.Caution) {
+            BlockingText(stringResource(R.string.keystore_detail))
+          }
           FluidButton(
             text = stringResource(R.string.keystore_retry),
             onClick = onRetry,
@@ -180,3 +175,17 @@ private fun NoteText(text: String) {
 
 private val ScreenPadding = 24.dp
 private val ScreenGap = 16.dp
+
+/**
+ * CS-17 (fase I): la frase aperta sotto il titolo di una pagina che blocca (la versione da aggiornare, il dispositivo azzerato, il Keystore): e'
+ * l'avvertimento che serve, quindi non sta dietro la «i». Al centro, nel colore della pagina.
+ */
+@Composable
+internal fun BlockingText(text: String) {
+  Text(
+    text = text,
+    style = MaterialTheme.typography.bodyLarge,
+    color = MaterialTheme.colorScheme.onSurfaceVariant,
+    textAlign = TextAlign.Center,
+  )
+}

@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircleOutline
+import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -27,7 +28,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
@@ -39,6 +39,7 @@ import dev.pampa.mycloudgallery.feature.albums.R
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumMessage
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumDimens
+import dev.pampa.mycloudgallery.feature.albums.ui.AlbumFigureState
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumText
 import dev.pampa.mycloudgallery.feature.albums.ui.SectionNote
 
@@ -154,7 +155,8 @@ fun SuggestionsScreen(
       }
       if (view == null || ui.count == 0) {
         item(key = "empty") {
-          FluidEmptyState(
+          AlbumFigureState(
+            icon = Icons.Rounded.PhotoLibrary,
             title = stringResource(R.string.suggestions_empty_title),
             detail = stringResource(if (toShare) R.string.suggestions_to_share_empty_detail else R.string.suggestions_empty_detail),
           )

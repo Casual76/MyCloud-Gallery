@@ -172,7 +172,7 @@ internal fun NoticeCard(
             color = colors.onContainer,
             modifier = Modifier.weight(1f, fill = false).then(if (folded) Modifier.semantics { hideFromAccessibility() } else Modifier),
           )
-          if (folded) GalleryInfoGlyph(open = open, tint = colors.onContainer)
+          if (folded) GalleryInfoGlyph(open = open)
         }
         if (body != null && (!folded || open)) {
           Text(

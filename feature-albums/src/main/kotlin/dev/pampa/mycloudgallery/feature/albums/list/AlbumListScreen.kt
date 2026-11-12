@@ -6,16 +6,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Group
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.PhotoAlbum
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,10 +37,8 @@ import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -51,6 +48,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.albums.contract.Album
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumListSort
 import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumNotice
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuButton
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
@@ -62,6 +60,7 @@ import dev.pampa.mycloudgallery.feature.albums.contract.AlbumPeople
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumCoverThumb
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumDimens
+import dev.pampa.mycloudgallery.feature.albums.ui.AlbumFigureState
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumText
 import dev.pampa.mycloudgallery.feature.albums.ui.SectionNote
 
@@ -167,9 +166,8 @@ private fun coverRequests(state: AlbumListState.Ready, thumbnails: AlbumThumbnai
 
 private fun LazyListScope.emptyState(handlers: AlbumListHandlers) {
   item(key = "empty") {
-    Column(verticalArrangement = Arrangement.spacedBy(AlbumDimens.BlockGap)) {
-      FluidEmptyState(title = stringResource(R.string.albums_empty_title), detail = stringResource(R.string.albums_empty_detail))
-      FluidButton(text = stringResource(R.string.albums_new), onClick = handlers::onCreate, fillWidth = true)
+    AlbumFigureState(icon = Icons.Rounded.PhotoAlbum, title = stringResource(R.string.albums_empty_title), detail = stringResource(R.string.albums_empty_detail)) {
+      FluidButton(text = stringResource(R.string.albums_new), onClick = handlers::onCreate, leading = { Icon(imageVector = Icons.Rounded.Add, contentDescription = null) })
     }
   }
 }

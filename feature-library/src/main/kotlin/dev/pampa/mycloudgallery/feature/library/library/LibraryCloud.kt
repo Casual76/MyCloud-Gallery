@@ -18,9 +18,9 @@ import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.MonitorHeart
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.Timer
@@ -71,10 +71,12 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoGlyph
 import dev.pampa.mycloudgallery.core.designsystem.design.glyph
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.icon.glyph
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRing
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRingDefaults
+import dev.pampa.mycloudgallery.core.designsystem.media.galleryRingColor
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
@@ -463,7 +465,7 @@ private fun PauseTitle(state: GalleryCloudState, title: String, detail: String?)
         color = ink,
         modifier = Modifier.semantics { hideFromAccessibility() },
       )
-      if (detail != null) GalleryInfoGlyph(open = open, tint = ink)
+      if (detail != null) GalleryInfoGlyph(open = open)
     }
     if (detail != null) GalleryInfoDetail(text = detail, visible = open, color = ink, modifier = Modifier.testTag(ProblemDetailTag))
   }
@@ -532,7 +534,8 @@ private fun etaText(etaMillis: Long?): String? = etaMillis?.let { withEta(null, 
 @Composable
 private fun ActivityRow(note: GalleryFooterNote, gauge: CloudGauge?, onClick: () -> Unit) {
   val ink = MaterialTheme.colorScheme.onSurface
-  val accent = MaterialTheme.colorScheme.primary
+  // CU-30: lo stesso avanzamento ha lo stesso colore ovunque, quello del backup.
+  val accent = galleryRingColor(GalleryIconFamily.Backup)
   val spoken = note.description ?: listOfNotNull(note.label, note.detail).joinToString(". ")
   Row(
     modifier = Modifier
@@ -560,7 +563,7 @@ private fun ActivityRow(note: GalleryFooterNote, gauge: CloudGauge?, onClick: ()
         note.busy -> FluidSpinner(size = SpinnerSize, color = accent)
         else -> {
           GalleryProgressRing(progress = 0f, modifier = Modifier.fillMaxSize(), color = accent, strokeWidth = GaugeStroke)
-          Icon(imageVector = note.glyph ?: Icons.Rounded.Schedule, contentDescription = null, tint = accent, modifier = Modifier.size(GaugeGlyph))
+          Icon(imageVector = note.glyph ?: Icons.Rounded.HourglassTop, contentDescription = null, tint = accent, modifier = Modifier.size(GaugeGlyph))
         }
       }
     }
@@ -631,7 +634,8 @@ private fun rememberNasSpace(commands: LibraryCommands): SpaceUi {
 private fun SpaceRow(shown: SpaceUi) {
   if (shown == SpaceUi.Absent) return
   val ink = MaterialTheme.colorScheme.onSurface
-  val accent = MaterialTheme.colorScheme.primary
+  // CU-30: lo stesso avanzamento ha lo stesso colore ovunque, quello del backup.
+  val accent = galleryRingColor(GalleryIconFamily.Backup)
   val ready = (shown as? SpaceUi.Shown)?.space as? LibraryNasSpace.Ready
   val spoken = when {
     ready != null -> stringResource(R.string.library_cloud_space_description, stringResource(R.string.library_cloud_space_used, cloudBytes(ready.usedBytes), cloudBytes(ready.totalBytes)))

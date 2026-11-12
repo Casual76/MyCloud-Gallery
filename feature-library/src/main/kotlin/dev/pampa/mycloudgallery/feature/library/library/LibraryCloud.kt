@@ -263,8 +263,9 @@ private fun backupItem(status: LibraryBackupStatus): CloudItem? = when (status) 
   // I4: il backup vero non ancora acceso si dice come nella pagina Backup, «In pausa» (la recinzione non cambia: cambia come si mostra).
   LibraryBackupStatus.TestOnly -> CloudItem.Backup(status, GalleryCloudState.Paused)
   is LibraryBackupStatus.Queued -> CloudItem.Backup(status, GalleryCloudState.Waiting)
-  // Fase I (12/11): la ricerca sul NAS ferma per una regola (il telefono caldo…) e' un'attesa, non un lavoro che gira.
-  is LibraryBackupStatus.Comparing -> CloudItem.Backup(status, if (status.wait != null) GalleryCloudState.Waiting else GalleryCloudState.Syncing)
+  // Fase I (12/11, BF-4): la ricerca sul NAS «sincronizza» solo mentre gira davvero; ferma per una regola, o non ancora partita, e' un'attesa.
+  is LibraryBackupStatus.Comparing ->
+    CloudItem.Backup(status, if (status.wait == null && status.seen != null) GalleryCloudState.Syncing else GalleryCloudState.Waiting)
   is LibraryBackupStatus.FirstBackup, is LibraryBackupStatus.Running -> CloudItem.Backup(status, GalleryCloudState.Syncing)
   is LibraryBackupStatus.AllSafe -> CloudItem.Backup(status, GalleryCloudState.Saved)
   // OA-10: un backup fermo non sparisce dalla nuvola (prima, con "NAS aggiornato", restava la spunta di "tutto salvato").
@@ -502,12 +503,17 @@ private fun ProblemNote(note: GalleryFooterNote) {
 @Immutable
 private data class CloudGauge(val glyph: ImageVector, val count: String, val eta: String?)
 
-/** Il conto dei lavori che hanno un totale; null per gli altri (la coda, il confronto, la rete che si sveglia): restano la loro frase. */
+/**
+ * Il conto dei lavori che hanno un totale; null per gli altri (la coda, il confronto, la rete che si sveglia, il backup che sta partendo: giro 2, BF2-4, mai
+ * «0 / N»): restano la loro frase.
+ */
 @Composable
 private fun gaugeOf(item: CloudItem): CloudGauge? = when (item) {
   is CloudItem.Backup -> when (val s = item.status) {
-    is LibraryBackupStatus.Running -> CloudGauge(Icons.Rounded.CloudUpload, ofTotal(GalleryNumbers.format(s.done), GalleryNumbers.format(s.total)), etaText(s.etaMillis))
-    is LibraryBackupStatus.FirstBackup -> CloudGauge(Icons.Rounded.CloudUpload, ofTotal(GalleryNumbers.format(s.done), GalleryNumbers.format(s.total)), etaText(s.etaMillis))
+    is LibraryBackupStatus.Running ->
+      if (s.starting) null else CloudGauge(Icons.Rounded.CloudUpload, ofTotal(GalleryNumbers.format(s.done), GalleryNumbers.format(s.total)), etaText(s.etaMillis))
+    is LibraryBackupStatus.FirstBackup ->
+      if (s.starting) null else CloudGauge(Icons.Rounded.CloudUpload, ofTotal(GalleryNumbers.format(s.done), GalleryNumbers.format(s.total)), etaText(s.etaMillis))
     else -> null
   }
   is CloudItem.Nas -> when (val s = item.status) {

@@ -73,47 +73,51 @@ private val Digits = Regex("[0-9.,]+")
 internal fun backupFooterNote(status: LibraryBackupStatus): GalleryFooterNote? = when (status) {
   LibraryBackupStatus.Idle -> null
   LibraryBackupStatus.TestOnly -> footerNote(BackupFooterProblems.of("test_only"), count = 0)
-  // Fase I (12/11): la ricerca ferma per una regola dice quale (il telefono caldo, la batteria…) con la clessidra, non "sto cercando" con la rotella.
-  is LibraryBackupStatus.Comparing -> status.wait?.let { wait ->
-    GalleryFooterNote(
-      tone = GalleryFooterTone.Waiting,
-      label = stringResource(R.string.backup_footer_comparing_paused),
-      glyph = Icons.Rounded.HourglassTop,
-      detail = stringResource(waitRes(wait)),
-    )
-  } ?: GalleryFooterNote(
-    tone = GalleryFooterTone.Working,
-    label = stringResource(R.string.backup_footer_comparing),
-    busy = true,
-    detail = status.pending.takeIf { it != null && it > 0 }?.let { pending ->
-      pluralStringResource(R.plurals.backup_footer_comparing_count, pending, GalleryNumbers.format(pending))
-    } ?: stringResource(R.string.backup_footer_comparing_search),
-  )
+  is LibraryBackupStatus.Comparing -> searchNote(status)
   is LibraryBackupStatus.AllSafe -> GalleryFooterNote(
     tone = GalleryFooterTone.Calm,
     label = stringResource(R.string.backup_footer_all_safe),
     glyph = Icons.Rounded.GppGood,
     detail = status.atNasMillis?.let { backupUpdatedAt(it) },
   )
-  is LibraryBackupStatus.Queued -> GalleryFooterNote(
-    tone = GalleryFooterTone.Waiting,
-    label = stringResource(R.string.backup_footer_queued, GalleryNumbers.format(status.items)),
-    // CU-33: l'attesa e' la clessidra, sempre.
-    glyph = Icons.Rounded.HourglassTop,
-    detail = stringResource(waitRes(status.wait)),
-  )
-  is LibraryBackupStatus.FirstBackup -> workingNote(
-    label = stringResource(R.string.backup_footer_first, GalleryNumbers.format(status.done), GalleryNumbers.format(status.total)),
-    done = status.done,
-    total = status.total,
-    etaMillis = status.etaMillis,
-  )
-  is LibraryBackupStatus.Running -> workingNote(
-    label = stringResource(R.string.backup_footer_running, GalleryNumbers.format(status.done), GalleryNumbers.format(status.total)),
-    done = status.done,
-    total = status.total,
-    etaMillis = status.etaMillis,
-  )
+  // Fase I (BF-6): il primo backup pronto non e' «in coda al prossimo giro»: e' da avviare (tocca a te), e il piede porta alla pagina.
+  is LibraryBackupStatus.Queued -> if (status.wait == LibraryBackupWait.FIRST_BACKUP) {
+    GalleryFooterNote(
+      tone = GalleryFooterTone.Waiting,
+      label = stringResource(R.string.backup_footer_first_ready),
+      glyph = GalleryIconStatus.YourTurn.glyph(),
+      detail = pluralStringResource(R.plurals.backup_footer_first_ready_detail, status.items, GalleryNumbers.format(status.items)),
+    )
+  } else {
+    GalleryFooterNote(
+      tone = GalleryFooterTone.Waiting,
+      label = stringResource(R.string.backup_footer_queued, GalleryNumbers.format(status.items)),
+      // CU-33: l'attesa e' la clessidra, sempre.
+      glyph = Icons.Rounded.HourglassTop,
+      detail = stringResource(waitRes(status.wait)),
+    )
+  }
+  // Giro 2 (BF2-4): chiesto adesso e accettato, il motore non l'ha ancora preso: «Sto partendo» come la pagina e le Impostazioni, mai «0 di N».
+  is LibraryBackupStatus.FirstBackup -> if (status.starting) {
+    startingNote()
+  } else {
+    workingNote(
+      label = stringResource(R.string.backup_footer_first, GalleryNumbers.format(status.done), GalleryNumbers.format(status.total)),
+      done = status.done,
+      total = status.total,
+      etaMillis = status.etaMillis,
+    )
+  }
+  is LibraryBackupStatus.Running -> if (status.starting) {
+    startingNote()
+  } else {
+    workingNote(
+      label = stringResource(R.string.backup_footer_running, GalleryNumbers.format(status.done), GalleryNumbers.format(status.total)),
+      done = status.done,
+      total = status.total,
+      etaMillis = status.etaMillis,
+    )
+  }
   // OA-10: il backup fermo si dice. La pausa dell'utente dura fino a "Riprendi" (nella pagina Backup: il tasto del pop-up porta li');
   // il lavoro fermato da Android riprende da solo, come una coda.
   is LibraryBackupStatus.Paused -> GalleryFooterNote(
@@ -129,6 +133,57 @@ internal fun backupFooterNote(status: LibraryBackupStatus): GalleryFooterNote? =
     status.count,
   )
 }
+
+/**
+ * Fase I (BF-7, BF-4): la ricerca sul NAS prima del primo backup, con le parole della pagina («Cerco cosa c'e' gia' sul NAS»). Gira: i file guardati e la
+ * barra (con il totale) o l'anello (senza). Ferma per una regola: quale, con la clessidra (la formula comune). Ferma per un motivo che il backup non nomina:
+ * la pausa e la Diagnostica. Non ancora partita: «Inizia fra poco», ferma. Si muove solo se la ricerca gira.
+ */
+@Composable
+private fun searchNote(status: LibraryBackupStatus.Comparing): GalleryFooterNote {
+  val wait = status.wait
+  val seen = status.seen
+  val total = status.total
+  return when {
+    wait == LibraryBackupWait.OTHER -> GalleryFooterNote(
+      tone = GalleryFooterTone.Waiting,
+      label = stringResource(R.string.backup_footer_comparing_paused),
+      glyph = GalleryIconStatus.Paused.glyph(),
+      detail = stringResource(R.string.backup_footer_search_elsewhere),
+    )
+    wait != null -> GalleryFooterNote(
+      tone = GalleryFooterTone.Waiting,
+      label = stringResource(R.string.backup_footer_comparing_paused),
+      glyph = Icons.Rounded.HourglassTop,
+      detail = stringResource(waitRes(wait)),
+    )
+    seen != null -> GalleryFooterNote(
+      tone = GalleryFooterTone.Working,
+      label = stringResource(R.string.backup_footer_comparing),
+      detail = when {
+        seen <= 0 -> null
+        total != null && total >= seen -> stringResource(R.string.backup_footer_search_of, GalleryNumbers.format(seen), GalleryNumbers.format(total))
+        else -> pluralStringResource(R.plurals.backup_footer_search_seen, seen, GalleryNumbers.format(seen))
+      },
+      progress = if (total != null && total > 0) (seen.toFloat() / total).coerceIn(0f, 1f) else null,
+      busy = total == null || total <= 0,
+    )
+    else -> GalleryFooterNote(
+      tone = GalleryFooterTone.Waiting,
+      label = stringResource(R.string.backup_footer_comparing),
+      glyph = Icons.Rounded.HourglassTop,
+      detail = stringResource(R.string.backup_footer_search_soon),
+    )
+  }
+}
+
+/** Giro 2 (BF2-4): «Sto partendo», l'anello che gira senza misura e nessun numero. */
+@Composable
+private fun startingNote(): GalleryFooterNote = GalleryFooterNote(
+  tone = GalleryFooterTone.Working,
+  label = stringResource(R.string.backup_footer_starting),
+  busy = true,
+)
 
 /** Un lavoro del backup in corso: l'anello nella capsula e la barra sotto se il totale e' noto, il tempo che manca se si sa stimare. */
 @Composable
@@ -164,10 +219,12 @@ private fun waitRes(wait: LibraryBackupWait): Int = when (wait) {
   LibraryBackupWait.POWER_SAVER -> R.string.backup_footer_wait_power_saver
   LibraryBackupWait.THERMAL -> R.string.backup_footer_wait_thermal
   LibraryBackupWait.DATA_CAP -> R.string.backup_footer_wait_data_cap
+  LibraryBackupWait.FIRST_BACKUP -> R.string.backup_footer_first_ready
   LibraryBackupWait.NAS -> R.string.backup_footer_wait_nas
   LibraryBackupWait.NEXT_RUN -> R.string.backup_footer_wait_next_run
   LibraryBackupWait.NAS_BUSY -> R.string.backup_footer_wait_nas_busy
   LibraryBackupWait.OTHER -> R.string.backup_footer_wait_other
+  LibraryBackupWait.NOT_ON_PHONE -> R.string.backup_footer_wait_not_on_phone
 }
 
 /** "Oggi alle 03:12", "12 ottobre 2026 alle 03:12": l'ultimo giro del backup, in ora del NAS mostrata come ora di casa. */

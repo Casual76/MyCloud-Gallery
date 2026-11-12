@@ -154,7 +154,7 @@ class BackupLayoutTest : ComposeBackupTallTest() {
       .fetchSemanticsNodes().flatMap { it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() }
     // I3: ogni copertina si legge con nome, stato e il numero che conta, in una frase.
     assertThat(spoken).contains("Fotocamera, Al sicuro. 1.250 al sicuro")
-    assertThat(spoken).contains("Screenshot, Da controllare. 3 con problemi")
+    assertThat(spoken).contains("Screenshot, In corso. 12 da salvare")
     assertThat(spoken).contains("Telegram, Non salvata. 224 foto e video, non si salva")
   }
 }

@@ -108,8 +108,8 @@ internal fun BackupPageScreen(
   val settingsLabel = stringResource(R.string.backup_settings_open)
   val sourceList = remember(state.sources) { state.sources.map { it.source } }
   BackupCoverWindow(LocalBackupCovers.current, sourceList)
-  val hero = heroModel(state.status, actions)
   val share = remember(state.status, state.sources) { SafeShare.of(state.status, state.sources) }
+  val hero = heroModel(state.status, actions, share)
   BackupPage(
     label = BackupLabel(title = stringResource(R.string.backup_title), subtitle = null),
     modifier = modifier,

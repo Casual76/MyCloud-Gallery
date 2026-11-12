@@ -83,8 +83,9 @@ class Correzioni5BVersioniAppTest {
     val versionWork = CopyOnWriteArrayList<BackupKind>()
     val userStarts = AtomicInteger()
 
-    override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean) {
+    override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean): Boolean {
       userStarts.incrementAndGet()
+      return true
     }
 
     override fun versionWork(kind: BackupKind) {

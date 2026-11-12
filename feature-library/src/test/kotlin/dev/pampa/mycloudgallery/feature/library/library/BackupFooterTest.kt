@@ -138,27 +138,34 @@ class BackupFooterTest {
   fun inCodaDiceQuantiEPerche() {
     show(LibraryBackupStatus.Queued(items = 312, wait = LibraryBackupWait.CHARGING))
     composeRule.onNodeWithText("312 in coda").assertExists()
-    composeRule.onNodeWithText("Attesa carica").assertExists()
+    // Fase I (BF-8): la formula comune del motivo (la stessa della pagina Backup e della Diagnostica). Giro 2 (BF2-3): «In attesa» una volta sola (il titolo).
+    composeRule.onNodeWithText("Serve la corrente").assertExists()
     composeRule.onNodeWithText("In attesa").assertExists()
+    assertThat(composeRule.onAllNodesWithText("In attesa della", substring = true).fetchSemanticsNodes()).isEmpty()
   }
 
   @Test
   fun ognunaDelleAttesePossibiliHaLaSuaFrase() {
     val phrases = mapOf(
-      LibraryBackupWait.CHARGING to "Attesa carica",
-      LibraryBackupWait.WIFI to "Attesa Wi-Fi",
-      LibraryBackupWait.HOME_WIFI to "Attesa Wi-Fi di casa",
-      LibraryBackupWait.NIGHT_WINDOW to "Attesa della notte",
-      LibraryBackupWait.BATTERY to "Attesa batteria",
+      // Fase I (BF-8): la formula comune per motivo (`gallery_wait_*`), senza promesse di ripartenza.
+      LibraryBackupWait.CHARGING to "Serve la corrente",
+      LibraryBackupWait.WIFI to "Serve il Wi-Fi",
+      LibraryBackupWait.HOME_WIFI to "Serve il Wi-Fi di casa",
+      LibraryBackupWait.NIGHT_WINDOW to "Fuori dalla fascia oraria",
+      LibraryBackupWait.BATTERY to "Batteria sotto la soglia",
       // FAB-4: il risparmio energetico non e' la batteria bassa e ha la sua frase.
-      LibraryBackupWait.POWER_SAVER to "Risparmio energetico acceso: riprende quando lo spegni.",
-      // Fase I (12/11): il caldo e i dati del mese con le parole della Diagnostica (prima «Attesa delle regole»).
-      LibraryBackupWait.THERMAL to "Telefono troppo caldo: riprende da solo quando si raffredda.",
-      LibraryBackupWait.DATA_CAP to "Tetto dati del mese raggiunto.",
-      LibraryBackupWait.NAS to "Attesa NAS",
+      LibraryBackupWait.POWER_SAVER to "Risparmio energetico attivo",
+      LibraryBackupWait.THERMAL to "Il telefono è troppo caldo",
+      LibraryBackupWait.DATA_CAP to "Tetto dati del mese raggiunto",
+      LibraryBackupWait.NAS to "NAS spento o non raggiungibile",
       LibraryBackupWait.NEXT_RUN to "Al prossimo giro",
       LibraryBackupWait.NAS_BUSY to "File occupato sul NAS, riprovo tra poco.",
-      LibraryBackupWait.OTHER to "Attesa delle regole",
+      // Giro 2 (BF2-11): niente gergo.
+      LibraryBackupWait.OTHER to "Il motivo è nella Diagnostica",
+      // T-1: una coda che l'ultimo giro non ha trovato sul telefono non promette un giro.
+      LibraryBackupWait.NOT_ON_PHONE to "Non li trovo sul telefono",
+      // BF-6: il primo backup pronto e' «da avviare», non «in coda al prossimo giro».
+      LibraryBackupWait.FIRST_BACKUP to "Primo backup da avviare",
     )
     assertThat(phrases.keys).containsExactlyElementsIn(LibraryBackupWait.entries)
     for ((wait, phrase) in phrases) {
@@ -177,6 +184,19 @@ class BackupFooterTest {
     composeRule.onNodeWithContentDescription("Primo backup: 1.240 di 6.658. circa 1 h 20 min").assertExists()
   }
 
+  /** Giro 2 (BF2-4): chiesto adesso e accettato, il piede dice «Sto partendo» come la pagina, mai «Primo backup: 0 di N». */
+  @Test
+  fun dopoInizia_OraIlPiedeDiceCheStaPartendo() {
+    show(LibraryBackupStatus.FirstBackup(done = 0, total = 7_105, etaMillis = null, starting = true))
+    // Come le altre voci di un lavoro in corso: l'anello nella capsula, la frase intera la dice TalkBack.
+    composeRule.onNodeWithContentDescription("Sto partendo", substring = true).assertExists()
+    assertThat(composeRule.onAllNodesWithText("0 / 7.105", useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+    assertThat(composeRule.onAllNodesWithText("0 di 7.105", substring = true).fetchSemanticsNodes()).isEmpty()
+    show(LibraryBackupStatus.Running(done = 0, total = 40, etaMillis = null, starting = true))
+    composeRule.onNodeWithContentDescription("Sto partendo", substring = true).assertExists()
+    assertThat(composeRule.onAllNodesWithText("0 / 40", useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+  }
+
   @Test
   fun unGiroNormaleDiceQuantiNeHaFattiESiTocca() {
     show(LibraryBackupStatus.Running(done = 12, total = 40, etaMillis = null))
@@ -188,19 +208,24 @@ class BackupFooterTest {
 
   @Test
   fun ilConfrontoDiceCosaStaFacendo() {
-    show(LibraryBackupStatus.Comparing(pending = null))
-    composeRule.onNodeWithText("Sto cercando cosa c’è già sul NAS…").assertExists()
-    show(LibraryBackupStatus.Comparing(pending = 120))
-    composeRule.onNodeWithText("Sto confrontando 120 foto con le copie sul NAS…").assertExists()
+    // Fase I (BF-7): la ricerca si chiama ricerca, come nella pagina; non ancora partita lo dice, mentre gira dice i file guardati.
+    show(LibraryBackupStatus.Comparing())
+    composeRule.onNodeWithText("Cerco cosa c’è già sul NAS").assertExists()
+    composeRule.onNodeWithText("Inizia fra poco.").assertExists()
+    show(LibraryBackupStatus.Comparing(seen = 1_234, total = 5_559))
+    composeRule.onNodeWithText("1.234 di 5.559 file guardati").assertExists()
   }
 
   /** Fase I (12/11): la ricerca ferma per una regola dice quale, non «sto cercando». */
   @Test
   fun laRicercaFermaDiceIlMotivoVero() {
-    show(LibraryBackupStatus.Comparing(pending = null, wait = LibraryBackupWait.THERMAL))
+    show(LibraryBackupStatus.Comparing(wait = LibraryBackupWait.THERMAL))
     composeRule.onNodeWithText("Ricerca sul NAS in pausa").assertExists()
-    composeRule.onNodeWithText("Telefono troppo caldo: riprende da solo quando si raffredda.").assertExists()
-    assertThat(composeRule.onAllNodesWithText("Sto cercando cosa c’è già sul NAS…").fetchSemanticsNodes()).isEmpty()
+    composeRule.onNodeWithText("Il telefono è troppo caldo").assertExists()
+    assertThat(composeRule.onAllNodesWithText("Cerco cosa c’è già sul NAS").fetchSemanticsNodes()).isEmpty()
+    // BF-4: un motivo che il backup non nomina: la pausa e la Diagnostica.
+    show(LibraryBackupStatus.Comparing(wait = LibraryBackupWait.OTHER))
+    composeRule.onNodeWithText("Il motivo è nella Diagnostica.").assertExists()
   }
 
   @Test
@@ -347,7 +372,7 @@ class BackupFooterTest {
     "tutto al sicuro" to LibraryBackupStatus.AllSafe(null),
     "in coda" to LibraryBackupStatus.Queued(items = 6_658, wait = LibraryBackupWait.HOME_WIFI),
     "primo backup" to LibraryBackupStatus.FirstBackup(done = 1_240, total = 6_658, etaMillis = 80 * 60_000L),
-    "confronto" to LibraryBackupStatus.Comparing(pending = 120),
+    "ricerca" to LibraryBackupStatus.Comparing(seen = 1_234, total = 5_559),
     "problema lungo" to LibraryBackupStatus.Problem(code = "phone_storage_low", count = 0),
     "problema con il numero" to LibraryBackupStatus.Problem(code = "verify_failed", count = 12_345),
     "in prova" to LibraryBackupStatus.TestOnly,

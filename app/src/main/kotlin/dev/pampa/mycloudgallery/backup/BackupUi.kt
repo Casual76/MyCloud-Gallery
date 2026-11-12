@@ -36,6 +36,7 @@ import dev.pampa.mycloudgallery.feature.nas.contract.NasScreen
 import dev.pampa.mycloudgallery.feature.settings.backup.BackupEntryStatus
 import dev.pampa.mycloudgallery.feature.viewer.info.MediaBackupStates
 import dev.pampa.mycloudgallery.work.BackupWorkScheduling
+import dev.pampa.mycloudgallery.work.NasWorkScheduling
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -389,6 +390,17 @@ class AppBackupActions(
    */
   override fun onPageResumed() {
     backup.kick()
+    // Fase I (punto 7.4): la ricerca sul NAS che aspetta solo il prossimo giro (fino a 6 ore) si chiede adesso. `scanNow` e' unica (KEEP): una
+    // verifica gia' in coda o in corso resta quella.
+    scope.launch {
+      try {
+        if (backup.firstSearchIdle()) NasWorkScheduling.scanNow(context)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        GalleryLog.w(TAG) { "ricerca sul NAS non chiesta: ${e.javaClass.simpleName}" }
+      }
+    }
     if (!fixing) return
     fixing = false
     scope.launch {
@@ -475,7 +487,9 @@ class AppBackupActions(
             // R4: "Riprendi" e "Fai ora" finiscono la pausa di "Ferma", ma solo quando il lavoro parte davvero (BK-4): prima la pausa si
             // toglieva al tocco, anche se poi l'utente toccava "Annulla" sul foglio dei dati mobili, e il backup ripartiva al primo Wi-Fi.
             backup.resumeFromPause()
-            backup.jobs.userInitiated(trigger, confirmed)
+            // Fase I (BF-1, BS2-2): fino a quando il motore non prende il giro, la pagina dice che sta partendo (non «al prossimo giro»), ma **solo se
+            // Android ha accettato il lavoro**; un motivo di adesso che ferma proprio questo lavoro lo dice lo stato al posto di «sto partendo».
+            if (backup.jobs.userInitiated(trigger, confirmed)) backup.userStarting(trigger)
           }
         }
       } catch (e: CancellationException) {

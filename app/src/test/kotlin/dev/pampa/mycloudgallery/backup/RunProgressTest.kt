@@ -15,10 +15,13 @@ class RunProgressTest {
 
   private val minute = 60_000L
 
-  /** Lo stato di un lotto, come lo pubblica il motore: contatori del lotto, totale dei soli elementi aperti. */
+  /**
+   * Lo stato di un lotto, come lo pubblica il motore: contatori del lotto, totale dei soli elementi aperti. Un giro chiesto dall'utente: dalla Fase I (BF-2) il
+   * primo backup ha una stima sua ([RunProgressFirstBackupTest]), queste prove restano quelle dei lotti e del modello dei giri normali.
+   */
   private fun batch(done: Int, total: Int = 980, bytesDone: Long = 0L, bytesTotal: Long = 0L) = BackupStatus.Running(
     kind = BackupKind.PHOTOS, done = done, total = total, bytesDone = bytesDone, bytesTotal = bytesTotal, etaMillis = null,
-    trigger = BackupTrigger.FIRST_BACKUP,
+    trigger = BackupTrigger.USER_NOW,
   )
 
   @Test

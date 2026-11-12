@@ -154,8 +154,9 @@ internal abstract class LibraryCloudPopupWordsBase(private val dark: Boolean, pr
     openPopup(backup = LibraryBackupStatus.Queued(items = 312, wait = LibraryBackupWait.POWER_SAVER))
 
     composeRule.onAllNodesWithText("312 in coda", substring = true).onFirst().assertExists()
-    composeRule.onAllNodesWithText("Risparmio energetico acceso: riprende quando lo spegni", substring = true).onFirst().assertExists()
-    composeRule.onAllNodesWithText("Attesa batteria", substring = true).assertCountEquals(0)
+    // Fase I (BF-8): la formula comune («Risparmio energetico attivo», come la Diagnostica); non e' la batteria bassa.
+    composeRule.onAllNodesWithText("Risparmio energetico attivo", substring = true).onFirst().assertExists()
+    composeRule.onAllNodesWithText("Batteria sotto la soglia", substring = true).assertCountEquals(0)
     shoot("pop-up-risparmio-energetico")
   }
 

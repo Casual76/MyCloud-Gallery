@@ -68,8 +68,11 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryCloudState
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterPill
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoGlyph
 import dev.pampa.mycloudgallery.core.designsystem.design.glyph
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRing
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRingDefaults
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
@@ -449,16 +452,9 @@ private fun PauseTitle(state: GalleryCloudState, title: String, detail: String?)
         color = ink,
         modifier = Modifier.semantics { hideFromAccessibility() },
       )
-      if (detail != null) Icon(imageVector = Icons.Outlined.Info, contentDescription = null, tint = ink, modifier = Modifier.size(InlineGlyph))
+      if (detail != null) GalleryInfoGlyph(open = open, tint = ink)
     }
-    if (open && detail != null) {
-      Text(
-        text = detail,
-        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-        color = ink,
-        modifier = Modifier.testTag(ProblemDetailTag).semantics { hideFromAccessibility() },
-      )
-    }
+    if (detail != null) GalleryInfoDetail(text = detail, visible = open, color = ink, modifier = Modifier.testTag(ProblemDetailTag))
   }
 }
 
@@ -541,7 +537,7 @@ private fun ActivityRow(note: GalleryFooterNote, gauge: CloudGauge?, onClick: ()
       val progress = note.progress
       when {
         progress != null -> {
-          GalleryProgressRing(progress = progress, modifier = Modifier.fillMaxSize(), color = accent, strokeWidth = GaugeStroke)
+          GalleryProgressRing(progress = progress, modifier = Modifier.fillMaxSize(), color = accent, strokeWidth = GaugeStroke, animate = true)
           Text(
             text = stringResource(R.string.library_cloud_gauge_percent, (progress * PercentScale).toInt()),
             style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Bold),
@@ -638,7 +634,7 @@ private fun SpaceRow(shown: SpaceUi) {
   ) {
     Box(modifier = Modifier.size(GaugeSize), contentAlignment = Alignment.Center) {
       val fraction = ready?.let { if (it.totalBytes > 0) (it.usedBytes.toFloat() / it.totalBytes).coerceIn(0f, 1f) else 0f } ?: 0f
-      GalleryProgressRing(progress = fraction, modifier = Modifier.fillMaxSize(), color = accent, strokeWidth = GaugeStroke)
+      GalleryProgressRing(progress = fraction, modifier = Modifier.fillMaxSize(), color = accent, strokeWidth = GaugeStroke, animate = true)
       if (shown == SpaceUi.Loading) {
         FluidSpinner(size = SpinnerSize, color = accent)
       } else {
@@ -803,7 +799,7 @@ private val ButtonGlyph: Dp = 20.dp
 private val RowMinHeight: Dp = 56.dp
 private val RowGap: Dp = 12.dp
 private val GaugeSize: Dp = 48.dp
-private val GaugeStroke: Dp = 4.dp
+private val GaugeStroke: Dp = GalleryProgressRingDefaults.stroke(GaugeSize)
 private val GaugeGlyph: Dp = 22.dp
 private val SyncGlyph: Dp = 26.dp
 private val InlineGlyph: Dp = 18.dp

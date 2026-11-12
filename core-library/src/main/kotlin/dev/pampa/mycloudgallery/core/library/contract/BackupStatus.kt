@@ -24,10 +24,11 @@ sealed interface LibraryBackupStatus {
   data object TestOnly : LibraryBackupStatus
 
   /**
-   * §2.11: prima del primo backup si cerca cosa c'e' gia' sul NAS ("Sto cercando…", "Sto confrontando N foto…"). Fase I (12/11, aggiunta
-   * compatibile): [wait] = la ricerca e' ferma adesso per quella regola (il telefono caldo, la batteria…): il piede dice quella, non "sto cercando".
+   * §2.11: prima del primo backup si cerca cosa c'e' gia' sul NAS. Fase I (12/11, BF-7): [seen] di [total] file del NAS gia' guardati mentre la
+   * ricerca gira (null = non sta girando; [total] null = non si sa ancora); [wait] = la ricerca e' ferma adesso per quella regola (il telefono caldo,
+   * la batteria…; [LibraryBackupWait.OTHER] = per un motivo che dice la Diagnostica): il piede dice quella, non "cerco".
    */
-  data class Comparing(val pending: Int?, val wait: LibraryBackupWait? = null) : LibraryBackupStatus
+  data class Comparing(val seen: Int? = null, val total: Int? = null, val wait: LibraryBackupWait? = null) : LibraryBackupStatus
 
   /** "Tutto al sicuro" · "Oggi alle 03:12": l'ultimo giro finito all'istante [atNasMillis] (null = non noto). */
   data class AllSafe(val atNasMillis: Long?) : LibraryBackupStatus
@@ -100,6 +101,9 @@ enum class LibraryBackupWait {
 
   /** Fase I (12/11): il tetto dei dati del mese e' raggiunto. */
   DATA_CAP,
+
+  /** Fase I (12/11, BF-6): il primo backup e' pronto e **aspetta il tocco** dell'utente: non parte da solo al prossimo giro. */
+  FIRST_BACKUP,
 
   /** Un altro motivo del motore delle regole (Diagnostica → Attivita' lo dice per esteso). */
   OTHER,

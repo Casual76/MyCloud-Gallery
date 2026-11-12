@@ -163,6 +163,11 @@ sealed interface BackupStatus {
     val bytesTotal: Long,
     val etaMillis: Long?,
     val trigger: BackupTrigger,
+    /**
+     * Fase I (12/11, BF-1, aggiunta compatibile): il lavoro chiesto adesso dall'utente («Inizia ora», «Fai ora») **sta partendo**: Android non l'ha
+     * ancora avviato e il motore non ha preso il giro. Niente numeri di avanzamento ancora; dura al piu' un minuto, poi lo stato vero.
+     */
+    val starting: Boolean = false,
   ) : BackupStatus
 
   data class Stopped(val by: StopBy) : BackupStatus
@@ -256,9 +261,10 @@ data class ExistingCopiesState(
   val similarPending: Int,
   /**
    * Fase I (12/11, aggiunta compatibile): perche' il lavoro che si aspetta e' **fermo adesso** per una regola delle attivita' (la scansione
-   * dell'area privata finche' non e' finita, poi la preparazione delle anteprime che serve al confronto delle copie simili): il telefono caldo,
-   * la batteria, la rete, i dati del mese. Null = puo' girare. La da' `:app` dal motore delle regole, lo stesso della Diagnostica; il piano
-   * non la legge.
+   * dell'area privata finche' non e' finita; poi la preparazione delle anteprime, **solo** se ci sono anteprime del NAS che il confronto delle copie
+   * simili aspetta): il telefono caldo, la batteria, la rete, i dati del mese. [WaitReason.NEXT_RUN] = fermo per un motivo che il backup non nomina
+   * (congelamento, attivita' spenta, profilo, limiti di Android: lo dice la Diagnostica). Null = puo' girare. La da' `:app` dal motore delle regole,
+   * lo stesso della Diagnostica; il piano non la legge.
    */
   val heldBy: WaitReason? = null,
   /** Fase I: quanti file del NAS la scansione dell'area privata ha gia' guardato, mentre gira (null = non sta scandendo o non si sa). */
@@ -339,6 +345,11 @@ data class BackupSummary(
    * sui dati mobili con conferma). [estimate] e' la scelta "Stanotte" (predefinita): segue il preset.
    */
   val estimateNow: BackupEstimate? = null,
+  /**
+   * Fase I (12/11, BF-5, aggiunta compatibile): falso = il riepilogo **non e' ancora stato calcolato** ([COUNTING]: il NAS o il catalogo non sono
+   * ancora pronti, appena aperta l'app). Chi lo mostra non scrive una parola provvisoria ne' un numero.
+   */
+  val counted: Boolean = true,
 ) {
   /** "Sto ancora confrontando": i tre numeri non sono ancora definitivi (la cache del riepilogo si rinfresca finche' e' vero). */
   val comparing: Boolean get() = !existing.settled
@@ -372,6 +383,6 @@ data class BackupSummary(
      * Fase I (12/11): il riepilogo **non ancora calcolato** (il NAS o il catalogo non sono ancora pronti, appena aperta l'app): niente numeri e le
      * scelte spente, come mentre si cerca sul NAS. Prima era [EMPTY], "assestato", e la pagina diceva «Pronto per partire · 0 foto e video · 0 B».
      */
-    val COUNTING: BackupSummary = EMPTY.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0))
+    val COUNTING: BackupSummary = EMPTY.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0), counted = false)
   }
 }

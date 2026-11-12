@@ -57,21 +57,42 @@ class FirstBackupSheetTest : ComposeBackupTest() {
     composeRule.onNodeWithText("40 sono già nell’area comune", substring = true).assertExists()
   }
 
+  /**
+   * Fase I (BF-2): prima di partire **nessuna durata** (il modello di serie era ottimista di circa tre volte): la frase in cima dice quanto c'e' da caricare,
+   * la stima dice il traffico, non il tempo, ne' le notti, ne' la batteria.
+   */
   @Test
-  fun laStimaDiceTempoNottiETraffico() {
+  fun ilFoglioDiceLeQuantitaNonUnaDurata() {
     showSheet(BackupSamples.firstBackupSummary)
-    // Il tempo e' nella frase in cima (si vede senza scorrere) e nella riga della stima.
     composeRule.onNodeWithText("Da caricare: 5.418 foto e video", substring = true).assertExists()
-    composeRule.onAllNodes(hasText("circa 2 h 36 min", substring = true)).assertCountEquals(2)
-    composeRule.onNodeWithText("In 1 notte, con le regole di adesso.", substring = true).assertExists()
     composeRule.onNodeWithText("Tutto sul Wi-Fi", substring = true).assertExists()
+    composeRule.onAllNodes(hasText("circa", substring = true)).assertCountEquals(0)
+    // Ne' le notti («In 1 notte», «In circa 2 notti»; il tasto «Stanotte» resta).
+    composeRule.onAllNodes(hasText("1 notte", substring = true)).assertCountEquals(0)
+    composeRule.onAllNodes(hasText("notti", substring = true)).assertCountEquals(0)
+    composeRule.onAllNodes(hasText("Batteria")).assertCountEquals(0)
+  }
+
+  /**
+   * Fase I (BF-2), i numeri del telefono del 12/11: 5.559 gia' sul NAS (37 GB da rileggere), 1.546 nuovi (3,0 GB), il modello di serie che diceva «Stanotte: circa
+   * 50 min» per oltre due ore di lavoro vero. Il foglio dice quanto si carica e che i gia' sul NAS si rileggono, nessun numero di minuti.
+   */
+  @Test
+  fun iNumeriDelTelefonoSenzaIlNumeroOttimista() {
+    showSheet(BackupSamples.phoneSummary)
+    composeRule.onNodeWithText("Da caricare: 1.546 foto e video", substring = true).assertExists()
+    composeRule.onNodeWithText("5.559 già sul NAS", substring = true).assertExists()
+    composeRule.onNodeWithText("si rileggono dal NAS per controllarli", substring = true).assertExists()
+    composeRule.onAllNodes(hasText("50 min", substring = true)).assertCountEquals(0)
+    composeRule.onAllNodes(hasText("48 min", substring = true)).assertCountEquals(0)
+    composeRule.onAllNodes(hasText("circa", substring = true)).assertCountEquals(0)
   }
 
   @Test
-  fun lePartenzeSonoDueEOgnunaHaLaSuaStima() {
+  fun iDatiMobiliDiInizia_OraSiDiconoSenzaDurata() {
     showSheet(BackupSamples.twoEstimatesSummary)
     composeRule.onNodeWithText("Parte subito; 15", substring = true).assertExists()
-    composeRule.onNodeWithText("circa 2 h 15 min", substring = true).assertExists()
+    composeRule.onAllNodes(hasText("circa 2 h 15 min", substring = true)).assertCountEquals(0)
     composeRule.onNodeWithText("Sui dati mobili chiedo conferma con la stima.").assertExists()
     composeRule.onNodeWithText("Meglio in carica e sul Wi-Fi di casa.").assertExists()
   }
@@ -85,9 +106,10 @@ class FirstBackupSheetTest : ComposeBackupTest() {
   }
 
   @Test
-  fun senzaStimaDiceChiaramenteCheNonCe() {
+  fun senzaStimaRestaIlTotaleDaCaricare() {
     showSheet(BackupSamples.firstBackupSummary.copy(estimate = null, estimateNow = null))
-    composeRule.onNodeWithText("La stima arriva quando ho finito di confrontare.").assertExists()
+    composeRule.onNodeWithText("5.418 · ", substring = true).assertExists()
+    composeRule.onAllNodes(hasText("Traffico")).assertCountEquals(0)
   }
 
   @Test
@@ -106,10 +128,11 @@ class FirstBackupSheetTest : ComposeBackupTest() {
   @Test
   fun fincheSiCercaSulNasIlFoglioDicePerche_ELeScelteAspettano() {
     showSheet(BackupSamples.firstBackupSummary.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0)))
-    // Fase I (12/11): niente «Sto ancora contando»: una riga che dice che cosa fa, e i numeri arrivano a ricerca finita.
-    composeRule.onNodeWithText("Prima cerco cosa c’è già sul NAS, così non lo ricarico.").assertExists()
+    // Fase I (12/11): niente «Sto ancora contando»: una riga che dice che cosa fa, e i numeri arrivano a ricerca finita. Qui la scansione non gira ancora
+    // (BF-4): la riga lo dice («Inizia fra poco»), senza barra.
+    composeRule.onNodeWithText("Prima guardo cosa c’è già sul NAS.").assertExists()
     composeRule.onNodeWithText("Cerco cosa c’è già sul NAS").assertExists()
-    composeRule.onNodeWithText("Può durare qualche minuto.").assertExists()
+    composeRule.onNodeWithText("Inizia fra poco.").assertExists()
     composeRule.onAllNodes(hasText("Da caricare", substring = true)).assertCountEquals(0)
     composeRule.onAllNodes(hasText("Sto ancora contando", substring = true)).assertCountEquals(0)
     button("Stanotte").assertIsNotEnabled()
@@ -125,20 +148,26 @@ class FirstBackupSheetTest : ComposeBackupTest() {
   @Test
   fun laRicercaDiceQuantiFileHaGuardato() {
     showSheet(BackupSamples.searchingSummary)
-    composeRule.onNodeWithText("1.234 di 5.559 file del NAS guardati").assertExists()
+    // BF-12 (parole): il numero e' la cosa da leggere, le parole la didascalia sotto.
+    composeRule.onNodeWithText("1.234 di 5.559").assertExists()
+    composeRule.onNodeWithText("file del NAS guardati").assertExists()
   }
 
   @Test
   fun senzaIlTotaleLaRicercaDiceSoloQuantiNeHaGuardati() {
     showSheet(BackupSamples.searchingSummary.copy(existing = BackupSamples.searchingSummary.existing.copy(scanTotal = null)))
-    composeRule.onNodeWithText("1.234 file del NAS guardati").assertExists()
+    composeRule.onNodeWithText("1.234").assertExists()
+    composeRule.onNodeWithText("file del NAS guardati").assertExists()
   }
 
-  /** Fase I (punto 5): ferma per una regola, la riga dice quale e che riprende da sola, non «cerco». */
+  /**
+   * Fase I (punto 5, BF-8): ferma per una regola, la riga dice quale (la formula comune, quella della Diagnostica) e che riprende da sola (il caldo riprende
+   * davvero da solo: la ripresa a tempo dei lavori del NAS), non «cerco». Il testo dato a `heldBy`: chi sceglie il motivo lo prova `ExistingCopiesLiveTest`.
+   */
   @Test
-  fun laRicercaFermaDiceIlMotivoVero() {
+  fun laRicercaFermaPerIlCaldoDiceIlMotivoEChe_RiprendeDaSola() {
     showSheet(BackupSamples.heldSummary)
-    composeRule.onNodeWithText("Telefono troppo caldo").assertExists()
+    composeRule.onNodeWithText("Il telefono è troppo caldo").assertExists()
     composeRule.onNodeWithText("La ricerca riprende da sola.").assertExists()
     composeRule.onAllNodes(hasText("Cerco cosa c’è già sul NAS")).assertCountEquals(0)
     button("Stanotte").assertIsNotEnabled()
@@ -152,7 +181,7 @@ class FirstBackupSheetTest : ComposeBackupTest() {
   fun poiIlConfrontoDelleCopieSimiliNonFermaLeScelte() {
     showSheet(BackupSamples.comparingSummary)
     composeRule.onNodeWithText("Ancora 120 foto da confrontare").assertExists()
-    composeRule.onNodeWithText("Il confronto continua da solo. Non cambia cosa si carica.").assertExists()
+    composeRule.onNodeWithText("Continua da solo. Si carica lo stesso.").assertExists()
     composeRule.onAllNodes(hasText("Da caricare:", substring = true)).assertCountEquals(1)
     button("Stanotte").assertIsEnabled()
     button("Inizia ora").assertIsEnabled()
@@ -160,11 +189,38 @@ class FirstBackupSheetTest : ComposeBackupTest() {
     assertThat(tonight).isEqualTo(1)
   }
 
+  /** BS-3: il motivo del confronto e' quello delle anteprime del NAS (la riga lo attribuisce a loro); le scelte restano accese. */
   @Test
-  fun ilConfrontoFermoDiceIlMotivoVero() {
+  fun ilConfrontoFermoDiceCheAspettanoLeAnteprime() {
     showSheet(BackupSamples.comparingSummary.copy(existing = BackupSamples.comparingSummary.existing.copy(heldBy = WaitReason.THERMAL)))
-    composeRule.onNodeWithText("Telefono troppo caldo: il confronto riprende da solo. Non cambia cosa si carica.").assertExists()
+    composeRule.onNodeWithText("Il telefono è troppo caldo · le anteprime del NAS aspettano e riprendono da sole. Si carica lo stesso.").assertExists()
     button("Inizia ora").assertIsEnabled()
+  }
+
+  /** BF-9: per la rete, il NAS spento e il tetto dei dati si dice la condizione e basta, nessun «riprende da sola». */
+  @Test
+  fun laReteNonPromette_RiprendeDaSola() {
+    showSheet(BackupSamples.heldSummary.copy(existing = BackupSamples.heldSummary.existing.copy(heldBy = WaitReason.HOME_WIFI)))
+    composeRule.onNodeWithText("In attesa del Wi-Fi di casa").assertExists()
+    composeRule.onAllNodes(hasText("riprende", substring = true)).assertCountEquals(0)
+  }
+
+  /** BF-9: anche il tetto dei dati (non riprende da solo fino al mese dopo). */
+  @Test
+  fun ilTettoDeiDatiNonPromette_RiprendeDaSola() {
+    showSheet(BackupSamples.heldSummary.copy(existing = BackupSamples.heldSummary.existing.copy(heldBy = WaitReason.DATA_CAP)))
+    composeRule.onNodeWithText("Tetto dati del mese raggiunto").assertExists()
+    composeRule.onAllNodes(hasText("riprende", substring = true)).assertCountEquals(0)
+  }
+
+  /** BF-4: un motivo che il backup non nomina (congelamento, attivita' spenta…): «in pausa» e la Diagnostica, mai «cerco… inizia fra poco». */
+  @Test
+  fun unMotivoSenzaNomeDiceCheEFermo() {
+    showSheet(BackupSamples.heldSummary.copy(existing = BackupSamples.heldSummary.existing.copy(heldBy = WaitReason.NEXT_RUN)))
+    composeRule.onNodeWithText("Ricerca in pausa").assertExists()
+    composeRule.onNodeWithText("Il motivo è nella Diagnostica.").assertExists()
+    composeRule.onAllNodes(hasText("Cerco", substring = true)).assertCountEquals(0)
+    composeRule.onAllNodes(hasText("Inizia fra poco", substring = true)).assertCountEquals(0)
   }
 
   @Test

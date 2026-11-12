@@ -263,8 +263,9 @@ private fun backupItem(status: LibraryBackupStatus): CloudItem? = when (status) 
   // I4: il backup vero non ancora acceso si dice come nella pagina Backup, «In pausa» (la recinzione non cambia: cambia come si mostra).
   LibraryBackupStatus.TestOnly -> CloudItem.Backup(status, GalleryCloudState.Paused)
   is LibraryBackupStatus.Queued -> CloudItem.Backup(status, GalleryCloudState.Waiting)
-  // Fase I (12/11): la ricerca sul NAS ferma per una regola (il telefono caldo…) e' un'attesa, non un lavoro che gira.
-  is LibraryBackupStatus.Comparing -> CloudItem.Backup(status, if (status.wait != null) GalleryCloudState.Waiting else GalleryCloudState.Syncing)
+  // Fase I (12/11, BF-4): la ricerca sul NAS «sincronizza» solo mentre gira davvero; ferma per una regola, o non ancora partita, e' un'attesa.
+  is LibraryBackupStatus.Comparing ->
+    CloudItem.Backup(status, if (status.wait == null && status.seen != null) GalleryCloudState.Syncing else GalleryCloudState.Waiting)
   is LibraryBackupStatus.FirstBackup, is LibraryBackupStatus.Running -> CloudItem.Backup(status, GalleryCloudState.Syncing)
   is LibraryBackupStatus.AllSafe -> CloudItem.Backup(status, GalleryCloudState.Saved)
   // OA-10: un backup fermo non sparisce dalla nuvola (prima, con "NAS aggiornato", restava la spunta di "tutto salvato").

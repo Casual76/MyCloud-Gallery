@@ -488,6 +488,8 @@ class AppBackupActions(
             // toglieva al tocco, anche se poi l'utente toccava "Annulla" sul foglio dei dati mobili, e il backup ripartiva al primo Wi-Fi.
             backup.resumeFromPause()
             backup.jobs.userInitiated(trigger, confirmed)
+            // Fase I (BF-1): fino a quando il motore non prende il giro, la pagina dice che sta partendo (non «al prossimo giro»).
+            backup.userStarting(trigger)
           }
         }
       } catch (e: CancellationException) {

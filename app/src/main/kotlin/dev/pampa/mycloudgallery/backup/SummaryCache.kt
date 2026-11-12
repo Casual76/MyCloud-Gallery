@@ -13,25 +13,54 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupSummary
  */
 internal class SummaryCache(private val refreshMs: Long) {
 
+  companion object {
+    /**
+     * Fase I (12/11; BS-1, BF-3): la chiave di un riepilogo. Oltre a sorgenti, confronto delle copie simili finito o no e conteggi del backup (BK-8),
+     * **l'account, l'area privata e se la sua scansione e' finita**: un riepilogo di un'altra area (l'admin ne assegna una nuova, mai scandita) non vale,
+     * e la fine della scansione rifa' subito numeri e cancello insieme (prima restavano quelli di prima fino a un minuto, con i tasti spenti). Resta in
+     * memoria, mai nei log.
+     */
+    fun keyOf(
+      sourceIds: Collection<String>,
+      similarSettled: Boolean,
+      counts: dev.pampa.mycloudgallery.core.backup.contract.SafetyCounts,
+      account: String?,
+      share: String?,
+      scanned: Boolean,
+    ): String = listOf(
+      sourceIds.sorted().joinToString(","), similarSettled, counts.safe, counts.noNasCopy, counts.unverified, account.orEmpty(), share.orEmpty(), scanned,
+    ).joinToString("|")
+  }
+
   private class Entry(val key: String, val at: Long, val summary: BackupSummary)
 
   private var entry: Entry? = null
 
   /** Il riepilogo in cache se vale ancora per [key] all'ora [now], altrimenti null (da ricalcolare). */
+  @Synchronized
   fun fresh(key: String, now: Long): BackupSummary? {
     val cached = entry ?: return null
     if (cached.key != key) return null
     return cached.summary.takeIf { !it.comparing || now - cached.at < refreshMs }
   }
 
+  @Synchronized
   fun put(key: String, now: Long, summary: BackupSummary) {
     entry = Entry(key, now, summary)
   }
 
   /** L'ultimo calcolato, anche vecchio (per una stima che non può aspettare). */
+  @Synchronized
   fun last(): BackupSummary? = entry?.summary
 
+  /** Fase I (BS-1): le parti del backup sono cambiate (un'altra area, un altro account, il NAS che va e viene): niente di prima vale. */
+  @Synchronized
+  fun clear() {
+    entry = null
+  }
+
   /** Fra quanti ms un riepilogo provvisorio scade (almeno 1); null se quello in cache è definitivo o non c'è. */
+  @Synchronized
   fun recheckInMs(now: Long): Long? {
     val cached = entry ?: return null
     if (!cached.summary.comparing) return null

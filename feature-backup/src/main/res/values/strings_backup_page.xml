@@ -63,7 +63,15 @@
   <string name="backup_hero_reset_line">Ricomincia dalla configurazione</string>
   <string name="backup_hero_setup">Da preparare</string>
   <string name="backup_hero_ready">Pronto per partire</string>
-  <string name="backup_hero_pair">%1$s · %2$s</string>
+  <!-- Fase I (12/11): la riga di «Pronto per partire» dice quanto viaggia, come il titolo del foglio (BF-c); dietro la «i» i conti delle cartelle scelte. -->
+  <string name="backup_hero_to_upload">%1$s da caricare · %2$s</string>
+  <plurals name="backup_hero_linked_only">
+    <item quantity="one">%1$s già sul NAS</item>
+    <item quantity="other">%1$s già sul NAS</item>
+  </plurals>
+  <string name="backup_hero_first_breakdown">Nelle cartelle scelte ci sono %1$s foto e video: %2$s già sul NAS, %3$s da caricare e %4$s che questo backup non carica adesso (già nell’area comune, non più sul telefono o con un problema da guardare).</string>
+  <!-- Fase I (BF-1): fra il tocco su «Inizia ora» o «Fai ora» e l'avvio del lavoro. -->
+  <string name="backup_hero_starting">Sto partendo</string>
   <!-- D12: la recinzione non si tocca; si dice una volta, in piccolo, senza parole da cantiere. -->
   <string name="backup_hero_test_only_line">Il backup vero non è ancora acceso</string>
   <string name="backup_hero_percent">%1$d%%</string>

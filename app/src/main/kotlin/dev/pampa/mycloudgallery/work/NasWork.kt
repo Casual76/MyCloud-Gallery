@@ -11,7 +11,6 @@ import androidx.work.ListenableWorker
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
@@ -49,7 +48,6 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.flow.first
 
 /**
  * I lavori del NAS nella Libreria (Fase 4A, P11; docs/fase4-progetto.md §1.4, §2.8, D22). Tutti **a tappe** (`StagedRun`
@@ -176,43 +174,34 @@ object NasWorkScheduling {
    *   un telefono caldo. La ripresa rilegge le regole (anche l'headroom termico, che nessun ascoltatore vede);
    * - **cosa no**: le attese che non sono una regola da aspettare (NAS spento, rete, congelamento, tetto dei dati, profilo, limiti di Android) non
    *   programmano niente, come oggi (`followUpOf` da' null): riprendono il periodico, l'apertura dell'app, la rete;
-   * - **una sola** ripresa per lavoro, con il suo nome: chi non e' la ripresa ([fromResume] falso: il periodico, la tappa dopo, «verifica adesso»)
-   *   **sostituisce** quella in coda (la scala riparte da capo: senza il tentativo negli input si riparte da 5 minuti), ma non tocca una ripresa che
-   *   sta girando (decide lei); la ripresa che aspetta ancora si mette in coda dopo di se' (non si cancellerebbe da sola);
+   * - **una sola** ripresa per lavoro, con il suo nome, e **nessuno la cancella**: chi non e' la ripresa (il periodico, la tappa dopo, «verifica
+   *   adesso») usa `KEEP` e lascia alla ripresa gia' registrata, in coda o in corso, la sua scadenza e il suo successore (BS-2 della critica: con
+   *   `REPLACE` e una lettura dello stato prima, una ripresa diventata RUNNING fra la lettura e l'accodamento veniva cancellata a meta' tappa; la
+   *   transizione di WorkManager non si puo' rendere atomica da qui). Si rinuncia all'azzeramento immediato della scala quando una ripresa c'e' gia':
+   *   l'attesa resta comunque sotto il tetto di un'ora. Solo la ripresa che aspetta ancora si mette in coda dopo di se' (`APPEND_OR_REPLACE`);
    * - **vincoli**: la rete dei lavori del NAS ([LanConstraints], la stessa del periodico), piu' la carica se la regola la chiede. Mai piu' larghi.
    *
-   * [input] sono gli input del lavoro che aspetta: il tentativo ([RuleWaits.KEY_ATTEMPT]) e se e' la ripresa ([KEY_WAIT_RESUME]). [states] legge gli stati
-   * del lavoro con quel nome (di serie WorkManager; le prove lo scelgono, perche' l'esecutore sincrono di prova non risponde da dentro un lavoro).
-   * @return vero se ha messo in coda una ripresa.
+   * [input] sono gli input del lavoro che aspetta: il tentativo ([RuleWaits.KEY_ATTEMPT]) e se e' la ripresa ([KEY_WAIT_RESUME]).
+   * @return vero se ha chiesto una ripresa (con `KEEP` WorkManager la scarta se ce n'e' gia' una).
    */
-  suspend fun afterWait(
+  fun afterWait(
     context: Context,
     name: String,
     worker: Class<out ListenableWorker>,
     wait: WaitReason,
     input: Data,
     now: LocalDateTime = LocalDateTime.now(),
-    states: suspend (String) -> List<WorkInfo.State> = { unique ->
-      WorkManager.getInstance(context.applicationContext).getWorkInfosForUniqueWorkFlow(unique).first().map { it.state }
-    },
   ): Boolean {
     val fromResume = input.getBoolean(KEY_WAIT_RESUME, false)
     val follow = RuleWaits.followUpOf(wait, now, input.getInt(RuleWaits.KEY_ATTEMPT, 0)) ?: return false
-    val wm = WorkManager.getInstance(context.applicationContext)
-    val policy = waitPolicy(fromResume, if (fromResume) emptyList() else states(name)) ?: return false
-    wm.enqueueUniqueWork(name, policy, waitRequest(worker, follow))
+    WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(name, waitPolicy(fromResume), waitRequest(worker, follow))
     return true
   }
 
   /**
-   * Come mettere in coda la ripresa (punto 7), dagli stati del lavoro con quel nome ([current]); null = non serve (una ripresa sta gia' girando:
-   * quando finisce decide lei). Pura, provata su JVM.
+   * Come mettere in coda la ripresa (punto 7, BS-2): la ripresa stessa dopo di se', chiunque altro senza toccare quella che c'e'. Pura, provata su JVM.
    */
-  fun waitPolicy(fromResume: Boolean, current: List<WorkInfo.State>): ExistingWorkPolicy? = when {
-    fromResume -> ExistingWorkPolicy.APPEND_OR_REPLACE
-    WorkInfo.State.RUNNING in current -> null
-    else -> ExistingWorkPolicy.REPLACE
-  }
+  fun waitPolicy(fromResume: Boolean): ExistingWorkPolicy = if (fromResume) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.KEEP
 
   /** La richiesta della ripresa: la rete dei lavori del NAS piu' i vincoli della regola, il ritardo e il tentativo della regola unica. */
   fun waitRequest(worker: Class<out ListenableWorker>, follow: RuleWaits.FollowUp): OneTimeWorkRequest =

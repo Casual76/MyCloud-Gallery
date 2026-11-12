@@ -58,6 +58,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupAction
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSetupStep
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
+import dev.pampa.mycloudgallery.core.backup.contract.BackupSummary
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.backup.contract.SourceStatus
 import dev.pampa.mycloudgallery.core.backup.contract.StopBy
@@ -69,8 +70,9 @@ import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryStatusMark
 import dev.pampa.mycloudgallery.core.designsystem.state.LocalWritesHeldByRelease
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
-import dev.pampa.mycloudgallery.feature.backup.first.heldRes
+import dev.pampa.mycloudgallery.feature.backup.first.resumesAlone
 import dev.pampa.mycloudgallery.feature.backup.first.searchText
+import dev.pampa.mycloudgallery.feature.backup.first.waitTitleRes
 import dev.pampa.mycloudgallery.feature.backup.BackupDimens
 import dev.pampa.mycloudgallery.feature.backup.R
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
@@ -156,7 +158,7 @@ internal class SafeShare(val safe: Int, val total: Int) {
 
 /** Il modello della testata per [status]: un ramo per ogni caso del contratto (un caso nuovo non compila finche' non ha il suo). */
 @Composable
-internal fun heroModel(status: BackupStatus, actions: BackupPageActions): HeroModel = when (status) {
+internal fun heroModel(status: BackupStatus, actions: BackupPageActions, share: SafeShare? = null): HeroModel = when (status) {
   is BackupStatus.NotConfigured -> {
     val missing = BackupSetupStep.entries.filter { it in status.missing }
     HeroModel(
@@ -184,35 +186,8 @@ internal fun heroModel(status: BackupStatus, actions: BackupPageActions): HeroMo
   is BackupStatus.FirstBackupReady -> {
     val summary = status.summary
     // Fase I (12/11): «Preparo» solo finche' la ricerca sul NAS non e' finita (lo stesso cancello del piano); il confronto delle copie simili non
-    // ferma niente e la testata non lo dice. Ferma per una regola, dice quale con la clessidra, senza l'arco che gira.
-    if (!summary.canStart) {
-      val held = summary.existing.heldBy
-      HeroModel(
-        mark = if (held != null) GalleryIconStatus.Waiting else GalleryIconStatus.Running,
-        label = stringResource(R.string.backup_status_first_comparing_title),
-        line = if (held != null) stringResource(R.string.backup_hero_search_held, stringResource(heldRes(held))) else searchText(summary.existing),
-        busy = held == null,
-        actions = listOf(HeroAction(stringResource(R.string.backup_status_first_see), Icons.Rounded.Checklist, actions.openSheet)),
-        calmAction = true,
-      )
-    } else {
-      val items = summary.toUpload.items + summary.linked.items
-      HeroModel(
-        mark = GalleryIconStatus.Attention,
-        label = stringResource(R.string.backup_hero_ready),
-        // Fase I (punto 4): mai «0 foto e video · 0 B»: senza numeri la riga non c'e' (il riepilogo li porta appena ci sono).
-        line = if (items <= 0) {
-          null
-        } else {
-          stringResource(
-            R.string.backup_hero_pair,
-            pluralStringResource(R.plurals.backup_source_media, items, BackupText.count(items)),
-            BackupText.size(summary.linked.bytes + summary.toUpload.bytes),
-          )
-        },
-        actions = listOf(HeroAction(stringResource(R.string.backup_status_first_see), Icons.Rounded.Checklist, actions.openSheet)),
-      )
-    }
+    // ferma niente e la testata non lo dice.
+    if (!summary.canStart) searchHero(summary, actions) else readyHero(summary, share, actions)
   }
   is BackupStatus.UpToDate -> HeroModel(
     mark = GalleryIconStatus.Done,
@@ -228,7 +203,15 @@ internal fun heroModel(status: BackupStatus, actions: BackupPageActions): HeroMo
     actions = listOf(HeroAction(stringResource(R.string.backup_do_now), Icons.Rounded.CloudUpload, actions.backupNow)),
     calmAction = true,
   )
-  is BackupStatus.Running -> {
+  // Fase I (BF-1): dopo «Inizia ora» o «Fai ora», finche' Android non avvia il lavoro: «Sto partendo», non «In attesa · al prossimo giro».
+  is BackupStatus.Running -> if (status.starting) {
+    HeroModel(
+      mark = GalleryIconStatus.Running,
+      label = stringResource(R.string.backup_hero_starting),
+      actions = listOf(HeroAction(stringResource(R.string.backup_stop), Icons.Rounded.Pause, actions.stop)),
+      calmAction = true,
+    )
+  } else {
     val kind = stringResource(if (status.kind == BackupKind.VIDEOS) R.string.backup_kind_videos else R.string.backup_kind_photos)
     // Giro 1 (CU-11): quanto e' fatto lo dice l'anello (sulle sorgenti); la riga dice solo che cosa carica e quanto manca di tempo. Prima c'era una
     // seconda frazione con un altro totale («Foto: 2.052 di 6.968» sotto «2.052 / 5.314»).
@@ -263,6 +246,68 @@ internal fun heroModel(status: BackupStatus, actions: BackupPageActions): HeroMo
     )
   }
   is BackupStatus.Problem -> problemHero(status, actions)
+}
+
+/**
+ * Fase I (BF-4, BF-5): la testata mentre si cerca sul NAS. L'arco gira **solo se la scansione gira davvero**; ferma per una regola, quale (con la clessidra, e
+ * «riprende da sola» solo dove e' vero); ferma per un motivo che il backup non nomina, la pausa e la Diagnostica; non ancora partita, «inizia fra poco», ferma.
+ * Appena aperta l'app, senza un riepilogo ancora calcolato, nessuna riga provvisoria.
+ */
+@Composable
+private fun searchHero(summary: BackupSummary, actions: BackupPageActions): HeroModel {
+  val existing = summary.existing
+  val held = existing.heldBy
+  val see = listOf(HeroAction(stringResource(R.string.backup_status_first_see), Icons.Rounded.Checklist, actions.openSheet))
+  val label = stringResource(R.string.backup_status_first_comparing_title)
+  return when {
+    !summary.counted -> HeroModel(mark = GalleryIconStatus.Waiting, label = label, actions = see, calmAction = true)
+    held == WaitReason.NEXT_RUN ->
+      HeroModel(mark = GalleryIconStatus.Paused, label = label, line = stringResource(R.string.backup_hero_search_paused), actions = see, calmAction = true)
+    held != null -> HeroModel(
+      mark = GalleryIconStatus.Waiting,
+      label = label,
+      line = if (resumesAlone(held)) stringResource(R.string.backup_hero_search_held, stringResource(waitTitleRes(held))) else stringResource(waitTitleRes(held)),
+      actions = see,
+      calmAction = true,
+    )
+    existing.scanSeen != null ->
+      HeroModel(mark = GalleryIconStatus.Running, label = label, line = searchText(existing), busy = true, actions = see, calmAction = true)
+    else -> HeroModel(mark = GalleryIconStatus.Waiting, label = label, line = stringResource(R.string.backup_hero_search_soon), actions = see, calmAction = true)
+  }
+}
+
+/**
+ * Fase I: il primo backup pronto. Il segno «tocca a te» (BF-5: non il «!» d'allarme); la riga dice **quanto viaggia**, come il titolo del foglio (BF-c: prima
+ * «7.105 foto e video · 40 GB» contava anche i 5.559 gia' sul NAS, che si rileggono soltanto); dietro la «i» i conti delle cartelle scelte, se l'anello ne
+ * conta di piu' (i media che non entrano in questo backup hanno un nome).
+ */
+@Composable
+private fun readyHero(summary: BackupSummary, share: SafeShare?, actions: BackupPageActions): HeroModel {
+  val upload = summary.toUpload
+  val linked = summary.linked.items
+  val rest = (share?.total ?: 0) - linked - upload.items
+  return HeroModel(
+    mark = GalleryIconStatus.YourTurn,
+    label = stringResource(R.string.backup_hero_ready),
+    // Fase I (punto 4): mai «0 foto e video · 0 B»: senza numeri la riga non c'e'.
+    line = when {
+      upload.items > 0 -> stringResource(R.string.backup_hero_to_upload, BackupText.count(upload.items), BackupText.size(upload.bytes))
+      linked > 0 -> pluralStringResource(R.plurals.backup_hero_linked_only, linked, BackupText.count(linked))
+      else -> null
+    },
+    detail = if (share != null && rest > 0) {
+      stringResource(
+        R.string.backup_hero_first_breakdown,
+        BackupText.count(share.total),
+        BackupText.count(linked),
+        BackupText.count(upload.items),
+        BackupText.count(rest),
+      )
+    } else {
+      null
+    },
+    actions = listOf(HeroAction(stringResource(R.string.backup_status_first_see), Icons.Rounded.Checklist, actions.openSheet)),
+  )
 }
 
 /** Un problema in testa: il segno del suo tono, il messaggio come etichetta, il perche' dietro la «i», le azioni come tasti con l'icona. */

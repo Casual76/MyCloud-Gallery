@@ -12,6 +12,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
+import androidx.work.impl.WorkManagerImpl
 import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.WorkManagerTestInitHelper
 import com.google.common.truth.Truth.assertThat
@@ -30,7 +31,6 @@ import java.time.LocalTime
 import java.util.UUID
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
-import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -64,14 +64,11 @@ class NasWaitSchedulingTest {
     }
   }
 
-  /**
-   * Il lavoro di prova: come `NasWorker` dopo una tappa in attesa, chiede la ripresa con i suoi input. E' la ripresa ([NasWorkScheduling.KEY_WAIT_RESUME]):
-   * non legge gli stati di WorkManager (non servono, e l'esecutore sincrono di prova non risponde da dentro un lavoro).
-   */
+  /** Il lavoro di prova: come `NasWorker` dopo una tappa in attesa, chiede la ripresa con la funzione vera e i suoi input. */
   private class FakeNasWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
       Script.attempts += inputData.getInt(RuleWaits.KEY_ATTEMPT, 0)
-      Script.wait?.let { NasWorkScheduling.afterWait(applicationContext, NAME, FakeNasWorker::class.java, it, inputData, NOW, states = { error("non serve") }) }
+      Script.wait?.let { NasWorkScheduling.afterWait(applicationContext, NAME, FakeNasWorker::class.java, it, inputData, NOW) }
       return Result.success()
     }
   }
@@ -93,17 +90,9 @@ class NasWaitSchedulingTest {
 
   private fun pending(): List<WorkInfo> = infos().filter { !it.state.isFinished }
 
-  /** Gli stati veri del lavoro con quel nome, letti dal filo della prova. */
-  private fun statesOf(name: String): List<WorkInfo.State> = workManager.getWorkInfosForUniqueWork(name).get().map { it.state }
-
   /** Una chiamata da un lavoro che non e' la ripresa (il periodico, la tappa dopo, «verifica adesso»): input senza tentativo. */
-  private fun fromFreshRun(
-    wait: WaitReason,
-    input: Data = Data.EMPTY,
-    states: (String) -> List<WorkInfo.State> = ::statesOf,
-  ): Boolean = runBlocking {
-    NasWorkScheduling.afterWait(context, NAME, FakeNasWorker::class.java, wait, input, now, states = { states(it) })
-  }
+  private fun fromFreshRun(wait: WaitReason, input: Data = Data.EMPTY): Boolean =
+    NasWorkScheduling.afterWait(context, NAME, FakeNasWorker::class.java, wait, input, now)
 
   /** Fa girare la ripresa in coda (il suo ritardo e i suoi vincoli sono soddisfatti): il lavoro di prova la esegue. */
   private fun runPending() {
@@ -142,6 +131,8 @@ class NasWaitSchedulingTest {
     assertWithMessage("la rete dei lavori del NAS").that(request).isNotNull()
     assertThat(request!!.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)).isFalse()
 
+    // (Una ripresa c'e' gia' e un produttore esterno non la tocca: si toglie per provare l'altra.)
+    workManager.cancelUniqueWork(NAME).result.get()
     fromFreshRun(WaitReason.Thermal(ThermalStatus.SEVERE))
     val hot = pending().single()
     assertThat(hot.constraints.requiresCharging()).isFalse()
@@ -186,38 +177,54 @@ class NasWaitSchedulingTest {
   // --- Una sola ripresa per lavoro, e la scala riparte da capo ----------------------------------------------------------------------------
 
   /**
-   * Guardie «una sola» e «riparte da capo» (mutazioni M3: sempre `APPEND_OR_REPLACE`, le riprese si accumulano; M5: `KEEP` al posto di `REPLACE`, resta
-   * quella vecchia da 40 minuti).
+   * Guardia «una sola, e nessuno la cancella» (BS-2): un produttore esterno (il periodico, «verifica adesso») che trova di nuovo il caldo **non tocca** la ripresa
+   * gia' in coda: resta quella, con la sua scadenza (qui al quarto gradino, 40 minuti), e non se ne aggiunge un'altra. Si rinuncia all'azzeramento della scala:
+   * il tetto di un'ora resta. Cadrebbe con `APPEND_OR_REPLACE` per gli esterni (le riprese si accumulano) e con `REPLACE` (la ripresa cambia, a 5 minuti).
    */
   @Test
-  fun unGiroNormaleSostituisceLaRipresaInCodaERipartedaCinqueMinuti() {
-    // Una ripresa gia' al quarto gradino (40 minuti) in coda.
+  fun unProduttoreEsternoNonToccaLaRipresaInCoda() {
     fromFreshRun(WaitReason.Thermal(ThermalStatus.SEVERE), Data.Builder().putInt(RuleWaits.KEY_ATTEMPT, 3).build())
-    assertThat(pending().single().initialDelayMillis).isEqualTo(40.minutes.inWholeMilliseconds)
-    // Il periodico (o «verifica adesso») trova di nuovo il caldo: una ripresa sola, da capo.
+    val queued = pending().single()
+    assertThat(queued.initialDelayMillis).isEqualTo(40.minutes.inWholeMilliseconds)
     fromFreshRun(WaitReason.Thermal(ThermalStatus.SEVERE))
-    val left = pending()
-    assertThat(left).hasSize(1)
-    assertThat(left.single().initialDelayMillis).isEqualTo(5.minutes.inWholeMilliseconds)
+    val left = pending().single()
+    assertThat(left.id).isEqualTo(queued.id)
+    assertThat(left.initialDelayMillis).isEqualTo(40.minutes.inWholeMilliseconds)
   }
 
-  /** Guardia «non cancella la ripresa che gira» (mutazione M4: senza il controllo di `RUNNING`, `REPLACE` la cancellerebbe a meta' tappa). */
+  /**
+   * Guardia «non cancella la ripresa che gira» (BS-2), con una ripresa **nello stato RUNNING del database di WorkManager** (lo stato che WorkManager le da'
+   * mentre gira): un altro lavoro trova il caldo e chiede la ripresa. Con `KEEP` non c'e' nessuna lettura dello stato prima dell'accodamento, quindi nessuna
+   * finestra fra una lettura e la transizione ENQUEUED -> RUNNING; e WorkManager tiene la ripresa che gira: resta RUNNING, l'unica, mai CANCELLED. Cadrebbe
+   * con `REPLACE` per gli esterni (la cancella e la cancella dal database).
+   *
+   * Perimetro: e' lo stato del database, non un lavoro che esegue davvero codice in parallelo (l'esecutore di prova e' sincrono e l'accodamento chiesto da
+   * dentro un lavoro gira solo dopo la sua fine: allora la ripresa e' finita e `KEEP` ne accoda giustamente una nuova).
+   */
   @Test
-  fun unaRipresaCheStaGirandoNonVieneSostituitaDaUnAltroLavoro() {
+  fun unaRipresaCheStaGirandoNonVieneCancellataDaUnAltroLavoro() {
     fromFreshRun(WaitReason.Thermal(ThermalStatus.SEVERE))
     val resume = pending().single().id
-    // Il periodico trova il caldo mentre la ripresa gira (lo stato `RUNNING` come lo leggerebbe da WorkManager): non la tocca, decide lei.
-    val asked = fromFreshRun(WaitReason.Thermal(ThermalStatus.SEVERE), states = { listOf(WorkInfo.State.RUNNING) })
-    assertThat(asked).isFalse()
-    assertThat(pending().single().id).isEqualTo(resume)
+    WorkManagerImpl.getInstance(context).workDatabase.workSpecDao().setState(WorkInfo.State.RUNNING, resume.toString())
+    fromFreshRun(WaitReason.Thermal(ThermalStatus.SEVERE))
+    assertThat(workManager.getWorkInfoById(resume).get()?.state).isEqualTo(WorkInfo.State.RUNNING)
+    assertThat(pending().map { it.id }).containsExactly(resume)
+  }
+
+  /** Una ripresa gia' finita non conta: il periodico che trova di nuovo il caldo ne mette in coda una nuova (una sola). */
+  @Test
+  fun dopoUnaRipresaFinitaUnaNuova() {
+    fromFreshRun(WaitReason.Thermal(ThermalStatus.SEVERE))
+    runPending()
+    assertThat(pending()).isEmpty()
+    fromFreshRun(WaitReason.Thermal(ThermalStatus.SEVERE))
+    assertThat(pending()).hasSize(1)
   }
 
   @Test
   fun laPoliticaDellaRipresa() {
-    assertThat(NasWorkScheduling.waitPolicy(fromResume = true, current = listOf(WorkInfo.State.RUNNING))).isEqualTo(ExistingWorkPolicy.APPEND_OR_REPLACE)
-    assertThat(NasWorkScheduling.waitPolicy(fromResume = false, current = listOf(WorkInfo.State.RUNNING))).isNull()
-    assertThat(NasWorkScheduling.waitPolicy(fromResume = false, current = listOf(WorkInfo.State.ENQUEUED))).isEqualTo(ExistingWorkPolicy.REPLACE)
-    assertThat(NasWorkScheduling.waitPolicy(fromResume = false, current = emptyList())).isEqualTo(ExistingWorkPolicy.REPLACE)
+    assertThat(NasWorkScheduling.waitPolicy(fromResume = true)).isEqualTo(ExistingWorkPolicy.APPEND_OR_REPLACE)
+    assertThat(NasWorkScheduling.waitPolicy(fromResume = false)).isEqualTo(ExistingWorkPolicy.KEEP)
   }
 
   // --- Che cosa segue una tappa ---------------------------------------------------------------------------------------------------------

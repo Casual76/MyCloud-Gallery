@@ -140,6 +140,32 @@ object BackupSamples {
       problems = emptyMap(),
     ),
   )
+
+  /**
+   * Fase I (BF-12): le sorgenti **prima del primo backup**: niente ancora al sicuro (l'anello della testata parte da zero, come sul telefono), e piu' media
+   * di quanti ne conta il riepilogo (1.240 + 5.418): 342 che questo backup non carica adesso (nell'area comune, non piu' sul telefono, con un problema).
+   */
+  val firstBackupSources: List<SourceStatus> = listOf(
+    SourceStatus(BackupSource.Camera, active = true, media = 5_800, safe = 0, queued = 5_800, problems = emptyMap()),
+    SourceStatus(BackupSource.Screenshots, active = true, media = 1_200, safe = 0, queued = 1_200, problems = emptyMap()),
+    SourceStatus(
+      BackupSource.Folder("external_primary", "Pictures/Telegram/"), active = false, media = 224, safe = 0, queued = 0,
+      problems = emptyMap(),
+    ),
+  )
+
+  /** Fase I (BF-2): i numeri veri del 12/11 (S25 dell'utente): 5.559 gia' sul NAS (37 GB), 1.546 nuovi (3,0 GB), e la stima del modello di serie (50 min). */
+  val phoneSummary: BackupSummary = BackupSummary(
+    existing = ExistingCopiesState.SETTLED,
+    linked = SummaryCount(photos = 5_559, videos = 0, photoBytes = 37_000_000_000, videoBytes = 0),
+    similar = SummaryCount.ZERO,
+    fresh = SummaryCount(photos = 1_546, videos = 0, photoBytes = 3_000_000_000, videoBytes = 0),
+    inCommonArea = SummaryCount.ZERO,
+    bySource = mapOf(BackupSource.Camera.id to SummaryCount(1_546, 0, 3_000_000_000, 0)),
+    estimate = BackupEstimate(durationMillis = 50L * 60_000L, nights = 1, wifiBytes = 43_000_000_000, mobileBytes = 0, batteryPercent = null),
+    warnings = emptySet(),
+    estimateNow = BackupEstimate(durationMillis = 48L * 60_000L, nights = 1, wifiBytes = 43_000_000_000, mobileBytes = 0, batteryPercent = 9),
+  )
 }
 
 /** Le azioni registrate (per i test delle schermate di P5: "un tocco chiama la porta, una volta"). */

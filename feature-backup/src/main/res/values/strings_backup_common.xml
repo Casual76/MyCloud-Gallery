@@ -21,18 +21,19 @@
 
   <string name="backup_at_day">%1$s alle %2$s</string>
 
-  <string name="backup_wait_charging">aspetta la carica</string>
-  <string name="backup_wait_wifi">aspetta il Wi-Fi</string>
-  <string name="backup_wait_home_wifi">aspetta il Wi-Fi di casa</string>
-  <string name="backup_wait_night_window">aspetta la notte</string>
-  <string name="backup_wait_battery">aspetta più batteria</string>
+  <!-- Fase I (BF-8): una formula sola per motivo, quella di core-designsystem (`gallery_wait_*`), per riferimento. -->
+  <string name="backup_wait_charging">@string/gallery_wait_charging</string>
+  <string name="backup_wait_wifi">@string/gallery_wait_wifi</string>
+  <string name="backup_wait_home_wifi">@string/gallery_wait_home_wifi</string>
+  <string name="backup_wait_night_window">@string/gallery_wait_night_window</string>
+  <string name="backup_wait_battery">@string/gallery_wait_battery</string>
   <!-- FAB-4: il risparmio energetico di Android e' acceso (e l'interruttore in "Quando lavora l'app" lo rispetta): non e' la batteria bassa. -->
-  <string name="backup_wait_power_saver">risparmio energetico acceso</string>
-  <string name="backup_wait_thermal">aspetta che si raffreddi</string>
-  <string name="backup_wait_data_cap">dati del mese finiti</string>
-  <string name="backup_wait_nas">aspetta il NAS</string>
-  <string name="backup_wait_comparing">confronta con il NAS</string>
-  <string name="backup_wait_next_run">al prossimo giro</string>
+  <string name="backup_wait_power_saver">@string/gallery_wait_power_saver</string>
+  <string name="backup_wait_thermal">@string/gallery_wait_thermal</string>
+  <string name="backup_wait_data_cap">@string/gallery_wait_data_cap</string>
+  <string name="backup_wait_nas">@string/gallery_wait_nas</string>
+  <string name="backup_wait_comparing">Confronta con il NAS</string>
+  <string name="backup_wait_next_run">Al prossimo giro</string>
   <!-- D-13: il NAS tiene ancora occupato un file del backup (una connessione caduta che il NAS non ha ancora chiuso). -->
-  <string name="backup_wait_nas_busy">il NAS è occupato</string>
+  <string name="backup_wait_nas_busy">Il NAS è occupato</string>
 </resources>

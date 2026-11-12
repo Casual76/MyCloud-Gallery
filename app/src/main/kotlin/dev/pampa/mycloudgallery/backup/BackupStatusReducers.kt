@@ -45,11 +45,17 @@ object BackupStatusReducers {
     BackupStatus.TestOnly -> LibraryBackupStatus.TestOnly
     is BackupStatus.FirstBackupReady ->
       if (!status.summary.canStart) {
-        LibraryBackupStatus.Comparing(pending = null, wait = status.summary.existing.heldBy?.let(::waitOf))
+        // BF-7: la ricerca, con i file del NAS gia' guardati se gira; ferma per una regola, quale (un motivo che il backup non nomina: «altro»).
+        val existing = status.summary.existing
+        LibraryBackupStatus.Comparing(
+          seen = existing.scanSeen,
+          total = existing.scanTotal,
+          wait = existing.heldBy?.let { if (it == WaitReason.NEXT_RUN) LibraryBackupWait.OTHER else waitOf(it) },
+        )
       } else {
-        // Il primo backup aspetta il tocco dell'utente: il piede lo conta fra le cose in coda e porta alla pagina.
-        val items = status.summary.toUpload.items + status.summary.linked.items
-        if (items > 0) LibraryBackupStatus.Queued(items, LibraryBackupWait.NEXT_RUN) else LibraryBackupStatus.Idle
+        // BF-6: il primo backup aspetta il tocco dell'utente, non il prossimo giro: «da avviare», con quanto c'e' da caricare (come il foglio).
+        val items = status.summary.toUpload.items.takeIf { it > 0 } ?: status.summary.linked.items
+        if (items > 0) LibraryBackupStatus.Queued(items, LibraryBackupWait.FIRST_BACKUP) else LibraryBackupStatus.Idle
       }
     is BackupStatus.UpToDate -> LibraryBackupStatus.AllSafe(status.atNasMillis)
     is BackupStatus.Waiting -> LibraryBackupStatus.Queued(status.items, waitOf(status.reason))

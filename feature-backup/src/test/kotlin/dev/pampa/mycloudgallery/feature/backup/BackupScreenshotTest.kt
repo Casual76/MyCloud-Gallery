@@ -52,7 +52,9 @@ abstract class BackupScreenshotBase(private val dark: Boolean, private val devic
 
   private fun page(
     status: BackupStatus,
-    sources: List<dev.pampa.mycloudgallery.core.backup.contract.SourceStatus> = BackupSamples.sources,
+    // BF-12: prima del primo backup niente e' ancora al sicuro (l'anello parte da zero), come sul telefono.
+    sources: List<dev.pampa.mycloudgallery.core.backup.contract.SourceStatus> =
+      if (status is BackupStatus.FirstBackupReady) BackupSamples.firstBackupSources else BackupSamples.sources,
     folder: Boolean = true,
     sheetOpen: Boolean = false,
   ) = BackupPageUi(status, sources, if (folder) BackupSamples.deviceFolder else null, sheetOpen)
@@ -159,6 +161,31 @@ abstract class BackupScreenshotBase(private val dark: Boolean, private val devic
   /** Fase I (punto 5): la ricerca ferma per il caldo. */
   @Test
   fun foglioPrimoBackupCercaInPausa() = shoot("foglio-primo-backup-cerca-in-pausa") { SheetOverPage(BackupSamples.heldSummary) }
+
+  // BF-12: i nuovi stati anche con il testo grande (il titolo della ricerca e la riga della clessidra sono quelli che vanno a capo).
+
+  @Test
+  fun foglioPrimoBackupCercaConNumeroTestoGrande() =
+    shoot("foglio-primo-backup-cerca-numero", fontScale = LARGE_TEXT) { SheetOverPage(BackupSamples.searchingSummary) }
+
+  @Test
+  fun foglioPrimoBackupCercaInPausaTestoGrande() =
+    shoot("foglio-primo-backup-cerca-in-pausa", fontScale = LARGE_TEXT) { SheetOverPage(BackupSamples.heldSummary) }
+
+  @Test
+  fun foglioPrimoBackupMentreConfrontaTestoGrande() =
+    shoot("foglio-primo-backup-confronto", fontScale = LARGE_TEXT) { SheetOverPage(BackupSamples.comparingSummary) }
+
+  @Test
+  fun paginaCercaInPausaTestoGrande() = shoot("pagina-cerca-in-pausa", fontScale = LARGE_TEXT) {
+    Page(page(BackupStatus.FirstBackupReady(BackupSamples.heldSummary)))
+  }
+
+  /** BF-1: «Sto partendo» dopo «Inizia ora». */
+  @Test
+  fun paginaStaPartendo() = shoot("pagina-sto-partendo") {
+    Page(page(BackupStatus.Running(BackupKind.PHOTOS, 0, 7_105, 0L, 3_000_000_000, null, BackupTrigger.FIRST_BACKUP, starting = true)))
+  }
 
   @Test
   fun foglioPrimoBackupCercaSulNas() = shoot("foglio-primo-backup-cerca-sul-nas") {

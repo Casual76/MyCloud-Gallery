@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase I (12/11, BF-8 della critica del primo backup): perche' un lavoro e' fermo adesso, **una formula sola per motivo**. La usano il foglio del primo
+       backup e la testata (feature-backup), il piede della Libreria (feature-library) e i titoli della Diagnostica (feature-diagnostics), per riferimento
+       (`@string/…`), mai copiandola. Etichette: senza punto finale. Nessuna promessa di ripartenza qui: chi la dice la aggiunge solo dove e' vera. -->
+  <string name="gallery_wait_charging">In attesa della corrente</string>
+  <string name="gallery_wait_battery">Batteria sotto la soglia</string>
+  <string name="gallery_wait_night_window">In attesa della fascia oraria</string>
+  <string name="gallery_wait_power_saver">Risparmio energetico attivo</string>
+  <string name="gallery_wait_thermal">Il telefono è troppo caldo</string>
+  <string name="gallery_wait_data_cap">Tetto dati del mese raggiunto</string>
+  <string name="gallery_wait_wifi">In attesa del Wi-Fi</string>
+  <string name="gallery_wait_home_wifi">In attesa del Wi-Fi di casa</string>
+  <string name="gallery_wait_nas">NAS spento o non raggiungibile</string>
+</resources>

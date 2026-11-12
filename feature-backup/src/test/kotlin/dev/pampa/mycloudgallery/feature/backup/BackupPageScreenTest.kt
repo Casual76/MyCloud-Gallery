@@ -171,7 +171,8 @@ class BackupPageScreenTest : ComposeBackupTest() {
   fun inCodaDiceQuantiEPerche() {
     start(BackupStatus.Waiting(items = 312, bytes = 1_400_000_000, reason = WaitReason.CHARGING))
     composeRule.onNodeWithText("In attesa").assertExists()
-    composeRule.onNodeWithText("312 in coda · aspetta la carica").assertExists()
+    // Fase I (BF-8): la formula comune del motivo (la stessa del foglio, del piede e della Diagnostica).
+    composeRule.onNodeWithText("312 in coda · In attesa della corrente").assertExists()
     composeRule.onNodeWithText("Fai ora").performClick()
     assertThat(actions.backupNowCalls).isEqualTo(1)
   }
@@ -239,7 +240,7 @@ class BackupPageScreenTest : ComposeBackupTest() {
     composeRule.onNodeWithText("1.234 di 5.559 file del NAS guardati").assertExists()
     // Fase I (punto 5): ferma per il caldo, la testata lo dice (e non «cerco»).
     set(BackupStatus.FirstBackupReady(BackupSamples.heldSummary))
-    composeRule.onNodeWithText("Telefono troppo caldo: la ricerca riprende da sola").assertExists()
+    composeRule.onNodeWithText("Il telefono è troppo caldo: la ricerca riprende da sola").assertExists()
     // Fase I: a ricerca finita e' pronto, anche con copie simili ancora da confrontare.
     set(BackupStatus.FirstBackupReady(BackupSamples.comparingSummary))
     composeRule.onNodeWithText("Pronto per partire").assertExists()
@@ -400,10 +401,31 @@ class BackupPageScreenTest : ComposeBackupTest() {
     start(BackupStatus.FirstBackupReady(BackupSummary.EMPTY))
     composeRule.onNodeWithText("Pronto per partire").assertExists()
     composeRule.onAllNodes(hasText("0 foto e video", substring = true)).assertCountEquals(0)
+    // BF-5: appena aperta l'app (riepilogo non ancora calcolato) nessuna riga provvisoria.
     set(BackupStatus.FirstBackupReady(BackupSummary.COUNTING))
     composeRule.onNodeWithText("Preparo il primo backup").assertExists()
-    composeRule.onNodeWithText("Cerco cosa c’è già sul NAS").assertExists()
+    composeRule.onAllNodes(hasText("Cerco", substring = true)).assertCountEquals(0)
     composeRule.onAllNodes(hasText("0 foto e video", substring = true)).assertCountEquals(0)
+  }
+
+  /** BF-c: la riga di «Pronto per partire» dice quanto viaggia, come il titolo del foglio (non i gia' sul NAS insieme ai nuovi). */
+  @Test
+  fun prontoPerPartireDiceQuantoSiCarica() {
+    start(BackupStatus.FirstBackupReady(BackupSamples.firstBackupSummary), BackupSamples.firstBackupSources)
+    composeRule.onNodeWithText("Pronto per partire").assertExists()
+    composeRule.onNodeWithText("5.418 da caricare", substring = true).assertExists()
+    composeRule.onAllNodes(hasText("6.658", substring = true)).assertCountEquals(0)
+  }
+
+  /** BF-1: dopo «Inizia ora», finche' il lavoro non parte, «Sto partendo» con «Ferma»: mai «In attesa · al prossimo giro» con «Fai ora». */
+  @Test
+  fun dopoInizia_OraDiceCheStaPartendo() {
+    start(BackupStatus.Running(BackupKind.PHOTOS, 0, 7_105, 0L, 3_000_000_000, null, BackupTrigger.FIRST_BACKUP, starting = true))
+    composeRule.onNodeWithText("Sto partendo").assertExists()
+    composeRule.onAllNodes(hasText("prossimo giro", substring = true)).assertCountEquals(0)
+    composeRule.onAllNodes(hasText("In attesa")).assertCountEquals(0)
+    composeRule.onAllNodes(hasText("Fai ora")).assertCountEquals(0)
+    composeRule.onNodeWithText("Ferma").assertExists()
   }
 
   @Test
@@ -412,7 +434,8 @@ class BackupPageScreenTest : ComposeBackupTest() {
     show { BackupPageScreen(state = ui.value, actions = pageActions(), onBack = {}) }
     button("Stanotte").assertIsNotEnabled()
     button("Inizia ora").assertIsNotEnabled()
-    composeRule.onAllNodes(hasText("1.234 di 5.559 file del NAS guardati", substring = true)).assertCountEquals(2)
+    // La testata (con le parole) e il foglio (il numero, le parole sotto).
+    composeRule.onAllNodes(hasText("1.234 di 5.559", substring = true)).assertCountEquals(2)
     // Fase I (12/11): il confronto delle copie simili non spegne le scelte.
     composeRule.runOnIdle { ui.value = page(BackupStatus.FirstBackupReady(BackupSamples.comparingSummary), sheetOpen = true) }
     composeRule.waitForIdle()

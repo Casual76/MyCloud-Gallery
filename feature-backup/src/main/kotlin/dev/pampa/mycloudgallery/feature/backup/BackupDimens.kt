@@ -36,10 +36,7 @@ internal object BackupDimens {
   /** Il glifo di un'icona di riga dentro la sua piastrella. */
   val RowGlyph: Dp = 24.dp
 
-  /** Fase I: la barra della ricerca sul NAS nella riga del foglio del primo backup (accanto al numero dei file guardati). */
-  val SearchBarWidth: Dp = 72.dp
-
-  /** Fase I: lo spessore di quella barra (il tratto di un anello di una riga). */
+  /** Fase I: lo spessore della barra della ricerca sul NAS nel foglio del primo backup (sotto il numero, a tutta larghezza). */
   val SearchBarHeight: Dp = 4.dp
 
   /** Il glifo in testa a una scheda di stato. */

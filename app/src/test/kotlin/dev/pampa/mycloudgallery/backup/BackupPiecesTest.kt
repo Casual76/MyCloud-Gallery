@@ -72,15 +72,24 @@ class BackupPiecesTest {
       fresh = SummaryCount(photos = 8, videos = 2, photoBytes = 10, videoBytes = 90),
       linked = SummaryCount(photos = 3, videos = 0, photoBytes = 3, videoBytes = 0),
     )
-    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(settled), 0)).isEqualTo(LibraryBackupStatus.Queued(13, LibraryBackupWait.NEXT_RUN))
+    // Fase I (BF-6): il primo backup pronto e' «da avviare» (non «in coda al prossimo giro»), con quanto c'e' da caricare (come il foglio: 10, non 13).
+    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(settled), 0)).isEqualTo(LibraryBackupStatus.Queued(10, LibraryBackupWait.FIRST_BACKUP))
     // Fase I (12/11): a scansione finita il primo backup e' pronto anche con copie simili da confrontare (non fermano niente): il piede non dice «aspetta».
     val comparing = settled.copy(existing = ExistingCopiesState(privateAreaScanned = true, similarPending = 7))
-    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(comparing))).isEqualTo(LibraryBackupStatus.Queued(13, LibraryBackupWait.NEXT_RUN))
-    // Finche' la scansione dell'area privata non e' finita si cerca; se una regola la ferma, il piede dice quale.
+    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(comparing))).isEqualTo(LibraryBackupStatus.Queued(10, LibraryBackupWait.FIRST_BACKUP))
+    // Niente da caricare ma gia' sul NAS da collegare: il piede conta quelli.
+    val linkedOnly = BackupSummary.EMPTY.copy(linked = SummaryCount(photos = 3, videos = 0, photoBytes = 3, videoBytes = 0))
+    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(linkedOnly))).isEqualTo(LibraryBackupStatus.Queued(3, LibraryBackupWait.FIRST_BACKUP))
+    // Finche' la scansione dell'area privata non e' finita si cerca (BF-7: con i file guardati, se gira); se una regola la ferma, il piede dice quale.
     val scanning = settled.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 7))
-    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(scanning))).isEqualTo(LibraryBackupStatus.Comparing(null))
+    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(scanning))).isEqualTo(LibraryBackupStatus.Comparing())
+    val looking = settled.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0, scanSeen = 1_234, scanTotal = 5_559))
+    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(looking))).isEqualTo(LibraryBackupStatus.Comparing(seen = 1_234, total = 5_559))
     val hot = settled.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0, heldBy = BackupWait.THERMAL))
-    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(hot))).isEqualTo(LibraryBackupStatus.Comparing(null, LibraryBackupWait.THERMAL))
+    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(hot))).isEqualTo(LibraryBackupStatus.Comparing(wait = LibraryBackupWait.THERMAL))
+    // BF-4: un motivo che il backup non nomina e' «altro» (la Diagnostica lo dice), non «al prossimo giro».
+    val frozen = settled.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0, heldBy = BackupWait.NEXT_RUN))
+    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(frozen))).isEqualTo(LibraryBackupStatus.Comparing(wait = LibraryBackupWait.OTHER))
     assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(BackupSummary.EMPTY), 0)).isEqualTo(LibraryBackupStatus.Idle)
   }
 

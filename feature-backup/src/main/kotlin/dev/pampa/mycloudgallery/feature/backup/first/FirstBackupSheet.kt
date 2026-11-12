@@ -2,16 +2,16 @@ package dev.pampa.mycloudgallery.feature.backup.first
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Battery5Bar
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -25,8 +25,8 @@ import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
-import dev.antigravity.fluidengine.ui.fluid.FluidRowValue
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
+import dev.antigravity.fluidengine.ui.fluid.FluidRowValue
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -37,13 +37,13 @@ import dev.pampa.mycloudgallery.core.backup.contract.ExistingCopiesState
 import dev.pampa.mycloudgallery.core.backup.contract.SummaryCount
 import dev.pampa.mycloudgallery.core.backup.contract.SummaryWarning
 import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
+import dev.pampa.mycloudgallery.core.designsystem.R as DesignR
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.icon.glyph
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRingDefaults
 import dev.pampa.mycloudgallery.core.designsystem.media.galleryRingColor
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryMotion
-import kotlinx.coroutines.delay
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
@@ -52,12 +52,12 @@ import dev.pampa.mycloudgallery.feature.backup.R
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupNote
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupSectionTitle
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupText
-import dev.pampa.mycloudgallery.feature.backup.ui.etaText
 import dev.pampa.mycloudgallery.feature.backup.ui.sourceNameById
+import kotlinx.coroutines.delay
 
 // Il foglio del primo backup (docs/fase5-progetto.md §1.5 `BackupSummary`, §2.11 punti 4 e 6, D11, D30): prima di caricare qualunque
 // cosa dice quanto c'e' da fare, in **tre numeri** ("N gia' sul NAS (collegati), M con una copia simile sul NAS, K nuovi"), quanto pesa,
-// la stima onesta con le regole di adesso e le due scelte: "Stanotte" (la predefinita) e "Inizia ora". Solo componenti G2:
+// il traffico (senza una durata: Fase I, BF-2) e le due scelte: "Stanotte" (la predefinita) e "Inizia ora". Solo componenti G2:
 // `GalleryConfirmSheet` (con lo scudo contro le sovrapposizioni, R7 della 4B) e `GallerySheetScaffold`; solo numeri (mai nomi di file o
 // cartelle dei media).
 //
@@ -144,46 +144,74 @@ internal fun FirstBackupSheetContent(
 }
 
 /**
- * La frase in cima al foglio, che dice **subito** quanto c'e' da fare senza scorrere: "Da caricare: 5.418 foto e video, 38 GB. Stanotte:
- * circa 2 h 36 min." Il foglio e' alto al piu' 640 dp e i tasti restano in vista: il resto (i tre numeri, la stima per esteso, gli avvisi)
- * scorre sotto. Finche' si cerca sul NAS dice perche' prima si cerca; se le regole non lasciano partire il backup, lo dice.
+ * La frase in cima al foglio, che dice **subito** quanto c'e' da fare senza scorrere: "Da caricare: 1.546 foto e video, 3,0 GB." Il foglio e' alto al piu'
+ * 640 dp e i tasti restano in vista: il resto (i tre numeri, il traffico, gli avvisi) scorre sotto. Finche' si cerca sul NAS dice che prima guarda; se le
+ * regole non lasciano partire il backup, lo dice. **Nessuna durata** (Fase I, BF-2): il modello di serie era ottimista di circa tre volte.
  */
 @Composable
 private fun headline(summary: BackupSummary): String {
   if (!summary.canStart) return stringResource(R.string.backup_first_headline_search)
   val upload = summary.toUpload
   val base = stringResource(R.string.backup_first_headline, BackupText.count(upload.items), BackupText.size(upload.bytes))
-  val tonight = summary.estimate
-  val tail = when {
-    tonight == null -> null
-    tonight.neverFinishes -> stringResource(R.string.backup_first_headline_never)
-    else -> stringResource(R.string.backup_first_headline_eta, etaText(tonight.durationMillis))
-  }
-  return if (tail == null) base else "$base $tail"
+  return if (summary.estimate?.neverFinishes == true) "$base ${stringResource(R.string.backup_first_headline_never)}" else base
 }
 
 /**
- * Fase I: la ricerca sul NAS prima del primo backup, in una riga: quanti file del NAS ha gia' guardato (o che cosa fa) e una barra che avanza;
- * ferma per una regola, quale regola e che riprende da sola, con la clessidra e senza barra.
+ * Fase I: la ricerca sul NAS prima del primo backup, in una riga (BF-4, BF-9, BF-10):
+ * - **gira** (lo scanner lavora): quanti file del NAS ha gia' guardato, come numero, e sotto la barra a tutta larghezza;
+ * - **ferma per una regola**: quale, con la clessidra, e «riprende da sola» solo dove e' vero ([resumesAlone]);
+ * - **ferma per un motivo che il backup non nomina** (congelamento, attivita' spenta, profilo, limiti di Android): «Ricerca in pausa», il motivo e' nella
+ *   Diagnostica, con il segno della pausa;
+ * - **non gira ancora** (aspetta il suo lavoro, o il NAS appena aperta l'app): «Cerco… · Inizia fra poco», ferma.
+ * Niente si anima se non gira niente.
  */
 @Composable
 private fun SearchRow(existing: ExistingCopiesState) {
   val held = existing.heldBy
+  val scanning = held == null && existing.scanSeen != null
+  val seen = existing.scanSeen ?: 0
+  val total = existing.scanTotal
   FluidListGroup {
     FluidListRow(
-      title = if (held != null) stringResource(heldRes(held)) else searchText(existing),
-      subtitle = stringResource(if (held != null) R.string.backup_first_search_held else R.string.backup_first_search_detail),
+      title = when {
+        held == WaitReason.NEXT_RUN -> stringResource(R.string.backup_first_search_paused)
+        held != null -> stringResource(waitTitleRes(held))
+        scanning && seen > 0 && total != null && total >= seen -> stringResource(R.string.backup_first_search_count_of, BackupText.count(seen), BackupText.count(total))
+        scanning && seen > 0 -> BackupText.count(seen)
+        else -> stringResource(R.string.backup_first_searching)
+      },
+      subtitle = when {
+        held == WaitReason.NEXT_RUN -> stringResource(R.string.backup_paused_elsewhere)
+        held != null -> if (resumesAlone(held)) stringResource(R.string.backup_first_search_resumes) else ""
+        scanning && seen > 0 -> pluralStringResource(R.plurals.backup_first_search_files, seen)
+        scanning -> ""
+        else -> stringResource(R.string.backup_first_search_soon)
+      },
       tone = FluidTone.Info,
-      leading = { Icon(imageVector = if (held != null) GalleryIconStatus.Waiting.glyph() else Icons.Rounded.Search, contentDescription = null) },
+      leading = {
+        val glyph = when {
+          held == WaitReason.NEXT_RUN -> GalleryIconStatus.Paused.glyph()
+          held != null -> GalleryIconStatus.Waiting.glyph()
+          else -> Icons.Rounded.Search
+        }
+        Icon(imageVector = glyph, contentDescription = null)
+      },
       disclosure = false,
-      badge = if (held != null) null else { { SearchBar(existing) } },
     )
+    if (scanning) {
+      SearchBar(
+        existing,
+        Modifier
+          .fillMaxWidth()
+          .padding(start = BackupDimens.CardPadding, end = BackupDimens.CardPadding, bottom = BackupDimens.CardPadding),
+      )
+    }
   }
 }
 
 /**
- * Fase I: quanto la ricerca sul NAS e' avanti, per la riga del foglio e per la testata: "1.234 di 5.559 file del NAS guardati", "1.234 file del NAS
- * guardati" (il totale non si sa ancora), o che cosa fa finche' non c'e' un numero.
+ * Fase I: quanto la ricerca sul NAS e' avanti, per la testata: "1.234 di 5.559 file del NAS guardati", "1.234 file del NAS guardati" (il totale non si sa
+ * ancora), o che cosa fa finche' non c'e' un numero.
  */
 @Composable
 internal fun searchText(existing: ExistingCopiesState): String {
@@ -197,32 +225,33 @@ internal fun searchText(existing: ExistingCopiesState): String {
 }
 
 /**
- * La barra della ricerca, **a poco prezzo** (punto 3: il foglio e' di vetro e sta sopra una pagina sfocata): con il totale si allunga con la molla fino
- * alla parte guardata; a ogni numero nuovo (ogni 10 s circa) un tratto la percorre una volta. Senza ancora un numero il tratto passa ogni
- * [SearchIdleMillis]. Fra un passaggio e l'altro **nessun fotogramma**: niente ciclo infinito. Tutto nel disegno e nel suo layer, cosi' non ridisegna il resto
- * del foglio. Con «riduci animazioni» la barra e' ferma alla sua misura.
+ * La barra della ricerca, sotto il numero e a tutta larghezza (BF-10), **a poco prezzo** (il foglio e' di vetro sopra una pagina sfocata): con il totale si
+ * allunga con la molla fino alla parte guardata; a ogni numero nuovo (ogni 10 s circa) un tratto la percorre una volta; senza il totale il tratto passa
+ * ogni [SearchIdleMillis]. Fra un passaggio e l'altro nessun fotogramma. La pista e' il testo al [GalleryProgressRingDefaults.TrackAlpha], leggibile anche
+ * nello scuro. Tutto nel disegno e nel suo layer. Con «riduci animazioni» la barra e' ferma alla sua misura.
  */
 @Composable
-private fun SearchBar(existing: ExistingCopiesState) {
+private fun SearchBar(existing: ExistingCopiesState, modifier: Modifier) {
   val reduced = LocalFluidMotionPolicy.current.reducedMotion
   val color = galleryRingColor(GalleryIconFamily.Backup)
-  val track = color.copy(alpha = GalleryProgressRingDefaults.TrackAlpha)
+  val track = MaterialTheme.colorScheme.onSurface.copy(alpha = GalleryProgressRingDefaults.TrackAlpha)
   val seen = existing.scanSeen ?: 0
   val total = existing.scanTotal ?: 0
-  val target = if (seen > 0 && total > 0) (seen.toFloat() / total).coerceIn(0f, 1f) else 0f
+  val known = seen > 0 && total > 0
+  val target = if (known) (seen.toFloat() / total).coerceIn(0f, 1f) else 0f
   val fill = remember { Animatable(0f) }
   val sweep = remember { Animatable(SweepRest) }
   LaunchedEffect(target, reduced) { if (reduced) fill.snapTo(target) else fill.animateTo(target, FluidMotion.smooth()) }
-  LaunchedEffect(seen, reduced) {
+  LaunchedEffect(seen, known, reduced) {
     if (reduced) return@LaunchedEffect
     do {
       sweep.snapTo(0f)
       sweep.animateTo(1f, GalleryMotion.sweepSpec())
       sweep.snapTo(SweepRest)
-      if (seen <= 0) delay(SearchIdleMillis)
-    } while (seen <= 0)
+      if (!known) delay(SearchIdleMillis)
+    } while (!known)
   }
-  Canvas(modifier = Modifier.width(BackupDimens.SearchBarWidth).height(BackupDimens.SearchBarHeight).graphicsLayer()) {
+  Canvas(modifier = modifier.height(BackupDimens.SearchBarHeight).graphicsLayer()) {
     val radius = CornerRadius(size.height / 2f, size.height / 2f)
     drawRoundRect(color = track, cornerRadius = radius)
     val filled = size.width * fill.value
@@ -244,22 +273,23 @@ private const val SweepRest = -1f
 /** Quanto della pista e' il tratto che la percorre. */
 private const val SearchSegment = 0.35f
 
-/** Senza ancora un numero, ogni quanto il tratto ripassa (un passaggio dura `GalleryMotion.ShimmerMillis`). */
+/** Senza il totale, ogni quanto il tratto ripassa (un passaggio dura `GalleryMotion.ShimmerMillis`). */
 private const val SearchIdleMillis = 2_600L
 
 /**
- * Fase I: le foto che aspettano ancora il confronto con le copie simili. Una riga piccola che **non ferma niente**: dice quante, che il confronto
- * continua da solo (o la regola che lo tiene fermo adesso) e che non cambia che cosa si carica.
+ * Fase I: le foto che aspettano ancora il confronto con le copie simili. Una riga piccola che **non ferma niente** e non promette niente che non sia vero
+ * (BS-3): un motivo c'e' solo se il confronto aspetta anteprime del NAS dalla Preparazione, e allora la riga lo attribuisce a quelle.
  */
 @Composable
 private fun CompareRow(count: Int, held: WaitReason?) {
   FluidListGroup {
     FluidListRow(
       title = pluralStringResource(R.plurals.backup_first_compare, count, BackupText.count(count)),
-      subtitle = if (held != null) {
-        stringResource(R.string.backup_first_compare_held, stringResource(heldRes(held)))
-      } else {
-        stringResource(R.string.backup_first_compare_detail)
+      subtitle = when {
+        held == null -> stringResource(R.string.backup_first_compare_detail)
+        held == WaitReason.NEXT_RUN -> stringResource(R.string.backup_first_compare_paused)
+        resumesAlone(held) -> stringResource(R.string.backup_first_compare_held_resumes, stringResource(waitTitleRes(held)))
+        else -> stringResource(R.string.backup_first_compare_held, stringResource(waitTitleRes(held)))
       },
       tone = FluidTone.Info,
       leading = { Icon(imageVector = if (held != null) GalleryIconStatus.Waiting.glyph() else Icons.Rounded.Compare, contentDescription = null) },
@@ -268,19 +298,31 @@ private fun CompareRow(count: Int, held: WaitReason?) {
   }
 }
 
-/** Fase I: perche' un lavoro e' fermo adesso, con le parole della Diagnostica (Attivita'). */
-internal fun heldRes(reason: WaitReason): Int = when (reason) {
-  WaitReason.CHARGING -> R.string.backup_held_charging
-  WaitReason.WIFI -> R.string.backup_held_wifi
-  WaitReason.HOME_WIFI -> R.string.backup_held_home_wifi
-  WaitReason.NIGHT_WINDOW -> R.string.backup_held_night_window
-  WaitReason.BATTERY -> R.string.backup_held_battery
-  WaitReason.POWER_SAVER -> R.string.backup_held_power_saver
-  WaitReason.THERMAL -> R.string.backup_held_thermal
-  WaitReason.DATA_CAP -> R.string.backup_held_data_cap
-  WaitReason.NAS -> R.string.backup_held_nas
-  WaitReason.NAS_BUSY -> R.string.backup_held_nas_busy
-  WaitReason.COMPARING, WaitReason.NEXT_RUN -> R.string.backup_held_other
+/**
+ * Fase I (BF-8): perche' un lavoro e' fermo adesso, con **la formula comune** (`gallery_wait_*` di core-designsystem: la stessa del piede e dei titoli della
+ * Diagnostica). [WaitReason.NEXT_RUN] e i motivi che il backup non nomina non arrivano qui (li dice la riga della pausa).
+ */
+internal fun waitTitleRes(reason: WaitReason): Int = when (reason) {
+  WaitReason.CHARGING -> DesignR.string.gallery_wait_charging
+  WaitReason.WIFI -> DesignR.string.gallery_wait_wifi
+  WaitReason.HOME_WIFI -> DesignR.string.gallery_wait_home_wifi
+  WaitReason.NIGHT_WINDOW -> DesignR.string.gallery_wait_night_window
+  WaitReason.BATTERY -> DesignR.string.gallery_wait_battery
+  WaitReason.POWER_SAVER -> DesignR.string.gallery_wait_power_saver
+  WaitReason.THERMAL -> DesignR.string.gallery_wait_thermal
+  WaitReason.DATA_CAP -> DesignR.string.gallery_wait_data_cap
+  WaitReason.NAS -> DesignR.string.gallery_wait_nas
+  WaitReason.NAS_BUSY -> R.string.backup_wait_nas_busy
+  WaitReason.COMPARING, WaitReason.NEXT_RUN -> R.string.backup_first_search_paused
+}
+
+/**
+ * Fase I (BF-9): l'attesa **riprende davvero da sola**? Si' per la fascia, la carica, la batteria, il risparmio energetico e il caldo: i lavori del NAS e del
+ * backup si riprogrammano da soli (`RuleWaits.followUpOf`). No per la rete, il NAS spento e il tetto dei dati: si dice la condizione e basta.
+ */
+internal fun resumesAlone(reason: WaitReason): Boolean = when (reason) {
+  WaitReason.CHARGING, WaitReason.BATTERY, WaitReason.NIGHT_WINDOW, WaitReason.POWER_SAVER, WaitReason.THERMAL -> true
+  WaitReason.WIFI, WaitReason.HOME_WIFI, WaitReason.NAS, WaitReason.DATA_CAP, WaitReason.NAS_BUSY, WaitReason.COMPARING, WaitReason.NEXT_RUN -> false
 }
 
 /** I tre numeri del §2.11 punto 6, ognuno con il suo peso. */
@@ -307,9 +349,9 @@ private fun NumberRow(titleRes: Int, detailRes: Int, count: SummaryCount, tone: 
 }
 
 /**
- * Quanto c'e' da caricare e la stima con le regole di adesso (§2.9): una riga per ognuna delle due scelte ("Stanotte" segue il preset,
- * "Inizia ora" parte subito e scavalca fascia e carica), poi traffico e batteria. Se le regole non lasciano partire il backup
- * (`neverFinishes`) lo dice invece di "0 notti".
+ * Quanto c'e' da caricare e che cosa costa, **in quantita'** (Fase I, BF-2): nessuna durata, ne' per «Stanotte» ne' per «Inizia ora», ne' la batteria che ne
+ * deriva. Restano il totale da caricare, il traffico (anche la rilettura delle copie gia' sul NAS), i dati mobili di «Inizia ora» e, se le regole non lasciano
+ * partire il backup (`neverFinishes`), il perche'.
  */
 @Composable
 private fun EstimateGroup(summary: BackupSummary) {
@@ -325,64 +367,36 @@ private fun EstimateGroup(summary: BackupSummary) {
       disclosure = false,
       badge = { FluidRowValue(text = stringResource(R.string.backup_first_total_value, BackupText.count(upload.items), BackupText.size(upload.bytes))) },
     )
-    FluidListDivider()
-    if (tonight == null && now == null) {
+    if (tonight?.neverFinishes == true) {
+      FluidListDivider()
       FluidListRow(
-        title = stringResource(R.string.backup_first_time),
-        subtitle = stringResource(R.string.backup_first_time_unknown),
+        title = stringResource(R.string.backup_first_tonight),
+        subtitle = stringResource(R.string.backup_first_never),
+        tone = FluidTone.Warning,
         disclosure = false,
         badge = { FluidRowValue(text = stringResource(R.string.backup_first_none)) },
       )
-    } else {
-      if (tonight != null) {
-        FluidListRow(
-          title = stringResource(R.string.backup_first_tonight),
-          subtitle = if (tonight.neverFinishes) {
-            stringResource(R.string.backup_first_never)
-          } else {
-            pluralStringResource(R.plurals.backup_first_nights, tonight.nights, BackupText.count(tonight.nights))
-          },
-          tone = if (tonight.neverFinishes) FluidTone.Warning else FluidTone.Neutral,
-          disclosure = false,
-          badge = { FluidRowValue(text = if (tonight.neverFinishes) stringResource(R.string.backup_first_none) else etaText(tonight.durationMillis)) },
-        )
-      }
-      if (now != null) {
-        if (tonight != null) FluidListDivider()
-        FluidListRow(
-          title = stringResource(R.string.backup_first_now),
-          subtitle = if (now.mobileBytes > 0) {
-            stringResource(R.string.backup_first_now_mobile, BackupText.size(now.mobileBytes))
-          } else {
-            stringResource(R.string.backup_first_now_detail)
-          },
-          disclosure = false,
-          badge = { FluidRowValue(text = etaText(now.durationMillis)) },
-        )
-      }
-      if (basis != null) {
-        FluidListDivider()
-        FluidListRow(
-          title = stringResource(R.string.backup_first_traffic),
-          subtitle = if (basis.mobileBytes > 0) {
-            stringResource(R.string.backup_first_traffic_mobile, BackupText.size(basis.mobileBytes))
-          } else {
-            stringResource(R.string.backup_first_traffic_wifi_only)
-          },
-          disclosure = false,
-          badge = { FluidRowValue(text = BackupText.size(basis.wifiBytes)) },
-        )
-        basis.batteryPercent?.let { percent ->
-          FluidListDivider()
-          FluidListRow(
-            title = stringResource(R.string.backup_first_battery),
-            subtitle = stringResource(R.string.backup_first_battery_detail),
-            disclosure = false,
-            leading = { Icon(imageVector = Icons.Rounded.Battery5Bar, contentDescription = null) },
-            badge = { FluidRowValue(text = stringResource(R.string.backup_first_battery_value, percent)) },
-          )
-        }
-      }
+    }
+    if (now != null && now.mobileBytes > 0) {
+      FluidListDivider()
+      FluidListRow(
+        title = stringResource(R.string.backup_first_now),
+        subtitle = stringResource(R.string.backup_first_now_mobile, BackupText.size(now.mobileBytes)),
+        disclosure = false,
+      )
+    }
+    if (basis != null) {
+      FluidListDivider()
+      FluidListRow(
+        title = stringResource(R.string.backup_first_traffic),
+        subtitle = if (basis.mobileBytes > 0) {
+          stringResource(R.string.backup_first_traffic_mobile, BackupText.size(basis.mobileBytes))
+        } else {
+          stringResource(R.string.backup_first_traffic_wifi_only)
+        },
+        disclosure = false,
+        badge = { FluidRowValue(text = BackupText.size(basis.wifiBytes)) },
+      )
     }
   }
 }

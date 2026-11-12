@@ -29,6 +29,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.google.common.truth.Truth.assertThat
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSetupStep
@@ -143,6 +144,17 @@ class BackupEntryTest {
     // Fase I (12/11): a ricerca finita il primo backup e' pronto anche con copie simili da confrontare.
     val comparing = BackupStatus.FirstBackupReady(summary.copy(existing = ExistingCopiesState(privateAreaScanned = true, similarPending = 120)))
     assertThat(BackupEntryTexts.subtitleOf(rule.activity, comparing)).isEqualTo("Pronto")
+  }
+
+  /** Fase I (BF-5): pronto ha il segno «tocca a te», non il «!» d'allarme; appena aperta l'app (riepilogo non calcolato) ne' segno ne' parola provvisoria. */
+  @Test
+  fun ilPrimoBackupProntoToccaAte_EAFreddoNonDiceNiente() {
+    assertThat(backupEntryMark(BackupStatus.FirstBackupReady(summary))).isEqualTo(GalleryIconStatus.YourTurn)
+    assertThat(backupEntryMark(BackupStatus.FirstBackupReady(BackupSummary.COUNTING))).isNull()
+    assertThat(BackupEntryTexts.subtitleOf(rule.activity, BackupStatus.FirstBackupReady(BackupSummary.COUNTING))).isEmpty()
+    val searching = BackupStatus.FirstBackupReady(summary.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0, scanSeen = 10)))
+    assertThat(backupEntryMark(searching)).isEqualTo(GalleryIconStatus.Running)
+    assertThat(backupEntryMark(BackupStatus.FirstBackupReady(summary.copy(existing = ExistingCopiesState(false, 0))))).isEqualTo(GalleryIconStatus.Waiting)
   }
 
   @Test

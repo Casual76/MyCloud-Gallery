@@ -76,7 +76,16 @@ internal fun backupEntryMark(status: BackupStatus?): GalleryIconStatus? = when (
   null -> null
   is BackupStatus.UpToDate -> GalleryIconStatus.Done
   is BackupStatus.Running -> GalleryIconStatus.Running
-  is BackupStatus.Problem, is BackupStatus.NotConfigured, is BackupStatus.FirstBackupReady -> GalleryIconStatus.Attention
+  is BackupStatus.Problem, is BackupStatus.NotConfigured -> GalleryIconStatus.Attention
+  // Fase I (BF-5): lo stesso segno della testata della pagina Backup. Pronto: «tocca a te» (non il «!» d'allarme); si cerca: in corso solo se la scansione
+  // gira, se no l'attesa; appena aperta l'app (riepilogo non ancora calcolato) nessun segno.
+  is BackupStatus.FirstBackupReady -> when {
+    !status.summary.counted -> null
+    status.summary.canStart -> GalleryIconStatus.YourTurn
+    status.summary.existing.heldBy == null && status.summary.existing.scanSeen != null -> GalleryIconStatus.Running
+    status.summary.existing.heldBy == dev.pampa.mycloudgallery.core.backup.contract.WaitReason.NEXT_RUN -> GalleryIconStatus.Paused
+    else -> GalleryIconStatus.Waiting
+  }
   BackupStatus.TestOnly -> GalleryIconStatus.Paused
   // Giro 2 (CU-7): l'attesa (la carica, il Wi-Fi) ha il segno della clessidra del componente comune; la pausa resta le due barre.
   is BackupStatus.Waiting -> GalleryIconStatus.Waiting
@@ -97,8 +106,13 @@ internal object BackupEntryTexts {
       is BackupStatus.NotConfigured -> res.getString(R.string.settings_backup_not_configured)
       BackupStatus.TestOnly -> res.getString(R.string.settings_backup_test_only)
       is BackupStatus.FirstBackupReady ->
-        // Fase I (12/11): «Preparo» solo finche' la ricerca sul NAS non e' finita; il confronto delle copie simili non ferma il primo backup.
-        res.getString(if (!status.summary.canStart) R.string.settings_backup_first_comparing else R.string.settings_backup_first_ready)
+        // Fase I (12/11): «Preparo» solo finche' la ricerca sul NAS non e' finita; il confronto delle copie simili non ferma il primo backup. BF-5: appena
+        // aperta l'app, finche' il riepilogo non c'e', nessuna parola provvisoria.
+        when {
+          !status.summary.counted -> ""
+          !status.summary.canStart -> res.getString(R.string.settings_backup_first_comparing)
+          else -> res.getString(R.string.settings_backup_first_ready)
+        }
       is BackupStatus.UpToDate -> res.getString(R.string.settings_backup_up_to_date)
       is BackupStatus.Waiting -> res.getString(R.string.settings_backup_waiting, ItalianCount.format(status.items))
       is BackupStatus.Running -> res.getString(R.string.settings_backup_running, ItalianCount.format(status.done), ItalianCount.format(status.total))

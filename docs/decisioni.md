@@ -19084,3 +19084,12 @@ Rilievi del giro 1 per I3 (`TRIAGE.md`); prima e dopo, parole contate e prove su
   con il numero, il come dietro la «i». Recinzioni e logica invariate; le parole della recinzione sono «In pausa» / «il backup vero non e' ancora acceso».
 - **Copertine**: la finestra delle miniature segue lo schermo (copertine visibili e sei accanto), non piu' le prime 24.
 - **Parole**: niente «media», «preset», sigle del protocollo; numeri con il punto delle migliaia.
+
+### I2, giro 2 della review (12/11 notte): la prova delle foto nascoste dopo (CS-23)
+- Una foto nascosta **dopo** che la terna e' pronta, a cache calda: `SearchPreviewsHiddenLaterTest` prende la terna vera del controller (due esempi con la
+  foto e la ricerca recente con la foto del suo primo risultato), la disegna con la barra vera e il caricatore finto con cache (`FakeThumbnailLoader`, che
+  ora registra anche `keep`), poi toglie dall'istantanea visibile prima la foto di un esempio e poi quella della recente: al disegno dopo il tondo ha il
+  segno del tipo e il caricatore non tiene piu' la miniatura, anche se e' ancora in cache.
+- Con il controllo tolto le prove cadono: il tondo che ricorda l'indice della foto senza guardare l'istantanea di adesso (`remember(media)` al posto di
+  `remember(library, media)` in `photoArt`) e le richieste tenute che non seguono l'istantanea (`remember(items, thumbnails)` in
+  `KeepSuggestionPreviews`).

@@ -47,6 +47,12 @@ import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
 /** Il segno nelle prove del volto disegnato in un tondo (CG-1: dopo una revoca non c'e' piu'). */
 internal const val SuggestionFaceTag: String = "suggerimento-volto"
 
+/** Il segno nelle prove della foto disegnata in un tondo (CS-23: una foto nascosta dopo non c'e' piu', nemmeno a cache calda). */
+internal const val SuggestionPhotoTag: String = "suggerimento-foto"
+
+/** Il segno nelle prove del segno del tipo, quando il tondo non ha un'anteprima. */
+internal const val SuggestionGlyphTag: String = "suggerimento-segno"
+
 /** Chi tiene le anteprime della barra accanto alla finestra del caricatore (`ThumbnailLoader.keep`). */
 internal const val SuggestionKeepOwner: String = "ricerca-suggerimenti"
 
@@ -109,7 +115,7 @@ internal fun SuggestionDisc(item: SuggestionItem, library: TimelineSnapshot?, th
       }
       null -> false
     }
-    if (!drawn) Icon(imageVector = glyph, contentDescription = null, tint = colors.glyph, modifier = Modifier.glyphSize())
+    if (!drawn) Icon(imageVector = glyph, contentDescription = null, tint = colors.glyph, modifier = Modifier.glyphSize().testTag(SuggestionGlyphTag))
   }
 }
 
@@ -127,7 +133,7 @@ private fun photoArt(media: MediaId, library: TimelineSnapshot?, thumbnails: Sea
   val placeholder = remember(library, index) { library.thumbHashAt(index)?.let { thumbnails.placeholders.image(it) } }
   val image = request?.let { thumbnails.loader.image(it.key, it.ref) }?.value
   val bitmap = image ?: placeholder ?: return false
-  Image(bitmap = bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+  Image(bitmap = bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().testTag(SuggestionPhotoTag))
   return true
 }
 

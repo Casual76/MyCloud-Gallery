@@ -89,4 +89,15 @@ internal object SettingsDimens {
 
   /** Il filo attorno a un'anteprima: la «Scura» sul fondo scuro e la «Chiara» sul fondo chiaro hanno ancora il loro bordo. */
   val AppIconOutline: Dp = 1.dp
+
+  // --- Giro 1 della fase I ----------------------------------------------------------------------------------------------------------
+
+  /** Il margine interno della testata di stato di una sottopagina. */
+  val HeaderPadding: Dp = 20.dp
+
+  /** Lo spazio fra la piastrella grande e il valore nella testata. */
+  val HeaderGap: Dp = 16.dp
+
+  /** Il segno di una scelta fra piu' opzioni (il tondo, la spunta). */
+  val ChoiceMark: Dp = 24.dp
 }

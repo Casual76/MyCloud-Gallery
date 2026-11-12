@@ -14,7 +14,6 @@
   <string name="backup_status_last_run">Ultimo giro: %1$s</string>
 
 
-  <string name="backup_status_running_files">%1$s: %2$s di %3$s</string>
 
   <!-- R4 della revisione 5A: «Ferma» è una pausa che dura finché non tocchi «Riprendi». -->
   <string name="backup_status_stopped_user">Non riparte da solo finché non tocchi «Riprendi». Quello che era a metà riparte da dove si era fermato.</string>
@@ -25,8 +24,8 @@
 
   <string name="backup_sources_empty_title">Nessuna cartella scelta</string>
   <plurals name="backup_source_media">
-    <item quantity="one">%1$s media</item>
-    <item quantity="other">%1$s media</item>
+    <item quantity="one">%1$s foto o video</item>
+    <item quantity="other">%1$s foto e video</item>
   </plurals>
   <string name="backup_source_safe">%1$s al sicuro</string>
   <plurals name="backup_source_problems">

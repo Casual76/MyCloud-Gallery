@@ -3,24 +3,15 @@
   <!-- Rete e VPN: dove sei, impronta di casa, controllo di WireGuard. -->
 
   <string name="network_title">Rete e VPN</string>
-  <string name="network_eyebrow">Adesso</string>
 
   <!-- Dove sei -->
   <string name="place_home_value">In casa</string>
-  <string name="place_home_title">Sei sulla rete di casa</string>
   <string name="place_away_value">Fuori casa</string>
-  <string name="place_away_wifi_title">Fuori casa, via VPN (Wi-Fi)</string>
-  <string name="place_away_mobile_title">Fuori casa, via VPN (dati mobili)</string>
   <string name="place_roaming_value">Roaming</string>
-  <string name="place_roaming_title">Roaming: attività automatiche ferme</string>
   <string name="place_vpn_off_value">VPN spenta</string>
-  <string name="place_vpn_off_title">Fuori casa, la VPN è spenta</string>
   <string name="place_untrusted_value">Rete estranea</string>
-  <string name="place_untrusted_title">Rete non riconosciuta</string>
   <string name="place_foreign_value">VPN estranea</string>
-  <string name="place_foreign_title">Una VPN che non è quella di casa</string>
   <string name="place_offline_value">Offline</string>
-  <string name="place_offline_title">Nessuna rete</string>
   <string name="network_route_home">Il NAS si raggiunge direttamente.</string>
   <string name="network_route_home_vpn">VPN accesa anche a casa: più lento.</string>
   <string name="network_route_vpn">Il NAS si raggiunge attraverso la VPN di casa.</string>
@@ -41,11 +32,7 @@
     <item quantity="one">%1$d rete riconosciuta</item>
     <item quantity="other">%1$d reti riconosciute</item>
   </plurals>
-  <string name="network_current">Rete attuale</string>
-  <string name="match_match">È la rete di casa</string>
   <string name="match_weak">Somiglia a casa ma non basta</string>
-  <string name="match_none">Non è la rete di casa</string>
-  <string name="match_unknown">Non so dirlo</string>
   <string name="network_ipv6">Casa raggiungibile da fuori</string>
   <string name="network_recapture">Salva di nuovo la rete di casa</string>
   <string name="network_recapture_detail">Dopo un reset del router, dal Wi-Fi di casa</string>
@@ -79,9 +66,6 @@
   <string name="network_section_vpn">VPN di casa</string>
   <string name="network_vpn_info">Che cosa fa l’app con la VPN</string>
   <string name="network_wg">WireGuard</string>
-  <string name="wg_pill_ready">Controllo attivo</string>
-  <string name="wg_pill_missing">Non installato</string>
-  <string name="wg_pill_permission">Manca il permesso</string>
   <string name="wg_pill_not_configured">Da configurare</string>
   <string name="wg_ready">L’app accende e spegne la VPN da sola.</string>
   <string name="wg_missing">L’app WireGuard non è installata su questo profilo.</string>
@@ -102,13 +86,6 @@
   <string name="cmd_short_skipped">non inviato</string>
   <string name="auto_suspended_lockdown">Fermo: spegnendo la VPN è sparita la rete (forse «VPN sempre attiva con blocco»). L’ho riaccesa.</string>
   <string name="auto_suspended_not_controllable">Fermo: WireGuard non risponde ai comandi.</string>
-  <string name="network_vpn_now">VPN in questo momento</string>
-  <string name="vpn_obs_none">Nessuna VPN attiva</string>
-  <string name="vpn_obs_home">VPN di casa attiva</string>
-  <string name="vpn_obs_foreign">VPN estranea attiva</string>
-  <string name="vpn_obs_unknown">VPN attiva, non so di chi</string>
-  <string name="network_try_up">Accendi la VPN</string>
-  <string name="network_try_down">Spegni la VPN</string>
   <string name="network_open_wg">Apri WireGuard</string>
   <string name="wg_grant_title">Serve il tuo permesso</string>
   <string name="wg_grant_message">Android ti chiede se questa app può comandare i tunnel di WireGuard: serve per accendere la VPN fuori casa e spegnerla a casa. In WireGuard deve essere acceso anche «Allow remote control apps».</string>
@@ -139,4 +116,20 @@
   <string name="skip_already">La VPN è già come hai chiesto.</string>
   <string name="skip_rate_limited">Ho già mandato un comando per questo cambio di rete: ne mando uno solo, mai in ciclo.</string>
   <string name="skip_background">In background Android rifiuta spesso questi comandi: ci provo una volta sola.</string>
+  <!-- Giro 1 della fase I (CU-5): valori corti a destra delle righe, l'interruttore della VPN di casa, il come dietro la «i». -->
+  <string name="network_route_info">Come arriva al NAS</string>
+  <string name="network_fingerprint_saved">Salvata</string>
+  <string name="network_fingerprint_missing">Da salvare</string>
+  <string name="wg_value_ready">Pronto</string>
+  <string name="wg_value_missing">Da installare</string>
+  <string name="wg_value_permission">Da consentire</string>
+  <string name="auto_value_off">Spento</string>
+  <string name="auto_value_on">Attivo</string>
+  <string name="auto_value_busy">In corso</string>
+  <string name="auto_value_suspended">Fermo</string>
+  <string name="network_vpn_home">VPN di casa</string>
+  <string name="vpn_value_off">Spenta</string>
+  <string name="vpn_value_on">Accesa</string>
+  <string name="vpn_value_foreign">Un’altra VPN</string>
+  <string name="vpn_value_unknown">Non so</string>
 </resources>

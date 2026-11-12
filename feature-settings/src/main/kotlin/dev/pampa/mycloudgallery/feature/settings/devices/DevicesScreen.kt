@@ -4,18 +4,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.NotificationImportant
 import androidx.compose.runtime.Composable
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.feature.settings.ui.DescribedRow
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsStatusHeader
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
-import dev.antigravity.fluidengine.ui.fluid.FluidHero
-import dev.antigravity.fluidengine.ui.fluid.FluidHeroMetric
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -81,19 +83,14 @@ internal fun DevicesScreen(
       return@FluidScreen
     }
 
+    // Giro 1 della fase I (CU-5): in cima quanti dispositivi lavorano, con il segno se qualcuno aspetta; i numeri di prima (da approvare, non piu'
+    // attivi) li dicono i gruppi qui sotto.
     item {
-      FluidHero(
-        tone = FluidHeroTone.PrimaryToSecondary,
-        motif = FluidHeroMotif.Figures,
-        eyebrow = stringResource(R.string.devices_hero_eyebrow),
-        value = pluralStringResource(R.plurals.devices_active_value, state.activeCount, state.activeCount),
-        title = stringResource(R.string.devices_hero_title),
-        description = stringResource(if (state.isAdmin) R.string.devices_hero_detail_admin else R.string.devices_hero_detail),
+      SettingsStatusHeader(
         icon = Icons.Rounded.Devices,
-        metrics = listOf(
-          FluidHeroMetric(stringResource(R.string.devices_metric_waiting), state.requests.count { it.windowOpen }.toString()),
-          FluidHeroMetric(stringResource(R.string.devices_metric_inactive), state.inactive.size.toString()),
-        ),
+        family = GalleryIconFamily.People,
+        value = pluralStringResource(R.plurals.devices_active_value, state.activeCount, state.activeCount),
+        status = if (state.requests.any { it.windowOpen }) GalleryIconStatus.Attention else null,
       )
     }
 
@@ -123,11 +120,12 @@ internal fun DevicesScreen(
     if (state.reissueDue) {
       item {
         FluidListGroup {
+          // L'avvertimento sul registro della famiglia resta in pagina (CG-4: le chiavi).
           FluidListRow(
             title = stringResource(R.string.devices_reissue),
             subtitle = stringResource(R.string.devices_reissue_detail),
             tone = FluidTone.Danger,
-            leading = { RowTile(Icons.Rounded.NotificationImportant) },
+            leading = { RowTile(Icons.Rounded.NotificationImportant, status = GalleryIconStatus.Problem, family = GalleryIconFamily.Danger) },
             leadingTile = false,
             onClick = onReissue,
           )
@@ -137,10 +135,7 @@ internal fun DevicesScreen(
 
     if (state.requests.isNotEmpty()) {
       item {
-        GallerySectionHeader(
-          title = stringResource(R.string.devices_section_requests),
-          detail = stringResource(R.string.devices_section_requests_detail),
-        )
+        GallerySectionHeader(title = stringResource(R.string.devices_section_requests))
       }
       item {
         FluidListGroup {
@@ -150,6 +145,7 @@ internal fun DevicesScreen(
           }
         }
       }
+      item { SettingsInfo(label = stringResource(R.string.devices_requests_info), text = stringResource(R.string.devices_section_requests_detail)) }
     }
 
     state.thisDevice?.let { device ->
@@ -171,10 +167,7 @@ internal fun DevicesScreen(
 
     if (state.inactive.isNotEmpty()) {
       item {
-        GallerySectionHeader(
-          title = stringResource(R.string.devices_section_inactive),
-          detail = stringResource(R.string.devices_section_inactive_detail),
-        )
+        GallerySectionHeader(title = stringResource(R.string.devices_section_inactive))
       }
       item {
         FluidListGroup {
@@ -190,19 +183,23 @@ internal fun DevicesScreen(
       item { GallerySectionHeader(title = stringResource(R.string.devices_section_reports)) }
       item {
         FluidListGroup {
-          FluidListRow(
+          DescribedRow(
             title = stringResource(R.string.devices_convert_reports),
-            subtitle = stringResource(R.string.devices_convert_reports_detail),
+            detail = stringResource(R.string.devices_convert_reports_detail),
+            icon = Icons.Rounded.NotificationImportant,
             tone = FluidTone.Warning,
-            leading = { RowTile(Icons.Rounded.NotificationImportant) },
-            leadingTile = false,
             onClick = onConvertReports,
           )
         }
       }
     }
 
-    item { FluidSectionFootnote(text = stringResource(R.string.devices_footnote)) }
+    item {
+      SettingsInfo(
+        label = stringResource(R.string.devices_info),
+        text = stringResource(R.string.devices_section_inactive_detail) + " " + stringResource(R.string.devices_footnote),
+      )
+    }
   }
 }
 

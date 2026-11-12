@@ -52,6 +52,9 @@ import dev.pampa.mycloudgallery.feature.people.ui.PersonAvatar
 import dev.pampa.mycloudgallery.feature.people.ui.PersonTile
 import dev.pampa.mycloudgallery.feature.people.ui.TileSelection
 import dev.pampa.mycloudgallery.feature.people.ui.PeopleFigureState
+import androidx.compose.ui.unit.Dp
+import dev.pampa.mycloudgallery.feature.people.ui.personCardHeight
+import dev.pampa.mycloudgallery.feature.people.ui.personFadeHeight
 
 // "TUTTE LE PERSONE" (Fase 8, P9; docs/fase8-progetto.md §1.5 `PeopleListState`, §2.6 "Cosa si vede", Q2 (b) del 27/10, D25). I1 (fase I, 11/11):
 // "come Samsung", una griglia di **schede alte con il volto a tutta scheda** e il nome in basso (senza nome: solo il volto), tre per riga sul
@@ -101,6 +104,8 @@ internal fun PeopleListScreen(
 ) {
   val metrics = rememberFluidScreenMetrics()
   val columns = metrics.columns(minColumn = PeopleDimens.TileMin, spacing = PeopleDimens.BlockGap, maxColumns = MAX_COLUMNS)
+  // Giro 1 (CU-2): la sfumatura sopra il nome si sceglie dall'altezza vera delle schede (corta sotto i 140 dp: la bocca resta libera).
+  val fade = personFadeHeight(personCardHeight(metrics.contentWidth, columns, PeopleDimens.BlockGap))
   val ready = ui.state as? PeopleListState.Ready
   if (ready != null && !ui.selecting) KeepInstantShape(PeopleInstant.CODE, PeopleInstant.shapeOf(ready, columns))
   FluidScreen(
@@ -135,10 +140,10 @@ internal fun PeopleListScreen(
       is PeopleListState.Ready -> {
         if (!ui.selecting) proposals(ui.proposals, crops, handlers)
         if (!ui.selecting && state.othersCount > 0) othersRow(state.othersCount, handlers)
-        if (state.named.isNotEmpty()) grid("named", state.named, columns, ui, crops, handlers)
+        if (state.named.isNotEmpty()) grid("named", state.named, columns, fade, ui, crops, handlers)
         if (state.unnamed.isNotEmpty()) {
           item(key = "header-unnamed") { GallerySectionHeader(title = stringResource(R.string.persone_header_unnamed)) }
-          grid("unnamed", state.unnamed, columns, ui, crops, handlers)
+          grid("unnamed", state.unnamed, columns, fade, ui, crops, handlers)
         }
         if (state.named.isEmpty() && state.unnamed.isEmpty()) {
           item(key = "none-named") {
@@ -231,11 +236,12 @@ private fun LazyListScope.hiddenRow(count: Int, handlers: PeopleListHandlers) {
   }
 }
 
-/** La griglia: [columns] tessere per riga, l'ultima riga lascia i posti vuoti (le tessere non si allargano). */
+/** La griglia: [columns] tessere per riga, l'ultima riga lascia i posti vuoti (le tessere non si allargano); [fade] la sfumatura sopra i nomi. */
 private fun LazyListScope.grid(
   key: String,
   cards: List<PersonCard>,
   columns: Int,
+  fade: Dp,
   ui: PeopleListUi,
   crops: PeopleCrops,
   handlers: PeopleListHandlers,
@@ -253,6 +259,7 @@ private fun LazyListScope.grid(
           onClick = { if (ui.selecting) handlers.onToggle(card.id) else handlers.onOpenPerson(card.id) },
           onLongClick = if (ui.selecting) null else ({ handlers.onStartWith(card.id) }),
           modifier = Modifier.weight(1f),
+          fadeHeight = fade,
         )
       }
       repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }

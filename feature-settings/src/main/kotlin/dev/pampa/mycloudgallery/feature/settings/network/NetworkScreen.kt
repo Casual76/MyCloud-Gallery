@@ -36,11 +36,9 @@ import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
-import dev.antigravity.fluidengine.ui.fluid.FluidHero
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
-import dev.antigravity.fluidengine.ui.fluid.FluidRowValue
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -67,12 +65,22 @@ import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.feature.settings.ui.RowValue
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
-import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
 import dev.pampa.mycloudgallery.feature.settings.ui.messageRes
 import dev.antigravity.fluidengine.ui.theme.FluidCard
 import java.text.DateFormat
 import java.util.Date
 import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
+import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsStatusHeader
 
 internal class NetworkActions(
   val onBack: () -> Unit,
@@ -150,9 +158,9 @@ private fun Context.openAppDetails() {
 }
 
 /**
- * Impostazioni → Rete e VPN (piano 2.1 e 2.5). In cima, dove si trova il telefono rispetto al NAS e se il
- * NAS si raggiunge (le stesse parole dell'indicatore globale, §3.5); poi l'impronta di casa e il controllo
- * di WireGuard.
+ * Impostazioni → Rete e VPN (piano 2.1 e 2.5; giro 1 della fase I, CU-5). In cima lo stato e basta: dove si trova il telefono rispetto al NAS
+ * (le stesse parole dell'indicatore globale, §3.5) con il segno che dice se il NAS si raggiunge; il come dietro la «i». Poi l'impronta di casa e
+ * la VPN: ogni riga dice il suo stato con un segno e un valore corto a destra, la VPN di casa e' un interruttore.
  */
 @Composable
 internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
@@ -163,16 +171,15 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
     ambient = FluidAmbient(tone = hero.tone, motif = FluidHeroMotif.Glow),
   ) {
     item {
-      FluidHero(
-        tone = hero.tone,
-        motif = FluidHeroMotif.Ripples,
-        eyebrow = stringResource(R.string.network_eyebrow),
-        value = stringResource(hero.value),
-        title = stringResource(hero.title),
-        description = stringResource(hero.detail(state)),
+      SettingsStatusHeader(
         icon = hero.icon,
+        family = GalleryIconFamily.Network,
+        value = stringResource(hero.value),
+        status = placeStatus(state),
+        label = if (state.snapshot.home is HomeMatch.Weak) stringResource(R.string.match_weak) else null,
       )
     }
+    item { SettingsInfo(label = stringResource(R.string.network_route_info), text = stringResource(hero.detail(state))) }
 
     if (state.snapshot.localNetwork == LocalNetworkAccess.DENIED) {
       item {
@@ -193,22 +200,24 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
       }
     }
 
-    // I3 (fase I): niente frasi sotto i titoli dei gruppi; lo stato di ogni riga e' un segno sulla piastrella o un valore corto a destra.
     item { GallerySectionHeader(title = stringResource(R.string.network_section_home)) }
     item {
       FluidListGroup {
         val fingerprint = state.fingerprint
+        val fingerprintTitle = stringResource(R.string.network_fingerprint)
+        val fingerprintValue = stringResource(if (fingerprint == null) R.string.network_fingerprint_missing else R.string.network_fingerprint_saved)
+        val fingerprintSpoken = if (fingerprint == null) {
+          stringResource(R.string.network_fingerprint_none)
+        } else {
+          stringResource(
+            R.string.network_fingerprint_detail,
+            pluralStringResource(R.plurals.network_ula_count, fingerprint.ulaPrefixes.size, fingerprint.ulaPrefixes.size),
+            DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(fingerprint.capturedAt)),
+          )
+        }
         FluidListRow(
-          title = stringResource(R.string.network_fingerprint),
-          subtitle = if (fingerprint == null) {
-            stringResource(R.string.network_fingerprint_none)
-          } else {
-            stringResource(
-              R.string.network_fingerprint_detail,
-              pluralStringResource(R.plurals.network_ula_count, fingerprint.ulaPrefixes.size, fingerprint.ulaPrefixes.size),
-              DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(fingerprint.capturedAt)),
-            )
-          },
+          title = fingerprintTitle,
+          subtitle = "",
           tone = if (fingerprint == null) FluidTone.Warning else FluidTone.Primary,
           leading = {
             RowTile(
@@ -219,15 +228,8 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
           },
           leadingTile = false,
           disclosure = false,
-        )
-        FluidListDivider()
-        FluidListRow(
-          title = stringResource(R.string.network_current),
-          subtitle = stringResource(state.snapshot.home.labelRes()),
-          tone = if (state.snapshot.home == HomeMatch.Match) FluidTone.Success else FluidTone.Neutral,
-          leading = { RowTile(Icons.Rounded.Home, status = if (state.snapshot.home == HomeMatch.Match) GalleryIconStatus.Done else null) },
-          leadingTile = false,
-          disclosure = false,
+          badge = { RowValue(fingerprintValue) },
+          modifier = Modifier.semantics { contentDescription = "$fingerprintTitle, $fingerprintValue. $fingerprintSpoken" },
         )
         FluidListDivider()
         FluidListRow(
@@ -237,7 +239,7 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
           leading = { RowTile(Icons.Rounded.Public) },
           leadingTile = false,
           disclosure = false,
-          badge = { FluidRowValue(stringResource(if (state.snapshot.ipv6Global) R.string.value_yes else R.string.value_no)) },
+          badge = { RowValue(stringResource(if (state.snapshot.ipv6Global) R.string.value_yes else R.string.value_no)) },
         )
         FluidListDivider()
         FluidListRow(
@@ -262,38 +264,40 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
     item { GallerySectionHeader(title = stringResource(R.string.network_section_vpn)) }
     item {
       FluidListGroup {
+        val ready = state.vpnCapability == VpnCapability.READY
+        val wgTitle = stringResource(R.string.network_wg)
+        val wgValue = stringResource(state.vpnCapability.valueRes())
         FluidListRow(
-          title = stringResource(R.string.network_wg),
-          subtitle = stringResource(state.vpnCapability.pillRes()),
-          tone = if (state.vpnCapability == VpnCapability.READY) FluidTone.Success else FluidTone.Warning,
-          leading = {
-            RowTile(Icons.Rounded.VpnKey, status = if (state.vpnCapability == VpnCapability.READY) GalleryIconStatus.Done else GalleryIconStatus.Attention)
-          },
+          title = wgTitle,
+          subtitle = "",
+          tone = if (ready) FluidTone.Success else FluidTone.Warning,
+          leading = { RowTile(Icons.Rounded.VpnKey, status = if (ready) GalleryIconStatus.Done else GalleryIconStatus.Attention) },
           leadingTile = false,
           disclosure = false,
+          badge = { RowValue(wgValue) },
+          modifier = Modifier.semantics { contentDescription = "$wgTitle, $wgValue" },
         )
         FluidListDivider()
+        val autoTitle = stringResource(R.string.network_automation)
+        val autoValue = stringResource(state.automation.valueRes())
+        val autoSpoken = automationText(state.automation)
+        val suspended = state.automation is VpnAutomationStatus.Suspended
         FluidListRow(
-          title = stringResource(R.string.network_automation),
-          subtitle = automationText(state.automation),
-          tone = when (state.automation) {
-            is VpnAutomationStatus.Suspended -> FluidTone.Warning
-            VpnAutomationStatus.Off -> FluidTone.Neutral
+          title = autoTitle,
+          subtitle = "",
+          tone = when {
+            suspended -> FluidTone.Warning
+            state.automation == VpnAutomationStatus.Off -> FluidTone.Neutral
             else -> FluidTone.Info
           },
-          leading = { RowTile(Icons.Rounded.Tune) },
+          leading = { RowTile(Icons.Rounded.Tune, status = if (suspended) GalleryIconStatus.Attention else null, family = GalleryIconFamily.Network) },
           leadingTile = false,
           disclosure = false,
+          badge = { RowValue(autoValue) },
+          modifier = Modifier.semantics { contentDescription = "$autoTitle, $autoValue. $autoSpoken" },
         )
         FluidListDivider()
-        FluidListRow(
-          title = stringResource(R.string.network_vpn_now),
-          subtitle = stringResource(state.snapshot.vpn.labelRes()),
-          tone = if (state.snapshot.vpn == VpnObservation.FOREIGN_VPN) FluidTone.Danger else FluidTone.Neutral,
-          leading = { RowTile(Icons.Rounded.VpnLock, status = if (state.snapshot.vpn == VpnObservation.FOREIGN_VPN) GalleryIconStatus.Problem else null) },
-          leadingTile = false,
-          disclosure = false,
-        )
+        VpnSwitchRow(state = state, onTunnel = actions.onTunnel)
       }
     }
 
@@ -317,34 +321,13 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
           style = FluidButtonStyle.Filled,
           size = FluidButtonSize.Large,
           fillWidth = true,
+          leading = { Icon(Icons.Rounded.Sync, contentDescription = null) },
         )
       }
     }
 
     item { CommandStatus(state.command) }
 
-    if (state.vpnCapability == VpnCapability.READY) {
-      item {
-        FluidButton(
-          text = stringResource(R.string.network_try_up),
-          onClick = { actions.onTunnel(true) },
-          style = FluidButtonStyle.Tinted,
-          size = FluidButtonSize.Large,
-          fillWidth = true,
-          enabled = state.command !is VpnCommandUi.Running,
-        )
-      }
-      item {
-        FluidButton(
-          text = stringResource(R.string.network_try_down),
-          onClick = { actions.onTunnel(false) },
-          style = FluidButtonStyle.Tinted,
-          size = FluidButtonSize.Large,
-          fillWidth = true,
-          enabled = state.command !is VpnCommandUi.Running,
-        )
-      }
-    }
     if (state.canOpenWireGuard) {
       item {
         FluidButton(
@@ -357,6 +340,7 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
           },
           size = FluidButtonSize.Large,
           fillWidth = true,
+          leading = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null) },
         )
       }
     }
@@ -368,6 +352,7 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
           style = FluidButtonStyle.Tinted,
           size = FluidButtonSize.Large,
           fillWidth = true,
+          leading = { Icon(Icons.Rounded.Tune, contentDescription = null) },
         )
       }
     }
@@ -386,6 +371,70 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
   )
 }
 
+/**
+ * La VPN di casa come un interruttore (CU-5: prima due tasti «Accendi» e «Spegni» uno sotto l'altro). Acceso = il tunnel di casa e' su; il tocco
+ * prova a cambiarlo (lo stesso comando dei tasti di prima). Si tocca solo con WireGuard pronto e nessun comando in corso; un'altra VPN accesa e' un
+ * problema (segno rosso) e lo dice il valore.
+ */
+@Composable
+private fun VpnSwitchRow(state: NetworkUiState, onTunnel: (Boolean) -> Unit) {
+  val title = stringResource(R.string.network_vpn_home)
+  val on = state.snapshot.vpn == VpnObservation.HOME_TUNNEL
+  val foreign = state.snapshot.vpn == VpnObservation.FOREIGN_VPN
+  val usable = state.vpnCapability == VpnCapability.READY && state.command !is VpnCommandUi.Running && !foreign
+  val value = stringResource(state.snapshot.vpn.valueRes())
+  FluidListRow(
+    title = title,
+    subtitle = "",
+    tone = when {
+      foreign -> FluidTone.Danger
+      on -> FluidTone.Primary
+      else -> FluidTone.Neutral
+    },
+    leading = { RowTile(Icons.Rounded.VpnLock, status = if (foreign) GalleryIconStatus.Problem else null) },
+    leadingTile = false,
+    disclosure = false,
+    badge = { if (usable) FluidSwitch(checked = on, onCheckedChange = null) else RowValue(value) },
+    onClick = if (usable) ({ onTunnel(!on) }) else null,
+    modifier = Modifier.semantics(mergeDescendants = true) {
+      contentDescription = "$title, $value"
+      if (usable) {
+        role = Role.Switch
+        toggleableState = ToggleableState(on)
+      }
+    },
+  )
+}
+
+/** Il segno della testata: il NAS si raggiunge (spunta), no (attenzione), una rete o una VPN estranea (problema), senza rete (fermo). */
+private fun placeStatus(state: NetworkUiState): GalleryIconStatus = when {
+  state.snapshot.vpn == VpnObservation.FOREIGN_VPN || state.snapshot.place == NetPlace.UNTRUSTED -> GalleryIconStatus.Problem
+  state.snapshot.place == NetPlace.OFFLINE -> GalleryIconStatus.Stopped
+  state.route is RouteUi.Allowed -> GalleryIconStatus.Done
+  else -> GalleryIconStatus.Attention
+}
+
+private fun VpnCapability.valueRes(): Int = when (this) {
+  VpnCapability.READY -> R.string.wg_value_ready
+  VpnCapability.WIREGUARD_MISSING -> R.string.wg_value_missing
+  VpnCapability.PERMISSION_MISSING -> R.string.wg_value_permission
+  VpnCapability.NOT_CONFIGURED -> R.string.wg_pill_not_configured
+}
+
+private fun VpnAutomationStatus.valueRes(): Int = when (this) {
+  VpnAutomationStatus.Off -> R.string.auto_value_off
+  VpnAutomationStatus.Idle, is VpnAutomationStatus.Done -> R.string.auto_value_on
+  is VpnAutomationStatus.WaitingForIdleSession, is VpnAutomationStatus.Commanding -> R.string.auto_value_busy
+  is VpnAutomationStatus.Suspended -> R.string.auto_value_suspended
+}
+
+private fun VpnObservation.valueRes(): Int = when (this) {
+  VpnObservation.NONE -> R.string.vpn_value_off
+  VpnObservation.HOME_TUNNEL -> R.string.vpn_value_on
+  VpnObservation.FOREIGN_VPN -> R.string.vpn_value_foreign
+  VpnObservation.UNKNOWN -> R.string.vpn_value_unknown
+}
+
 private val IPV6_MATTERS = setOf(NetPlace.AWAY_VPN_WIFI, NetPlace.AWAY_VPN_MOBILE, NetPlace.VPN_OFF)
 
 /** L'apertura della pagina: come ci si chiama in questa rete e cosa succede al NAS. */
@@ -393,7 +442,6 @@ private class PlaceHero(
   val tone: FluidHeroTone,
   val icon: ImageVector,
   val value: Int,
-  val title: Int,
   val detail: (NetworkUiState) -> Int,
 )
 
@@ -409,38 +457,17 @@ private fun placeHero(state: NetworkUiState): PlaceHero {
     }
   }
   if (state.snapshot.vpn == VpnObservation.FOREIGN_VPN) {
-    return PlaceHero(FluidHeroTone.Alert, Icons.Rounded.VpnLock, R.string.place_foreign_value, R.string.place_foreign_title, detail)
+    return PlaceHero(FluidHeroTone.Alert, Icons.Rounded.VpnLock, R.string.place_foreign_value, detail)
   }
   return when (state.snapshot.place) {
-    NetPlace.HOME -> PlaceHero(FluidHeroTone.PrimaryToSecondary, Icons.Rounded.Home, R.string.place_home_value, R.string.place_home_title, detail)
-    NetPlace.AWAY_VPN_WIFI -> PlaceHero(FluidHeroTone.Secondary, Icons.Rounded.Wifi, R.string.place_away_value, R.string.place_away_wifi_title, detail)
-    NetPlace.AWAY_VPN_MOBILE -> PlaceHero(FluidHeroTone.Secondary, Icons.Rounded.CellTower, R.string.place_away_value, R.string.place_away_mobile_title, detail)
-    NetPlace.ROAMING -> PlaceHero(FluidHeroTone.Tertiary, Icons.Rounded.Language, R.string.place_roaming_value, R.string.place_roaming_title, detail)
-    NetPlace.VPN_OFF -> PlaceHero(FluidHeroTone.Tertiary, Icons.Rounded.VpnLock, R.string.place_vpn_off_value, R.string.place_vpn_off_title, detail)
-    NetPlace.UNTRUSTED -> PlaceHero(FluidHeroTone.Alert, Icons.Rounded.Lan, R.string.place_untrusted_value, R.string.place_untrusted_title, detail)
-    NetPlace.OFFLINE -> PlaceHero(FluidHeroTone.Secondary, Icons.Rounded.SignalWifiOff, R.string.place_offline_value, R.string.place_offline_title, detail)
+    NetPlace.HOME -> PlaceHero(FluidHeroTone.PrimaryToSecondary, Icons.Rounded.Home, R.string.place_home_value, detail)
+    NetPlace.AWAY_VPN_WIFI -> PlaceHero(FluidHeroTone.Secondary, Icons.Rounded.Wifi, R.string.place_away_value, detail)
+    NetPlace.AWAY_VPN_MOBILE -> PlaceHero(FluidHeroTone.Secondary, Icons.Rounded.CellTower, R.string.place_away_value, detail)
+    NetPlace.ROAMING -> PlaceHero(FluidHeroTone.Tertiary, Icons.Rounded.Language, R.string.place_roaming_value, detail)
+    NetPlace.VPN_OFF -> PlaceHero(FluidHeroTone.Tertiary, Icons.Rounded.VpnLock, R.string.place_vpn_off_value, detail)
+    NetPlace.UNTRUSTED -> PlaceHero(FluidHeroTone.Alert, Icons.Rounded.Lan, R.string.place_untrusted_value, detail)
+    NetPlace.OFFLINE -> PlaceHero(FluidHeroTone.Secondary, Icons.Rounded.SignalWifiOff, R.string.place_offline_value, detail)
   }
-}
-
-private fun HomeMatch.labelRes(): Int = when (this) {
-  HomeMatch.Match -> R.string.match_match
-  is HomeMatch.Weak -> R.string.match_weak
-  HomeMatch.NoMatch -> R.string.match_none
-  HomeMatch.Unknown -> R.string.match_unknown
-}
-
-private fun VpnObservation.labelRes(): Int = when (this) {
-  VpnObservation.NONE -> R.string.vpn_obs_none
-  VpnObservation.HOME_TUNNEL -> R.string.vpn_obs_home
-  VpnObservation.FOREIGN_VPN -> R.string.vpn_obs_foreign
-  VpnObservation.UNKNOWN -> R.string.vpn_obs_unknown
-}
-
-private fun VpnCapability.pillRes(): Int = when (this) {
-  VpnCapability.READY -> R.string.wg_pill_ready
-  VpnCapability.WIREGUARD_MISSING -> R.string.wg_pill_missing
-  VpnCapability.PERMISSION_MISSING -> R.string.wg_pill_permission
-  VpnCapability.NOT_CONFIGURED -> R.string.wg_pill_not_configured
 }
 
 private fun VpnCapability.detailRes(): Int = when (this) {

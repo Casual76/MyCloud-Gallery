@@ -11,6 +11,8 @@ import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceRules
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmation
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupActions
+import dev.pampa.mycloudgallery.feature.backup.contract.BackupCoverPorts
+import dev.pampa.mycloudgallery.feature.backup.ui.BackupCovers
 import java.util.Optional
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -33,7 +35,11 @@ class FreeSpaceViewModel @Inject constructor(
   clock: Optional<BackupClock>,
   actions: Optional<BackupActions>,
   runs: Optional<FreeSpaceRuns>,
+  coverPorts: Optional<BackupCoverPorts> = Optional.empty(),
 ) : ViewModel() {
+
+  /** Giro 1 (CU-6): le anteprime del riepilogo (la Libreria visibile e la cache delle miniature); senza la porta, niente anteprime. */
+  internal val covers: BackupCovers? = coverPorts.map { BackupCovers(it) }.orElse(null)
 
   private val freeSpace: FreeSpace? = service.orElse(null)
 

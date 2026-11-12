@@ -211,7 +211,9 @@ private fun CapChips(state: RulesUiState, onCap: (CapChoice) -> Unit) {
     horizontalArrangement = Arrangement.spacedBy(SettingsDimens.PillGap),
     verticalArrangement = Arrangement.spacedBy(SettingsDimens.PillGap),
   ) {
-    val preset = state.presetCapBytes?.let { stringResource(R.string.rules_cap_preset_chip, ByteFormat.size(it)) } ?: stringResource(R.string.rules_cap_preset)
+    // Giro 1 della fase I (CU-20): la capsula dice il nome del preset scelto, non la parola «preset».
+    val name = PresetCatalog.info(state.preset).title
+    val preset = state.presetCapBytes?.let { stringResource(R.string.rules_cap_preset_chip, name, ByteFormat.size(it)) } ?: stringResource(R.string.rules_cap_preset, name)
     FluidChip(label = preset, selected = state.cap == CapChoice.FromPreset, onClick = { onCap(CapChoice.FromPreset) })
     for (bytes in MobileCapOptions) {
       FluidChip(label = ByteFormat.size(bytes), selected = state.cap == CapChoice.Limit(bytes), onClick = { onCap(CapChoice.Limit(bytes)) })

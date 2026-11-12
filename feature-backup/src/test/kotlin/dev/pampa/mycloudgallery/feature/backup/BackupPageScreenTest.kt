@@ -28,6 +28,7 @@ import dev.pampa.mycloudgallery.feature.backup.page.BackupPageUi
 import dev.pampa.mycloudgallery.feature.backup.page.SourceState
 import dev.pampa.mycloudgallery.feature.backup.page.SourcesHalt
 import dev.pampa.mycloudgallery.feature.backup.page.sourceState
+import dev.pampa.mycloudgallery.feature.backup.page.coverMarkShown
 import dev.pampa.mycloudgallery.feature.backup.page.sourcesHalt
 import dev.pampa.mycloudgallery.feature.backup.page.otherProblems
 import dev.pampa.mycloudgallery.feature.backup.testing.BackupSamples
@@ -78,7 +79,8 @@ class BackupPageScreenTest : ComposeBackupTest() {
 
   /** Apre il perche' della testata (la «i» senza riga accanto). */
   private fun openWhy() {
-    composeRule.onNodeWithContentDescription("Perché").performClick()
+    // Giro 1 (CS-5): la «i» della galleria dice a TalkBack anche il perche' (la frase aperta non si rilegge).
+    composeRule.onNodeWithContentDescription("Perché", substring = true).performClick()
     composeRule.waitForIdle()
   }
 
@@ -175,8 +177,9 @@ class BackupPageScreenTest : ComposeBackupTest() {
   fun unGiroInCorsoDiceADoveEPuoEssereFermato() {
     start(BackupStatus.Running(BackupKind.PHOTOS, 1_240, 6_658, 2_100_000_000, 48_000_000_000, 4_800_000, BackupTrigger.FIRST_BACKUP))
     composeRule.onNodeWithText("Primo backup").assertExists()
-    composeRule.onNodeWithText("Foto: 1.240 di 6.658", substring = true).assertExists()
-    composeRule.onNodeWithText("circa 1 h 20 min", substring = true).assertExists()
+    // Giro 1 (CU-11): la riga dice il tipo e il tempo; la frazione la dice solo l'anello (mai due frazioni con totali diversi).
+    composeRule.onNodeWithText("Foto · circa 1 h 20 min").assertExists()
+    composeRule.onNodeWithText("1.240 di 6.658", substring = true).assertDoesNotExist()
     composeRule.onNodeWithText("Fai ora").assertDoesNotExist()
     composeRule.onNodeWithText("Ferma").performClick()
     assertThat(actions.stopCalls).isEqualTo(1)
@@ -187,7 +190,7 @@ class BackupPageScreenTest : ComposeBackupTest() {
     fun running(trigger: BackupTrigger) = BackupStatus.Running(BackupKind.VIDEOS, 3, 40, 1_000_000, 9_000_000_000, null, trigger)
     start(running(BackupTrigger.USER_NOW))
     composeRule.onNodeWithText("In corso").assertExists()
-    composeRule.onNodeWithText("Video: 3 di 40", substring = true).assertExists()
+    composeRule.onNodeWithText("Video").assertExists()
     set(running(BackupTrigger.SCHEDULED))
     composeRule.onNodeWithText("In corso").assertExists()
     set(running(BackupTrigger.FIRST_BACKUP))
@@ -261,13 +264,30 @@ class BackupPageScreenTest : ComposeBackupTest() {
     }
   }
 
-  /** I3: una copertina per sorgente, con il segno e il numero che conta; per TalkBack nome, stato e numeri in una frase. */
+  /** I3: una copertina per sorgente, con il numero che conta; per TalkBack nome, stato e numeri in una frase. */
   @Test
   fun leSorgentiDiconoStatoENumeroCheConta() {
     start(BackupStatus.UpToDate(6_658, null))
     composeRule.onNodeWithContentDescription("Fotocamera, Al sicuro. 1.250 al sicuro").assertExists()
     composeRule.onNodeWithContentDescription("Screenshot, Da controllare. 3 con problemi").assertExists()
-    composeRule.onNodeWithContentDescription("Telegram, Non salvata. 224 media, non si salva").assertExists()
+    composeRule.onNodeWithContentDescription("Telegram, Non salvata. 224 foto e video, non si salva").assertExists()
+  }
+
+  /**
+   * Giro 1 (CS-2): lo stato di tutte le copertine lo dice la testata, una volta; il segno sta solo sulla copertina diversa dalle altre (un problema,
+   * una cartella spenta). Prima la pausa era sull'anello e su ognuna delle sei copertine.
+   */
+  @Test
+  fun ilSegnoStaSoloSullaCopertinaDiversaDalleAltre() {
+    val all = List(6) { SourceState.Halted }
+    assertThat(all.map { coverMarkShown(it, all) }).containsExactly(false, false, false, false, false, false)
+    val oneProblem = all.dropLast(1) + SourceState.Problem
+    assertThat(oneProblem.map { coverMarkShown(it, oneProblem) }).containsExactly(false, false, false, false, false, true).inOrder()
+    val oneOff = listOf(SourceState.Working, SourceState.Safe, SourceState.Off)
+    assertThat(oneOff.map { coverMarkShown(it, oneOff) }).containsExactly(false, false, true).inOrder()
+    // Tutte con lo stesso problema: lo dice la testata, non sei segni.
+    val allProblems = List(3) { SourceState.Problem }
+    assertThat(allProblems.map { coverMarkShown(it, allProblems) }).containsExactly(false, false, false)
   }
 
   /**

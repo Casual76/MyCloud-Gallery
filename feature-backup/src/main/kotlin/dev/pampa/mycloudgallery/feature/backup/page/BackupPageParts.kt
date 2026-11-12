@@ -31,6 +31,7 @@ import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.FolderShared
 import androidx.compose.material.icons.rounded.MoveToInbox
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +48,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -101,14 +103,24 @@ import dev.pampa.mycloudgallery.feature.backup.ui.sourceName
  */
 @Composable
 internal fun SourceGrid(sources: List<SourceStatus>, halt: SourcesHalt?) {
+  // Giro 1 della fase I (CS-2): lo stato comune («In pausa», «In corso») lo dicono l'anello e l'etichetta in cima, una volta; il segno sta solo
+  // sulla copertina diversa dalle altre (un problema, una cartella spenta). Prima la pausa si vedeva otto volte nella stessa pagina.
+  val states = sources.map { sourceState(it, it.problems.values.sum(), halt) }
+  // Giro 1 (CS-13): col testo grande la copertina cresce con il testo (a 1,3x due per riga sul telefono), e il nome va su due righe: prima a 1,3x
+  // «Fotoca…», «Screens…», «WhatsA…» non si distinguevano.
+  val scale = LocalDensity.current.fontScale
   BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
     val gap = BackupDimens.CoverGap
-    val columns = maxOf(MinColumns, ((maxWidth + gap) / (BackupDimens.CoverMinCell + gap)).toInt())
+    val minColumns = if (scale >= LargeTextScale) MinColumnsLargeText else MinColumns
+    val minCell = BackupDimens.CoverMinCell * maxOf(1f, scale)
+    val columns = maxOf(minColumns, ((maxWidth + gap) / (minCell + gap)).toInt())
     val cell = (maxWidth - gap * (columns - 1)) / columns
     Column(verticalArrangement = Arrangement.spacedBy(BackupDimens.CoverRowGap)) {
-      sources.chunked(columns).forEach { row ->
+      sources.indices.chunked(columns).forEach { row ->
         Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-          row.forEach { SourceCard(source = it, halt = halt, cell = cell) }
+          row.forEach { index ->
+            SourceCard(source = sources[index], halt = halt, cell = cell, showMark = coverMarkShown(states[index], states))
+          }
         }
       }
     }
@@ -121,7 +133,7 @@ internal fun SourceGrid(sources: List<SourceStatus>, halt: SourcesHalt?) {
  * sicuro, la nuvola barrata quando la cartella non si salva. Nessuna frase: per TalkBack la copertina dice nome, stato e numeri in una frase.
  */
 @Composable
-private fun SourceCard(source: SourceStatus, halt: SourcesHalt?, cell: Dp) {
+private fun SourceCard(source: SourceStatus, halt: SourcesHalt?, cell: Dp, showMark: Boolean) {
   val name = sourceName(source.source)
   val problems = source.problems.values.sum()
   val state = sourceState(source, problems, halt)
@@ -145,13 +157,13 @@ private fun SourceCard(source: SourceStatus, halt: SourcesHalt?, cell: Dp) {
   Column(
     modifier = Modifier.width(cell).semantics(mergeDescendants = true) { contentDescription = "$name, $stateLabel. $numbers" },
   ) {
-    SourceCover(source = source.source, cell = cell, mark = mark, dim = !source.active)
+    SourceCover(source = source.source, cell = cell, mark = mark.takeIf { showMark }, dim = !source.active)
     Spacer(Modifier.height(BackupDimens.CoverLineGap))
     Text(
       text = name,
       style = MaterialTheme.typography.labelLarge,
       color = MaterialTheme.colorScheme.onSurface,
-      maxLines = 1,
+      maxLines = NameLines,
       overflow = TextOverflow.Ellipsis,
       modifier = Modifier.clearAndSetSemantics {},
     )
@@ -163,6 +175,13 @@ private fun SourceCard(source: SourceStatus, halt: SourcesHalt?, cell: Dp) {
     CountRow(count)
   }
 }
+
+/**
+ * CS-2: il segno di stato sulla copertina solo quando la cartella e' diversa dalle altre e chiede uno sguardo: un problema o una cartella che non si
+ * salva. Lo stato che hanno tutte (in pausa, in corso, al sicuro) lo dice la testata, e la barra e il numero di ogni copertina lo mostrano senza segno.
+ */
+internal fun coverMarkShown(state: SourceState, all: List<SourceState>): Boolean =
+  (state == SourceState.Problem || state == SourceState.Off) && all.any { it != state }
 
 /** Il numero che conta di una copertina: il glifo (che dice di che numero si tratta) e il numero. */
 private class CountLine(val icon: ImageVector, val value: Int, val mark: GalleryIconStatus)
@@ -443,7 +462,8 @@ internal fun DeviceGroup(state: BackupPageUi, actions: BackupPageActions) {
     FluidListRow(
       title = stringResource(R.string.backup_settings_title),
       subtitle = "",
-      leading = { GalleryIconTile(spec = GalleryIcons.Advanced) },
+      // Giro 1: nessuna piastrella grigia accanto alle colorate (le impostazioni del backup sono del backup).
+      leading = { GalleryIconTile(icon = Icons.Rounded.Tune, family = GalleryIconFamily.Backup) },
       leadingTile = false,
       onClick = { actions.open(BackupScreen.SETTINGS) },
     )
@@ -454,6 +474,9 @@ internal fun DeviceGroup(state: BackupPageUi, actions: BackupPageActions) {
 private fun Modifier.widthLimit(): Modifier = this.then(Modifier.widthIn(max = BackupDimens.ValueMaxWidth))
 
 private const val MinColumns = 3
+private const val MinColumnsLargeText = 2
+private const val LargeTextScale = 1.3f
+private const val NameLines = 2
 private const val BarTrackAlpha = 0.10f
 private const val DimAlpha = 0.45f
 private const val HalfTurn = 180f

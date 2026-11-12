@@ -17,6 +17,16 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.backup.contract.SourceStatus
 import dev.pampa.mycloudgallery.core.backup.contract.StopBy
+import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceExclusion
+import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceItem
+import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceKind
+import dev.pampa.mycloudgallery.core.backup.contract.FreeSpacePlan
+import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
+import dev.pampa.mycloudgallery.feature.backup.free.FreeSheet
+import dev.pampa.mycloudgallery.feature.backup.free.FreeSpaceActions
+import dev.pampa.mycloudgallery.feature.backup.free.FreeSpaceSamples
+import dev.pampa.mycloudgallery.feature.backup.free.FreeSpaceScreen
+import dev.pampa.mycloudgallery.feature.backup.free.FreeSpaceUi
 import dev.pampa.mycloudgallery.feature.backup.page.BackupPageActions
 import dev.pampa.mycloudgallery.feature.backup.page.BackupPageScreen
 import dev.pampa.mycloudgallery.feature.backup.page.BackupPageUi
@@ -55,7 +65,7 @@ abstract class I3BackupShotsBase(private val page: I3BackupPage, private val dar
     show(dark = dark, fontScale = if (device.endsWith("testo-grande")) LARGE_TEXT else null) {
       // Le copertine passano dalla stessa strada della produzione (`BackupCovers`: la Libreria visibile e la cache delle miniature), su una Libreria
       // sintetica: ogni cartella ha le sue foto piu' recenti. Al «prima» non c'erano.
-      val covers = androidx.compose.runtime.remember { if (STAGE == "dopo") I3Covers.covers() else null }
+      val covers = androidx.compose.runtime.remember { if (STAGE != "prima") I3Covers.covers() else null }
       CompositionLocalProvider(LocalBackupCovers provides covers) { page.content() }
     }
     val look = if (dark) "scuro" else "chiaro"
@@ -66,7 +76,8 @@ abstract class I3BackupShotsBase(private val page: I3BackupPage, private val dar
 
   companion object {
     const val DIR = "../docs/screenshots/beta-grafica/I3"
-    const val STAGE = "dopo"
+    // Giro 1 della fase I: `giro1` (i `dopo` di I3 sono il «prima» del giro).
+    const val STAGE = "giro1"
 
     fun data(pages: List<I3BackupPage>): List<Array<Any>> = pages.flatMap { listOf(arrayOf<Any>(it, false), arrayOf<Any>(it, true)) }
   }
@@ -100,6 +111,34 @@ internal object I3Covers {
     }
     return BackupCovers(BackupCoverPorts(newest = newest, library = items, loader = FakeThumbnailLoader()))
   }
+
+  /**
+   * Giro 1 (CU-6): il piano di Libera spazio dei dati di prova (1.240 elementi, gli esclusi di una Libreria vera), con le prime dodici foto prese dalla
+   * stessa Libreria sintetica delle copertine: cosi' le anteprime passano dalla strada vera (la Libreria visibile e la cache delle miniature).
+   */
+  fun freePlan(excluded: Map<FreeSpaceExclusion, Int> = FreeSpaceSamples.excludedSample, items: Int = 1_240): FreeSpacePlan {
+    val view = SyntheticLibrary(seed = 11L, count = 400).view()
+    val base = FreeSpaceSamples.plan(items = items, excluded = excluded)
+    val mixed = base.items.mapIndexed { i, item ->
+      if (i >= ShownItems) {
+        item
+      } else {
+        FreeSpaceItem(
+          mediaId = view.snapshot.idAt(view.snapshotIndex(i * 5)),
+          versionId = item.versionId,
+          phone = item.phone,
+          mime = item.mime,
+          size = item.size,
+          safeCopy = item.safeCopy,
+          isVideo = item.isVideo,
+          localDay = item.localDay,
+        )
+      }
+    }
+    return FreeSpacePlan(filter = base.filter, permanent = base.permanent, items = mixed, excluded = base.excluded, needsGuardian = base.needsGuardian)
+  }
+
+  private const val ShownItems = 12
 }
 
 /** Una pagina da fotografare: [slug] e' il nome nel file. */
@@ -168,8 +207,29 @@ class I3BackupPage(val slug: String, val content: @Composable () -> Unit) {
       )
     }
 
-    val all: List<I3BackupPage> = listOf(inProva, inCorso, alSicuro, problema, pausa, nonConfigurato, impostazioni)
-    val long: List<I3BackupPage> = listOf(inProva, inCorso, problema, impostazioni)
+    /** Giro 1 (CU-7): il backup che aspetta la carica ha la clessidra, non il segno della pausa. */
+    val attesa = I3BackupPage("in-attesa") { Page(state(BackupStatus.Waiting(items = 3_120, bytes = 9_100_000_000, reason = WaitReason.CHARGING), sixHalted)) }
+
+    @Composable
+    private fun Free(plan: FreeSpacePlan) = FreeSpaceScreen(
+      state = FreeSpaceUi.Summary(plan, FreeSpaceKind.ALL),
+      sheet = FreeSheet.None,
+      taps = null,
+      actions = FreeSpaceActions(),
+      nowMs = 0L,
+      onBack = {},
+    )
+
+    /** Giro 1 (CU-6): il riepilogo di Libera spazio (prima: `docs/screenshots/5-P12/libera-spazio-riepilogo-*`). */
+    val liberaSpazio = I3BackupPage("libera-spazio") { Free(I3Covers.freePlan()) }
+
+    /** Lo stesso con il backup vero non ancora acceso (la recinzione): «Backup in pausa», mai «cartella di prova». */
+    val liberaSpazioInPausa = I3BackupPage("libera-spazio-in-pausa") {
+      Free(I3Covers.freePlan(excluded = mapOf(FreeSpaceExclusion.OUTSIDE_TEST_FENCE to 5_208, FreeSpaceExclusion.RECENT to 214), items = 40))
+    }
+
+    val all: List<I3BackupPage> = listOf(inProva, inCorso, alSicuro, problema, pausa, nonConfigurato, impostazioni, attesa, liberaSpazio, liberaSpazioInPausa)
+    val long: List<I3BackupPage> = listOf(inProva, inCorso, problema, impostazioni, liberaSpazio, liberaSpazioInPausa)
     val wide: List<I3BackupPage> = listOf(inProva, impostazioni)
   }
 }
@@ -216,6 +276,7 @@ class I3BackupLargeTextShots(page: I3BackupPage, dark: Boolean) : I3BackupShotsB
   companion object {
     @JvmStatic
     @ParameterizedRobolectricTestRunner.Parameters(name = "{0} scuro={1}")
-    fun data(): List<Array<Any>> = listOf(arrayOf<Any>(I3BackupPage.inProva, false), arrayOf<Any>(I3BackupPage.impostazioni, true))
+    fun data(): List<Array<Any>> =
+      listOf(arrayOf<Any>(I3BackupPage.inProva, false), arrayOf<Any>(I3BackupPage.impostazioni, true), arrayOf<Any>(I3BackupPage.liberaSpazio, false))
   }
 }

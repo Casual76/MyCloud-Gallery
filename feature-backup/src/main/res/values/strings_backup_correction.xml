@@ -93,11 +93,11 @@
   <string name="backup_correction_blocked_read_only">Questa area è in sola lettura: da qui non si può correggere.</string>
   <string name="backup_correction_blocked_nas">Il NAS non risponde. Riprova quando sei a casa.</string>
   <string name="backup_correction_blocked_frozen">I lavori sul NAS sono fermi per un cambiamento anomalo: controlla la Diagnostica.</string>
-  <string name="backup_correction_blocked_not_mine">Questo media non è tuo: non puoi correggerlo.</string>
+  <string name="backup_correction_blocked_not_mine">Questa foto non è tua: non puoi correggerla.</string>
   <string name="backup_correction_blocked_not_available">La correzione non è ancora pronta.</string>
   <string name="backup_correction_blocked_paused">Il backup è in pausa: riprendilo dalla pagina Backup per correggere questa foto.</string>
   <string name="backup_correction_blocked_test_only">Il backup vero non è ancora acceso: per ora sul NAS non scrivo.</string>
-  <string name="backup_correction_blocked_busy">Sto ancora lavorando su questo media, o il backup sta finendo un lotto: riprova fra poco.</string>
+  <string name="backup_correction_blocked_busy">Sto ancora lavorando su questa foto, o il backup sta finendo un lotto: riprova fra poco.</string>
   <string name="backup_correction_blocked_rotation">Questo tipo di file non si ruota dall’app: la rotazione non si vedrebbe da nessuna parte. Ruotalo in Galleria.</string>
   <string name="backup_correction_unavailable_title">Le correzioni non sono ancora pronte</string>
   <string name="backup_correction_unavailable_detail">Questa funzione si accende quando il backup è collegato.</string>

@@ -329,12 +329,12 @@ class CorrectionSheetTest : ComposeBackupTallTest() {
       CorrectionReadiness.READ_ONLY_AREA to "Questa area è in sola lettura",
       CorrectionReadiness.NAS_UNREACHABLE to "Il NAS non risponde.",
       CorrectionReadiness.FROZEN to "I lavori sul NAS sono fermi",
-      CorrectionReadiness.NOT_MINE to "Questo media non è tuo",
+      CorrectionReadiness.NOT_MINE to "Questa foto non è tua",
       CorrectionReadiness.NOT_AVAILABLE to "La correzione non è ancora pronta.",
       // VE-7: pausa, prova e lavoro in corso hanno la loro frase (prima: tutti "non è ancora pronta").
       CorrectionReadiness.PAUSED to "Il backup è in pausa",
       CorrectionReadiness.TEST_ONLY to "Il backup vero non è ancora acceso",
-      CorrectionReadiness.BUSY to "Sto ancora lavorando su questo media",
+      CorrectionReadiness.BUSY to "Sto ancora lavorando su questa foto",
       // VE-4: la rotazione di un formato che non si scrive non si fa.
       CorrectionReadiness.ROTATION_NOT_WRITABLE to "non si ruota dall’app",
     )

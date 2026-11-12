@@ -17,7 +17,6 @@ import androidx.compose.material.icons.rounded.PublicOff
 import androidx.compose.material.icons.rounded.Router
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.SyncAlt
-import androidx.compose.material.icons.rounded.Usb
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -45,10 +44,8 @@ import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -59,11 +56,9 @@ import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
-import dev.antigravity.fluidengine.ui.fluid.FluidHero
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -71,7 +66,9 @@ import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingCoordinator
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.feature.settings.R
-import dev.pampa.mycloudgallery.feature.settings.ui.Note
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsStatusHeader
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIcons
+import androidx.compose.material.icons.rounded.SdStorage
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -89,6 +86,11 @@ internal class BackupNoticeViewModel @Inject constructor(coordinator: Onboarding
     .map { OnboardingStep.SECURITY_NOTICE in it.plan }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), OnboardingStep.SECURITY_NOTICE in coordinator.progress.value.plan)
 
+  /** Giro 1 della fase I (CS-7, CU-10): la famiglia non ha ancora deciso (il passo 13 e' fra quelli da completare). */
+  val undecided: StateFlow<Boolean> = coordinator.progress
+    .map { OnboardingStep.SECURITY_NOTICE in it.pending }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), OnboardingStep.SECURITY_NOTICE in coordinator.progress.value.pending)
+
   private companion object {
     const val STOP_TIMEOUT_MS = 5_000L
   }
@@ -99,7 +101,8 @@ internal class BackupNoticeViewModel @Inject constructor(coordinator: Onboarding
 internal fun BackupNoticeRoute(onBack: () -> Unit, onReviewChecklist: () -> Unit) {
   val viewModel: BackupNoticeViewModel = hiltViewModel()
   val canReview by viewModel.canReview.collectAsStateWithLifecycle()
-  BackupNoticeScreen(onBack = onBack, onReviewChecklist = onReviewChecklist.takeIf { canReview })
+  val undecided by viewModel.undecided.collectAsStateWithLifecycle()
+  BackupNoticeScreen(onBack = onBack, onReviewChecklist = onReviewChecklist.takeIf { canReview }, undecided = undecided)
 }
 
 /**
@@ -111,33 +114,37 @@ internal fun BackupNoticeRoute(onBack: () -> Unit, onReviewChecklist: () -> Unit
  * segna niente di cio' che l'app non puo' verificare (un disco USB attaccato al NAS o una voce del FRITZ!Box non si leggono).
  */
 @Composable
-internal fun BackupNoticeScreen(onBack: () -> Unit, onReviewChecklist: (() -> Unit)?) {
+internal fun BackupNoticeScreen(onBack: () -> Unit, onReviewChecklist: (() -> Unit)?, undecided: Boolean = true) {
   FluidScreen(
     title = stringResource(R.string.backup_title),
     onBack = onBack,
     ambient = FluidAmbient(tone = FluidHeroTone.Tertiary, motif = FluidHeroMotif.Glow),
   ) {
+    // Giro 1 della fase I (CS-7, CU-10): «Il NAS non e' un backup» resta il titolo; «Senza copia» e il segno di attenzione solo finche' la famiglia
+    // non ha deciso. La figura non porta segni fissi: l'app non vede un disco staccato.
     item {
-      FluidHero(
-        tone = FluidHeroTone.Tertiary,
-        motif = FluidHeroMotif.Cards,
-        eyebrow = stringResource(R.string.backup_eyebrow),
-        value = stringResource(R.string.backup_value),
-        title = stringResource(R.string.backup_hero_title),
-        description = stringResource(R.string.backup_hero_detail),
-        icon = Icons.Rounded.Backup,
+      SettingsStatusHeader(
+        icon = Icons.Rounded.SdStorage,
+        family = GalleryIconFamily.Backup,
+        value = stringResource(R.string.backup_hero_title),
+        label = if (undecided) stringResource(R.string.backup_value) else null,
+        status = if (undecided) GalleryIconStatus.Attention else null,
       )
     }
-    // I3 (fase I): perche' due dischi non bastano, come figura (i due dischi del NAS che si copiano a vicenda, la copia staccata); la frase dietro la «i».
     item { RaidFigure() }
-    item { SettingsInfo(label = stringResource(R.string.backup_raid_title), text = stringResource(R.string.backup_raid_message)) }
+    item {
+      SettingsInfo(
+        label = stringResource(R.string.backup_raid_title),
+        text = stringResource(R.string.backup_hero_detail) + " " + stringResource(R.string.backup_raid_message),
+      )
+    }
 
     item { GallerySectionHeader(title = stringResource(R.string.backup_section_checklist)) }
     item {
       FluidListGroup {
         CHECKLIST.forEachIndexed { index, item ->
           if (index > 0) FluidListDivider()
-          ChecklistRow(item = item, important = index < IMPORTANT)
+          ChecklistRow(item = item, important = undecided && index < IMPORTANT)
         }
       }
     }
@@ -170,7 +177,7 @@ private class ChecklistItem(val icon: ImageVector, val family: GalleryIconFamily
 
 /** Le sei voci, nell'ordine di rischio (`sicurezza.md` §1): la copia esterna e' seconda solo alla rete, ma qui viene prima perche' e' l'unica difesa dalla perdita totale. */
 private val CHECKLIST: List<ChecklistItem> = listOf(
-  ChecklistItem(Icons.Rounded.Usb, GalleryIconFamily.Backup, R.string.backup_item_copy, R.string.backup_item_copy_detail),
+  ChecklistItem(GalleryIcons.ExternalCopy.icon, GalleryIcons.ExternalCopy.family, R.string.backup_item_copy, R.string.backup_item_copy_detail),
   ChecklistItem(Icons.Rounded.PublicOff, GalleryIconFamily.Security, R.string.backup_item_public, R.string.backup_item_public_detail),
   ChecklistItem(Icons.Rounded.Wifi, GalleryIconFamily.Network, R.string.backup_item_wifi, R.string.backup_item_wifi_detail),
   ChecklistItem(Icons.Rounded.Devices, GalleryIconFamily.Network, R.string.backup_item_guest, R.string.backup_item_guest_detail),
@@ -232,14 +239,14 @@ private fun RaidFigure() {
   ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(SettingsDimens.PillGap)) {
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(SettingsDimens.TightGap)) {
-        GalleryIconTile(icon = Icons.Rounded.Storage, family = GalleryIconFamily.Backup, size = SettingsDimens.ChoiceTile, status = GalleryIconStatus.Problem)
+        GalleryIconTile(icon = Icons.Rounded.Storage, family = GalleryIconFamily.Backup, size = SettingsDimens.ChoiceTile)
         Icon(Icons.Rounded.SyncAlt, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        GalleryIconTile(icon = Icons.Rounded.Storage, family = GalleryIconFamily.Backup, size = SettingsDimens.ChoiceTile, status = GalleryIconStatus.Problem)
+        GalleryIconTile(icon = Icons.Rounded.Storage, family = GalleryIconFamily.Backup, size = SettingsDimens.ChoiceTile)
       }
       Text(text = stringResource(R.string.backup_raid_nas), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(SettingsDimens.PillGap)) {
-      GalleryIconTile(icon = Icons.Rounded.Usb, family = GalleryIconFamily.Places, size = SettingsDimens.ChoiceTile, status = GalleryIconStatus.Done)
+      GalleryIconTile(icon = GalleryIcons.ExternalCopy.icon, family = GalleryIcons.ExternalCopy.family, size = SettingsDimens.ChoiceTile)
       Text(text = stringResource(R.string.backup_raid_copy), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
   }

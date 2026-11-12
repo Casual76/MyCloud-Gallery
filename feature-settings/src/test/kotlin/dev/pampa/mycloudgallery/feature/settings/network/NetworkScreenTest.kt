@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.feature.settings.network
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -74,7 +75,8 @@ class NetworkScreenTest : SharingComposeBase() {
 
     assertThat(asked).isEqualTo(1)
     // Senza il permesso le prove a mano non ci sono.
-    assertThat(has(string(R.string.network_try_up))).isFalse()
+    // Giro 1 della fase I: la VPN di casa e' un interruttore, che senza il permesso non si tocca.
+    assertThat(rule.onAllNodes(isToggleable()).fetchSemanticsNodes()).isEmpty()
   }
 
   @Test
@@ -109,7 +111,7 @@ class NetworkScreenTest : SharingComposeBase() {
     page(state(capability = VpnCapability.READY), actions())
 
     assertThat(has(string(R.string.wg_grant))).isFalse()
-    assertThat(has(string(R.string.network_try_up))).isTrue()
+    assertThat(rule.onAllNodes(isToggleable()).fetchSemanticsNodes()).hasSize(1)
   }
 
   @Test

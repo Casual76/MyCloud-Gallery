@@ -452,8 +452,8 @@ La Fase 5 decide **cosa** si mostra e **quando**; il filone grafico decide **com
 | `LOST_BEFORE_BACKUP` | N foto cancellate prima del backup | Apri il cestino di Galleria | E-B4 |
 | `VERIFY_FAILED` | N copie non integre | Riprova · Diagnostica | E-B18, E-B8 |
 | `UNREADABLE` | N file del telefono illeggibili | Riprova · Diagnostica | D15, E-M12 |
-| `COMMON_COPY_LOST` | N media spariti dall'area comune | Recuperalo dal cestino del NAS | E-B13, L44 |
-| `UNEXPECTED` | N media con un errore inatteso | Riprova · Diagnostica | R1 |
+| `COMMON_COPY_LOST` | N foto e video spariti dall'area comune | Recuperalo dal cestino del NAS | E-B13, L44 |
+| `UNEXPECTED` | N foto e video con un errore inatteso | Riprova · Diagnostica | R1 |
 | `SOURCE_CHANGED` | N versioni in attesa del computer: il file sul NAS è stato cambiato dal PC (P14, 5B) | Diagnostica | E-E6 |
 | `PHONE_STORAGE_LOW` | Memoria del telefono quasi piena | Libera spazio | E-P3 |
 | `STALE` | Backup fermo da 3 giorni | Guida: batteria "Illimitata", "Mai in sospensione" | E-P15, E-P2 |

@@ -120,7 +120,7 @@ class VersionsSheetTest : ComposeBackupTallTest() {
       RestoreAvailability.NAS_UNREACHABLE to "Il NAS non risponde. Riprova quando sei a casa.",
       RestoreAvailability.FROZEN to "I lavori sul NAS sono fermi",
       RestoreAvailability.READ_ONLY_AREA to "Questa area è in sola lettura",
-      RestoreAvailability.NOT_MINE to "Questo media non è tuo",
+      RestoreAvailability.NOT_MINE to "Questa foto non è tua",
       RestoreAvailability.NOT_AVAILABLE to "Il ripristino non è ancora pronto.",
       RestoreAvailability.ALREADY_ORIGINAL to "L’originale è già quello di adesso.",
     )

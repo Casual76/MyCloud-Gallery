@@ -72,7 +72,8 @@ internal abstract class I3SettingsShotsBase(
 
   companion object {
     const val DIR = "../docs/screenshots/beta-grafica/I3"
-    const val STAGE = "dopo"
+    // Giro 1 della fase I: `giro1` (i `dopo` di I3 sono il «prima» del giro).
+    const val STAGE = "giro1"
 
     fun data(pages: List<I3SettingsPage>): List<Array<Any>> = pages.flatMap { listOf(arrayOf<Any>(it, false), arrayOf<Any>(it, true)) }
   }

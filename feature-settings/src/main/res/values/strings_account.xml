@@ -4,28 +4,18 @@
 
   <!-- Pagina -->
   <string name="account_title">Account del NAS</string>
-  <string name="account_eyebrow">NAS</string>
   <string name="account_unavailable_title">Funzione non ancora collegata</string>
   <string name="account_unavailable_detail">L’account del NAS non è ancora disponibile su questo dispositivo.</string>
   <string name="account_none_title">Nessun account</string>
   <string name="account_none_detail">Questo dispositivo non ha ancora un account NAS configurato. Finisci la configurazione iniziale.</string>
-  <string name="account_hero_blocked_value">Password</string>
   <string name="account_hero_blocked_title">Serve la nuova password</string>
   <string name="account_hero_blocked_action">Inserisci la password</string>
   <string name="account_hero_ready_value">Collegato</string>
-  <string name="account_hero_ready_title">Connessione cifrata al NAS</string>
   <string name="account_hero_unencrypted_title">Collegato, ma non cifrato</string>
-  <string name="account_hero_via_home">Sei sulla rete di casa: il NAS si raggiunge direttamente.</string>
-  <string name="account_hero_via_home_vpn">La VPN è accesa anche a casa: il NAS è più lento.</string>
-  <string name="account_hero_via_vpn">Fuori casa: il NAS si raggiunge attraverso la VPN di casa.</string>
   <string name="account_hero_unavailable_value">Non risponde</string>
-  <string name="account_hero_unavailable_title">Il NAS non è raggiungibile</string>
   <string name="account_hero_waking_value">Risveglio</string>
-  <string name="account_hero_waking_title">Il NAS si sta svegliando</string>
   <string name="account_hero_waking_detail">I dischi erano in pausa: ci mettono qualche secondo.</string>
   <string name="account_hero_idle_value">In attesa</string>
-  <string name="account_hero_idle_title">Nessuna sessione aperta</string>
-  <string name="account_hero_idle_detail">Si collega quando serve.</string>
   <string name="account_section_account">Account</string>
   <string name="account_user">Utente</string>
   <string name="account_address">Indirizzo del NAS</string>
@@ -33,13 +23,10 @@
   <string name="account_section_change">Cambia</string>
   <string name="account_change_password">Password del NAS</string>
   <string name="account_change_password_detail">La nuova password si prova una sola volta</string>
-  <string name="account_change_password_needed">Quella salvata non vale più: inseriscila di nuovo</string>
-  <string name="account_pill_needed">Serve</string>
   <string name="account_change_address">Indirizzo del NAS</string>
   <string name="account_change_address_detail">Mai in automatico: lo verifichi e lo confermi tu</string>
   <string name="account_section_link">Collegamento</string>
   <string name="account_link_encryption">Cifratura</string>
-  <string name="account_link_dialect">Protocollo</string>
   <string name="account_link_route">Percorso</string>
   <string name="account_link_identity">Identità del NAS</string>
   <string name="account_identity_pinned">Verificata</string>
@@ -135,4 +122,13 @@
   <string name="address_scope_phone">Vale solo su questo telefono. Gli altri telefoni e i nuovi inviti usano ancora l’indirizzo di prima finché non lo cambia l’admin della famiglia.</string>
   <string name="address_scope_failed">Su questo telefono l’indirizzo è cambiato, ma non sono riuscito a scriverlo nella configurazione firmata della famiglia: i nuovi inviti hanno ancora quello di prima.</string>
   <string name="address_retry_share">Riprova a scriverlo</string>
+  <!-- Giro 1 della fase I (CU-5, CU-20): il perche' di uno stato, le regole del cambio e la sigla del protocollo dietro la «i». -->
+  <string name="account_why">Perché</string>
+  <string name="account_change_info">Come si cambiano</string>
+  <string name="account_link_info">Il collegamento</string>
+  <!-- Giro 1 della fase I (CU-20): la lingua di rete fra telefono e NAS in parole, senza la sigla. -->
+  <string name="account_link_dialect_newest">Il telefono e il NAS parlano la lingua di rete più recente.</string>
+  <string name="account_link_dialect_recent">Il telefono e il NAS parlano una lingua di rete recente.</string>
+  <string name="account_link_dialect_old">Il telefono e il NAS parlano una lingua di rete vecchia.</string>
+  <string name="account_link_dialect_unknown">Non so quale lingua di rete parlano il telefono e il NAS.</string>
 </resources>

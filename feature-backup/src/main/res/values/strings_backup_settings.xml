@@ -5,7 +5,7 @@
   <string name="backup_settings_folders_loading">Cerco le cartelle del telefono…</string>
   <string name="backup_settings_folders_unavailable">Non riesco a leggere le cartelle del telefono: qui compaiono solo quelle già scelte.</string>
   <string name="backup_settings_not_ready">Il backup non è ancora pronto: le scelte si fanno quando lo è.</string>
-  <string name="backup_settings_sources_note">Spegnere una cartella non cancella niente: quello che è già al sicuro resta, i media nuovi non si caricano più.</string>
+  <string name="backup_settings_sources_note">Spegnere una cartella non cancella niente: quello che è già al sicuro resta, le foto nuove non si caricano più.</string>
   <string name="backup_settings_sources_info">Se spengo una cartella?</string>
   <string name="backup_settings_save_failed">Non sono riuscito a salvare la scelta: sul telefono non c’è abbastanza spazio. Libera un po’ di memoria e riprova.</string>
   <string name="backup_settings_source_numbers">%1$s · %2$s</string>

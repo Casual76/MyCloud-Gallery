@@ -74,22 +74,28 @@ class GalleryCoverCardContrastTest {
   }
 
   private val darkState = mutableStateOf(false)
+  private val compactState = mutableStateOf(false)
   private var host: View? = null
   private var started = false
 
-  private fun stage(dark: Boolean) {
+  private fun stage(dark: Boolean, compact: Boolean = false) {
     darkState.value = dark
+    compactState.value = compact
     if (!started) {
       started = true
       composeRule.setContent {
         MyCloudGalleryTheme(settings = EngineSettings(themeMode = if (darkState.value) ThemeMode.DARK else ThemeMode.LIGHT)) {
           host = LocalView.current
           Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
+            val compact = compactState.value
             GalleryCoverCard(
-              modifier = Modifier.size(180.dp, 240.dp).semantics(mergeDescendants = true) { contentDescription = SPOKEN },
+              // La scheda piccola di «Tutte le persone» (griglia a tre su 360 dp): titolo di una riga e sfumatura corta.
+              modifier = Modifier.size(if (compact) 100.dp else 180.dp, if (compact) 133.dp else 240.dp).semantics(mergeDescendants = true) { contentDescription = SPOKEN },
               title = TITLE,
-              caption = CAPTION,
+              caption = if (compact) null else CAPTION,
+              titleMaxLines = if (compact) 1 else 2,
               isNew = true,
+              fadeHeight = if (compact) GalleryCoverCardDefaults.FadeHeightCompact else GalleryCoverCardDefaults.FadeHeight,
             ) {
               // La copertina peggiore: tutta bianca.
               Box(Modifier.fillMaxSize().background(GalleryOnPhoto.Content))
@@ -129,6 +135,16 @@ class GalleryCoverCardContrastTest {
       val caption = worstContrastBeside(CAPTION, pixels)
       assertWithMessage("scuro=$dark: titolo $title:1").that(title).isAtLeast(4.5f)
       assertWithMessage("scuro=$dark: riga piccola $caption:1").that(caption).isAtLeast(4.5f)
+    }
+  }
+
+  @Test
+  fun conLaSfumaturaCortaIlTitoloReggeComePrima() {
+    // fadeHeight compatto (I1, i volti piccoli): la sfumatura sale meno, lo scrim dietro la riga e' lo stesso.
+    for (dark in listOf(false, true)) {
+      stage(dark, compact = true)
+      val title = worstContrastBeside(TITLE, bitmap())
+      assertWithMessage("compatta, scuro=$dark: titolo $title:1").that(title).isAtLeast(4.5f)
     }
   }
 

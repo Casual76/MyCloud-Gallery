@@ -39,6 +39,12 @@ object GalleryCoverCardDefaults {
 
   /** Quanto sale la sfumatura sopra il titolo (dalla foto allo scrim pieno). */
   val FadeHeight: Dp = 28.dp
+
+  /**
+   * La sfumatura corta delle schede piccole (sotto i 140 dp, con il titolo di una riga, come i volti di «Tutte le persone»): copre meno della
+   * copertina. Lo scrim pieno dietro le righe resta lo stesso, quindi anche il contrasto.
+   */
+  val FadeHeightCompact: Dp = 14.dp
   val NewDotRing: Dp = 2.dp
 }
 
@@ -53,6 +59,7 @@ object GalleryCoverCardDefaults {
  * @param isNew il punto dell'accento in alto a destra (la parola la dice la descrizione della scheda).
  * @param labelsSpoken falso (di serie): la scheda ha la sua descrizione (`contentDescription` con `mergeDescendants`) e i testi si vedono ma TalkBack
  *   non li rilegge (una sola lettura per scheda, CS-6 della fase I); vero solo per una scheda senza descrizione propria.
+ * @param fadeHeight quanto sale la sfumatura sopra il titolo: [GalleryCoverCardDefaults.FadeHeight], o `FadeHeightCompact` sulle schede piccole.
  * @param cover la copertina (la foto, il volto, il segno della famiglia mentre la foto non c'e'), sotto a tutto.
  */
 @Composable
@@ -64,6 +71,7 @@ fun GalleryCoverCard(
   titleMaxLines: Int = 2,
   isNew: Boolean = false,
   labelsSpoken: Boolean = false,
+  fadeHeight: Dp = GalleryCoverCardDefaults.FadeHeight,
   cover: @Composable BoxScope.() -> Unit,
 ) {
   Box(modifier = modifier) {
@@ -75,6 +83,7 @@ fun GalleryCoverCard(
         titleStyle = titleStyle,
         titleMaxLines = titleMaxLines,
         spoken = labelsSpoken,
+        fadeHeight = fadeHeight,
         modifier = Modifier.align(Alignment.BottomStart),
       )
     }
@@ -88,12 +97,12 @@ fun GalleryCoverCard(
  * correva dietro le righe stesse e il titolo stava nella parte chiara (2-2,6:1 su una copertina chiara, CU-2 della fase I).
  */
 @Composable
-private fun GalleryCoverLabel(title: String, caption: String?, titleStyle: TextStyle, titleMaxLines: Int, spoken: Boolean, modifier: Modifier) {
+private fun GalleryCoverLabel(title: String, caption: String?, titleStyle: TextStyle, titleMaxLines: Int, spoken: Boolean, fadeHeight: Dp, modifier: Modifier) {
   val scrim = GalleryOnPhoto.scrim()
   val quiet = if (spoken) Modifier else Modifier.semantics { hideFromAccessibility() }
   val inset = GalleryCoverCardDefaults.TextInset
   Column(modifier = modifier.fillMaxWidth()) {
-    Box(modifier = Modifier.fillMaxWidth().height(GalleryCoverCardDefaults.FadeHeight).background(Brush.verticalGradient(listOf(scrim.copy(alpha = 0f), scrim))))
+    Box(modifier = Modifier.fillMaxWidth().height(fadeHeight).background(Brush.verticalGradient(listOf(scrim.copy(alpha = 0f), scrim))))
     GalleryCoverLines(title, caption, titleStyle, titleMaxLines, quiet, Modifier.fillMaxWidth().background(scrim).padding(start = inset, end = inset, bottom = inset))
   }
 }

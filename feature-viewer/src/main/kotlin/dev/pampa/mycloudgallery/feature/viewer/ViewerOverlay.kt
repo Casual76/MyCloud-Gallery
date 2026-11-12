@@ -929,8 +929,8 @@ private fun ViewerOverlays(
   val analysisFeedback = remember { AnalysisFeedback() }
   val analysisHaptics = LocalFluidHaptics.current
   LaunchedEffect(currentId) { analysisFeedback.moved(currentId) }
-  LaunchedEffect(analysisMedia.kind, currentId) {
-    if (analysisFeedback.completed(currentId, analysisMedia.kind)) analysisHaptics.play(FluidHapticEvent.Tap)
+  LaunchedEffect(analysisMedia.kind, analysisMedia.version, currentId) {
+    if (analysisFeedback.completed(currentId, analysisMedia.kind, analysisMedia.version)) analysisHaptics.play(FluidHapticEvent.Tap)
   }
   val handlers = ViewerActionHandlers(
     onToggleFavorite = controller::toggleFavorite,
@@ -975,7 +975,7 @@ private fun ViewerOverlays(
       onExplain = { state.message = ViewerMessage.SimilarUnavailable },
     ),
     analysisActions = if (request.secure) emptyList() else analysisMenuEntries(resources, analysisMedia) {
-      analysisFeedback.asked(currentId)
+      analysisFeedback.asked(currentId, analysisMedia.version)
       services.analysis?.analyzeNow(currentId)
     },
     dock = LocalViewerDock.current.entry(secure = request.secure),
@@ -1235,7 +1235,7 @@ private fun ViewerOverlays(
       if (request.secure) null else analysisBadge(format, analysisMedia, video = kind == MediaKind.VIDEO)
     }
     val onAnalysisNow: (() -> Unit)? = if (!request.secure && analysisMedia.kind == MediaAnalysisKind.QUEUED) {
-      { analysisFeedback.asked(currentId); services.analysis?.analyzeNow(currentId) }
+      { analysisFeedback.asked(currentId, analysisMedia.version); services.analysis?.analyzeNow(currentId) }
     } else {
       null
     }

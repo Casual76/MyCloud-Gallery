@@ -60,8 +60,11 @@ enum class MediaAnalysisHold {
   WIFI,
 }
 
-/** Lo stato di un media: il suo caso e, se e' stato chiesto ma non parte, perche'. */
-data class MediaAnalysis(val kind: MediaAnalysisKind, val hold: MediaAnalysisHold? = null) {
+/**
+ * Lo stato di un media: il suo caso e, se e' stato chiesto ma non parte, perche'. [version] (XS2-5, additivo): un'etichetta opaca della **versione**
+ * del media per cui lo stato e' stato letto (null = non si sa); il visore la usa per non mescolare stati e richieste di versioni diverse dello stesso media.
+ */
+data class MediaAnalysis(val kind: MediaAnalysisKind, val hold: MediaAnalysisHold? = null, val version: Long? = null) {
   companion object {
     val UNKNOWN = MediaAnalysis(MediaAnalysisKind.UNKNOWN)
   }

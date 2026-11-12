@@ -18767,8 +18767,9 @@ L'utente ha messo a confronto le Raccolte con la Galleria di Samsung e ha scelto
   (`fluidPressable`), lo stato per fotogramma (scorrimento, posizioni dei segni sulla carta) si legge in lambda o in `snapshotFlow`.
 - **Lo stato in cima** alle Raccolte e' la sola capsula (`NetworkStatusEntry(compact = true)` in `MainScaffold`): la frase intera la dice TalkBack.
 - **Tablet**: a due pannelli i caroselli scorrono nel pannello stretto come sul telefono (stesse schede, il carosello sporge fino al bordo del
-  pannello); la voce scelta ha il filo dell'accento; le miniature si chiedono solo se il pannello accanto e' vuoto (con una griglia aperta la finestra e'
-  sua, e le schede usano cio' che e' in cache). Da 840 dp a un pannello solo la colonna e' larga al piu' 760 dp e i caroselli mostrano piu' schede.
+  pannello); la voce scelta ha il filo dell'accento. Con il pannello accanto vuoto le schede sono la finestra delle miniature; con una pagina aperta
+  accanto (una griglia con la sua finestra) le **tengono accanto** a quella finestra (giro 1, CS-8: vedi sotto). Da 840 dp a un pannello solo la
+  colonna e' larga al piu' 760 dp e i caroselli mostrano piu' schede.
 - **Le pagine «tutti»**: Tutte le persone e' una griglia di schede alte (3:4) con il volto e il nome sopra la sfumatura, tre per riga sul telefono,
   senza conti (li dice TalkBack); Altri volti senza la frase e senza conti; la pagina di una persona senza la frase di «Forse e' anche…»; Tutti i
   ricordi e' una griglia di schede (due per riga sul telefono) per mese, con la copertina alla taglia L chiesta solo per le righe sullo schermo e le due
@@ -18791,6 +18792,53 @@ L'utente ha messo a confronto le Raccolte con la Galleria di Samsung e ha scelto
   7. Testo grande (1,3x): i nomi sulle schede si troncano con i puntini, le piastrelle vanno a capo su due righe, niente si sovrappone.
   8. Tutte le persone: tre schede per riga, volti nitidi; selezione (pressione lunga): il filo e il segno nell'angolo. Tutti i ricordi: copertine
      nitide, scorrimento fluido.
+
+#### I1, giro di correzione 1 (12/11/2026)
+
+Dai rilievi del giro 1 della review della fase I (CU = Opus, CS = Sonnet). Unito prima `integra/beta-grafica` (`6b99fbd6`), poi i componenti comuni
+di I4 (`f329e9c3`: stato vuoto, «i», anello), la scheda di copertina corretta di I4 (`0b883af0`) e di nuovo `integra/beta-grafica` (`2214c94a`).
+
+- **CU-2, CU-21, CS-5: la scheda di una persona e' `GalleryCoverCard`** (`PersonTile` in `PeopleParts.kt`): non piu' una copia dell'etichetta, cosi'
+  la sfumatura corretta di I4 (28 dp di dissolvenza sopra le righe, scrim pieno dietro il titolo, 4,5:1 su una foto bianca) vale anche per le Persone.
+  Il volto, la scelta in selezione e il filo restano di `PersonTile`; la scheda comune non e' stata toccata. Sulle schede alte i conti con il ritaglio
+  vero (quadrato, volto = 67% centrale): nelle Raccolte (116 x 156 dp) occhi, naso e bocca restano fuori dallo scrim, il mento ci entra; nella griglia
+  di «Tutte le persone» (circa 100 x 133 dp) la bocca cade nella sfumatura. **Chiesto a I4 un `fadeHeight` compatto** (12-16 dp) per i titoli di una
+  riga sulle schede piccole: quando arriva lo passa `PersonTile`.
+- **CS-6: una sola lettura per scheda.** `labelsSpoken` falso e' ora il valore di serie di `GalleryCoverCard` (I4): le schede delle Raccolte, di
+  «Tutte le persone» e di «Tutti i ricordi» non lo passano piu'. Ognuna ha la sua descrizione; quella delle Raccolte (`CollectionEntry.spoken`) dice
+  anche la riga piccola (il mese, «Viaggio») quando la frase non la contiene, perche' il testo scritto non si rilegge (test).
+- **CS-8: sul tablet con una pagina aperta accanto le schede chiedono ancora le loro foto.** Prima non le chiedevano (la finestra delle miniature e'
+  una sola, e li' e' della griglia accanto) e le schede non ancora viste restavano sul colore con il glifo. Ora `CollectionCoverWindow` con `beside`
+  vero **tiene** le richieste accanto alla finestra della griglia (`CollectionCovers.keep`, `ThumbnailLoader.keep` con il proprietario
+  `"collections"`, lo stesso meccanismo di I2) senza sostituirla, e le lascia (`release`) quando il pannello si chiude o la scheda se ne va. Solo media
+  della Libreria visibile, come la finestra. Prova: `CollectionCoversBesideTest` (tenere/lasciare, il nascosto non si chiede, la finestra della griglia
+  non si tocca); scena `raccolte-raccolta-aperta-dopo-*-tablet`.
+- **CU-17**: il pannello vuoto del tablet e' solo la figura delle Raccolte (`GalleryIconTile` grande, al centro); «Scegli una raccolta» lo dice
+  TalkBack. La frase «Quello che apri dall'elenco compare qui» e' tolta.
+- **CU-24**: nella mappa in anteprima una foto non si appunta sotto la capsula «Mappa» ne' sotto il credito: le due capsule si misurano
+  (`onSizeChanged`) e un luogo il cui tondo le toccherebbe (`pinTouches`, test) resta nel carosello sotto.
+- **CU-22**: il cestino del NAS nelle Raccolte si chiama **«Cestino del NAS»** (corto, non troncato) con il segno della cartella con il cestino
+  (`FolderDelete`); quello del telefono resta «Eliminati di recente» con il cestino.
+- **CU-8 = CS-12**: «Altri volti» con la piastrella della famiglia Persone e «Persone nascoste» con quella dei Nascosti (`GalleryIconTile`), mai la
+  grigia di sistema; i volti tondi nelle righe («Forse e' anche…», «Persone nascoste») senza la piastrella grigia dietro.
+- **CU-12**: i tasti della pagina di una persona hanno l'icona e una parola: **«Nome»** (matita) o «Rinomina», e **«Controlla»** (persona con la
+  spunta); su una riga a 360 dp; TalkBack dice la frase intera («Aggiungi un nome», «Controlla le foto»).
+- **CU-23: una sola forma di stato vuoto** (`GalleryFigureState` di I4: la figura, il titolo, al piu' un tasto, nessuna frase in vista). Portati: le
+  raccolte-filtro (Preferiti, Video, Screenshot, Fotocamera, Messaggi), i Nascosti (vuoti, chiusi, rifiutati, senza blocco schermo, errore), il cestino
+  del telefono (vuoto, non disponibile, errore), la scelta delle foto, le Raccolte tutte nascoste, gli **inviti delle sezioni vuote delle Raccolte**
+  (figura e titolo dentro una scheda, tutta da toccare), le pagine delle Persone (elenco vuoto o in calcolo con la barra, nessuna con nome, Altri volti,
+  Persone nascoste, pagina vuota, tutte le foto nascoste, dimenticata, non trovata, «Controlla» vuoto e fatto) e dei Ricordi (Tutti i ricordi vuoto,
+  ricordo sparito o non trovato, presentazione sparita). Il **perche'** resta solo dove spiega una regola o un motivo (lo sblocco dei Nascosti e i
+  motivi di un rifiuto, il blocco schermo che manca, i 30 giorni del cestino, come si aggiunge un preferito, i tre volti di «Altri volti», che cosa fa
+  «nascondi», le foto tutte nascoste, quanti volti cambiati) e sta **dietro la «i»** comune (`GalleryInfoButton`/`GalleryInfoDetail`): un tocco lo
+  apre sotto, TalkBack lo dice nella descrizione della «i». Le altre frasi sono tolte con le loro stringhe. La pagina di una persona nascosta ha come
+  figura il suo volto (sopra), poi il titolo e la «i»: la stessa grammatica con una figura vera. Le sezioni Utility (doppioni, simili, filtri) usano lo
+  stesso stato vuoto e quindi hanno la loro frase dietro la «i»; il riquadro di spiegazione in cima al cestino del telefono non e' toccato.
+- **Screenshot nuovi**: le Raccolte e «Tutte le persone» con copertine e volti **quasi bianchi** (`*-copertine-chiare-*`, chiaro e scuro), il tablet
+  con una raccolta aperta; gli stati vuoti in `libreria-*`, `persone-*`, `tutti-i-ricordi-vuoto-*`, `pagina-sparita-*`, `presentazione-sparita-*`.
+- **Da provare sul telefono**, oltre ai punti sopra: (a) Raccolte con foto di neve o di cielo in copertina: i nomi si leggono; (b) Tab S9, aprire una
+  persona e poi scorrere le Raccolte a sinistra: le copertine arrivano anche per le schede mai viste, e la griglia accanto non perde le sue; (c) un
+  tocco sulla «i» di uno stato vuoto apre la frase sotto, un altro la chiude; TalkBack la dice senza tocco.
 
 ### I4, il resto dell'app con meno testo (fase I, 11/11 notte)
 

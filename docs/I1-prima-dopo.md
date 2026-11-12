@@ -23,7 +23,16 @@ Le parole visibili sono contate sugli stessi dati di prova (le sezioni come le c
 - La mappa e' una carta ferma 2:1 (al piu' 220 dp) con al piu' 5 foto appuntate, la capsula «Mappa» in basso a sinistra e il credito della carta in basso a destra.
 - Lo zoom della mappa va da 1 a 8 (un luogo solo: zoom 8, una regione); il margine attorno ai luoghi e' il 18% del lato corto.
 - Utility, NAS e Nascosti: piastrelle a due colonne con l'icona del componente condiviso (Eliminati di recente in rosso "pericolo", NAS in blu "backup", Utility in grigio "sistema", Nascosti in nero "sicurezza").
-- L'invito di una sezione vuota (Persone spenta, nessun ricordo) e' una scheda piena nel colore della famiglia con l'icona e l'etichetta bianca.
+- L'invito di una sezione vuota (Persone spenta, nessun ricordo) ha la forma unica degli stati vuoti (giro 1, CU-23): la figura e il titolo, dentro una scheda che si tocca. Prima era una scheda piena nel colore della famiglia.
+- Giro 1: il cestino del NAS si chiama «Cestino del NAS» (cartella con il cestino); i tasti della pagina di una persona sono «Nome»/«Rinomina» e «Controlla» con l'icona; il pannello vuoto del tablet e' solo la figura.
+- Giro 1: negli stati vuoti la frase resta solo dove spiega una regola, dietro la «i»; altrove ci sono solo la figura e il titolo.
 - "Nuovo" sui ricordi e' un punto dell'accento in alto a destra, senza parola.
 - In «Tutte le persone» una persona senza nome non ha piu' l'invito «Aggiungi un nome» sulla scheda: si aggiunge dalla sua pagina.
 - Lo stato in cima alle Raccolte e' solo la capsula («In casa»): «NAS collegato» lo dice TalkBack e la pagina che si apre toccandola.
+
+## Giro di correzione 1 (12/11/2026)
+Screenshot nuovi nella stessa cartella: `raccolte-copertine-chiare-*` e `persone-elenco-copertine-chiare-*` (copertine e volti quasi bianchi, chiaro e
+scuro: il nome si legge con la sfumatura corretta di I4), `raccolte-raccolta-aperta-dopo-*-tablet` (CS-8), gli stati vuoti nella forma comune
+(`libreria-*`, `persone-elenco-vuoto/calcolo-*`, `persone-altri-volti-vuoto-*`, `persone-nascoste-vuoto-*`, `persone-pagina-nascosta-*`,
+`persone-persona-foto-nascoste-*`, `persone-controlla-*`, `tutti-i-ricordi-vuoto-*`, `pagina-sparita-*`, `presentazione-sparita-*`). Le scelte sono
+in `docs/decisioni.md`, «I1, giro di correzione 1».

@@ -6,29 +6,27 @@
 
   <!-- Ruolo Indicizzatore (D15, Q3) -->
   <string name="models_section_indexer">Analisi delle foto</string>
-  <string name="models_indexer_title">Analizza le foto di questo dispositivo</string>
   <string name="models_indexer_detail">Un dispositivo che analizza calcola una volta per tutta la famiglia ciò che serve a cercare per contenuto. Lo scegli tu, dispositivo per dispositivo.</string>
   <string name="models_indexer_state_on">Indicizzatore</string>
   <string name="models_indexer_state_off">Non analizza</string>
   <string name="models_indexer_measuring">Misuro la velocità del telefono…</string>
   <string name="models_indexer_probe">Misura: %1$s immagini al secondo (%2$s)</string>
-  <string name="models_backend_gpu">con la GPU</string>
+  <string name="models_backend_gpu">con il processore grafico</string>
   <string name="models_backend_cpu">con il processore</string>
   <plurals name="models_indexer_estimate">
-    <item quantity="one">Analizzare %1$s media richiede circa una notte.</item>
-    <item quantity="other">Analizzare %1$s media richiede circa %2$d notti.</item>
+    <item quantity="one">Analizzare %1$s foto e video richiede circa una notte.</item>
+    <item quantity="other">Analizzare %1$s foto e video richiede circa %2$d notti.</item>
   </plurals>
-  <string name="models_indexer_no_estimate">Da analizzare: %1$s media. La stima delle notti arriva appena il modello di analisi è pronto e il dispositivo è stato misurato.</string>
+  <string name="models_indexer_no_estimate">Da analizzare: %1$s foto e video. La stima delle notti arriva appena il modello di analisi è pronto e il dispositivo è stato misurato.</string>
   <string name="models_indexer_nothing">Non c’è niente da analizzare.</string>
   <string name="models_index_now">Indicizza ora</string>
 
   <!-- Stato del calcolo (AiStatus) -->
-  <string name="models_status_title">Stato dell’analisi</string>
   <string name="models_status_off">Questo dispositivo non analizza le foto.</string>
   <string name="models_status_model_missing">Serve il modello di analisi: scaricalo qui sotto.</string>
   <string name="models_status_idle">Tutto analizzato, per ora.</string>
-  <string name="models_status_running">Analizzati %1$s media su %2$s.</string>
-  <string name="models_status_running_eta">Analizzati %1$s media su %2$s, mancano circa %3$d minuti.</string>
+  <string name="models_status_running">Analizzati %1$s foto e video su %2$s.</string>
+  <string name="models_status_running_eta">Analizzati %1$s foto e video su %2$s, mancano circa %3$d minuti.</string>
   <string name="models_status_next_stage">Riprendo fra poco: l’analisi continua con la prossima tappa.</string>
   <string name="models_status_waiting_rules">In attesa: lo permettono le regole di rete e batteria.</string>
   <string name="models_status_waiting_network">In attesa di una rete.</string>
@@ -36,17 +34,16 @@
   <string name="models_status_waiting_storage">In attesa di spazio libero.</string>
   <string name="models_status_waiting_hot">In pausa: il telefono è caldo.</string>
   <string name="models_status_waiting_preparation">In attesa che le foto siano preparate.</string>
-  <string name="models_status_buffer_only">Analizzato ciò che c’era in locale: %1$s media. Il resto aspetta il NAS.</string>
+  <string name="models_status_buffer_only">Analizzato ciò che c’era in locale: %1$s foto e video. Il resto aspetta il NAS.</string>
 
   <!-- Aree senza indicizzatori (E-I12) -->
-  <string name="models_section_areas">Aree senza chi le analizza</string>
   <string name="models_area_common">Nessun dispositivo analizza l’area comune.</string>
   <string name="models_area_private">Nessun dispositivo analizza la tua area privata.</string>
 
   <!-- Copertura (D31) -->
   <string name="models_section_coverage">Copertura della ricerca</string>
-  <string name="models_coverage_complete">La ricerca per contenuto copre tutti i media.</string>
-  <string name="models_coverage_partial">La ricerca per contenuto copre %1$s media su %2$s.</string>
+  <string name="models_coverage_complete">La ricerca per contenuto copre tutte le foto e i video.</string>
+  <string name="models_coverage_partial">La ricerca per contenuto copre %1$s foto e video su %2$s.</string>
   <string name="models_coverage_model_missing">La ricerca per contenuto è ferma: manca il modello (%1$s).</string>
   <string name="models_coverage_updating">Aggiornamento della ricerca: %1$d%%.</string>
   <string name="models_reason_preparation">In attesa della preparazione: %1$s</string>
@@ -77,7 +74,7 @@
   <string name="models_reading_disable">Spegni</string>
   <string name="models_reading_disable_title">Spegnere la lettura del testo?</string>
   <string name="models_reading_disable_message">Da quel momento ML Kit non parte più, su nessun dispositivo del tuo account. Il testo già letto resta e si può cercare.</string>
-  <string name="models_reading_coverage_note">Il testo letto copre solo i media su cui la lettura è stata attiva su qualche dispositivo della famiglia.</string>
+  <string name="models_reading_coverage_note">Il testo letto copre solo le foto su cui la lettura è stata attiva su qualche dispositivo della famiglia.</string>
 
   <!-- Modelli (D20) -->
   <string name="models_section_models">Modelli</string>
@@ -152,6 +149,7 @@
   <string name="models_status_off_short">Fermo</string>
   <string name="models_status_model_missing_short">Manca il modello</string>
   <string name="models_status_buffer_short">%1$s in locale</string>
+  <string name="models_status_running_short">In corso</string>
   <string name="models_eta_short">≈ %1$d min</string>
   <string name="models_wait_rules_short">Aspetta le regole</string>
   <string name="models_wait_network_short">Aspetta la rete</string>
@@ -170,9 +168,7 @@
   <string name="models_probe_hot_short">Caldo: misuro dopo</string>
   <string name="models_probe_busy_short">Misura in corso</string>
   <string name="models_probe_failed_short">Misura non riuscita</string>
-  <string name="models_probe_short">%1$s foto/s · %2$s</string>
-  <string name="models_backend_gpu_short">GPU</string>
-  <string name="models_backend_cpu_short">CPU</string>
+  <string name="models_probe_short">%1$s foto/s</string>
   <string name="models_reading_short_off">Spenta</string>
   <string name="models_reading_short_off_excluded">Spenta, non qui</string>
   <string name="models_reading_short_disabling">Si spegne…</string>
@@ -181,7 +177,6 @@
   <string name="models_reading_short_on_not_here">Attiva, non qui</string>
   <string name="models_reading_changed_short">Testo cambiato: rileggilo</string>
   <string name="models_reading_sync_short">Agli altri dispositivi dopo</string>
-  <string name="models_reading_info">Come funziona la lettura del testo</string>
   <string name="models_model_query_short">Ricerca</string>
   <string name="models_model_index_short">Analisi</string>
   <string name="models_model_cutout_short">Ritaglio</string>

@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.nas
 
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRingDefaults
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -84,8 +85,8 @@ internal object NasDimens {
   val SheetMaxWidth: Dp = 560.dp
 
   /** I4: l'anello che avanza di un'operazione in corso, e il suo tratto. */
-  val OpRing: Dp = 52.dp
-  val OpRingStroke: Dp = 5.dp
+  val OpRing: Dp = GalleryProgressRingDefaults.Card
+  val OpRingStroke: Dp = GalleryProgressRingDefaults.stroke(GalleryProgressRingDefaults.Card)
 
   /** I4: il segno di «Annulla il resto». */
   val StopGlyph: Dp = 20.dp

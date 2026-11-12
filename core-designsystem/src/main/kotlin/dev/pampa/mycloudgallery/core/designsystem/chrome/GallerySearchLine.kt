@@ -18,12 +18,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconPalette
-import dev.pampa.mycloudgallery.core.designsystem.icon.rememberGalleryIconColors
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRingDefaults
+import dev.pampa.mycloudgallery.core.designsystem.media.galleryRingColor
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryMotion
 
 // LA RIGA SOPRA LA BARRA DI RICERCA, NELLA FORMA DELLA FASE I (I2, 11/11 sera). L'utente: dopo una ricerca gli avvisi «occupano troppo»; «non tutto e'
@@ -58,7 +58,8 @@ class GallerySearchLineSpec(
 }
 
 /**
- * La barra della riga sopra la barra di ricerca (I2): una pista dell'inchiostro della chrome e il riempimento nel colore della famiglia Ricerca. Il
+ * La barra della riga sopra la barra di ricerca (I2): lo stesso colore e lo stesso tratto dell'anello della galleria (giro 1, «un solo anello»: il colore
+ * della famiglia Ricerca, [galleryRingColor], la pista dello stesso colore al 28%, il tratto dell'anello di una riga). Il
  * riempimento **si allunga con la molla** di FluidMotion fino a [progress] (anche la prima volta, da zero: la riga che compare racconta che la ricerca
  * cresce), e a ogni passo avanti un riflesso lo percorre due volte. Con [progress] null la barra lavora senza misura: il riflesso percorre tutta la pista
  * finche' la barra c'e' (dura quanto il motore che si carica, mezzo secondo).
@@ -67,10 +68,10 @@ class GallerySearchLineSpec(
  * corse finite, non un ciclo infinito. Con «riduci animazioni» la barra e' ferma alla sua misura, senza riflessi.
  */
 @Composable
-fun GallerySearchProgress(progress: Float?, ink: Color, modifier: Modifier = Modifier) {
+fun GallerySearchProgress(progress: Float?, modifier: Modifier = Modifier) {
   val reduced = LocalFluidMotionPolicy.current.reducedMotion
-  val fillColors = rememberGalleryIconColors(GalleryIconFamily.Search)
-  val track = ink.copy(alpha = TrackAlpha)
+  val fillColor = galleryRingColor(GalleryIconFamily.Search)
+  val track = fillColor.copy(alpha = GalleryProgressRingDefaults.TrackAlpha)
   val gleam = GalleryIconPalette.TileGlyph.copy(alpha = GleamAlpha)
   val target = progress?.coerceIn(0f, 1f)
   val fill = remember { Animatable(0f) }
@@ -104,7 +105,7 @@ fun GallerySearchProgress(progress: Float?, ink: Color, modifier: Modifier = Mod
     val width = if (target == null) size.width else size.width * fill.value.coerceIn(0f, 1f)
     if (target != null && width > 0f) {
       drawRoundRect(
-        brush = Brush.horizontalGradient(listOf(fillColors.top, fillColors.bottom), startX = 0f, endX = size.width),
+        color = fillColor,
         size = Size(width.coerceAtLeast(size.height), size.height),
         cornerRadius = radius,
       )
@@ -124,10 +125,9 @@ fun GallerySearchProgress(progress: Float?, ink: Color, modifier: Modifier = Mod
   }
 }
 
-/** L'altezza della barra: sottile, ma abbastanza per vedere il riempimento sul vetro. */
-private val BarHeight: Dp = 6.dp
+/** L'altezza della barra: il tratto dell'anello di una riga (4 dp), come l'anello del pop-up della nuvola. */
+private val BarHeight: Dp = GalleryProgressRingDefaults.stroke(GalleryProgressRingDefaults.Row)
 
-private const val TrackAlpha = 0.20f
 private const val GleamAlpha = 0.65f
 
 /** Il riflesso e' largo un terzo della pista. */

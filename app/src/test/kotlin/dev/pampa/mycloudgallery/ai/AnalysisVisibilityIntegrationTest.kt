@@ -220,6 +220,11 @@ class AnalysisVisibilityIntegrationTest {
       val hiddenToo = rig.others.last()
       rig.world.db.personalDao().upsert(MediaPersonalEntity(hiddenToo.value, favorite = false, hidden = true, updatedAt = 9_000_000_000_000L))
 
+      // Il valore che resta **a flusso fermo** (quello che un nuovo osservatore leggerebbe per primo, prima di qualunque calcolo) e' gia' neutro: nessun replay del
+      // vecchio. Si legge `value` senza osservare: con il rientro in linea (`Unconfined`) il flusso riparte e sovrascrive la cache prima che `first()` la legga,
+      // e la prova non vedrebbe il replay. Mutazione: `replayExpirationMillis` di serie (la cache resta).
+      assertThat(rig.shown(rig.page.live.value)).isEmpty()
+
       // Rientro: il PRIMO valore non ha anteprime.
       val first = rig.page.live.first()
       assertThat(rig.shown(first)).isEmpty()
@@ -238,30 +243,43 @@ class AnalysisVisibilityIntegrationTest {
 
   /**
    * La prova che **vieta le emissioni intermedie**, non solo quella che aspetta il risultato finale: una risoluzione partita con l'accesso pieno e ferma nel
-   * filtro finale, una revoca, poi la risoluzione che si sblocca: dopo la revoca **nessun** valore emesso ha una `Shown`. Mutazione: risolvere con `combine`
-   * (la risoluzione in corso non si annulla e consegna la sua `Shown` dopo la revoca).
+   * filtro finale, una revoca, poi la risoluzione che si sblocca: dopo la revoca **nessun** valore emesso ha una `Shown`. Mutazione: risolvere in sequenza senza
+   * annullare (`transform` al posto di `transformLatest`): la risoluzione in corso non si annulla e consegna la sua `Shown` dopo la revoca.
+   *
+   * Il nastro gira su un **thread vero** (`Dispatchers.Default`) e chi osserva e' `Unconfined` in un altro scope: cosi' ogni emissione e' vista nel momento in cui
+   * esce. Tutto su `Unconfined` in questa prova non basterebbe: l'emissione vecchia e quella neutra di dopo escono una dentro l'altra e lo `StateFlow` ne conserva
+   * una sola, e la prova non vedrebbe il difetto.
    */
   @Test
   fun dopoLaRevocaNessunaEmissioneIntermediaHaUnaShown() = runBlocking<Unit> {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val watcher = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     val entered = kotlinx.coroutines.CompletableDeferred<Unit>()
     val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
     val rig = rig(WorldSpec.nothingHidden(), scope) { real ->
       object : VisibleMedia by real {
         override suspend fun visible(ids: Collection<MediaId>): Set<MediaId> {
+          // Il filtro finale risponde **con l'accesso pieno** (risultato calcolato prima della revoca) e poi la risoluzione resta ferma: se si sbloccasse dopo la
+          // revoca consegnerebbe una `Shown` che nessuno piu' autorizza. (Se il blocco stesse prima della lettura, il filtro leggerebbe la vista di adesso e
+          // risponderebbe vuoto da solo: la prova non vedrebbe niente.)
+          val answer = real.visible(ids)
           entered.complete(Unit)
           gate.await()
-          return real.visible(ids)
+          return answer
         }
       }
     }
     try {
       val log = java.util.concurrent.CopyOnWriteArrayList<Any>()
-      val collector = scope.launch { rig.page.live.collect { log += it } }
+      val collector = watcher.launch { rig.page.live.collect { log += it } }
       // La prima risoluzione (accesso pieno) e' ferma dentro il filtro finale.
       withTimeout(20_000) { entered.await() }
       log += REVOKED
       rig.access.value = MediaAccess.NONE
+      // La revoca si vede **subito**, anche con una risoluzione ferma: esce lo stato neutro prima che la risoluzione di prima si sblocchi.
+      withTimeout(5_000) {
+        while (log.dropWhile { it !== REVOKED }.drop(1).none { it is AnalysisFlow }) kotlinx.coroutines.delay(10)
+      }
       // Si sblocca la risoluzione di prima: la sua Shown non e' piu' autorizzata e non deve uscire.
       gate.complete(Unit)
       kotlinx.coroutines.delay(500)
@@ -273,6 +291,7 @@ class AnalysisVisibilityIntegrationTest {
       assertThat(after.last().visibilityGeneration).isGreaterThan(before)
       collector.cancel()
     } finally {
+      watcher.cancel()
       scope.cancel()
       rig.world.close()
     }

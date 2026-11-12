@@ -409,8 +409,8 @@ private fun MoreCard(more: CollectionEntry, kind: CardKind, family: CollectionAr
 
 /**
  * L'invito di una sezione che non ha ancora niente da mostrare (Persone spenta, i ricordi in preparazione, nessun viaggio). Giro 1 (CU-23): nella forma
- * unica degli stati vuoti della galleria ([GalleryFigureState]: la figura e il titolo, nessuna frase), come la Libreria vuota; tutto l'invito si
- * tocca e TalkBack lo legge una volta ([CollectionEntry.spoken]). Sul tablet la scelta e' il filo intorno.
+ * unica degli stati vuoti della galleria ([GalleryFigureState]: la figura e il titolo, nessuna frase), come la Libreria vuota, dentro una scheda;
+ * tutto l'invito si tocca e TalkBack lo legge una volta ([CollectionEntry.spoken]). Sul tablet la scelta e' il filo intorno.
  */
 @Composable
 private fun InviteCard(entry: CollectionEntry, selected: Boolean, onSelect: (CollectionEntry) -> Unit) {
@@ -427,6 +427,8 @@ private fun InviteCard(entry: CollectionEntry, selected: Boolean, onSelect: (Col
       }
       .selectedRing(selected, CardShape)
       .clip(CardShape)
+      // Sopra il fondo di una scheda: si vede che e' una cosa sola, e che si tocca (non un'intestazione della pagina).
+      .background(MaterialTheme.colorScheme.surfaceContainer)
       .padding(vertical = CollectionsDimens.CardTextInset),
   )
 }

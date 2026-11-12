@@ -65,7 +65,8 @@ class BackupMessagesTest {
     val text = BackupProblemTexts.of(BackupProblemCode.WRITES_STOPPED, heldByRelease = true)
     assertThat(text).isSameInstanceAs(BackupProblemTexts.releaseReadOnly)
     val detail = normalized(context.getString(checkNotNull(text.detail)))
-    assertThat(detail).contains("pampa store")
+    // Pacchetto U (12/11): l'app si aggiorna da sola (Impostazioni → Aggiornamenti), la frase non manda piu' al Pampa Store: dice di aggiornarla.
+    assertThat(detail).contains("aggiorn")
     assertThat(detail).doesNotContain("riprende")
     assertThat(detail).doesNotContain("riattiv")
     assertThat(BackupProblemTexts.of(BackupProblemCode.WRITES_STOPPED)).isNotSameInstanceAs(BackupProblemTexts.releaseReadOnly)

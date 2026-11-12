@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -152,10 +153,9 @@ fun UpdatePanel(state: UpdatesState, actions: UpdateActions, modifier: Modifier 
  */
 @Composable
 internal fun PanelButtons(model: UpdatePanelModel, actions: UpdateActions, fillWidth: Boolean) {
-  val context = LocalContext.current
   model.primary?.let { action ->
     FluidButton(
-      text = context.getString(action.label),
+      text = stringResource(action.label),
       onClick = actionFor(action, actions),
       modifier = Modifier.widthIn(max = UpdateDimens.PromptMaxWidth),
       style = if (model.primaryFilled) FluidButtonStyle.Filled else FluidButtonStyle.Plain,
@@ -169,7 +169,7 @@ internal fun PanelButtons(model: UpdatePanelModel, actions: UpdateActions, fillW
     )
   }
   model.secondary?.let { action ->
-    FluidButton(text = context.getString(action.label), onClick = actionFor(action, actions), style = FluidButtonStyle.Plain, size = FluidButtonSize.Large)
+    FluidButton(text = stringResource(action.label), onClick = actionFor(action, actions), style = FluidButtonStyle.Plain, size = FluidButtonSize.Large)
   }
 }
 
@@ -251,7 +251,7 @@ internal fun UpdateFigureView(model: UpdatePanelModel, hero: Boolean, step: Inst
       }
       val ringSemantics = if (model.figure == UpdateFigure.DOWNLOADING) {
         val quarter = (FluidUpdate.percent(progress ?: 0f) / QUARTER) * QUARTER
-        val spoken = LocalContext.current.getString(R.string.update_progress_spoken, quarter)
+        val spoken = stringResource(R.string.update_progress_spoken, quarter)
         Modifier.clearAndSetSemantics {
           progressBarRangeInfo = ProgressBarRangeInfo(progress ?: 0f, 0f..1f)
           stateDescription = spoken

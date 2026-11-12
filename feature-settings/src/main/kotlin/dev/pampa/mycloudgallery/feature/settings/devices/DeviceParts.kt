@@ -2,8 +2,8 @@ package dev.pampa.mycloudgallery.feature.settings.devices
 
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Block
-import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.PhonelinkErase
 import androidx.compose.material.icons.rounded.TabletAndroid
@@ -118,12 +118,13 @@ internal fun RequestRow(request: RequestUi, onClick: () -> Unit, modifier: Modif
     modifier = modifier.semantics { contentDescription = spoken },
     tone = if (request.windowOpen) FluidTone.Warning else FluidTone.Neutral,
     leading = {
+      // Giro 2 (CU-7): il dispositivo che chiede di entrare, con il segno dell'attesa (scaduta: fermo; un nome che ne imita un altro: attenzione).
       RowTile(
-        Icons.Rounded.HourglassTop,
+        Icons.Rounded.Devices,
         status = when {
           !request.windowOpen -> GalleryIconStatus.Stopped
           request.lookAlikeOfName != null -> GalleryIconStatus.Attention
-          else -> null
+          else -> GalleryIconStatus.Waiting
         },
         family = GalleryIconFamily.People,
       )

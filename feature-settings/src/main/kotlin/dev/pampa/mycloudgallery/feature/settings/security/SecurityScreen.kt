@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.settings.security
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.provider.Settings
@@ -35,7 +36,6 @@ import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -255,16 +255,13 @@ internal fun SecurityScreen(state: SecurityUiState, actions: SecurityActions) {
       )
     }
     item {
-      SettingsInfo(
-        label = stringResource(R.string.security_how),
-        text = if (enabled) {
+      GalleryInfoRow(label = stringResource(R.string.security_how), detail = if (enabled) {
           // CU-14: il tempo entra a meta' frase, con la minuscola (le scelte hanno la maiuscola perche' sono righe a se').
           stringResource(R.string.security_hero_on_title) + ". " +
             stringResource(R.string.security_hero_on_detail, stringResource(state.settings.timeout.labelRes()).replaceFirstChar { it.lowercase() })
         } else {
           stringResource(R.string.security_hero_off_detail)
-        },
-      )
+        }, modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding))
     }
 
     if (noScreenLock) {
@@ -328,10 +325,7 @@ internal fun SecurityScreen(state: SecurityUiState, actions: SecurityActions) {
     item { GallerySectionHeader(title = stringResource(R.string.security_section_protects)) }
     item { ProtectsFigure() }
     item {
-      SettingsInfo(
-        label = stringResource(R.string.security_protects_info),
-        text = stringResource(R.string.security_protects_keys_detail) + ". " + stringResource(R.string.security_protects_screens_detail) + ".",
-      )
+      GalleryInfoRow(label = stringResource(R.string.security_protects_info), detail = stringResource(R.string.security_protects_keys_detail) + ". " + stringResource(R.string.security_protects_screens_detail) + ".", modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding))
     }
 
     item { GallerySectionHeader(title = stringResource(R.string.security_section_backup)) }
@@ -346,7 +340,7 @@ internal fun SecurityScreen(state: SecurityUiState, actions: SecurityActions) {
         )
       }
     }
-    item { SettingsInfo(label = stringResource(R.string.security_footnote_info), text = stringResource(R.string.security_footnote)) }
+    item { GalleryInfoRow(label = stringResource(R.string.security_footnote_info), detail = stringResource(R.string.security_footnote), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
   }
 }
 

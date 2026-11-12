@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.settings.sharing
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
@@ -32,7 +33,6 @@ import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.toneMark
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
@@ -108,7 +108,7 @@ fun SharingScreen(removeLocation: Boolean, onBack: () -> Unit, onToggle: (Boolea
     item { LocationFigure(on = removeLocation) }
     // La garanzia resta in pagina, in una riga; i formati (sigle) dietro la «i» (CU-20).
     item { FluidSectionFootnote(text = stringResource(R.string.sharing_footnote_check)) }
-    item { SettingsInfo(label = stringResource(R.string.sharing_formats_info), text = stringResource(R.string.sharing_footnote_formats)) }
+    item { GalleryInfoRow(label = stringResource(R.string.sharing_formats_info), detail = stringResource(R.string.sharing_footnote_formats), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
   }
 }
 

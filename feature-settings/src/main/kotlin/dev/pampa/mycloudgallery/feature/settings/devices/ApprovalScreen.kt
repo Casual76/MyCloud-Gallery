@@ -1,9 +1,10 @@
 package dev.pampa.mycloudgallery.feature.settings.devices
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import androidx.compose.foundation.layout.padding
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import androidx.compose.material.icons.rounded.SearchOff
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -173,13 +174,13 @@ private fun ApprovalPage(state: ApprovalUiState, actions: ApprovalActions, modif
 
     if (request == null) {
       item {
-        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i».
+        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i» del componente.
         GalleryFigureState(
           icon = Icons.Rounded.SearchOff,
           title = stringResource(R.string.approve_missing_title),
           tone = GalleryIllustrationTone.Caution,
           fill = false,
-          action = { SettingsInfo(label = stringResource(R.string.settings_state_why), text = stringResource(R.string.approve_missing_detail)) },
+          why = stringResource(R.string.approve_missing_detail),
         )
       }
       item {

@@ -1,5 +1,10 @@
 package dev.pampa.mycloudgallery.feature.settings.about
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import androidx.compose.ui.Modifier
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -30,7 +35,6 @@ import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 
 /**
  * "Informazioni e licenze" (Fase 3, P11; docs/fase3-progetto.md §1.3): cos'e' l'app, da dove vengono i nomi dei luoghi
@@ -140,7 +144,7 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
     }
     item { FluidSectionFootnote(text = stringResource(R.string.about_geonames_note)) }
     // Giro 1 della fase I (CU-5): la frase sotto il titolo del gruppo sta dietro la «i»; le attribuzioni restano in pagina (licenze).
-    item { SettingsInfo(label = stringResource(R.string.about_section_info), text = stringResource(R.string.about_section_places_detail)) }
+    item { GalleryInfoRow(label = stringResource(R.string.about_section_info), detail = stringResource(R.string.about_section_places_detail), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
 
     // --- La mappa (Fase 9, P2): OpenStreetMap e OpenMapTiles (online), Natural Earth e GeoNames (carta di base), stile e caratteri ---------
     item {
@@ -189,7 +193,7 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
       }
     }
     item { FluidSectionFootnote(text = stringResource(R.string.about_map_note)) }
-    item { SettingsInfo(label = stringResource(R.string.about_section_info), text = stringResource(R.string.about_section_map_detail)) }
+    item { GalleryInfoRow(label = stringResource(R.string.about_section_info), detail = stringResource(R.string.about_section_map_detail), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
 
     // --- Librerie (tutte quelle dell'APK di release) -----------------------------------------------------------------
     item {
@@ -214,13 +218,13 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
       }
     }
     item { FluidSectionFootnote(text = stringResource(R.string.about_libraries_footnote)) }
-    item { SettingsInfo(label = stringResource(R.string.about_section_info), text = stringResource(R.string.about_section_libraries_detail)) }
+    item { GalleryInfoRow(label = stringResource(R.string.about_section_info), detail = stringResource(R.string.about_section_libraries_detail), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
 
     // --- Il Fluid Engine: le opere di altri che porta con se' -------------------------------------------------------------
     item {
       GallerySectionHeader(title = stringResource(R.string.about_section_engine))
     }
-    item { SettingsInfo(label = stringResource(R.string.about_section_info), text = stringResource(R.string.about_section_engine_detail, EngineBuild.VERSION)) }
+    item { GalleryInfoRow(label = stringResource(R.string.about_section_info), detail = stringResource(R.string.about_section_engine_detail, EngineBuild.VERSION), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
     item {
       SelectionContainer {
         FluidListGroup {

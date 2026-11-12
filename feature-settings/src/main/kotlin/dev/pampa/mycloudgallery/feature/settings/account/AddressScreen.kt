@@ -1,9 +1,12 @@
 package dev.pampa.mycloudgallery.feature.settings.account
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import androidx.compose.material.icons.rounded.CloudOff
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
@@ -269,13 +272,13 @@ internal fun AddressScreen(state: AddressUiState, actions: AddressActions) {
   ) {
     if (!state.available) {
       item {
-        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i».
+        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i» del componente.
         GalleryFigureState(
           icon = Icons.Rounded.CloudOff,
           title = stringResource(R.string.account_unavailable_title),
           tone = GalleryIllustrationTone.Caution,
           fill = false,
-          action = { SettingsInfo(label = stringResource(R.string.settings_state_why), text = stringResource(R.string.account_unavailable_detail)) },
+          why = stringResource(R.string.account_unavailable_detail),
         )
       }
       return@FluidScreen

@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.settings.widget
 
+import androidx.compose.ui.test.hasContentDescription
 import android.app.Application
 import android.content.Context
 import androidx.activity.ComponentActivity
@@ -160,8 +161,9 @@ class WidgetSettingsScreenTest {
     assertThat(allChoices).hasSize(6)
     assertThat(rule.onAllNodes(SemanticsMatcher("interruttore") { it.config.getOrNull(SemanticsProperties.Role) == Role.Switch }).fetchSemanticsNodes()).isEmpty()
     // I3 (fase I): le regole stanno dietro la «i» della sezione, a un tocco.
-    scrollTo(string(R.string.widget_section_privacy))
-    rule.onNodeWithText(string(R.string.widget_section_privacy)).performClick()
+    // Giro 2 (CS-21): la riga della «i» e' quella comune (GalleryInfoRow): un tasto con l'etichetta e il perche' nella descrizione.
+    rule.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasContentDescription(string(R.string.widget_section_privacy), substring = true))
+    rule.onNodeWithContentDescription(string(R.string.widget_section_privacy), substring = true).performClick()
     rule.waitForIdle()
     assertThat(has(string(R.string.widget_privacy_lock))).isTrue()
     assertThat(has(string(R.string.widget_privacy_hidden))).isTrue()

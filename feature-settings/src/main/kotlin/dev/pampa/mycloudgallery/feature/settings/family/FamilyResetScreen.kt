@@ -1,9 +1,12 @@
 package dev.pampa.mycloudgallery.feature.settings.family
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import androidx.compose.material.icons.rounded.AdminPanelSettings
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Devices
@@ -224,13 +227,13 @@ internal fun FamilyResetScreen(
     }
     if (!state.isAdmin && state.stage != ResetStage.DONE) {
       item {
-        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i».
+        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i» del componente.
         GalleryFigureState(
           icon = Icons.Rounded.AdminPanelSettings,
           title = stringResource(R.string.reset_not_admin_title),
           tone = GalleryIllustrationTone.Brand,
           fill = false,
-          action = { SettingsInfo(label = stringResource(R.string.settings_state_why), text = stringResource(R.string.reset_not_admin_detail)) },
+          why = stringResource(R.string.reset_not_admin_detail),
         )
       }
       return@FluidScreen

@@ -1,9 +1,9 @@
 package dev.pampa.mycloudgallery.feature.settings.devices
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import androidx.compose.material.icons.rounded.MobileOff
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -145,13 +145,13 @@ internal fun DeviceDetailScreen(state: DeviceDetailUiState, actions: DeviceDetai
   ) {
     if (device == null) {
       item {
-        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i».
+        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i» del componente.
         GalleryFigureState(
           icon = Icons.Rounded.MobileOff,
           title = stringResource(R.string.device_not_found_title),
           tone = GalleryIllustrationTone.Caution,
           fill = false,
-          action = { SettingsInfo(label = stringResource(R.string.settings_state_why), text = stringResource(R.string.device_not_found_detail)) },
+          why = stringResource(R.string.device_not_found_detail),
         )
       }
       return@FluidScreen

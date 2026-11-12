@@ -1,7 +1,5 @@
 package dev.pampa.mycloudgallery.feature.settings.backup
 
-import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
-import androidx.compose.material.icons.rounded.HourglassTop
 import android.content.Context
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudUpload
@@ -66,8 +64,7 @@ internal fun BackupEntryRow(status: BackupStatus?, onClick: () -> Unit) {
   FluidListRow(
     title = stringResource(R.string.settings_backup),
     subtitle = "",
-    // Giro 1 (CU-7): in attesa (la carica, il Wi-Fi) la piastrella e' la clessidra, e solo quella; la pausa resta le due barre.
-    leading = { RowTile(if (status is BackupStatus.Waiting) Icons.Rounded.HourglassTop else Icons.Rounded.CloudUpload, status = backupEntryMark(status), family = GalleryIconFamily.Backup) },
+    leading = { RowTile(Icons.Rounded.CloudUpload, status = backupEntryMark(status)) },
     leadingTile = false,
     badge = { RowValue(backupEntrySubtitle(status)) },
     onClick = onClick,
@@ -81,7 +78,8 @@ internal fun backupEntryMark(status: BackupStatus?): GalleryIconStatus? = when (
   is BackupStatus.Running -> GalleryIconStatus.Running
   is BackupStatus.Problem, is BackupStatus.NotConfigured, is BackupStatus.FirstBackupReady -> GalleryIconStatus.Attention
   BackupStatus.TestOnly -> GalleryIconStatus.Paused
-  is BackupStatus.Waiting -> null
+  // Giro 2 (CU-7): l'attesa (la carica, il Wi-Fi) ha il segno della clessidra del componente comune; la pausa resta le due barre.
+  is BackupStatus.Waiting -> GalleryIconStatus.Waiting
   is BackupStatus.Stopped -> if (status.by == StopBy.RESET) GalleryIconStatus.Stopped else GalleryIconStatus.Paused
 }
 

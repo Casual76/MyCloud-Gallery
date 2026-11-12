@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.feature.settings.rules
 
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollAction
@@ -59,8 +61,9 @@ class RulesScreenTest : SharingComposeBase() {
     rule.onNodeWithText(string(R.string.rules_power_saver)).assertIsDisplayed()
     // I3 (fase I): che cosa fa sta dietro la «i», a un tocco.
     assertThat(has(string(R.string.rules_power_saver_detail))).isFalse()
-    rule.onNode(hasScrollAction()).performScrollToNode(hasText(string(R.string.rules_power_saver_info)))
-    rule.onNodeWithText(string(R.string.rules_power_saver_info)).performClick()
+    // Giro 2 (CS-21): la riga della «i» e' quella comune (GalleryInfoRow): un tasto con l'etichetta e il perche' nella descrizione.
+    rule.onNode(hasScrollAction()).performScrollToNode(hasContentDescription(string(R.string.rules_power_saver_info), substring = true))
+    rule.onNodeWithContentDescription(string(R.string.rules_power_saver_info), substring = true).performClick()
     rule.waitForIdle()
     assertThat(has(string(R.string.rules_power_saver_detail))).isTrue()
   }

@@ -1,5 +1,10 @@
 package dev.pampa.mycloudgallery.feature.settings.devices
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import androidx.compose.ui.Modifier
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import androidx.compose.material.icons.Icons
@@ -9,7 +14,6 @@ import androidx.compose.runtime.Composable
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.feature.settings.ui.DescribedRow
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsStatusHeader
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.res.pluralStringResource
@@ -76,13 +80,13 @@ internal fun DevicesScreen(
   ) {
     if (state.trust is TrustStatus.NotConfigured) {
       item {
-        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i».
+        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i» del componente.
         GalleryFigureState(
           icon = Icons.Rounded.Devices,
           title = stringResource(R.string.devices_empty_title),
           tone = GalleryIllustrationTone.Brand,
           fill = false,
-          action = { SettingsInfo(label = stringResource(R.string.settings_state_why), text = stringResource(R.string.devices_empty_detail)) },
+          why = stringResource(R.string.devices_empty_detail),
         )
       }
       return@FluidScreen
@@ -150,7 +154,7 @@ internal fun DevicesScreen(
           }
         }
       }
-      item { SettingsInfo(label = stringResource(R.string.devices_requests_info), text = stringResource(R.string.devices_section_requests_detail)) }
+      item { GalleryInfoRow(label = stringResource(R.string.devices_requests_info), detail = stringResource(R.string.devices_section_requests_detail), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
     }
 
     state.thisDevice?.let { device ->
@@ -200,10 +204,7 @@ internal fun DevicesScreen(
     }
 
     item {
-      SettingsInfo(
-        label = stringResource(R.string.devices_info),
-        text = stringResource(R.string.devices_section_inactive_detail) + " " + stringResource(R.string.devices_footnote),
-      )
+      GalleryInfoRow(label = stringResource(R.string.devices_info), detail = stringResource(R.string.devices_section_inactive_detail) + " " + stringResource(R.string.devices_footnote), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding))
     }
   }
 }

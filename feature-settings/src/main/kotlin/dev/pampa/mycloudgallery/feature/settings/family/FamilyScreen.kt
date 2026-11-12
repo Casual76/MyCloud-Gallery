@@ -1,5 +1,10 @@
 package dev.pampa.mycloudgallery.feature.settings.family
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import androidx.compose.ui.Modifier
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import androidx.compose.material.icons.Icons
@@ -43,7 +48,6 @@ import androidx.compose.runtime.getValue
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.feature.settings.ui.DescribedRow
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsStatusHeader
 
 /** Lo stato della pagina Famiglia: chi sono io nella famiglia e quanti siamo. */
@@ -134,13 +138,13 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
   ) {
     if (!state.isMember && !state.canRejoin) {
       item {
-        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i».
+        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i» del componente.
         GalleryFigureState(
           icon = Icons.Rounded.Groups,
           title = stringResource(R.string.family_none_title),
           tone = GalleryIllustrationTone.Brand,
           fill = false,
-          action = { SettingsInfo(label = stringResource(R.string.settings_state_why), text = stringResource(R.string.family_none_detail)) },
+          why = stringResource(R.string.family_none_detail),
         )
       }
       return@FluidScreen
@@ -213,11 +217,8 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
       }
     }
     item {
-      SettingsInfo(
-        label = stringResource(R.string.family_protect_info),
-        text = stringResource(R.string.family_kit_detail) + ". " + stringResource(R.string.family_state_detail) + ". " +
-          pluralStringResource(if (state.isAdmin) R.plurals.family_hero_detail_admin else R.plurals.family_hero_detail, state.adminCount, state.adminCount),
-      )
+      GalleryInfoRow(label = stringResource(R.string.family_protect_info), detail = stringResource(R.string.family_kit_detail) + ". " + stringResource(R.string.family_state_detail) + ". " +
+          pluralStringResource(if (state.isAdmin) R.plurals.family_hero_detail_admin else R.plurals.family_hero_detail, state.adminCount, state.adminCount), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding))
     }
 
     if (!state.isAdmin) {

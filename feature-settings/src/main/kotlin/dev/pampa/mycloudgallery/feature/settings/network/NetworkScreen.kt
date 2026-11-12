@@ -1,5 +1,9 @@
 package dev.pampa.mycloudgallery.feature.settings.network
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CellTower
 import androidx.compose.material.icons.rounded.Fingerprint
@@ -64,7 +68,6 @@ import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.feature.settings.ui.RowValue
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import dev.pampa.mycloudgallery.feature.settings.ui.messageRes
 import dev.antigravity.fluidengine.ui.theme.FluidCard
 import java.text.DateFormat
@@ -179,7 +182,7 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
         label = if (state.snapshot.home is HomeMatch.Weak) stringResource(R.string.match_weak) else null,
       )
     }
-    item { SettingsInfo(label = stringResource(R.string.network_route_info), text = stringResource(hero.detail(state))) }
+    item { GalleryInfoRow(label = stringResource(R.string.network_route_info), detail = stringResource(hero.detail(state)), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
 
     if (state.snapshot.localNetwork == LocalNetworkAccess.DENIED) {
       item {
@@ -253,11 +256,8 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
       }
     }
     item {
-      SettingsInfo(
-        label = stringResource(R.string.network_home_info),
-        text = stringResource(R.string.network_section_home_detail) + " " +
-          stringResource(if (state.admin) R.string.network_recapture_detail_admin else R.string.network_recapture_detail) + ".",
-      )
+      GalleryInfoRow(label = stringResource(R.string.network_home_info), detail = stringResource(R.string.network_section_home_detail) + " " +
+          stringResource(if (state.admin) R.string.network_recapture_detail_admin else R.string.network_recapture_detail) + ".", modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding))
     }
     item { CaptureStatus(state.capture, actions) }
 
@@ -301,7 +301,7 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
       }
     }
 
-    item { SettingsInfo(label = stringResource(R.string.network_vpn_info), text = stringResource(state.vpnCapability.detailRes())) }
+    item { GalleryInfoRow(label = stringResource(R.string.network_vpn_info), detail = stringResource(state.vpnCapability.detailRes()), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
 
     if (state.vpnCapability == VpnCapability.PERMISSION_MISSING) {
       item { ControlPermissionBlock(state.permission, actions) }

@@ -27,7 +27,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryCoverCard
 import dev.pampa.mycloudgallery.core.designsystem.instant.InstantBlock
@@ -48,6 +47,8 @@ import dev.pampa.mycloudgallery.feature.memories.ui.MemoryCover
 import dev.pampa.mycloudgallery.feature.memories.ui.MemoryNames
 import dev.pampa.mycloudgallery.feature.memories.ui.coverRequest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIcons
 
 // "TUTTI I RICORDI" (Fase 9, P9; docs/fase9-progetto.md §1.5 `MemoriesListState`, §2.5, D14). I1 (fase I, 11/11: "l'app parla troppo"): non piu' righe
 // con la copertina piccola e due righe di testo, ma **una griglia di schede** per mese, come la galleria delle Raccolte: la copertina a tutta scheda, il
@@ -115,7 +116,8 @@ internal fun AllMemoriesScreen(
   ) {
     when (val state = ui.state) {
       MemoriesListState.Empty -> item(key = "empty") {
-        FluidEmptyState(title = stringResource(R.string.memorie_all_empty_title), detail = stringResource(R.string.memorie_all_empty_detail))
+        // Giro 1 (CU-23): la forma unica degli stati vuoti, la figura e il titolo.
+        GalleryFigureState(icon = GalleryIcons.Memories.icon, title = stringResource(R.string.memorie_all_empty_title), fill = false)
       }
       is MemoriesListState.Ready -> {
         for (month in state.byMonth) {
@@ -163,6 +165,8 @@ private fun MemoryCardTile(
     title = title,
     caption = caption,
     isNew = card.isNew,
+    // Giro 1 (CS-6): la descrizione della scheda dice gia' "Nuovo", il titolo e le foto: il titolo e il mese scritti non si rileggono.
+    labelsSpoken = false,
   ) {
     if (snapshot != null) MemoryCover(thumbnails, snapshot, card.cover, Modifier.matchParentSize(), ThumbBucket.L)
   }

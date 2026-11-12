@@ -61,7 +61,7 @@ class PeopleCorrDScreenshotTest(private val dark: Boolean) : PeopleScreenTest() 
   private fun page(ui: PersonPageUi): @Composable () -> Unit = { PersonPageScreen(ui, scenes.thumbs.thumbnails, scenes.crops, NoPersonPageHandlers) }
 
   @Test fun personaConLeFotoTutteNascoste() =
-    shoot("persona-foto-nascoste", "Anna", "Tutte le foto sono nascoste", "Il nome e il gruppo ci sono ancora", content = page(allHidden("Anna")))
+    shoot("persona-foto-nascoste", "Anna", "Tutte le foto sono nascoste", content = page(allHidden("Anna")))
 
   @Test fun personaConLeFotoTutteNascosteTestoGrande() =
     shoot("persona-foto-nascoste", "Tutte le foto sono nascoste", fontScale = LARGE_TEXT, content = page(allHidden("Anna")))

@@ -10,9 +10,7 @@
   <string name="memorie_menu_dismiss">Non mostrare questo ricordo</string>
   <string name="memorie_menu_open_album">Apri l’album</string>
   <string name="memorie_gone_title">Questo ricordo non c’è più</string>
-  <string name="memorie_gone_detail">Succede quando restano poche foto da mostrare o quando lo nascondi.</string>
   <string name="memorie_not_found_title">Non trovo questo ricordo</string>
-  <string name="memorie_not_found_detail">Potrebbe essere uscito dallo scaffale dei ricordi.</string>
   <string name="memorie_back_to_memories">Torna ai ricordi</string>
   <string name="memorie_undo">Annulla</string>
   <string name="memorie_undo_dismiss">Non lo vedrai più nei ricordi.</string>
@@ -20,6 +18,5 @@
   <string name="memorie_undo_never">Fatto: quel periodo non comparirà più nei ricordi.</string>
   <string name="memorie_all_title">Tutti i ricordi</string>
   <string name="memorie_all_empty_title">Ancora nessun ricordo</string>
-  <string name="memorie_all_empty_detail">I ricordi arrivano quando ci sono abbastanza foto.</string>
   <string name="memorie_all_row_detail">%1$s · %2$s</string>
 </resources>

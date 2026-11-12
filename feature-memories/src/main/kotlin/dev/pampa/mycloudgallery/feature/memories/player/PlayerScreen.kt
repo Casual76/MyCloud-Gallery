@@ -50,7 +50,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidPressGrip
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
@@ -64,6 +63,8 @@ import dev.pampa.mycloudgallery.feature.memories.contract.PlayerUi
 import dev.pampa.mycloudgallery.feature.memories.page.cellDescription
 import dev.pampa.mycloudgallery.feature.memories.ui.MemoriesDimens
 import dev.pampa.mycloudgallery.feature.memories.ui.MemoriesText
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIcons
 
 // LA PRESENTAZIONE (`MemoryPlayer`; Fase 9, P9; docs/fase9-progetto.md §1.5 `PlayerState`, §2.4, D13, E-MEM19): schermo intero, scuro. Il palco con
 // l'immagine, in basso i comandi (dopo un tocco, in pausa, sulla carta finale, con TalkBack sempre), in alto "Chiudi" e dove si e'. Il titolo sta
@@ -120,11 +121,12 @@ private fun Loading() {
 
 @Composable
 private fun Gone(handlers: PlayerHandlers) {
-  Column(
+  // Giro 1 (CU-23): la forma unica degli stati vuoti, al centro: la figura, il titolo e il tasto per tornare.
+  GalleryFigureState(
+    icon = GalleryIcons.Memories.icon,
+    title = stringResource(R.string.memorie_gone_title),
     modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(MemoriesDimens.PlayerInset),
-    verticalArrangement = Arrangement.spacedBy(MemoriesDimens.BlockGap, Alignment.CenterVertically),
   ) {
-    FluidEmptyState(title = stringResource(R.string.memorie_gone_title), detail = stringResource(R.string.memorie_gone_detail))
     FluidButton(text = stringResource(R.string.memorie_back_to_memories), onClick = handlers::onExit, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true)
   }
 }

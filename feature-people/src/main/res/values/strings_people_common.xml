@@ -12,6 +12,8 @@
   <string name="persone_unnamed_short">Senza nome</string>
   <string name="persone_add_name">Aggiungi un nome</string>
   <string name="persone_rename">Rinomina</string>
+  <!-- Giro 1 (CU-12): l'etichetta corta del tasto della pagina di una persona senza nome (TalkBack dice «Aggiungi un nome»). -->
+  <string name="persone_button_name">Nome</string>
   <string name="persone_cancel">Annulla</string>
   <string name="persone_back">Indietro</string>
   <string name="persone_select">Seleziona</string>

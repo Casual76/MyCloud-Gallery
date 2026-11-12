@@ -37,6 +37,15 @@ abstract class PeopleScreenTest : PeopleComposeTest() {
     for (text in texts) assertWithMessage("$scene: manca «$text»").that(shows(text)).isTrue()
   }
 
+  /** Giro 1 (CU-12): una frase che TalkBack dice (la descrizione di un tasto con l'etichetta corta), anche se non e' scritta. */
+  protected fun says(text: String): Boolean =
+    composeRule.onAllNodes(androidx.compose.ui.test.hasContentDescription(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
+
+  /** Giro 1 (CU-23): una frase che sta dietro la «i» di uno stato: TalkBack la dice (la descrizione della «i»), la pagina non la scrive. */
+  protected fun assertSays(scene: String, vararg texts: String) {
+    for (text in texts) assertWithMessage("$scene: la «i» non dice «$text»").that(says(text)).isTrue()
+  }
+
   protected fun assertDoesNotShow(scene: String, vararg texts: String) {
     for (text in texts) assertWithMessage("$scene: non deve esserci «$text»").that(shows(text)).isFalse()
   }

@@ -28,12 +28,14 @@ import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIcons
 import dev.pampa.mycloudgallery.core.faces.contract.MergeProposal
 import dev.pampa.mycloudgallery.core.faces.contract.PersonCard
 import dev.pampa.mycloudgallery.core.model.PersonId
@@ -49,6 +51,7 @@ import dev.pampa.mycloudgallery.feature.people.ui.PeopleText
 import dev.pampa.mycloudgallery.feature.people.ui.PersonAvatar
 import dev.pampa.mycloudgallery.feature.people.ui.PersonTile
 import dev.pampa.mycloudgallery.feature.people.ui.TileSelection
+import dev.pampa.mycloudgallery.feature.people.ui.PeopleFigureState
 
 // "TUTTE LE PERSONE" (Fase 8, P9; docs/fase8-progetto.md §1.5 `PeopleListState`, §2.6 "Cosa si vede", Q2 (b) del 27/10, D25). I1 (fase I, 11/11):
 // "come Samsung", una griglia di **schede alte con il volto a tutta scheda** e il nome in basso (senza nome: solo il volto), tre per riga sul
@@ -127,7 +130,7 @@ internal fun PeopleListScreen(
     when (val state = ui.state) {
       is PeopleListState.Working -> working(state)
       PeopleListState.Empty -> item(key = "empty") {
-        FluidEmptyState(title = stringResource(R.string.persone_empty_title), detail = stringResource(R.string.persone_empty_detail))
+        PeopleFigureState(icon = Icons.Rounded.Face, title = stringResource(R.string.persone_empty_title))
       }
       is PeopleListState.Ready -> {
         if (!ui.selecting) proposals(ui.proposals, crops, handlers)
@@ -139,7 +142,7 @@ internal fun PeopleListScreen(
         }
         if (state.named.isEmpty() && state.unnamed.isEmpty()) {
           item(key = "none-named") {
-            FluidEmptyState(title = stringResource(R.string.persone_none_named_title), detail = stringResource(R.string.persone_none_named_detail))
+            PeopleFigureState(icon = Icons.Rounded.Face, title = stringResource(R.string.persone_none_named_title), why = stringResource(R.string.persone_none_named_detail))
           }
         }
         if (!ui.selecting && state.hiddenCount > 0) hiddenRow(state.hiddenCount, handlers)
@@ -151,13 +154,13 @@ internal fun PeopleListScreen(
 
 private fun LazyListScope.working(state: PeopleListState.Working) {
   item(key = "working") {
-    Column(verticalArrangement = Arrangement.spacedBy(PeopleDimens.BlockGap)) {
-      FluidEmptyState(
-        title = stringResource(R.string.persone_working_title),
-        detail = state.percent?.let { stringResource(R.string.persone_working_percent, it) } ?: stringResource(R.string.persone_working_waiting),
-      )
-      state.percent?.let { percent -> FluidProgressBar(progress = { percent / PERCENT }) }
-    }
+    // Giro 1 (CU-23): la figura, il titolo e la barra; quanto manca e quando va avanti stanno dietro la «i».
+    PeopleFigureState(
+      icon = Icons.Rounded.Face,
+      title = stringResource(R.string.persone_working_title),
+      why = state.percent?.let { stringResource(R.string.persone_working_percent, it) } ?: stringResource(R.string.persone_working_waiting),
+      action = state.percent?.let { percent -> { FluidProgressBar(progress = { percent / PERCENT }) } },
+    )
   }
 }
 
@@ -203,7 +206,9 @@ private fun LazyListScope.othersRow(count: Int, handlers: PeopleListHandlers) {
         // I1: un'etichetta sola; che cosa si fa li' lo dice la pagina.
         subtitle = "",
         tone = FluidTone.Primary,
-        leading = { Icon(imageVector = Icons.Rounded.Group, contentDescription = null) },
+        // Giro 1 (CU-8): la piastrella della famiglia Persone, come le altre dell'app (mai la grigia di sistema).
+        leading = { GalleryIconTile(icon = Icons.Rounded.Group, family = GalleryIconFamily.People) },
+        leadingTile = false,
         onClick = handlers::onOpenOthers,
       )
     }
@@ -217,7 +222,9 @@ private fun LazyListScope.hiddenRow(count: Int, handlers: PeopleListHandlers) {
         title = stringResource(R.string.persone_hidden_row, count),
         subtitle = "",
         tone = FluidTone.Neutral,
-        leading = { Icon(imageVector = Icons.Rounded.VisibilityOff, contentDescription = null) },
+        // Giro 1 (CU-8): lo stesso segno dei Nascosti nelle Raccolte e nelle Impostazioni (famiglia Sicurezza).
+        leading = { GalleryIconTile(spec = GalleryIcons.Hidden) },
+        leadingTile = false,
         onClick = handlers::onOpenHidden,
       )
     }

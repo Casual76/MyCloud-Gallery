@@ -22,7 +22,6 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -38,6 +37,8 @@ import dev.pampa.mycloudgallery.feature.people.ui.PeopleMessageBlock
 import dev.pampa.mycloudgallery.feature.people.ui.PeopleText
 import dev.pampa.mycloudgallery.feature.people.ui.PersonAvatar
 import javax.inject.Inject
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIcons
+import dev.pampa.mycloudgallery.feature.people.ui.PeopleFigureState
 
 // "PERSONE NASCOSTE" (Fase 8, P9; docs/fase8-progetto.md E-F28): Impostazioni -> Persone -> "Persone nascoste". Le persone che hai nascosto, come righe
 // di un gruppo con il volto, il nome (o "Persona senza nome") e il conto; un tocco le mostra di nuovo. Le loro foto non sono mai state tolte dalla
@@ -72,7 +73,11 @@ internal fun HiddenPeopleScreen(
     when (state) {
       HiddenPeopleState.Loading -> item(key = "loading") { FluidLoadingBlock() }
       HiddenPeopleState.Empty -> item(key = "empty") {
-        FluidEmptyState(title = stringResource(R.string.persone_hidden_empty_title), detail = stringResource(R.string.persone_hidden_empty_detail))
+        PeopleFigureState(
+          icon = GalleryIcons.Hidden.icon,
+          title = stringResource(R.string.persone_hidden_empty_title),
+          why = stringResource(R.string.persone_hidden_empty_detail),
+        )
       }
       is HiddenPeopleState.Ready -> item(key = "people") {
         FluidListGroup {
@@ -86,6 +91,8 @@ internal fun HiddenPeopleScreen(
               disclosure = false,
               onClick = { handlers.onShow(card.id) },
               leading = { PersonAvatar(card.cover, crops, PeopleDimens.AvatarRow, Modifier.size(PeopleDimens.AvatarRow)) },
+              // Giro 1 (CU-8): il volto tondo da solo, senza la piastrella grigia dietro.
+              leadingTile = false,
               badge = { Text(text = show, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) },
               modifier = Modifier.semantics(mergeDescendants = true) {
                 contentDescription = resources.getString(R.string.persone_hidden_spoken, PeopleText.spoken(resources, card))

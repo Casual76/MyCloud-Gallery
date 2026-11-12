@@ -175,7 +175,7 @@ class PeopleRoutesTest : PeopleScreenTest() {
   @Test
   fun pagina_ilNomeSiDaDalFoglio_eLaPaginaEIlTitoloSiAggiornano() {
     show(content = pageRoute(world.bruno))
-    composeRule.onNodeWithText("Aggiungi un nome", useUnmergedTree = true).performClick()
+    composeRule.onNodeWithContentDescription("Aggiungi un nome").performClick()
     composeRule.waitForIdle()
     composeRule.onNode(hasSetTextAction()).performTextInput("  Zio Carlo ")
     composeRule.onNodeWithText("Salva", useUnmergedTree = true).performClick()
@@ -200,7 +200,7 @@ class PeopleRoutesTest : PeopleScreenTest() {
   fun pagina_controllaEDividi_portanoAlleGrigliePerQuellaPersona() {
     val reviews = mutableListOf<Pair<PersonId, Boolean>>()
     show(content = pageRoute(world.anna, exits = PersonPageExits({}, { id, split -> reviews += id to split })))
-    composeRule.onNodeWithText("Controlla le foto", useUnmergedTree = true).performClick()
+    composeRule.onNodeWithContentDescription("Controlla le foto").performClick()
     composeRule.onNodeWithContentDescription("Altre azioni").performClick()
     composeRule.onNodeWithText("Dividi…", useUnmergedTree = true).performClick()
     composeRule.waitForIdle()

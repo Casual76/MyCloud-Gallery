@@ -109,6 +109,15 @@ interface AiCandidates {
   suspend fun forShare(share: String, recipe: Int, limit: Int): List<AiCandidate>
 
   suspend fun phoneOnly(recipe: Int, limit: Int): List<AiCandidate>
+
+  /**
+   * XS-4: come [forShare], ma i candidati chiesti dall'utente ([include], "Analizza adesso") entrano **anche oltre il limite** della lista
+   * (che e' di 2.000 media dal piu' recente). Di serie ignora [include]: chi non ha un limite non ne ha bisogno.
+   */
+  suspend fun forShare(share: String, recipe: Int, limit: Int, include: Set<ContentKey>): List<AiCandidate> = forShare(share, recipe, limit)
+
+  /** XS-4: come [phoneOnly], con i candidati chiesti ([include]) anche oltre il limite. */
+  suspend fun phoneOnly(recipe: Int, limit: Int, include: Set<ContentKey>): List<AiCandidate> = phoneOnly(recipe, limit)
 }
 
 /**

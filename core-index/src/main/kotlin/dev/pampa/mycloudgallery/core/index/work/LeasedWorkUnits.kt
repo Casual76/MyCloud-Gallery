@@ -49,6 +49,13 @@ class LeasedWorkUnits(
    * fallimento dichiarato da questo stesso dispositivo, o di un'altra famiglia, vale come prima). Null = come prima.
    */
   private val ownDecoderFamily: String? = null,
+  /**
+   * XS-2 (Pacchetto XF): al piu' cosi' tanti mesi **con media prioritari** ([UnitPriority.visible]: sullo schermo, o chiesti dall'utente con
+   * "Analizza adesso") stanno davanti nella finestra di [maxMonthsPerCall]; il resto della finestra e' **sempre** dei mesi ordinari, nell'ordine
+   * di sempre. Cosi' dei mesi urgenti che non si possono servire (anteprime non ancora pronte, media di un altro dispositivo) non riempiono la
+   * finestra e il lavoro ordinario avanza a ogni tappa. Di serie come [maxMonthsPerCall] (nessun tetto in piu': il comportamento di prima).
+   */
+  private val maxPriorityMonthsPerCall: Int = maxMonthsPerCall,
 ) : WorkUnits {
 
   /** Contatori per la Diagnostica (`INDEX_LEASES_CONTENDED` e affini): solo numeri. */
@@ -74,7 +81,7 @@ class LeasedWorkUnits(
     val visible = priority.visible.value
     if (published.refresh(share) is RemoteResult.Failed) stats.refreshFailures.incrementAndGet()
     val months = LinkedHashSet<String>()
-    if (visible.isNotEmpty()) months += source.monthsOf(share, pass, visible)
+    if (visible.isNotEmpty()) months += source.monthsOf(share, pass, visible).take(maxPriorityMonthsPerCall)
     months += source.months(share, pass)
     val leasing = rules.blockFor(share) == null && identity.writableRegistry() != null
     for (month in months.take(maxMonthsPerCall)) {

@@ -216,15 +216,21 @@ interface AiUnsupportedFrom : AiUnsupported {
  * cancelli, stesse prenotazioni, stesso salvataggio subito e stessa pubblicazione. I confini delle unita' non si toccano (dipendono solo
  * dai media del mese, D9): cambia solo l'ordine con cui questo dispositivo li lavora dentro l'unita' che ha gia' preso.
  *
- * [urgent] si legge a inizio unita' o lista (mai per ogni media): e' un insieme piccolo, tenuto da `:app` in un file locale (mai sul NAS:
- * e' una richiesta di questo dispositivo, come i segni "non supportato"). [done] si chiama quando un media urgente e' finito qui
- * (calcolato, gia' fatto da altri o non supportato): la chiave esce dalla coda delle urgenze. Un media che resta "in attesa" (l'anteprima
- * non c'e') **resta urgente**: sara' il primo al prossimo giro in cui si puo'.
+ * [urgent] si legge a inizio unita' o lista **e di nuovo ad ogni confine di lotto** (XS-4: una richiesta arrivata mentre il calcolo
+ * lavora riordina solo cio' che non e' ancora stato lavorato): e' un insieme piccolo, tenuto da `:app` in un file locale (mai sul NAS: e'
+ * una richiesta di questo dispositivo, come i segni "non supportato"). E' **ordinato: l'ultima chiesta per prima** (XS-4). [done] si
+ * chiama quando un media urgente e' finito qui (calcolato, gia' fatto da altri o non supportato): la chiave esce dalla coda delle
+ * urgenze. Un media che resta "in attesa" (l'anteprima non c'e') **resta urgente** ma lo dice con [waiting]: il registro lo mette dietro
+ * agli altri (rotazione) e, dopo troppe attese o troppo tempo, la richiesta scade (XS-2: le urgenze che non si possono servire non
+ * tengono la coda).
  */
 interface AiUrgentKeys {
   fun urgent(): Set<ContentKey>
 
   fun done(key: ContentKey) = Unit
+
+  /** XS-2/XS-7: il media chiesto e' stato incontrato ma non si e' potuto lavorare in questa tappa, e [why] dice perche'. */
+  fun waiting(key: ContentKey, why: UrgentWait) = Unit
 
   companion object {
     /** Nessuna urgenza: la coda resta quella di sempre. */
@@ -232,6 +238,28 @@ interface AiUrgentKeys {
       override fun urgent(): Set<ContentKey> = emptySet()
     }
   }
+}
+
+/** Perche' un media chiesto adesso non si e' potuto lavorare in una tappa (XS-2, XS-7). Solo codici: mai testi. */
+enum class UrgentWait {
+  /** L'anteprima non c'e' ancora (la preparazione non l'ha fatta, o i byte del telefono non si aprono). */
+  PREVIEW,
+
+  /** L'unita' che lo contiene la sta lavorando un altro dispositivo (prenotata): niente si sottrae, si aspetta. */
+  OTHER_DEVICE,
+
+  /** Un guasto passeggero del motore: si riprova al giro dopo. */
+  RETRY,
+}
+
+/**
+ * XS-5: **l'unico criterio di "fatto"** per un media, quello del calcolo. Un media e' fatto qui quando ha il vettore e, con la lettura del
+ * testo attiva, anche il testo, ognuno con la ricetta **corrente** (le classi vengono da cio' che e' salvato qui e da cio' che altri hanno
+ * pubblicato nella share). Lo usano il calcolo ([ItemWorker.finishedHere]), il visore e il registro delle urgenze: nessuno ha un secondo
+ * criterio, cosi' un vettore arrivato dal NAS non toglie la richiesta finche' il testo da leggere non c'e'.
+ */
+object AiCompletion {
+  fun isDone(have: Set<AiClass>, readingText: Boolean): Boolean = AiClass.VEC in have && (AiClass.OCR in have || !readingText)
 }
 
 /** I contatori del calcolo per la Diagnostica (§2.6): solo numeri. */

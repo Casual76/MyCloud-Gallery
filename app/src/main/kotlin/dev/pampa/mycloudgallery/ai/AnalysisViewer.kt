@@ -1,11 +1,14 @@
 package dev.pampa.mycloudgallery.ai
 
+import android.content.Context
+import dev.pampa.mycloudgallery.core.ai.compute.UrgentWait
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.AiWaitReason
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
+import dev.pampa.mycloudgallery.core.rules.ConfirmationKind
 import dev.pampa.mycloudgallery.core.rules.RuleDecision
 import dev.pampa.mycloudgallery.core.rules.RunScope
 import dev.pampa.mycloudgallery.core.rules.WaitReason
@@ -16,25 +19,35 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.MediaAnalysisHold
 import dev.pampa.mycloudgallery.feature.viewer.menu.MediaAnalysisKind
 import dev.pampa.mycloudgallery.feature.viewer.menu.ViewerAnalysis
 import dev.pampa.mycloudgallery.work.AiWorkScheduling
-import android.content.Context
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 
 /**
- * "Analizza adesso" del visore sopra il calcolo vero (Pacchetto X): lo stato del media aperto si ricava dalle **stesse** fonti del
- * motore — cio' che e' salvato qui con la ricetta corrente (`AiResults.saved`, come la ripresa D22), i segni "non supportato", il ruolo,
- * il media che il motore sta calcolando adesso e il registro delle urgenze. Al tocco la chiave entra nel registro (passa davanti nella
- * coda, [AiUrgentFile]) e parte "Indicizza ora" come richiesta dell'utente con le regole di sempre: nessun percorso nuovo, nessuna
- * scorciatoia su prenotazioni, cancelli o pubblicazione. Se le regole lo fermano (telefono troppo caldo, NAS irraggiungibile) la
- * capsula lo dice subito con il motivo vero e il media **resta primo** per quando si puo'.
+ * "Analizza adesso" del visore sopra il calcolo vero (Pacchetto X, corretto dal Pacchetto XF): lo stato del media aperto si ricava dalle
+ * **stesse** fonti del motore — il criterio di "fatto" del calcolo ([AiGraph.isDone]: ricette e lettura del testo correnti), i segni "non
+ * supportato", il ruolo, il media che il motore sta calcolando adesso e il registro delle richieste — e **per la chiave corrente** del media
+ * (XS-6: una versione vecchia gia' analizzata non toglie il comando a quella nuova).
+ *
+ * Al tocco la chiave entra nel registro (passa davanti nella coda, [AiUrgentFile]) e parte "Analizza adesso" ([AiWorkScheduling.analyzeAsked]):
+ * una richiesta dell'utente **non confermata** e **solo per i media chiesti** (XS-3). Se le regole chiedono una conferma (dati mobili,
+ * roaming, tetto superato) **nessun foglio** si apre: il media resta primo in coda e la capsula dice la condizione vera ("Parte sul Wi-Fi");
+ * il resto dell'analisi resta al lavoro in background con le sue regole.
+ *
+ * Il motivo di una pausa e' quello **della richiesta davvero eseguita** (la richiesta dell'utente) valutato **adesso** e riletto quando
+ * cambiano ambiente o impostazioni (XS-7), mai quello di una tappa di un'ora fa.
  *
  * Che cosa si analizza non cambia: sui video si fanno i vettori dei fotogrammi (e il testo sui fotogrammi scelti, con la lettura attiva),
- * come in ogni tappa; con la lettura del testo spenta si fa solo il vettore; nascosti e album protetti seguono le regole di oggi (il
- * visore dei Nascosti non mostra ne' voce ne' capsula, come album e mappa).
+ * come in ogni tappa; con la lettura del testo spenta si fa solo il vettore; nascosti e album protetti seguono le regole di oggi (il visore
+ * dei Nascosti non mostra ne' voce ne' capsula, come album e mappa).
  */
 class AppViewerAnalysis(
   private val context: Context,
@@ -42,20 +55,29 @@ class AppViewerAnalysis(
   private val ai: AiGraph,
   private val indexVersion: Flow<Long>,
   private val scope: CoroutineScope,
-  /** Un vettore scelto nell'indice locale, anche calcolato da un altro dispositivo e arrivato dal NAS. */
-  private val hasVectors: (ContentKey) -> Boolean = { false },
 ) : ViewerAnalysis {
 
+  /** Cio' che costa leggere (catalogo, indice): si rilegge quando e' cambiato qualcosa che lo riguarda, non a ogni media che il motore finisce. */
+  private class Resolved(val current: ContentKey?, val ready: Boolean, val unsupported: Boolean)
+
   override fun observe(id: MediaId): Flow<MediaAnalysis> = flow {
-    combine(ai.indexer, ai.status, ai.live, ai.urgent.state, indexVersion) { _, _, _, _, _ -> Unit }
-      .collect { emit(evaluate(id)) }
+    var resolved: Resolved? = null
+    // I segnali che cambiano cio' che si legge dal catalogo e dall'indice, e quelli dell'ambiente (regole): rileggono tutto.
+    val heavy = combine(ai.indexer, ai.status, ai.urgent.state, ai.urgent.waits, indexVersion) { _, _, _, _, _ -> true }
+    val environment = (ai.parts.decisionTriggers ?: emptyFlow()).map { true }
+    // Il media che il motore sta calcolando cambia a ogni media: basta il confronto con la chiave gia' letta, senza rileggere niente.
+    val cheap = ai.live.map { it.current }.distinctUntilChanged().map { false }
+    merge(heavy, environment, cheap).collect { reload ->
+      val now = if (reload || resolved == null) resolve(id).also { resolved = it } else resolved!!
+      emit(evaluate(now))
+    }
   }.distinctUntilChanged()
 
   override fun analyzeNow(id: MediaId) {
     scope.launch {
       val key = ownKeys(id)?.firstOrNull() ?: return@launch
-      ai.urgent.add(key)
-      AiWorkScheduling.indexNow(context)
+      ai.urgent.add(key, id)
+      AiWorkScheduling.analyzeAsked(context)
     }
   }
 
@@ -65,62 +87,114 @@ class AppViewerAnalysis(
     return cat.mediaContentKeysOf(listOf(id)).firstOrNull { it.mediaId == id }?.own?.takeIf { it.isNotEmpty() }
   }
 
-  private suspend fun evaluate(id: MediaId): MediaAnalysis {
-    val keys = ownKeys(id) ?: return MediaAnalysis.UNKNOWN
-    if (keys.any { ready(it) }) return MediaAnalysis(MediaAnalysisKind.READY)
-    if (unsupported(id, keys)) return MediaAnalysis(MediaAnalysisKind.UNSUPPORTED)
-    if (!ai.indexer.value) return MediaAnalysis(MediaAnalysisKind.NOT_HERE)
-    if (ai.status.value == AiStatus.ModelMissing) return MediaAnalysis(MediaAnalysisKind.MODEL_MISSING)
-    if (keys.any { it == ai.live.value.current }) return MediaAnalysis(MediaAnalysisKind.ANALYZING)
-    if (keys.any { it in ai.urgent.state.value }) return MediaAnalysis(MediaAnalysisKind.FIRST, holdOf())
-    return MediaAnalysis(MediaAnalysisKind.QUEUED)
+  /** XS-6: lo stato si legge per la **chiave corrente** (la prima); le versioni vecchie non decidono per il comando. */
+  private suspend fun resolve(id: MediaId): Resolved {
+    val current = ownKeys(id)?.first() ?: return Resolved(null, ready = false, unsupported = false)
+    return Resolved(current, ready = done(current), unsupported = unsupported(id, current))
+  }
+
+  /** XS-5: "gia' analizzata" = lo stesso criterio del calcolo; un guasto dell'indice (non aperto) vale "non ancora". */
+  private suspend fun done(key: ContentKey): Boolean = try {
+    ai.isDone(key)
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: IOException) {
+    false
+  }
+
+  private suspend fun evaluate(r: Resolved): MediaAnalysis {
+    val kind = ViewerAnalysisRules.kindOf(
+      ViewerAnalysisRules.Facts(
+        current = r.current,
+        ready = r.ready,
+        unsupported = r.unsupported,
+        indexer = ai.indexer.value,
+        modelMissing = ai.status.value == AiStatus.ModelMissing,
+        liveCurrent = ai.live.value.current,
+        asked = ai.urgent.state.value,
+      ),
+    )
+    if (kind != MediaAnalysisKind.FIRST) return MediaAnalysis(kind)
+    return MediaAnalysis(kind, holdOf(r.current!!))
+  }
+
+  /** "Non supportato" per il vettore: dai propri byte, o da un'anteprima di una delle sue share (R5, come la copertura). */
+  private suspend fun unsupported(id: MediaId, key: ContentKey): Boolean {
+    val marks = ai.unsupported
+    if (AiClass.VEC in marks.classesOf(listOf(key))[key].orEmpty()) return true
+    val shares = runCatching { catalog()?.nasSharesOf(listOf(id))?.get(id) }.getOrNull().orEmpty()
+    return shares.any { share -> AiClass.VEC in marks.classesOf(listOf(key), share)[key].orEmpty() }
   }
 
   /**
-   * "Gia' analizzata" per chi guarda: un vettore nell'indice locale (calcolato qui o arrivato da un altro dispositivo: in entrambi i casi
-   * la ricerca la trova), e con la lettura del testo attiva anche il testo salvato qui con la ricetta corrente. Il motore salta comunque
-   * cio' che altri hanno gia' pubblicato: niente si analizza due volte.
+   * Perche' una richiesta dell'utente non parte (o parte solo in locale) adesso: il verdetto **vero e di adesso** delle regole **per la
+   * richiesta davvero eseguita** (non confermata, XS-3, XS-7), in una riga.
    */
-  private suspend fun ready(key: ContentKey): Boolean = runCatching {
-    val recipe = ai.recipe
-    val forVec = ai.results.saved(key, recipe.version)
-    if (AiClass.VEC !in forVec && !hasVectors(key)) return@runCatching false
-    if (!ai.textReadingHere.value) return@runCatching true
-    val forOcr = if (recipe.ocrVersion == recipe.version) forVec else ai.results.saved(key, recipe.ocrVersion)
-    AiClass.OCR in forOcr
-  }.getOrDefault(false)
+  private suspend fun holdOf(key: ContentKey): MediaAnalysisHold? {
+    val decision = ai.decisionFor(WorkRequest.UserInitiated(BackgroundActivity.AI_COMPUTE, confirmed = false, writesToNas = true))
+    return ViewerAnalysisRules.holdOf(ai.urgent.waitOf(key), decision, ai.status.value)
+  }
+}
 
-  /** "Non supportato" per il vettore: dai propri byte, o da un'anteprima di una delle sue share (R5, come la copertura). */
-  private suspend fun unsupported(id: MediaId, keys: List<ContentKey>): Boolean {
-    val marks = ai.unsupported
-    if (marks.classesOf(keys).values.any { AiClass.VEC in it }) return true
-    val shares = runCatching { catalog()?.nasSharesOf(listOf(id))?.get(id) }.getOrNull().orEmpty()
-    return shares.any { share -> marks.classesOf(keys, share).values.any { AiClass.VEC in it } }
+/**
+ * Le regole **pure** dello stato del visore (provate con unita' vere in `ViewerAnalysisRulesTest`): quale caso, e perche' una richiesta non parte.
+ * Nessuna lettura qui: i fatti arrivano gia' letti.
+ */
+internal object ViewerAnalysisRules {
+
+  /** I fatti di un media aperto: la sua chiave **corrente** (XS-6) e cio' che il motore e il registro dicono di lei. */
+  class Facts(
+    val current: ContentKey?,
+    val ready: Boolean,
+    val unsupported: Boolean,
+    val indexer: Boolean,
+    val modelMissing: Boolean,
+    val liveCurrent: ContentKey?,
+    val asked: Set<ContentKey>,
+  )
+
+  fun kindOf(f: Facts): MediaAnalysisKind {
+    val current = f.current ?: return MediaAnalysisKind.UNKNOWN
+    if (f.ready) return MediaAnalysisKind.READY
+    if (f.unsupported) return MediaAnalysisKind.UNSUPPORTED
+    if (!f.indexer) return MediaAnalysisKind.NOT_HERE
+    if (f.modelMissing) return MediaAnalysisKind.MODEL_MISSING
+    if (current == f.liveCurrent) return MediaAnalysisKind.ANALYZING
+    if (current in f.asked) return MediaAnalysisKind.FIRST
+    return MediaAnalysisKind.QUEUED
   }
 
-  /** Perche' una richiesta dell'utente non parte (o parte solo in locale) adesso: il verdetto vero, in una riga. */
-  private suspend fun holdOf(): MediaAnalysisHold? {
-    (ai.status.value as? AiStatus.Waiting)?.let { waiting ->
-      return when (waiting.reason) {
-        AiWaitReason.HOT -> MediaAnalysisHold.HOT
-        AiWaitReason.PREPARATION -> MediaAnalysisHold.PREPARATION
-        AiWaitReason.NAS_UNREACHABLE, AiWaitReason.NO_NETWORK -> MediaAnalysisHold.NAS
-        else -> null
+  /**
+   * Il motivo di una richiesta ferma. Prima cio' che il motore ha visto della richiesta stessa (anteprime non pronte; unita' di un altro
+   * dispositivo: "parte appena si puo'"), poi il verdetto **di adesso** delle regole per la richiesta dell'utente non confermata (XS-3, XS-7):
+   * una conferma richiesta dai dati mobili o dal roaming vale "parte sul Wi-Fi". Solo senza un verdetto (montaggi di prova) si ripiega
+   * sull'ultimo stato del motore, e solo per i suoi motivi specifici: "regole" generico non dice niente.
+   */
+  fun holdOf(wait: UrgentWait?, decision: RuleDecision?, status: AiStatus): MediaAnalysisHold? {
+    when (wait) {
+      UrgentWait.PREVIEW -> return MediaAnalysisHold.PREPARATION
+      UrgentWait.OTHER_DEVICE -> return MediaAnalysisHold.RULES
+      UrgentWait.RETRY, null -> Unit
+    }
+    if (decision != null) {
+      return when (decision) {
+        // Solo il buffer locale: senza NAS un media che sta solo li' aspetta.
+        is RuleDecision.Run -> if (decision.scope == RunScope.LOCAL_BUFFER_ONLY) MediaAnalysisHold.NAS else null
+        is RuleDecision.Wait -> holdOf(decision.reason)
+        is RuleDecision.Stop -> holdOf(decision.reason)
+        is RuleDecision.NeedsConfirmation -> if (ConfirmationKind.OVER_CAP in decision.kinds) MediaAnalysisHold.RULES else MediaAnalysisHold.WIFI
       }
     }
-    val decision = runCatching {
-      ai.parts.decide?.invoke(WorkRequest.UserInitiated(BackgroundActivity.AI_COMPUTE, confirmed = true, writesToNas = true))
-    }.getOrNull() ?: return null
-    return when (decision) {
-      // Solo il buffer locale: senza NAS un media che sta solo li' aspetta.
-      is RuleDecision.Run -> if (decision.scope == RunScope.LOCAL_BUFFER_ONLY) MediaAnalysisHold.NAS else null
-      is RuleDecision.Wait -> holdOf(decision.reason)
-      is RuleDecision.Stop -> holdOf(decision.reason)
-      is RuleDecision.NeedsConfirmation -> MediaAnalysisHold.RULES
+    val waiting = status as? AiStatus.Waiting ?: return null
+    return when (waiting.reason) {
+      AiWaitReason.HOT -> MediaAnalysisHold.HOT
+      AiWaitReason.PREPARATION -> MediaAnalysisHold.PREPARATION
+      AiWaitReason.NAS_UNREACHABLE, AiWaitReason.NO_NETWORK -> MediaAnalysisHold.NAS
+      else -> null
     }
   }
 
-  private fun holdOf(reason: WaitReason): MediaAnalysisHold = when (reason) {
+  fun holdOf(reason: WaitReason): MediaAnalysisHold = when (reason) {
     is WaitReason.Thermal -> MediaAnalysisHold.HOT
     WaitReason.NasUnreachable, WaitReason.Offline, WaitReason.NetworkNotTrusted, WaitReason.PoorNetwork,
     WaitReason.Roaming, WaitReason.HeavyNeedsHomeWifi, is WaitReason.NetworkNotAllowed,

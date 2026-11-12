@@ -52,6 +52,12 @@ enum class MediaAnalysisHold {
 
   /** Un altro motivo delle regole (la Diagnostica lo dice per esteso). */
   RULES,
+
+  /**
+   * XS-3 (Pacchetto XF): sui dati mobili, in roaming o con il tetto superato la richiesta **non apre nessun foglio**: il media resta primo in
+   * coda e parte sul Wi-Fi.
+   */
+  WIFI,
 }
 
 /** Lo stato di un media: il suo caso e, se e' stato chiesto ma non parte, perche'. */
@@ -63,8 +69,10 @@ data class MediaAnalysis(val kind: MediaAnalysisKind, val hold: MediaAnalysisHol
 
 /**
  * L'analisi del media aperto. `:app` la lega al calcolo e all'indice locale: [observe] segue il media mentre il pannello e' aperto (da
- * "in coda" a "primo" a "pronto"), [analyzeNow] lo mette davanti nella coda e fa partire subito il calcolo come richiesta dell'utente,
- * con le regole di sempre.
+ * "in coda" a "primo" a "pronto"), [analyzeNow] lo mette davanti nella coda e fa partire subito il calcolo **per quel media**: come
+ * richiesta dell'utente **non confermata** (se le regole chiedono una conferma per i dati mobili, il roaming o il tetto, nessun foglio: il
+ * media resta primo in coda e parte sul Wi-Fi) e solo per i media chiesti (XS-3, Pacchetto XF). Lo stato e' quello della **chiave corrente**
+ * del media, e il visore lo lega al media per cui e' nato (`observeBound`).
  */
 interface ViewerAnalysis {
   fun observe(id: MediaId): Flow<MediaAnalysis>

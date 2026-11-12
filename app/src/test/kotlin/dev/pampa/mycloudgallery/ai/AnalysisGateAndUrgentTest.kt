@@ -95,7 +95,8 @@ class AnalysisGateAndUrgentTest {
     first.add(key(2))
 
     val again = AiUrgentFile(file)
-    assertThat(again.urgent()).containsExactly(key(1), key(2)).inOrder()
+    // L'ultima chiesta per prima (XS-4).
+    assertThat(again.urgent()).containsExactly(key(2), key(1)).inOrder()
 
     again.done(key(1))
     assertThat(AiUrgentFile(file).urgent()).containsExactly(key(2))

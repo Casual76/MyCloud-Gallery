@@ -54,6 +54,10 @@ import kotlinx.coroutines.withTimeout
  */
 internal class AiRig(private val app: Application, private val root: File) {
   var imageOverride: dev.pampa.mycloudgallery.core.ai.contract.ImageEmbedder? = null
+
+  /** XS-7: il verdetto delle regole e gli eventi che lo cambiano, scelti dalla prova (di serie quelli del motore vero). */
+  var decideOverride: (suspend (dev.pampa.mycloudgallery.core.rules.WorkRequest) -> dev.pampa.mycloudgallery.core.rules.RuleDecision?)? = null
+  var triggersOverride: kotlinx.coroutines.flow.Flow<Unit>? = null
   val time = TestTime()
   val backend = TestNas.backend(time)
 
@@ -124,6 +128,8 @@ internal class AiRig(private val app: Application, private val root: File) {
       cutter = { cutterOverride ?: cutter },
       cutoutWriter = { path -> FakePhoneMediaWriter(path).also { writers += it } },
       people = people,
+      decide = decideOverride,
+      decisionTriggers = triggersOverride,
     )
     reader.readingHere = { stack.textSwitch.state.value.activeHere }
     reader.fixture(RECEIPT, OcrResult(listOf(OcrLine(ShortBox(1000, 2000, 60000, 9000), 0, listOf(WordSpan(0, 30000), WordSpan(32000, 65535)), "Pizzeria Mario")), dense = false))

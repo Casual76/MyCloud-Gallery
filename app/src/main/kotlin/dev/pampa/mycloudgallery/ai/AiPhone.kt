@@ -9,12 +9,12 @@ import dev.pampa.mycloudgallery.core.backup.contract.PhoneBytes
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneOpen
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
 import dev.pampa.mycloudgallery.core.database.CatalogPhoneCursor
-import dev.pampa.mycloudgallery.core.database.CatalogPhoneOnly
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.QuickHash
+import dev.pampa.mycloudgallery.core.model.VersionId
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepFailCode
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepOpen
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepOutput
@@ -77,7 +77,7 @@ class AppAiPhone(
         if (page.isEmpty()) break
         for (item in page) {
           val missing = wanted - settled(item.contentKey)
-          if (missing.isEmpty() || !allowed(catalog, item)) continue
+          if (missing.isEmpty() || !allowed(catalog, item.mediaId, item.versionId)) continue
           facts.put(item.contentKey, ContentFact(item.mediaId, item.versionId, item.size, item.source, item.quickHash))
           out += AiCandidate(item.contentKey, item.kind, item.source, missing)
           if (out.size >= limit) break
@@ -89,6 +89,26 @@ class AppAiPhone(
       // L'indice di ricerca non si apre (dove si salva): senza, niente si calcola; quello che si e' trovato basta alla stima.
     }
     return out
+  }
+
+  /**
+   * XS-4: il candidato per un media **chiesto** dall'utente ([id], la chiave [key] che aveva), anche se la pagina limitata dei media del solo
+   * telefono non lo contiene (oltre i primi 2.000). Solo se e' ancora lo stesso contenuto, sta solo sul telefono (nessuna copia sul NAS), ha
+   * una copia leggibile, e' ammesso dalla recinzione (D13) e ha ancora classi da fare. Altrimenti null: niente si inventa.
+   */
+  suspend fun candidateOf(id: MediaId, key: ContentKey, wantsText: Boolean): AiCandidate? {
+    val catalog = catalog() ?: return null
+    val media = catalog.media(id) ?: return null
+    val version = media.versions.firstOrNull { it.id == media.currentVersionId } ?: return null
+    if (ContentKey.of(version.fingerprint) != key) return null
+    if (catalog.nasSharesOf(listOf(id))[id].orEmpty().isNotEmpty()) return null
+    if (catalog.phoneRefOf(media.id, version.id) == null) return null
+    if (!allowed(catalog, media.id, version.id)) return null
+    val wanted = if (wantsText) setOf(AiClass.VEC, AiClass.OCR) else setOf(AiClass.VEC)
+    val missing = wanted - settled(key)
+    if (missing.isEmpty()) return null
+    facts.put(key, ContentFact(media.id, version.id, version.fingerprint.size, media.source, version.fingerprint.quickHash))
+    return AiCandidate(key, media.kind, media.source, missing)
   }
 
   /** Le classi gia' a posto per [key]: salvate qui con la ricetta corrente, o segnate "non supportate" (E-A12). */
@@ -103,10 +123,10 @@ class AppAiPhone(
   }
 
   /** D13: senza recinzione sempre; con la recinzione solo una riga in una cartella ammessa (senza account, nessuna: si fallisce chiusi). */
-  private suspend fun allowed(catalog: MediaCatalog, item: CatalogPhoneOnly): Boolean {
+  private suspend fun allowed(catalog: MediaCatalog, mediaId: MediaId, versionId: VersionId): Boolean {
     val fence = fence ?: return true
     val account = account() ?: return false
-    val place = catalog.phoneRefOf(item.mediaId, item.versionId) ?: return false
+    val place = catalog.phoneRefOf(mediaId, versionId) ?: return false
     val folder = catalog.phoneRowFolder(place.volume, place.mediaStoreId) ?: return false
     return fence.allowsPhoneFolder(account, folder)
   }

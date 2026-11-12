@@ -68,7 +68,7 @@ fun LibraryTab(
       state = state,
       tabBarScroll = tabBarScroll,
       network = network,
-      cloudActions = remember(onNetworkClick, onNasStatusClick, onBackupStatusClick) {
+      cloudActions = remember(onNetworkClick, onNasStatusClick, onBackupStatusClick, onAnalysisStatusClick) {
         LibraryCloudActions(onNetwork = onNetworkClick, onNas = onNasStatusClick, onBackup = onBackupStatusClick, onAnalysis = onAnalysisStatusClick)
       },
       search = search,

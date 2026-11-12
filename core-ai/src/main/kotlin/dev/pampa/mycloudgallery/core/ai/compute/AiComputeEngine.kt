@@ -21,6 +21,7 @@ import dev.pampa.mycloudgallery.core.index.ai.AiIndexPublisher
 import dev.pampa.mycloudgallery.core.index.ai.AnalysisFetcher
 import dev.pampa.mycloudgallery.core.index.contract.UnitPriority
 import dev.pampa.mycloudgallery.core.index.contract.WorkUnits
+import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.prepare.contract.Preparer
 import java.util.Locale
 import kotlin.time.Duration
@@ -67,6 +68,12 @@ data class AiComputeParts(
    * coda, con le stesse regole e gli stessi cancelli di sempre ([AiUrgentKeys]). Di serie nessuno.
    */
   val urgent: AiUrgentKeys = AiUrgentKeys.NONE,
+  /**
+   * Pacchetto XF (XS-4): di queste chiavi chieste, quelle che [AiScope] contiene (per una share: i suoi file presenti; per il telefono: quelle
+   * che nessuna share ha). Serve a servire **prima** l'ambito che contiene un media chiesto (con gli stessi cancelli: `isMine`, ruolo, regole)
+   * e a dire "in attesa" se l'unita' che lo contiene la lavora un altro dispositivo. Di serie nessuna: l'ordine degli ambiti e' quello di sempre.
+   */
+  val requestedIn: suspend (AiScope, Set<ContentKey>) -> Set<ContentKey> = { _, _ -> emptySet() },
 )
 
 /**
@@ -115,9 +122,12 @@ class AiComputeEngine(
 
   override suspend fun run(scope: AiScope, budget: Duration): AiRunResult = run(scope, budget, AiRunControl.ALWAYS)
 
-  /** Una tappa con le regole di [control] (in :app: `StageScope` di `StagedRun`, vedi [AiStageBatch]). */
-  suspend fun run(scope: AiScope, budget: Duration, control: AiRunControl): AiRunResult {
-    val session = ComputeSession(parts, computer, recipe, config, counters, nanos, pause, budget, control, state, strikes, liveFlow)
+  /**
+   * Una tappa con le regole di [control] (in :app: `StageScope` di `StagedRun`, vedi [AiStageBatch]). Con [only] (XS-3: "Analizza adesso") la
+   * tappa lavora **solo i media chiesti** e poi si ferma: il resto resta al lavoro in background con le sue regole.
+   */
+  suspend fun run(scope: AiScope, budget: Duration, control: AiRunControl, only: Boolean = false): AiRunResult {
+    val session = ComputeSession(parts, computer, recipe, config, counters, nanos, pause, budget, control, state, strikes, liveFlow, only)
     if (!parts.roles.indexer.value) {
       state.value = AiStatus.Off
       return session.result(AiStop.ROLE_OFF)
@@ -148,18 +158,46 @@ class AiComputeEngine(
    * Tutti gli ambiti di questo dispositivo in ordine (D14: prima l'area privata propria, poi l'area comune, poi i media del solo
    * telefono), finche' il tempo non finisce o le regole non fermano. Comodo per `AiComputeWorker` e per i test.
    */
-  suspend fun runAll(budget: Duration, control: AiRunControl = AiRunControl.ALWAYS): List<Pair<AiScope, AiRunResult>> {
+  suspend fun runAll(budget: Duration, control: AiRunControl = AiRunControl.ALWAYS, only: Boolean = false): List<Pair<AiScope, AiRunResult>> {
     val start = nanos()
     val out = ArrayList<Pair<AiScope, AiRunResult>>()
-    val scopes = parts.roles.shares().map { AiScope.Share(it) } + AiScope.PhoneOnly
+    val scopes = requestedFirst(parts.roles.shares().map { AiScope.Share(it) } + AiScope.PhoneOnly, only)
     for (scope in scopes) {
       val left = budget - (nanos() - start).nanoseconds
       if (!left.isPositive()) break
-      val result = run(scope, left, control)
+      val result = run(scope, left, control, only)
       out += scope to result
       if (result.stoppedBy != null && result.stoppedBy != AiStop.BUFFER_ONLY) break
     }
     return out
+  }
+
+  /**
+   * XS-4: con delle richieste dell'utente, l'ambito che contiene un media chiesto si serve **prima degli altri** (stessi cancelli: la tappa
+   * di ogni ambito controlla ancora `isMine`, ruolo e regole). Con [only] gli ambiti senza media chiesti non si toccano. Senza richieste
+   * l'ordine e' quello di sempre (area privata propria, comune, solo telefono, D14). Un guasto di [AiComputeParts.requestedIn] vale come
+   * "nessuna richiesta qui".
+   */
+  private suspend fun requestedFirst(scopes: List<AiScope>, only: Boolean): List<AiScope> {
+    val asked = try {
+      parts.urgent.urgent()
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      emptySet<ContentKey>()
+    }
+    if (asked.isEmpty()) return if (only) emptyList() else scopes
+    val holds = scopes.associateWith { scope ->
+      try {
+        parts.requestedIn(scope, asked).isNotEmpty()
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        false
+      }
+    }
+    val ordered = scopes.sortedBy { if (holds.getValue(it)) 0 else 1 }
+    return if (only) ordered.filter { holds.getValue(it) } else ordered
   }
 
   private suspend fun isMine(share: String): Boolean {

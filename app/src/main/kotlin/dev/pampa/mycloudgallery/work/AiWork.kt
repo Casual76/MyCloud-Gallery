@@ -78,6 +78,14 @@ object AiWorkScheduling {
   /** Il giro dopo una sincronizzazione o una preparazione con novita': lavoro unico, assorbe le novita' arrivate mentre gira. */
   const val COMPUTE_NEWS_WORK = "ai-compute-news"
 
+  /**
+   * XS-3 (Pacchetto XF): "Analizza adesso" dal visore. Una richiesta dell'utente **non confermata** (dati mobili, roaming e tetto superato
+   * chiedono conferma e qui nessun foglio la da': la richiesta aspetta il Wi-Fi) e **solo per i media chiesti**: il resto resta al lavoro in
+   * background con le sue regole. Ha il suo nome: non si confonde con "Indicizza ora".
+   */
+  const val COMPUTE_ASKED_WORK = "ai-compute-asked"
+  const val KEY_ONLY_ASKED = "only-asked"
+
   /** La tappa dopo di un giro non richiesto dall'utente (periodico o novita'): si accoda a quella in corso, mai buttata. */
   const val COMPUTE_NEXT_WORK = "ai-compute-next"
   const val TAG = "ai"
@@ -128,6 +136,10 @@ object AiWorkScheduling {
    * dividevano `COMPUTE_NOW_WORK` e un giro delle novita' in coda assorbiva il tocco dell'utente (o il contrario). Lavoro unico (`KEEP`): le
    * novita' arrivate mentre gira le raccoglie la tappa dopo.
    */
+  fun analyzeAsked(context: Context) {
+    WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(COMPUTE_ASKED_WORK, ExistingWorkPolicy.KEEP, computeRequest(user = true, onlyAsked = true))
+  }
+
   fun afterNews(context: Context) {
     WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(COMPUTE_NEWS_WORK, ExistingWorkPolicy.KEEP, computeRequest(user = false))
   }
@@ -137,10 +149,17 @@ object AiWorkScheduling {
    * della sua catena (la richiesta dell'utente continua come richiesta dell'utente) e la politica e' `APPEND_OR_REPLACE`, che si accoda a chi sta
    * girando. Con `KEEP` WorkManager la buttava, perche' il lavoro in corso e' "non finito": "Indicizza ora" analizzava circa 1.300 foto e si fermava.
    */
-  fun continueCompute(context: Context, user: Boolean, delayMs: Long = 0, constraints: Constraints = Constraints.NONE, attempt: Int = 0) {
-    val name = if (user) COMPUTE_NOW_WORK else COMPUTE_NEXT_WORK
+  fun continueCompute(
+    context: Context,
+    user: Boolean,
+    delayMs: Long = 0,
+    constraints: Constraints = Constraints.NONE,
+    attempt: Int = 0,
+    onlyAsked: Boolean = false,
+  ) {
+    val name = if (onlyAsked) COMPUTE_ASKED_WORK else if (user) COMPUTE_NOW_WORK else COMPUTE_NEXT_WORK
     WorkManager.getInstance(context.applicationContext)
-      .enqueueUniqueWork(name, ExistingWorkPolicy.APPEND_OR_REPLACE, computeRequest(user, delayMs, constraints, attempt))
+      .enqueueUniqueWork(name, ExistingWorkPolicy.APPEND_OR_REPLACE, computeRequest(user, delayMs, constraints, attempt, onlyAsked))
   }
 
   /**
@@ -151,18 +170,49 @@ object AiWorkScheduling {
    * FAB-5: prima il risparmio energetico e la batteria fra il 16% e il 19% chiedevano il vincolo "batteria non scarica", che Android da' subito per
    * soddisfatto: il lavoro si svegliava ogni minuto per ore. [attempt] e' il numero del tentativo dagli input del lavoro ([RuleWaits.KEY_ATTEMPT]).
    */
-  fun afterWait(context: Context, user: Boolean, wait: WaitReason, attempt: Int = 0, now: LocalDateTime = LocalDateTime.now()) {
+  fun afterWait(context: Context, user: Boolean, wait: WaitReason, attempt: Int = 0, now: LocalDateTime = LocalDateTime.now(), onlyAsked: Boolean = false) {
     val follow = RuleWaits.followUpOf(wait, now, attempt) ?: return
-    continueCompute(context, user, follow.delay.inWholeMilliseconds, follow.constraints(), follow.attempt)
+    continueCompute(context, user, follow.delay.inWholeMilliseconds, follow.constraints(), follow.attempt, onlyAsked)
   }
 
-  private fun computeRequest(user: Boolean, delayMs: Long = 0, constraints: Constraints = Constraints.NONE, attempt: Int = 0): OneTimeWorkRequest =
+  private fun computeRequest(
+    user: Boolean,
+    delayMs: Long = 0,
+    constraints: Constraints = Constraints.NONE,
+    attempt: Int = 0,
+    onlyAsked: Boolean = false,
+  ): OneTimeWorkRequest =
     OneTimeWorkRequestBuilder<AiComputeWorker>()
-      .setInputData(workDataOf(KEY_USER to user, RuleWaits.KEY_ATTEMPT to attempt))
+      .setInputData(workDataOf(KEY_USER to user, KEY_ONLY_ASKED to onlyAsked, RuleWaits.KEY_ATTEMPT to attempt))
       .setConstraints(constraints)
       .apply { if (delayMs > 0) setInitialDelay(delayMs, TimeUnit.MILLISECONDS) }
       .addTag(TAG)
       .build()
+}
+
+/**
+ * XS-3: che cosa fa **dopo** di se' una tappa di "Analizza adesso" (richiesta dell'utente non confermata, solo per i media chiesti). Funzione pura
+ * (provata in `AskedStageTest` senza WorkManager): una tappa finita per tempo si riaccoda; un'attesa delle regole riprogramma come ogni lavoro; una
+ * conferma richiesta (dati mobili, roaming, tetto) **non apre nessun foglio**: riparte da sola sul Wi-Fi; una tappa finita non lascia niente, salvo
+ * una richiesta arrivata dopo l'ultima lettura (un giro in piu', per i soli chiesti).
+ */
+sealed interface AskedFollowUp {
+  data object Done : AskedFollowUp
+
+  data object Again : AskedFollowUp
+
+  data class AfterWait(val reason: WaitReason) : AskedFollowUp
+
+  data object OnUnmetered : AskedFollowUp
+}
+
+fun askedFollowUp(outcome: StageOutcome?, askedSinceStart: Boolean): AskedFollowUp = when (outcome) {
+  is StageOutcome.Yielded -> AskedFollowUp.Again
+  is StageOutcome.Waiting -> AskedFollowUp.AfterWait(outcome.reason)
+  is StageOutcome.Stopped -> AskedFollowUp.AfterWait(outcome.reason)
+  is StageOutcome.NeedsConfirmation -> AskedFollowUp.OnUnmetered
+  is StageOutcome.Finished -> if (askedSinceStart) AskedFollowUp.Again else AskedFollowUp.Done
+  null -> AskedFollowUp.Done
 }
 
 /** Nessun punto di ripresa proprio: la ripresa vera e' `AiResults.saved` (ogni media si salva subito, D22). */
@@ -179,18 +229,24 @@ class AiStages(private val graph: AppGraph, private val ai: AiGraph, noBackup: F
   val beat = HeartbeatStore(File(noBackup, HEARTBEAT_AI))
   private val mark = AiStageMark(File(noBackup, AiStageMark.FILE))
 
-  suspend fun compute(user: Boolean): StageOutcome {
+  /**
+   * Una tappa. [only] (XS-3): "Analizza adesso" dal visore, una richiesta dell'utente **non confermata** e **solo per i media chiesti**; senza,
+   * [user] distingue "Indicizza ora" (confermata, tutto) dal lavoro in background.
+   */
+  suspend fun compute(user: Boolean, only: Boolean = false): StageOutcome {
     // DG-3: la tappa di prima e' morta? E se Android l'ha chiusa per memoria (E-A16), `AI_KILLED_MEMORY` in Diagnostica.
     reportInterruptedStage()
     mark.begin(graph.platform.deviceNow())
+    val request = Companion.requestOf(user, only)
     val outcome = try {
       // OB-3: con l'app in uso i thread del calcolo scendono di priorita' (anche per «Indicizza ora», che non riduce il ritmo).
-      graph.quietly { stage(user) }
+      graph.quietly { stage(request, only) }
     } finally {
       mark.end()
     }
     // IX-2: cio' che la pagina Ricerca e modelli dira' dopo, anche in un altro processo (le attese delle regole non passavano dal motore).
-    ai.noteStage(outcome)
+    // XS-7: con la richiesta davvero eseguita (utente o background), che decide il motivo vero di una pausa.
+    ai.noteStage(outcome, request)
     // DG-4: poco spazio e vettori non validi si perdevano con il processo della notte: ora arrivano anche dagli eventi.
     ai.computeCounters()?.let { c ->
       if (c.storageLow.get() > 0) graph.events.code(AiDiag.AI_STORAGE_LOW)
@@ -205,15 +261,10 @@ class AiStages(private val graph: AppGraph, private val ai: AiGraph, noBackup: F
     if (AiKilledByMemory.wasKilled(markedAt, exits)) graph.events.code(AiDiag.AI_KILLED_MEMORY)
   }
 
-  private suspend fun stage(user: Boolean): StageOutcome {
-    val request = if (user) {
-      WorkRequest.UserInitiated(BackgroundActivity.AI_COMPUTE, confirmed = true, writesToNas = true)
-    } else {
-      WorkRequest.Background(BackgroundActivity.AI_COMPUTE, writesToNas = true)
-    }
+  private suspend fun stage(request: WorkRequest, only: Boolean): StageOutcome {
     val outcome = StagedRun(request = request, rules = graph.stageRules(), ledger = graph.trafficLedger, checkpoints = NoAiCheckpoints)
       .run({ scope, _ ->
-        val results = ai.runStage(Duration.INFINITE, StageScopeControl(scope)) ?: return@run BatchResult(hasMore = false)
+        val results = ai.runStage(Duration.INFINITE, StageScopeControl(scope), only) ?: return@run BatchResult(hasMore = false)
         BatchResult(hasMore = results.any { it.second.stoppedBy == AiStop.BUDGET || it.second.stoppedBy == AiStop.RULES })
       })
     if (outcome is StageOutcome.Finished) beat.beat(graph.platform.deviceNow())
@@ -222,6 +273,17 @@ class AiStages(private val graph: AppGraph, private val ai: AiGraph, noBackup: F
 
   companion object {
     const val HEARTBEAT_AI = "heartbeat-ai-compute"
+
+    /**
+     * La richiesta alle regole di una tappa. XS-3: "Analizza adesso" ([only]) e' una richiesta dell'utente **non confermata**: dati mobili, roaming
+     * e tetto superato chiedono conferma, e nessun foglio la da': la richiesta resta prima in coda e aspetta il Wi-Fi (la capsula lo dice). "Indicizza
+     * ora" ([user]) resta confermata (e' un tasto con il suo nome), il lavoro in background non e' mai una richiesta dell'utente.
+     */
+    fun requestOf(user: Boolean, only: Boolean): WorkRequest = when {
+      only -> WorkRequest.UserInitiated(BackgroundActivity.AI_COMPUTE, confirmed = false, writesToNas = true)
+      user -> WorkRequest.UserInitiated(BackgroundActivity.AI_COMPUTE, confirmed = true, writesToNas = true)
+      else -> WorkRequest.Background(BackgroundActivity.AI_COMPUTE, writesToNas = true)
+    }
   }
 }
 
@@ -249,13 +311,16 @@ class AiComputeWorker @AssistedInject constructor(
   override suspend fun doWork(): Result {
     if (!gallery.backgroundWorkAllowed) return Result.success()
     gallery.awaitReady(COLD_START_WAIT)
-    val user = inputData.getBoolean(AiWorkScheduling.KEY_USER, false)
+    // XS-3: "Analizza adesso" e' una richiesta dell'utente, non confermata e solo per i media chiesti.
+    val only = inputData.getBoolean(AiWorkScheduling.KEY_ONLY_ASKED, false)
+    val user = inputData.getBoolean(AiWorkScheduling.KEY_USER, false) || only
     // FAB-5: quante attese di fila senza un vincolo esatto ha gia' fatto questa catena: il ritardo della prossima cresce.
     val attempt = inputData.getInt(RuleWaits.KEY_ATTEMPT, 0)
+    val startedAt = System.currentTimeMillis()
     val outcome = try {
       gallery.runIfActive {
         gallery.nas?.start()
-        AiStages(graph, stack.ai, applicationContext.noBackupFilesDir).compute(user)
+        AiStages(graph, stack.ai, applicationContext.noBackupFilesDir).compute(user, only)
       }
     } catch (e: kotlinx.coroutines.CancellationException) {
       StopReports.report(graph, DiagJob.AI_COMPUTE, StopReports.reasonOf(this))
@@ -267,11 +332,21 @@ class AiComputeWorker @AssistedInject constructor(
     }
     outcome?.let { graph.events.stage(DiagJob.AI_COMPUTE, it) }
     // IX-1: la tappa dopo si accoda a questo lavoro (nome della sua catena, APPEND_OR_REPLACE), e un'attesa delle regole riprogramma.
-    when (outcome) {
-      is StageOutcome.Yielded -> AiWorkScheduling.continueCompute(applicationContext, user)
-      is StageOutcome.Waiting -> AiWorkScheduling.afterWait(applicationContext, user, outcome.reason, attempt)
-      is StageOutcome.Stopped -> AiWorkScheduling.afterWait(applicationContext, user, outcome.reason, attempt)
-      else -> Unit
+    if (only) {
+      when (val next = askedFollowUp(outcome, stack.ai.urgent.askedSince(startedAt))) {
+        AskedFollowUp.Again -> AiWorkScheduling.continueCompute(applicationContext, user, onlyAsked = true)
+        is AskedFollowUp.AfterWait -> AiWorkScheduling.afterWait(applicationContext, user, next.reason, attempt, onlyAsked = true)
+        AskedFollowUp.OnUnmetered ->
+          AiWorkScheduling.continueCompute(applicationContext, user, constraints = LanConstraints.unmetered(), onlyAsked = true)
+        AskedFollowUp.Done -> Unit
+      }
+    } else {
+      when (outcome) {
+        is StageOutcome.Yielded -> AiWorkScheduling.continueCompute(applicationContext, user)
+        is StageOutcome.Waiting -> AiWorkScheduling.afterWait(applicationContext, user, outcome.reason, attempt)
+        is StageOutcome.Stopped -> AiWorkScheduling.afterWait(applicationContext, user, outcome.reason, attempt)
+        else -> Unit
+      }
     }
     return Result.success()
   }

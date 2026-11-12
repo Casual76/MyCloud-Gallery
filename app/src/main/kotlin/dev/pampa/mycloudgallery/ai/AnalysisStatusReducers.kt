@@ -5,6 +5,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.AiWaitReason
 import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisWait
+import dev.pampa.mycloudgallery.core.rules.ConfirmationKind
 import dev.pampa.mycloudgallery.core.rules.NetworkClass
 import dev.pampa.mycloudgallery.core.rules.RuleDecision
 import dev.pampa.mycloudgallery.core.rules.WaitReason
@@ -75,7 +76,11 @@ object AnalysisStatusReducers {
 
   /** Fermo con (forse) lavoro da fare: lo dice il verdetto delle regole di adesso; senza verdetto, "in coda" senza inventare motivi. */
   private fun fromRules(facts: Facts, ready: Int?, total: Int?): LibraryAnalysisStatus = when (val decision = facts.decision) {
-    null, is RuleDecision.Run, is RuleDecision.NeedsConfirmation -> LibraryAnalysisStatus.Queued(facts.remaining, ready, total)
+    null, is RuleDecision.Run -> LibraryAnalysisStatus.Queued(facts.remaining, ready, total)
+    // XS-3/XS-7: una richiesta dell'utente non confermata che chiede conferma (dati mobili, roaming, tetto) non parte da sola: il motivo vero
+    // e' "serve il Wi-Fi" (o il tetto raggiunto), non un generico "in coda".
+    is RuleDecision.NeedsConfirmation ->
+      pausedUnlessDone(if (ConfirmationKind.OVER_CAP in decision.kinds) LibraryAnalysisWait.DATA_CAP else LibraryAnalysisWait.WIFI, facts, ready, total)
     is RuleDecision.Wait -> waitOf(decision.reason, facts, ready, total)
     is RuleDecision.Stop -> waitOf(decision.reason, facts, ready, total)
   }

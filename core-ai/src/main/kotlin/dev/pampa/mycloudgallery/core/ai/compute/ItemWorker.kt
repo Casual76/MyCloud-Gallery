@@ -102,8 +102,7 @@ internal class ItemWorker(
    * [others]) e, con la lettura attiva qui, anche il testo (AI-D1: le sue anteprime nel buffer non servono piu').
    */
   suspend fun finishedHere(key: ContentKey, share: String?, others: Set<AiClass> = emptySet()): Boolean {
-    val done = saved(key, share) + others
-    return AiClass.VEC in done && (AiClass.OCR in done || !roles.textReadingHere.value)
+    return AiCompletion.isDone(saved(key, share) + others, roles.textReadingHere.value)
   }
 
   private suspend fun saved(key: ContentKey, share: String?): Set<AiClass> {

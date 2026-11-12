@@ -56,4 +56,5 @@ private fun holdRes(hold: MediaAnalysisHold): Int = when (hold) {
   MediaAnalysisHold.NAS -> R.string.analysis_hold_nas
   MediaAnalysisHold.PREPARATION -> R.string.analysis_hold_preparation
   MediaAnalysisHold.RULES -> R.string.analysis_hold_rules
+  MediaAnalysisHold.WIFI -> R.string.analysis_hold_wifi
 }

@@ -136,7 +136,11 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.similarMenuEntries
 import dev.antigravity.fluidengine.ui.haptics.FluidHapticEvent
 import dev.antigravity.fluidengine.ui.haptics.LocalFluidHaptics
 import dev.pampa.mycloudgallery.feature.viewer.info.analysisNote
+import dev.pampa.mycloudgallery.feature.viewer.menu.AnalysisFeedback
+import dev.pampa.mycloudgallery.feature.viewer.menu.AnalysisObserved
 import dev.pampa.mycloudgallery.feature.viewer.menu.MediaAnalysis
+import dev.pampa.mycloudgallery.feature.viewer.menu.observeBound
+import dev.pampa.mycloudgallery.feature.viewer.menu.observedFor
 import dev.pampa.mycloudgallery.feature.viewer.menu.MediaAnalysisKind
 import dev.pampa.mycloudgallery.feature.viewer.menu.analysisMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.menu.everywhereLocations
@@ -914,17 +918,19 @@ private fun ViewerOverlays(
   LaunchedEffect(currentId) { cutout.bind(currentId) }
   val canCutout = currentKind != MediaKind.VIDEO && cutout.available
   // Pacchetto X: lo stato dell'analisi del media aperto (voce ⋮, capsula nelle informazioni). Mai dai Nascosti, come album e mappa.
-  val analysisMedia by produceState(MediaAnalysis.UNKNOWN, services.analysis, currentId, request.secure) {
+  // XS-6: lo stato osservato e' **legato al media** per cui e' nato (mai il valore della foto di prima in attesa della prima emissione) e il
+  // riscontro di fine analisi vale solo per la richiesta fatta in questa visita (`AnalysisFeedback`).
+  val analysisObserved by produceState<AnalysisObserved?>(null, services.analysis, currentId, request.secure) {
+    value = AnalysisObserved(currentId, MediaAnalysis.UNKNOWN)
     if (request.secure) return@produceState
-    services.analysis?.observe(currentId)?.collect { value = it }
+    services.analysis?.observeBound(currentId)?.collect { value = it }
   }
-  var askedAnalysis by remember { mutableStateOf<MediaId?>(null) }
+  val analysisMedia = observedFor(currentId, analysisObserved)
+  val analysisFeedback = remember { AnalysisFeedback() }
   val analysisHaptics = LocalFluidHaptics.current
+  LaunchedEffect(currentId) { analysisFeedback.moved(currentId) }
   LaunchedEffect(analysisMedia.kind, currentId) {
-    if (askedAnalysis == currentId && analysisMedia.kind == MediaAnalysisKind.READY) {
-      analysisHaptics.play(FluidHapticEvent.Tap)
-      askedAnalysis = null
-    }
+    if (analysisFeedback.completed(currentId, analysisMedia.kind)) analysisHaptics.play(FluidHapticEvent.Tap)
   }
   val handlers = ViewerActionHandlers(
     onToggleFavorite = controller::toggleFavorite,
@@ -969,7 +975,7 @@ private fun ViewerOverlays(
       onExplain = { state.message = ViewerMessage.SimilarUnavailable },
     ),
     analysisActions = if (request.secure) emptyList() else analysisMenuEntries(resources, analysisMedia) {
-      askedAnalysis = currentId
+      analysisFeedback.asked(currentId)
       services.analysis?.analyzeNow(currentId)
     },
     dock = LocalViewerDock.current.entry(secure = request.secure),
@@ -1229,7 +1235,7 @@ private fun ViewerOverlays(
       if (request.secure) null else analysisNote(format, analysisMedia, video = kind == MediaKind.VIDEO)
     }
     val onAnalysisNow: (() -> Unit)? = if (!request.secure && analysisMedia.kind == MediaAnalysisKind.QUEUED) {
-      { askedAnalysis = currentId; services.analysis?.analyzeNow(currentId) }
+      { analysisFeedback.asked(currentId); services.analysis?.analyzeNow(currentId) }
     } else {
       null
     }

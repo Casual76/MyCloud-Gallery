@@ -51,9 +51,21 @@ data class CatalogChange(
  */
 /**
  * Pacchetto F (FS-1): una posizione del telefono che il MediaStore non mostrava, annotata a [firstAtMillis] (orologio di riferimento) con la
- * versione del MediaStore [msVersion]: diventa assente solo con una conferma (prova positiva, o un tempo lungo) e mai con un'altra versione.
+ * versione del MediaStore [msVersion]: diventa assente solo con una prova positiva e attuale (FS3), mai per la sola attesa e mai con un'altra
+ * versione.
  */
 data class PhoneSuspect(val firstAtMillis: Long, val msVersion: String)
+
+/**
+ * Pacchetto F (FS3-6): una posizione del telefono come l'ha letta la fotografia di un confronto: si segna assente solo se nel catalogo e' ancora
+ * esattamente cosi' ([MediaCatalog.markPhoneVanishedIfUnchanged]).
+ */
+data class ObservedPhonePosition(
+  val key: LocationKey,
+  val mediaStoreId: Long?,
+  val mediaStoreVersion: String?,
+  val lastSeenAtMillis: Long,
+)
 
 data class MediaStoreCursor(
   val volume: String,

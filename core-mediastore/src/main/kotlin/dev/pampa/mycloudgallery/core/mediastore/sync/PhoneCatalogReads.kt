@@ -1,6 +1,8 @@
 package dev.pampa.mycloudgallery.core.mediastore.sync
 
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
+import dev.pampa.mycloudgallery.core.database.ObservedPhonePosition
+import dev.pampa.mycloudgallery.core.database.dao.PhonePositionRow
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreRow
 import dev.pampa.mycloudgallery.core.model.FileStamp
 import dev.pampa.mycloudgallery.core.model.LocationKey
@@ -21,7 +23,8 @@ class PhonePlace(val relativePath: String, val displayName: String) {
 
 /**
  * Pacchetto F (FS-1): una posizione del telefono per il confronto degli `_ID`: [present] o assente, l'`_ID` in cache con la versione del
- * MediaStore con cui e' stato letto ([msVersion]: un `_ID` di un'altra versione non dice niente, E-P22) e il posto.
+ * MediaStore con cui e' stato letto ([msVersion]: un `_ID` di un'altra versione non dice niente, E-P22), il posto e [lastSeenAt] come l'ha
+ * letto la fotografia (FS3-6: si segna assente solo se e' ancora tutto cosi').
  */
 class PhonePosition(
   val key: LocationKey,
@@ -29,9 +32,13 @@ class PhonePosition(
   val mediaStoreId: Long?,
   val msVersion: String?,
   val place: PhonePlace,
+  val lastSeenAt: Long,
 ) {
   /** L'`_ID` in cache, se vale per la versione [current] del MediaStore. */
   fun idFor(current: String): Long? = mediaStoreId?.takeIf { msVersion == current }
+
+  /** Come l'ha letta la fotografia: il confronto atomico prima di segnarla assente. */
+  fun observed(): ObservedPhonePosition = ObservedPhonePosition(key, mediaStoreId, msVersion, lastSeenAt)
 
   override fun toString(): String = "PhonePosition(present=$present)"
 }
@@ -51,6 +58,12 @@ interface PhoneCatalogReads {
    * conferma delle altre assenze.
    */
   suspend fun positionsAtMediaStoreRow(volume: String, id: Long, msVersion: String): List<PhonePosition>
+
+  /** Pacchetto F (FS3-1): fino a [limit] posizioni presenti nella cartella [folderKey] (`Location.Phone.folderKey`), in ordine di chiave. */
+  suspend fun presentInFolder(folderKey: String, limit: Int): List<PhonePosition>
+
+  /** Pacchetto F (FS3-1): fino a [limit] posizioni presenti del [volume], in ordine di chiave. */
+  suspend fun presentOnVolume(volume: String, limit: Int): List<PhonePosition>
 
   /**
    * Pacchetto F (FS-1): le posizioni del volume presenti e assenti (non le non raggiungibili), con l'`_ID` e la versione in cache e il posto,
@@ -87,19 +100,27 @@ class RoomPhoneCatalogReads(private val database: GalleryDatabase) : PhoneCatalo
           mediaStoreId = it.mediaStoreId,
           msVersion = it.mediaStoreVersion,
           place = PhonePlace(it.relativePath.orEmpty(), it.displayName.orEmpty()),
+          lastSeenAt = it.lastSeenAt,
         )
       }
 
+  override suspend fun presentInFolder(folderKey: String, limit: Int): List<PhonePosition> =
+    locations.phonePresentInFolder(folderKey, limit).map(::position)
+
+  override suspend fun presentOnVolume(volume: String, limit: Int): List<PhonePosition> =
+    locations.phonePresentOnVolume(volume, limit).map(::position)
+
   override suspend fun phonePositions(volume: String): List<PhonePosition> =
-    locations.phonePositionsOnVolume(volume).map { row ->
-      PhonePosition(
-        key = LocationKey(row.locationKey),
-        present = row.state == LocationState.PRESENT.code,
-        mediaStoreId = row.mediaStoreId,
-        msVersion = row.mediaStoreVersion,
-        place = PhonePlace(row.relativePath.orEmpty(), row.displayName.orEmpty()),
-      )
-    }
+    locations.phonePositionsOnVolume(volume).map(::position)
+
+  private fun position(row: PhonePositionRow) = PhonePosition(
+    key = LocationKey(row.locationKey),
+    present = row.state == LocationState.PRESENT.code,
+    mediaStoreId = row.mediaStoreId,
+    msVersion = row.mediaStoreVersion,
+    place = PhonePlace(row.relativePath.orEmpty(), row.displayName.orEmpty()),
+    lastSeenAt = row.lastSeenAt,
+  )
 
   override suspend fun storedStamp(key: LocationKey): FileStamp? {
     val entity = locations.byKey(key.value) ?: return null
@@ -150,13 +171,16 @@ interface MediaStorePointCheck {
 }
 
 /**
- * Pacchetto F (FS2-2): la **prova sul disco**. Il MediaStore puo' omettere righe (un provider in ricostruzione, un indice a meta'), ma un file
- * che il disco vede ancora non e' sparito; uno che il disco non vede piu', con il disco attendibile (i file di alcune foto vive ci sono), e' la
- * prova positiva della cancellazione (anche un file nel cestino ha un altro nome o un'altra cartella). Chi la usa ricontrolla comunque accesso
- * e volume dopo l'ultima lettura.
+ * Pacchetto F (FS2-2, FS3-1): la **prova sul disco**. Il MediaStore puo' omettere righe (un provider in ricostruzione, un indice a meta'), ma
+ * un file che il disco vede ancora non e' sparito (veto, sempre); uno che il disco dice **con certezza** di non avere e' la prova positiva della
+ * cancellazione (anche un file nel cestino ha un altro nome o un'altra cartella). "Non so" non e' mai una prova.
+ *
+ * Limite che non si puo' chiudere: un file in scrittura (`IS_PENDING`) di un'altra app, che ne' il MediaStore ne' FUSE mostrano a questa app,
+ * risponde come un file cancellato. Torna da solo quando l'altra app lo pubblica (riga nuova o di nuovo visibile: la lettura del telefono la
+ * rimette presente).
  */
 interface PhoneFileProbe {
 
-  /** true: il file c'e'; false: il disco leggibile non lo vede; null: non si sa (Android 10, volume non leggibile, errore). */
+  /** true: il file c'e'; false: il disco dice con certezza che non c'e'; null: non si sa (Android 10, volume o cartella non leggibili, errore). */
   suspend fun exists(volume: String, place: PhonePlace): Boolean?
 }

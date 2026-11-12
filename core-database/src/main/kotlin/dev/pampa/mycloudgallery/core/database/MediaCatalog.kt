@@ -36,6 +36,7 @@ import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.LocationId
 import dev.pampa.mycloudgallery.core.model.LocationKey
 import dev.pampa.mycloudgallery.core.model.LocationState
+import dev.pampa.mycloudgallery.core.model.LocationType
 import dev.pampa.mycloudgallery.core.model.Media
 import dev.pampa.mycloudgallery.core.model.MediaGroupId
 import dev.pampa.mycloudgallery.core.model.MediaGroupKind
@@ -327,19 +328,34 @@ class MediaCatalog(
   }
 
   /**
-   * Pacchetto F (FS2-4): come [markVanished] per una posizione del telefono, ma solo se e' ancora **presente** e **nessuno l'ha rivista** dopo
-   * [notSeenSince] (l'istante in cui la lettura del telefono ha preso la sua fotografia). Una posizione registrata o confermata dopo (dalla
-   * lettura stessa, con un altro `_ID`, o da un salvataggio dell'app) resta presente. Un "visto" piu' avanti di adesso non e' una vista nuova:
-   * e' di prima che l'orologio tornasse indietro. Nella stessa transazione del controllo.
+   * Pacchetto F (FS3-6): segna assenti, in **una** transazione, le posizioni del telefono che sono ancora esattamente come le ha lette la
+   * fotografia del confronto: presenti, stesso `_ID` in cache, stessa versione del MediaStore, stesso `last_seen_at`. Una posizione toccata
+   * nel frattempo (riletta, salvata dall'app, ricollegata a un'altra riga) resta com'e', qualunque cosa dica l'orologio: l'ordine non si deduce
+   * dai millisecondi. Quante ne ha segnate.
    */
-  suspend fun markVanishedIfNotSeenSince(key: LocationKey, notSeenSince: Long): Boolean = write { tx ->
-    val entity = locationDao.byKey(key.value) ?: return@write false
+  suspend fun markPhoneVanishedIfUnchanged(observed: List<ObservedPhonePosition>): Int = write { tx ->
     val now = clock()
-    if (entity.state != LocationState.PRESENT.code || entity.lastSeenAt in (notSeenSince + 1)..now) return@write false
-    val location = entity.toDomain()
-    locationDao.update(LocationRules.vanished(location, now).toEntity())
-    tx.touch(mediaOf(location.id))
-    true
+    var marked = 0
+    for (o in observed) {
+      val entity = locationDao.byKey(o.key.value) ?: continue
+      if (entity.locationType != LocationType.PHONE.code || entity.state != LocationState.PRESENT.code) continue
+      if (entity.mediaStoreId != o.mediaStoreId || entity.mediaStoreVersion != o.mediaStoreVersion || entity.lastSeenAt != o.lastSeenAtMillis) continue
+      locationDao.update(LocationRules.vanished(entity.toDomain(), now).toEntity())
+      tx.touch(mediaOf(LocationId(entity.locationId)))
+      marked++
+    }
+    marked
+  }
+
+  /**
+   * Pacchetto F (FS3-4): da quale `_ID` (escluso) riprende lo scorrimento degli `_ID` vivi sconosciuti al catalogo sul [volume], o null: dal
+   * piu' alto. Su disco, in `catalog_meta`, cosi' un processo nuovo non riparte sempre dagli stessi.
+   */
+  suspend fun phoneRecoverCursor(volume: String): Long? = metaDao.get(RECOVER + volume)
+
+  /** Pacchetto F (FS3-4): salva (o con null toglie) il punto di ripresa di [phoneRecoverCursor]. */
+  suspend fun savePhoneRecoverCursor(volume: String, afterId: Long?): Unit = write {
+    if (afterId == null) metaDao.delete(RECOVER + volume) else metaDao.put(RECOVER + volume, afterId)
   }
 
   /**
@@ -2911,6 +2927,9 @@ class MediaCatalog(
     /** Pacchetto F: il prefisso delle annotazioni della lettura del telefono in `catalog_meta` (`;` e' il carattere dopo `:`). */
     private const val SUSPECT: String = "phone_suspect:"
     private const val SUSPECT_END: String = "phone_suspect;"
+
+    /** Pacchetto F (FS3-4): il punto di ripresa del recupero per volume. */
+    private const val RECOVER: String = "phone_recover:"
 
     private fun suspectPrefix(volume: String): String = "$SUSPECT$volume:"
 

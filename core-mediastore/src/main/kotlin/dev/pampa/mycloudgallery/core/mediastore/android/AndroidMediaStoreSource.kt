@@ -13,6 +13,9 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.ext.SdkExtensions
 import android.os.storage.StorageManager
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
 import android.provider.MediaStore
 import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.core.content.ContextCompat
@@ -28,9 +31,13 @@ import dev.pampa.mycloudgallery.core.mediastore.sync.PhoneFileProbe
 import dev.pampa.mycloudgallery.core.mediastore.sync.PhonePlace
 import dev.pampa.mycloudgallery.core.mediastore.sync.PointRow
 import dev.pampa.mycloudgallery.core.metadata.contract.MediaBytes
+import dev.pampa.mycloudgallery.core.model.Location
+import dev.pampa.mycloudgallery.core.model.LocationKey
 import dev.pampa.mycloudgallery.core.model.isValidMediaStoreVolume
 import java.io.File
 import java.io.IOException
+import java.text.Normalizer
+import java.util.Locale
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.channels.Channel
@@ -57,11 +64,14 @@ import kotlinx.coroutines.launch
  * - [open]: le foto solo con `ACCESS_MEDIA_LOCATION` e `setRequireOriginal` (D9); senza, [OriginalBytesUnavailableException]
  *   invece di byte oscurati. Con il permesso anche i video si leggono originali.
  * - [changes]: `ContentObserver` su immagini e video di tutti i volumi, con i discendenti, accorpato a [changeWindow].
- * - [exists] (pacchetto F, FS2-2): la prova sul disco, da Android 11 (FUSE: con il permesso dei media l'app vede i file delle foto e dei
- *   video per percorso). Su Android 10 o con il volume non leggibile non sa niente (null).
+ * - [exists] (pacchetto F, FS2-2, FS3-1): la prova sul disco, da Android 11 (FUSE: con il permesso dei media l'app vede i file delle foto e
+ *   dei video per percorso), con `stat` e il suo errno: solo ENOENT/ENOTDIR dicono "non c'e'". Su Android 10, con il volume non leggibile o
+ *   con qualunque altro errore non sa niente (null).
  *
  * @param volumeNames i volumi montati (di default `MediaStore.getExternalVolumeNames`); i test lo sostituiscono.
  * @param volumeRoot la cartella radice di un volume montato (di default da `StorageManager`, Android 11+); i test la sostituiscono.
+ * @param statPath `stat` su un percorso (di default `Os.stat`): riesce o lancia `ErrnoException`; i test la sostituiscono.
+ * @param missingErrnos gli errno che vogliono dire "non esiste" (ENOENT, ENOTDIR).
  * @param deletedFilesSupported se `deleted_files` esiste (estensione S ≥ 23, docs/android.md tema 4).
  */
 class AndroidMediaStoreSource(
@@ -74,6 +84,8 @@ class AndroidMediaStoreSource(
   },
   private val changeWindow: Duration = 1500.milliseconds,
   private val volumeRoot: (String) -> File? = { volumeRootOf(context.applicationContext, it) },
+  private val statPath: (String) -> Unit = { Os.stat(it) },
+  private val missingErrnos: Set<Int> = setOf(OsConstants.ENOENT, OsConstants.ENOTDIR),
 ) : MediaStoreSource, MediaStoreRowLookup, MediaStorePointCheck, PhoneFileProbe {
 
   private val appContext = context.applicationContext
@@ -145,6 +157,11 @@ class AndroidMediaStoreSource(
   /**
    * Pacchetto F (FS-1): il controllo puntuale prima di un'assenza. Le righe con quegli `_ID` o in quei posti (percorso relativo e nome), **anche
    * in scrittura** (`IS_PENDING`: su Android 10 con `setIncludePending`), mai le cestinate. A blocchi: SQLite su API 29 accetta 999 variabili.
+   *
+   * FS3-1 (chiavi canoniche): il posto si cerca per **nome**, con le sue varianti NFC/NFD e di maiuscole (tutto, minuscole, maiuscole,
+   * estensione), e si tiene solo la riga la cui chiave canonica (cartella e nome, minuscole NFC) e' quella cercata: uno spelling diverso dello
+   * stesso posto si trova anche se il MediaStore confronta le stringhe esatte. Niente `COLLATE` o funzioni nella selezione (il MediaProvider
+   * le rifiuta in modalita' stretta). Un nome con maiuscole miste diverse resta fuori dalla query: lo copre il veto del disco.
    */
   override suspend fun stillThere(volume: String, ids: Collection<Long>, places: Collection<PhonePlace>): List<PointRow> {
     requireVolume(volume)
@@ -154,15 +171,20 @@ class AndroidMediaStoreSource(
       out += queryPointRows(volume, selection, chunk.map { it.toString() })
     }
     for (chunk in places.distinct().chunked(MAX_PLACES_PER_QUERY)) {
-      val selection = "$BASE_SELECTION AND (" + chunk.joinToString(" OR ") { "($COL_RELATIVE_PATH = ? AND $COL_DISPLAY_NAME = ?)" } + ")"
-      out += queryPointRows(volume, selection, chunk.flatMap { listOf(it.relativePath, it.displayName) })
+      val wanted = chunk.mapNotNullTo(HashSet()) { canonicalKey(volume, it.relativePath, it.displayName) }
+      val names = chunk.flatMap { nameVariants(it.displayName) }.distinct()
+      for (nameChunk in names.chunked(MAX_IDS_PER_QUERY)) {
+        val selection = "$BASE_SELECTION AND $COL_DISPLAY_NAME IN (${nameChunk.joinToString(",") { "?" }})"
+        out += queryPointRows(volume, selection, nameChunk).filter { canonicalKey(volume, it.row.relativePath, it.row.displayName) in wanted }
+      }
     }
-    return out
+    return out.distinctBy { it.row.id }
   }
 
   /**
-   * Pacchetto F (FS2-2): se il file del posto c'e' sul disco. Null se non si sa: Android 10 (nessun accesso per percorso), volume non montato
-   * o non leggibile, posto non valido, errore. Chi la usa controlla prima che il disco veda alcune foto vive (un disco cieco non prova niente).
+   * Pacchetto F (FS2-2, FS3-1): se il file del posto c'e' sul disco, con `stat` e il suo errno ([diskAnswer]). Null se non si sa: Android 10
+   * (nessun accesso per percorso), volume non montato o radice non leggibile, posto non valido, un errno diverso da ENOENT/ENOTDIR (EACCES,
+   * EPERM, EIO...), qualunque altro errore.
    */
   override suspend fun exists(volume: String, place: PhonePlace): Boolean? {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || !isValidMediaStoreVolume(volume)) return null
@@ -170,13 +192,12 @@ class AndroidMediaStoreSource(
     if (place.displayName.isEmpty() || '/' in place.displayName || place.displayName == ".." || segments.any { it == ".." || it == "." }) {
       return null
     }
-    return try {
-      val root = volumeRoot(volume)?.takeIf { it.isDirectory } ?: return null
-      File(segments.fold(root) { dir, name -> File(dir, name) }, place.displayName).exists()
+    val root = try {
+      volumeRoot(volume)
     } catch (e: Exception) {
-      // Qualunque errore (permesso, volume in smontaggio, servizio di sistema) vale "non si sa", mai "non c'e'".
       null
-    }
+    } ?: return null
+    return diskAnswer(root, segments, place.displayName) { path -> statOutcome(missingErrnos) { statPath(path) } }
   }
 
   override suspend fun deletedSince(volume: String, generation: Long): List<DeletedRow>? {
@@ -509,6 +530,60 @@ class AndroidMediaStoreSource(
     internal fun itemUri(volume: String, id: Long, type: RowType): Uri {
       val collection = if (type == RowType.VIDEO) MediaStore.Video.Media.getContentUri(volume) else MediaStore.Images.Media.getContentUri(volume)
       return ContentUris.withAppendedId(collection, id)
+    }
+
+    /**
+     * Pacchetto F (FS3-1): l'esito di uno `stat`. Riuscito → c'e'; `ErrnoException` con un errno di [missing] (ENOENT, ENOTDIR) → non c'e';
+     * ogni altro errno (EACCES, EPERM, EIO...) e ogni altra eccezione → non si sa. Funzione pura: e' la traduzione che le prove controllano.
+     */
+    internal fun statOutcome(missing: Set<Int>, stat: () -> Unit): Boolean? = try {
+      stat()
+      true
+    } catch (e: ErrnoException) {
+      if (e.errno in missing) false else null
+    } catch (e: Exception) {
+      null
+    }
+
+    /**
+     * Pacchetto F (FS3-1, FS3-5): la risposta del disco per il file [name] nelle cartelle [segments] sotto [root], dato [stat] (vedi
+     * [statOutcome]). La radice del volume deve rispondere (un volume non leggibile non dice niente). Il file risponde: c'e' → c'e'; non so →
+     * non so; non c'e' → vale solo se la cartella visibile piu' vicina lo conferma, risalendo (la cartella madre c'e', o manca anche lei e
+     * c'e' la sua, fino alla radice); un "non so" a qualunque livello → non so. Non dipende dai file vivi: vale anche per l'ultima foto.
+     */
+    internal fun diskAnswer(root: File, segments: List<String>, name: String, stat: (String) -> Boolean?): Boolean? {
+      if (stat(root.path) != true) return null
+      val dirs = segments.runningFold(root) { dir, segment -> File(dir, segment) }
+      when (stat(File(dirs.last(), name).path)) {
+        true -> return true
+        null -> return null
+        false -> Unit
+      }
+      for (dir in dirs.drop(1).asReversed()) {
+        when (stat(dir.path)) {
+          true -> return false
+          null -> return null
+          false -> Unit
+        }
+      }
+      return false
+    }
+
+    /** Pacchetto F (FS3-1): le varianti di un nome per la query per posto: NFC, NFD, minuscole, maiuscole, estensione in minuscolo e maiuscolo. */
+    internal fun nameVariants(name: String): List<String> {
+      val forms = listOf(name, Normalizer.normalize(name, Normalizer.Form.NFC), Normalizer.normalize(name, Normalizer.Form.NFD))
+      return forms.flatMap { f ->
+        val dot = f.lastIndexOf('.')
+        val ext = if (dot > 0) listOf(f.substring(0, dot) + f.substring(dot).lowercase(Locale.ROOT), f.substring(0, dot) + f.substring(dot).uppercase(Locale.ROOT)) else emptyList()
+        listOf(f, f.lowercase(Locale.ROOT), f.uppercase(Locale.ROOT)) + ext
+      }.distinct()
+    }
+
+    /** La chiave canonica di un posto (quella del catalogo: minuscole, NFC), o null se il posto non e' valido. */
+    internal fun canonicalKey(volume: String, relativePath: String, displayName: String): LocationKey? = try {
+      Location.Phone(volume, relativePath, displayName).key
+    } catch (e: IllegalArgumentException) {
+      null
     }
 
     /** Pacchetto F: la radice di un volume montato (Android 11+), o null. */

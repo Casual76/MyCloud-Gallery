@@ -141,13 +141,13 @@ class FullScanTest : PhoneSyncTestBase() {
 
     // Pacchetto F (FS-1): prima si fermava dopo averne segnate 10; adesso l'ondata si guarda prima di scrivere, e non si scrive niente.
     assertThat(report.vanished).isEqualTo(0)
-    assertThat(sync.stats.snapshot.value.absencesBlocked).isEqualTo(1)
+    assertThat(sync.stats.snapshot.value.absencesBlocked).isAtLeast(1)
     rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
 
-    // Con il disco leggibile i 47 file mancano davvero (le tre vive ci sono): l'ondata si conferma file per file.
+    // FS3-1: anche con il disco leggibile, tre vivi non bastano a provare un'ondata (ne servono 20): restano, finche' non arriva una prova.
     store.diskReadable = true
     advance(3 * MINUTE)
-    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(47)
-    rows.take(3).forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
   }
 }

@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.pm.ProviderInfo
 import android.provider.MediaStore
+import android.system.ErrnoException
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
@@ -241,29 +242,95 @@ class AndroidMediaStoreSourceTest {
     assertThat(source.stillThere("external_primary", emptyList(), listOf(PhonePlace("Pictures/", "Screenshot_4.png")))).isEmpty()
   }
 
-  /** Pacchetto F (FS2-2): la prova sul disco distingue "c'e'", "non c'e'" e "non si sa" (volume senza radice, posto non valido). */
+  /**
+   * Pacchetto F (FS3-1): la traduzione dell'esito di `stat`, la funzione pura che decide. Solo ENOENT (2) e ENOTDIR (20) dicono "non c'e'";
+   * EACCES (13), EPERM (1), EIO (5) e ogni altra eccezione dicono "non so". Gli errno sono passati esplicitamente: in Robolectric non si puo'
+   * provocare un EACCES vero di FUSE, e le costanti di `OsConstants` sono quelle del telefono.
+   */
   @Test
-  fun laProvaSulDiscoDistingueCEDaNonCEDaNonSiSa() = runBlocking<Unit> {
+  fun lEsitoDiStatSiTraduceSoloConENOENTInNonCE() {
+    val missing = setOf(ENOENT, ENOTDIR)
+    assertThat(AndroidMediaStoreSource.statOutcome(missing) { }).isTrue()
+    assertThat(AndroidMediaStoreSource.statOutcome(missing) { throw ErrnoException("stat", ENOENT) }).isFalse()
+    assertThat(AndroidMediaStoreSource.statOutcome(missing) { throw ErrnoException("stat", ENOTDIR) }).isFalse()
+    for (errno in listOf(EACCES, EPERM, EIO)) {
+      assertThat(AndroidMediaStoreSource.statOutcome(missing) { throw ErrnoException("stat", errno) }).isNull()
+    }
+    assertThat(AndroidMediaStoreSource.statOutcome(missing) { throw SecurityException("no") }).isNull()
+    assertThat(AndroidMediaStoreSource.statOutcome(missing) { throw IllegalStateException("no") }).isNull()
+  }
+
+  /**
+   * Pacchetto F (FS3-1, FS3-5): la prova sul disco con `stat` e il suo errno, non `File.exists`. Un "non c'e'" vale solo se la cartella visibile
+   * piu' vicina lo conferma (anche risalendo) e la radice del volume risponde; un errno diverso (accesso negato) a qualunque livello e' "non so".
+   */
+  @Test
+  fun laProvaSulDiscoDistingueCEDaNonCEDaNonSo() = runBlocking<Unit> {
     val root = java.nio.file.Files.createTempDirectory("volume").toFile()
+    val denied = HashSet<String>()
+    var broken = false
     try {
       java.io.File(root, "DCIM/Camera").mkdirs()
       java.io.File(root, "DCIM/Camera/IMG_1.jpg").writeBytes(byteArrayOf(1))
+      java.io.File(root, "DCIM/Camera/IMG_3.jpg").writeBytes(byteArrayOf(3))
       val probe = AndroidMediaStoreSource(
         context = context,
         volumeNames = { setOf("external_primary") },
         volumeRoot = { if (it == "external_primary") root else null },
+        statPath = { path ->
+          if (broken) throw IllegalStateException("servizio di sistema")
+          if (path in denied) throw ErrnoException("stat", EACCES)
+          if (!java.io.File(path).exists()) throw ErrnoException("stat", ENOENT)
+        },
+        missingErrnos = setOf(ENOENT, ENOTDIR),
       )
+      val camera = java.io.File(root, "DCIM/Camera").path
       assertThat(probe.exists("external_primary", PhonePlace("DCIM/Camera/", "IMG_1.jpg"))).isTrue()
+      // ENOENT con la cartella che si vede: non c'e'.
       assertThat(probe.exists("external_primary", PhonePlace("DCIM/Camera/", "IMG_2.jpg"))).isFalse()
+      // Accesso negato sul file: non so (File.exists direbbe "false").
+      denied += java.io.File(camera, "IMG_3.jpg").path
+      assertThat(probe.exists("external_primary", PhonePlace("DCIM/Camera/", "IMG_3.jpg"))).isNull()
+      // ENOENT sul file ma la cartella risponde con accesso negato: non so.
+      denied += camera
+      assertThat(probe.exists("external_primary", PhonePlace("DCIM/Camera/", "IMG_2.jpg"))).isNull()
+      denied.clear()
+      // Una cartella intera che non c'e' piu', con la sua madre visibile: non c'e'.
+      assertThat(probe.exists("external_primary", PhonePlace("DCIM/Vecchia/", "IMG_9.jpg"))).isFalse()
+      // Posti non validi, volume senza radice, errori qualunque: non so.
       assertThat(probe.exists("1a2b-3c4d", PhonePlace("DCIM/Camera/", "IMG_1.jpg"))).isNull()
       assertThat(probe.exists("external_primary", PhonePlace("DCIM/../../", "IMG_1.jpg"))).isNull()
       assertThat(probe.exists("external_primary", PhonePlace("DCIM/", "Camera/IMG_1.jpg"))).isNull()
-      // Il volume tolto: la radice non c'e' piu', non si sa (mai "non c'e'").
+      broken = true
+      assertThat(probe.exists("external_primary", PhonePlace("DCIM/Camera/", "IMG_2.jpg"))).isNull()
+      broken = false
+      // Il volume tolto: la radice non risponde, non so (mai "non c'e'").
       root.deleteRecursively()
       assertThat(probe.exists("external_primary", PhonePlace("DCIM/Camera/", "IMG_1.jpg"))).isNull()
     } finally {
       root.deleteRecursively()
     }
+  }
+
+  /**
+   * Pacchetto F (FS3-1, chiavi canoniche): la ricerca per posto del MediaStore vero trova lo stesso posto scritto in NFD o con il nome in
+   * maiuscole/minuscole o con l'estensione diversa, e non lo stesso nome in un'altra cartella. La query gira su un SQLite vero (confronto esatto).
+   */
+  @Test
+  fun ilControlloPuntualeTrovaLoStessoPostoConUnAltroSpelling() = runBlocking<Unit> {
+    val nfc = "DCIM/Caf\u00e9/"
+    val nfd = "DCIM/Cafe\u0301/"
+    provider.insertRow(1, name = "IMG_1.JPG", path = nfd)
+    provider.insertRow(2, name = "IMG_1.JPG", path = "Pictures/")
+    provider.insertRow(3, name = "img_2.jpg", path = nfc)
+    provider.insertRow(4, name = "Cr\u00e8me.jpg", path = "DCIM/Camera/")
+    val places = listOf(
+      PhonePlace(nfc, "IMG_1.jpg"),
+      PhonePlace(nfd, "IMG_2.JPG"),
+      PhonePlace("DCIM/Camera/", "Cre\u0300me.jpg"),
+    )
+    val found = source.stillThere("external_primary", emptyList(), places)
+    assertThat(found.map { it.row.id }).containsExactly(1L, 3L, 4L)
   }
 
   @Test
@@ -359,8 +426,21 @@ class AndroidMediaStoreSourceTest {
       var now = 1_760_000_000_000L
       val catalog = MediaCatalog(db, AccountId.of("alessio"), zone = { ZoneId.of("Europe/Rome") }) { now }
       val access = FakePhoneAccessReader(PhoneAccess(MediaAccess.FULL, mediaLocation = true, volumes = setOf("external_primary")))
+      // Pacchetto F (FS3-1): il disco del telefono, perche' la cancellazione detta da deleted_files abbia la sua prova (ENOENT).
+      val root = java.nio.file.Files.createTempDirectory("volume").toFile().apply { deleteOnExit() }
+      val disk = AndroidMediaStoreSource(
+        context = context,
+        volumeNames = { setOf("external_primary") },
+        deletedFilesSupported = { deletedFiles },
+        hasMediaLocation = { location },
+        volumeRoot = { root },
+        statPath = { path -> if (!java.io.File(path).exists()) throw ErrnoException("stat", ENOENT) },
+        missingErrnos = setOf(ENOENT, ENOTDIR),
+      )
+      val camera = java.io.File(root, "DCIM/Camera").apply { mkdirs() }
+      (1L..6L).filter { it != 2L }.forEach { java.io.File(camera, "IMG_$it.jpg").writeBytes(byteArrayOf(1)) }
       val sync = DefaultPhoneLibrarySync(
-        source = source, access = access, catalog = catalog, reads = RoomPhoneCatalogReads(db), clock = { now },
+        source = disk, access = access, catalog = catalog, reads = RoomPhoneCatalogReads(db), clock = { now },
         dispatchers = InlineDispatchers, config = PhoneSyncConfig(batchSize = 2),
       )
       (1L..5L).forEach { provider.insertRow(it, content = FakeMediaContent.jpeg(1_000, seed = it), generation = it) }
@@ -387,6 +467,13 @@ class AndroidMediaStoreSourceTest {
   }
 
   companion object {
+    // Gli errno di Linux (gli stessi su ogni Android): le prove non dipendono da `OsConstants` in Robolectric.
+    private const val EPERM = 1
+    private const val ENOENT = 2
+    private const val EIO = 5
+    private const val EACCES = 13
+    private const val ENOTDIR = 20
+
     /** Registra il provider finto per l'autorita' `media`. */
     fun registerMediaProvider(): FakeMediaProvider {
       val info = ProviderInfo().apply { authority = MediaStore.AUTHORITY }

@@ -39,12 +39,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Pacchetto F (12/11, prove sul campo e critiche FS-1, FS-2, FS-4, FS-5, FS2-1..FS2-5): un media cancellato dal telefono esce dal catalogo come
- * presente anche quando la cancellazione e' avvenuta ad app chiusa o dopo un cambio di versione del MediaStore, ma **mai alla prima
- * osservazione**, mai senza una prova (il disco che non vede piu' il file, o un giorno intero senza che torni) e mai per sbaglio: risposta
- * parziale (anche oltre 500 righe, anche al controllo puntuale), ondata, lettura fallita a meta', permesso cambiato, volume o versione che
- * cambiano, riga in scrittura, cestino ripristinato. Una posizione segnata assente che ricompare (stesso `_ID` o altro `_ID` nello stesso posto)
- * torna presente anche a generazione ferma. Ogni guardia ha la sua mutazione nel resoconto.
+ * Pacchetto F (12/11-13/11, prove sul campo e critiche FS-1..5, FS2-1..7, FS3-1..7): un media cancellato dal telefono esce dal catalogo come
+ * presente anche quando la cancellazione e' avvenuta ad app chiusa o dopo un cambio di versione del MediaStore, ma **solo con una prova
+ * positiva e attuale per quel file**: il controllo puntuale non lo trova e il disco dice con certezza che non c'e'. "Non so" non scrive mai,
+ * dopo nessuna attesa. Mai per sbaglio: risposta parziale (anche al controllo puntuale), ondata, lettura fallita a meta', permesso cambiato,
+ * volume, versione o generazione che cambiano, riga in scrittura, cestino ripristinato, orologio che salta. Una posizione segnata assente che
+ * ricompare torna presente anche a generazione ferma. Ogni guardia ha la sua mutazione (evidenze in `beta/evidenze-F/`).
  */
 @RunWith(AndroidJUnit4::class)
 class MediaSparitiTest : PhoneSyncTestBase() {
@@ -55,7 +55,7 @@ class MediaSparitiTest : PhoneSyncTestBase() {
   /** Piu' del tempo della seconda osservazione e del limite del confronto al ritorno. */
   private val wait = 6 * MINUTE
 
-  /** Piu' del tempo lungo senza la prova del disco (24 ore). */
+  /** Un giorno e un'ora: nessuna attesa, per quanto lunga, fa da prova (FS3-2). */
   private val day = 25 * 60 * MINUTE
 
   /** Una sincronizzazione sullo stesso catalogo ma su [source] (un MediaStore che a un certo punto si comporta male). */
@@ -256,40 +256,60 @@ class MediaSparitiTest : PhoneSyncTestBase() {
     assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
     advance(wait)
     assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
-    // Nemmeno dopo un giorno: il disco le vede, e un'ondata non si conferma mai col tempo.
     advance(day)
     assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
     rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
-    assertThat(suspected(sync)).isEqualTo(47)
+    // Tre vivi non bastano per provare un'ondata (ne servono 20): niente da provare, niente annotato.
+    assertThat(sync.stats.snapshot.value.absencesBlocked).isAtLeast(1)
+    assertThat(suspected(sync)).isEqualTo(0)
   }
-
   @Test
   fun unOndataVeraSiConfermaSoloConLaProvaDelDisco() = runBlocking<Unit> {
-    // Una cartella cancellata dal PC: 47 file su 50 spariti davvero. Senza la prova del disco (Android 10) resta annotata anche dopo un giorno.
+    // Una cartella cancellata dal PC: 60 file su 80 spariti davvero (un'ondata: 60 >= max(10, 20 vivi)), 20 vivi di controllo.
     val sharp = config.copy(vanishAlarmMin = 10)
-    val rows = photos(1L..50L)
+    val rows = photos(1L..80L)
     syncOn(store, config = sharp).syncNow(SyncReason.APP_START)
     store.deletedFilesEmptyForApps = true
-    (4L..50L).forEach { store.remove(PRIMARY, it) }
+    (21L..80L).forEach { store.remove(PRIMARY, it) }
     store.diskReadable = false
     val sync = syncOn(store, config = sharp)
     advance(3 * MINUTE)
     assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    // Senza la prova del disco (Android 10): "non so", nemmeno dopo un giorno.
     advance(wait)
     assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
     advance(day)
     assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
     rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
+    assertThat(suspected(sync)).isEqualTo(60)
 
-    // Con il disco leggibile (Android 11+): i file vivi ci sono, i 47 no. L'ondata si conferma, le tre vive restano.
+    // Con il disco leggibile: i 20 vivi di controllo ci sono, i 60 file no. L'ondata si conferma file per file, i vivi restano.
     store.diskReadable = true
     advance(3 * MINUTE)
-    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(47)
-    rows.drop(3).forEach { assertThat(stateAt(it)).isEqualTo(LocationState.ABSENT) }
-    rows.take(3).forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(60)
+    rows.drop(20).forEach { assertThat(stateAt(it)).isEqualTo(LocationState.ABSENT) }
+    rows.take(20).forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
     assertThat(suspected(sync)).isEqualTo(0)
   }
 
+  @Test
+  fun unOndataConMenoViviDiControlloDelDovutoNonSiProva() = runBlocking<Unit> {
+    // 47 file su 50 spariti davvero, il disco leggibile, ma solo 3 vivi: ne servono 20 per un'ondata. Restano, e lo si conta.
+    val sharp = config.copy(vanishAlarmMin = 10)
+    val rows = photos(1L..50L)
+    syncOn(store, config = sharp).syncNow(SyncReason.APP_START)
+    store.deletedFilesEmptyForApps = true
+    (4L..50L).forEach { store.remove(PRIMARY, it) }
+    val sync = syncOn(store, config = sharp)
+    advance(3 * MINUTE)
+    sync.syncNow(SyncReason.FOREGROUND)
+    advance(wait)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    advance(day)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
+    assertThat(sync.stats.snapshot.value.absencesBlocked).isAtLeast(1)
+  }
   @Test
   fun unProviderIncompletoAncheAlControlloPuntualeConIFileSulDiscoNonTogliNiente() = runBlocking<Unit> {
     // FS2-2: il provider mostra solo due righe su cinque, anche al controllo puntuale, per ore. I file sono sul disco: restano presenti.
@@ -308,8 +328,8 @@ class MediaSparitiTest : PhoneSyncTestBase() {
   }
 
   @Test
-  fun unDiscoCiecoNonProvaNienteEDecideIlTempoLungo() = runBlocking<Unit> {
-    // Il disco risponde ma non vede nemmeno le foto vive (montaggio a meta'): non e' una prova. Si aspetta il tempo lungo.
+  fun unDiscoCiecoNonProvaNienteNemmenoDopoUnGiorno() = runBlocking<Unit> {
+    // Il disco risponde "non c'e'" anche per le foto vive (FUSE senza permesso, montaggio a meta'): i vivi di controllo lo scoprono.
     val rows = photos(1L..5L)
     val sync = newSync()
     sync.syncNow(SyncReason.APP_START)
@@ -320,16 +340,60 @@ class MediaSparitiTest : PhoneSyncTestBase() {
     sync.syncNow(SyncReason.FOREGROUND)
     advance(wait)
     assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
-    assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
     assertThat(sync.stats.snapshot.value.absencesBlocked).isAtLeast(1)
     advance(day)
-    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(1)
-    assertThat(stateAt(rows[1])).isEqualTo(LocationState.ABSENT)
-    listOf(rows[0], rows[2], rows[3], rows[4]).forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
+    assertThat(suspected(sync)).isEqualTo(1)
   }
 
   @Test
-  fun senzaLaProvaDelDiscoUnaCancellazioneSiConfermaSoloDopoUnGiorno() = runBlocking<Unit> {
+  fun unVivoDiControlloCheIlDiscoNonVedeNonFaSparireNiente() = runBlocking<Unit> {
+    // Quattro foto nella stessa cartella: la 2 il provider non la mostra ma il file c'e'; la 3 e' cancellata davvero; il disco risponde
+    // "accesso negato" sulla 1 (un vivo di controllo). Senza il disco attendibile non si scrive: la 2 resta (c'e'), la 3 resta (non so).
+    val rows = photos(1L..4L)
+    val sync = newSync()
+    sync.syncNow(SyncReason.APP_START)
+    store.deletedFilesEmptyForApps = true
+    store.setSelection(PRIMARY, setOf(1L, 3L, 4L))
+    store.remove(PRIMARY, 3)
+    store.diskDenied += rows[0].displayName
+    advance(3 * MINUTE)
+    sync.syncNow(SyncReason.FOREGROUND)
+    advance(wait)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    advance(day)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
+    // Il disco torna a rispondere: la 3 (che non c'e') diventa assente, la 2 (che c'e') resta.
+    store.diskDenied.clear()
+    advance(3 * MINUTE)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(1)
+    assertThat(stateAt(rows[2])).isEqualTo(LocationState.ABSENT)
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+  }
+
+  @Test
+  fun unAccessoNegatoSulFileNonEUnaProva() = runBlocking<Unit> {
+    // Il file della 2 e' sparito, ma il disco risponde con un errore diverso da ENOENT (EACCES): "non so", per sempre se resta cosi'.
+    val rows = photos(1L..3L)
+    val sync = newSync()
+    sync.syncNow(SyncReason.APP_START)
+    store.deletedFilesEmptyForApps = true
+    store.remove(PRIMARY, 2)
+    store.diskDenied += rows[1].displayName
+    advance(3 * MINUTE)
+    sync.syncNow(SyncReason.FOREGROUND)
+    advance(wait)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    advance(day)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+    assertThat(suspected(sync)).isEqualTo(1)
+  }
+  @Test
+  fun senzaLaProvaDelDiscoNessunaAssenzaNemmenoDopoUnGiorno() = runBlocking<Unit> {
+    // Android 10 o disco non leggibile: "non so" non scrive mai, l'annotazione resta senza scadenza.
     val rows = photos(1L..3L)
     val sync = newSync()
     sync.syncNow(SyncReason.APP_START)
@@ -340,14 +404,18 @@ class MediaSparitiTest : PhoneSyncTestBase() {
     sync.syncNow(SyncReason.FOREGROUND)
     advance(wait)
     assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
-    advance(20 * 60 * MINUTE)
+    advance(day)
     assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    advance(30 * day)
+    assertThat(sync.syncNow(SyncReason.MAINTENANCE).vanished).isEqualTo(0)
     assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
-    advance(5 * 60 * MINUTE)
+    assertThat(suspected(sync)).isEqualTo(1)
+    // Appena il disco risponde, la prova c'e'.
+    store.diskReadable = true
+    advance(3 * MINUTE)
     assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(1)
     assertThat(stateAt(rows[1])).isEqualTo(LocationState.ABSENT)
   }
-
   @Test
   fun unaPosizioneAssenteCheTornaConLoStessoIdTornaPresenteAGenerazioneFerma() = runBlocking<Unit> {
     val rows = photos(1L..3L)
@@ -493,6 +561,8 @@ class MediaSparitiTest : PhoneSyncTestBase() {
     val report = sync.syncNow(SyncReason.FOREGROUND)
     assertThat(report.completed).isFalse()
     assertThat(sync.stats.snapshot.value.absencesBlocked).isEqualTo(1)
+    // FS3-5: il confronto a scansione aperta e' solo per un volume senza righe; qui la seconda lettura risponde, e non si annota niente.
+    assertThat(suspected(sync)).isEqualTo(0)
     assertThat(catalog.mediaStoreCursor(PRIMARY)!!.scanEpoch).isNotNull()
     assertThat(catalog.mediaStoreCursor(PRIMARY)!!.lastFullScanAt).isNotEqualTo(now)
     rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
@@ -648,7 +718,9 @@ class MediaSparitiTest : PhoneSyncTestBase() {
   }
 
   @Test
-  fun unMediaStoreCheRispondeVuotoNonAnnotaNiente() = runBlocking<Unit> {
+  fun unMediaStoreCheRispondeVuotoAnnotaSoltantoEIFileRestano() = runBlocking<Unit> {
+    // FS3-5: un elenco vuoto non ferma piu' tutto (un volume svuotato davvero deve poter uscire), ma annota soltanto: alla prova il
+    // controllo puntuale trova le righe (il provider era solo vuoto nell'elenco) e i file ci sono.
     val rows = photos(1L..2L)
     newSync().syncNow(SyncReason.APP_START)
     val empty = object : MediaStoreSource by store {
@@ -657,11 +729,13 @@ class MediaSparitiTest : PhoneSyncTestBase() {
     advance(3 * MINUTE)
     val sync = syncOn(empty)
     assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
-    rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
     assertThat(sync.stats.snapshot.value.absencesBlocked).isEqualTo(1)
+    assertThat(suspected(sync)).isEqualTo(2)
+    advance(wait)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
     assertThat(suspected(sync)).isEqualTo(0)
   }
-
   @Test
   fun lAccessoSiRicontrollaPrimaDiOgniLottoDiAssenze() = runBlocking<Unit> {
     val rows = photos(1L..5L)
@@ -918,42 +992,63 @@ class MediaSparitiTest : PhoneSyncTestBase() {
     assertThat(rows.subList(1, 4).count { stateAt(it) == LocationState.ABSENT }).isEqualTo(2)
   }
 
-  @Test
-  fun unaPosizioneRivistaDopoLaFotografiaNonDiventaAssente() = runBlocking<Unit> {
-    val rows = photos(1L..3L)
-    newSync().syncNow(SyncReason.APP_START)
-    store.deletedFilesEmptyForApps = true
-    store.remove(PRIMARY, 2)
+  /**
+   * Un controllo puntuale durante il quale l'app registra di nuovo il posto [row] (un salvataggio dal NAS), senza toccare il MediaStore; con
+   * [asId] la registrazione ricollega il posto a un'altra riga.
+   */
+  private fun recordingDuring(row: MediaStoreRow, asId: Long? = null, before: () -> Unit = {}): Pair<MediaStorePointCheck, () -> Boolean> {
     var saved = false
-    // Proprio durante il controllo puntuale l'app salva un file nello stesso posto (dal NAS) e il catalogo lo registra; il disco non lo
-    // mostra ancora. La posizione e' stata rivista dopo la fotografia del confronto: non si tocca.
-    val saving = object : MediaStorePointCheck {
+    val check = object : MediaStorePointCheck {
       override suspend fun stillThere(volume: String, ids: Collection<Long>, places: Collection<PhonePlace>): List<PointRow> {
         val answer = store.stillThere(volume, ids, places)
         if (!saved && places.isNotEmpty()) {
           saved = true
-          val row = store.put(photo(60, taken = T0 + 60 * MINUTE, name = rows[1].displayName))
-          store.diskHidden += row.id
-          // Il tempo passa: il salvataggio e' dopo la fotografia del confronto.
-          advance(1)
+          before()
           val content = ByteArray(row.size.toInt()) { (it % 251).toByte() }
           val fingerprint = Fingerprint.ofContent(content)
-          catalog.record(
-            Observation(row.phoneLocation(store.version(volume)), FileStamp(fingerprint.size, row.dateModifiedMs), fingerprint, MediaKind.PHOTO, MediaSource.OTHER),
-          )
+          val location = row.phoneLocation(store.version(volume)).let { if (asId == null) it else it.copy(mediaStoreId = asId) }
+          catalog.record(Observation(location, FileStamp(fingerprint.size, row.dateModifiedMs), fingerprint, MediaKind.PHOTO, MediaSource.OTHER))
         }
         return answer
       }
     }
+    return check to { saved }
+  }
+
+  @Test
+  fun unaPosizioneRivistaNelloStessoMillisecondoNonDiventaAssente() = runBlocking<Unit> {
+    // FS3-6: l'orologio e' fermo per tutto il giro; la nuova registrazione ha lo stesso millisecondo della fotografia. Conta che la riga non
+    // sia piu' quella letta, non l'ordine dei millisecondi.
+    val rows = photos(1L..3L)
+    newSync().syncNow(SyncReason.APP_START)
+    store.deletedFilesEmptyForApps = true
+    store.remove(PRIMARY, 2)
+    val (saving, saved) = recordingDuring(rows[1])
     val sync = syncOn(store, pointCheck = saving)
     advance(3 * MINUTE)
     sync.syncNow(SyncReason.FOREGROUND)
     advance(wait)
     assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
-    assertThat(saved).isTrue()
+    assertThat(saved()).isTrue()
     assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
   }
 
+  @Test
+  fun unaPosizioneRivistaConLOrologioTornatoIndietroDuranteIlGiroNonDiventaAssente() = runBlocking<Unit> {
+    val rows = photos(1L..3L)
+    newSync().syncNow(SyncReason.APP_START)
+    store.deletedFilesEmptyForApps = true
+    store.remove(PRIMARY, 2)
+    // Proprio durante il controllo l'orologio torna indietro di un'ora e l'app registra di nuovo il posto.
+    val (saving, saved) = recordingDuring(rows[1], before = { now -= 60 * MINUTE })
+    val sync = syncOn(store, pointCheck = saving)
+    advance(3 * MINUTE)
+    sync.syncNow(SyncReason.FOREGROUND)
+    advance(wait)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    assertThat(saved()).isTrue()
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+  }
   @Test
   fun ilPostoTrovatoSiConfrontaConLaChiaveDelCatalogo() = runBlocking<Unit> {
     val rows = photos(1L..3L)
@@ -1000,19 +1095,63 @@ class MediaSparitiTest : PhoneSyncTestBase() {
   @Test
   fun unOrologioTornatoIndietroNonBloccaLeAnnotazioni() = runBlocking<Unit> {
     val rows = photos(1L..3L)
-    val sync = newSync()
-    sync.syncNow(SyncReason.APP_START)
+    newSync().syncNow(SyncReason.APP_START)
     store.deletedFilesEmptyForApps = true
     store.remove(PRIMARY, 2)
     advance(3 * MINUTE)
-    sync.syncNow(SyncReason.FOREGROUND)
-    // L'utente rimette l'orologio indietro di dieci giorni: l'annotazione "dal futuro" si rifa' adesso, non aspetta dieci giorni.
-    now -= 10 * 24 * 60 * MINUTE
+    newSync().syncNow(SyncReason.FOREGROUND)
+    // L'utente rimette l'orologio indietro di dieci giorni e riapre l'app: l'annotazione ripresa "dal futuro" si rifa' adesso.
+    now -= 10 * day
+    advance(3 * MINUTE)
+    val sync = newSync()
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
     advance(3 * MINUTE)
     assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
-    advance(wait)
+    advance(3 * MINUTE)
     assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(1)
     assertThat(stateAt(rows[1])).isEqualTo(LocationState.ABSENT)
+  }
+  @Test
+  fun unaPosizioneRicollegataAUnAltraRigaAlMillisecondoDellaFotografiaNonDiventaAssente() = runBlocking<Unit> {
+    // FS3-6: l'orologio torna proprio al millisecondo in cui la fotografia aveva letto la posizione, e l'app la ricollega a un'altra riga: il
+    // last_seen_at e' uguale, l'_ID no. Conta tutta la riga letta, non solo l'ora.
+    val rows = photos(1L..3L)
+    newSync().syncNow(SyncReason.APP_START)
+    val seen = db.locationDao().byKey(placeOf(rows[1]).key.value)!!.lastSeenAt
+    store.deletedFilesEmptyForApps = true
+    store.remove(PRIMARY, 2)
+    var back = 0L
+    val (saving, saved) = recordingDuring(rows[1], asId = 60, before = { back = now; now = seen })
+    val sync = syncOn(store, pointCheck = saving)
+    advance(3 * MINUTE)
+    sync.syncNow(SyncReason.FOREGROUND)
+    advance(wait)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    assertThat(saved()).isTrue()
+    assertThat(back).isNotEqualTo(0L)
+    assertThat(db.locationDao().byKey(placeOf(rows[1]).key.value)!!.lastSeenAt).isEqualTo(seen)
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+  }
+
+  @Test
+  fun unaGenerazioneCheCambiaFraDueLottiDiAssenzeFermaIlSecondo() = runBlocking<Unit> {
+    val rows = photos(1L..5L)
+    newSync().syncNow(SyncReason.APP_START)
+    store.deletedFilesEmptyForApps = true
+    listOf(2L, 3L, 4L).forEach { store.remove(PRIMARY, it) }
+    // Appena il primo lotto (due assenze) e' scritto il MediaStore cambia (una riga ripristinata, un file nuovo): la generazione sale.
+    val moving = object : MediaStoreSource by store {
+      override suspend fun generation(volume: String): Long? {
+        val g = store.generation(volume) ?: return null
+        return if (db.locationDao().phonePositionsOnVolume(PRIMARY).any { it.state == LocationState.ABSENT.code }) g + 1 else g
+      }
+    }
+    val sync = syncOn(moving)
+    advance(3 * MINUTE)
+    sync.syncNow(SyncReason.FOREGROUND)
+    advance(wait)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(2)
+    assertThat(rows.subList(1, 4).count { stateAt(it) == LocationState.ABSENT }).isEqualTo(2)
   }
 
   @Test
@@ -1027,13 +1166,33 @@ class MediaSparitiTest : PhoneSyncTestBase() {
     // Un processo nuovo tre minuti dopo: l'annotazione viene dal disco e non e' ancora matura.
     advance(3 * MINUTE)
     assertThat(newSync().syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
-    // Un altro processo (la manutenzione notturna, la prossima apertura): si conferma al suo primo giro.
+    // Un altro processo (la manutenzione notturna, la prossima apertura): matura, ma prima la rivede in questo processo (FS3-2)...
     advance(3 * MINUTE)
-    assertThat(newSync().syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(1)
+    val later = newSync()
+    assertThat(later.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    // ...e la prova al giro dopo.
+    advance(3 * MINUTE)
+    assertThat(later.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(1)
     assertThat(stateAt(rows[1])).isEqualTo(LocationState.ABSENT)
     assertThat(catalog.phoneSuspects(PRIMARY)).isEmpty()
   }
 
+  @Test
+  fun unSaltoInAvantiDellOrologioNonAccorciaLAttesa() = runBlocking<Unit> {
+    // FS3-2: nello stesso processo l'attesa si misura con l'orologio monotono; dieci giorni "passati" sull'orologio civile non contano.
+    val rows = photos(1L..3L)
+    val sync = newSync()
+    sync.syncNow(SyncReason.APP_START)
+    store.deletedFilesEmptyForApps = true
+    store.remove(PRIMARY, 2)
+    advance(3 * MINUTE)
+    sync.syncNow(SyncReason.FOREGROUND)
+    now += 10 * day
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+    advance(wait)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(1)
+  }
   @Test
   fun unAccessoRidottoDimenticaLeAnnotazioniAncheSulDisco() = runBlocking<Unit> {
     photos(1L..3L)
@@ -1052,7 +1211,6 @@ class MediaSparitiTest : PhoneSyncTestBase() {
   fun inPrimoPianoLaConfermaArrivaDaSolaQuandoMatura() = runBlocking<Unit> {
     val fast = config.copy(
       absenceConfirmAfter = 400.milliseconds,
-      absenceConfirmWithoutProof = 400.milliseconds * 1000,
       quickReconcileEvery = 100.milliseconds,
       absenceRecheckMargin = 50.milliseconds,
     )
@@ -1078,5 +1236,222 @@ class MediaSparitiTest : PhoneSyncTestBase() {
       sync.detach()
       scope.cancel()
     }
+  }
+
+  // --- FS3: la prova attuale, per quel file -------------------------------------------------------------------------------------------
+
+  @Test
+  fun inPrimoPianoDopoUnNonSoSiRiprovaDaSolo() = runBlocking<Unit> {
+    // FS3-7: la prima prova trova il disco che "non sa"; nessun segnale arriva, ma il giro da solo riprova (con il suo limite) e conferma.
+    val fast = config.copy(
+      absenceConfirmAfter = 300.milliseconds,
+      quickReconcileEvery = 100.milliseconds,
+      absenceRecheckMargin = 50.milliseconds,
+      absenceUnknownRetry = 400.milliseconds,
+    )
+    val rows = photos(1L..3L)
+    val sync = DefaultPhoneLibrarySync(
+      source = store, access = access, catalog = catalog, reads = reads, clock = System::currentTimeMillis,
+      monotonicMs = { System.nanoTime() / 1_000_000 }, dispatchers = InlineDispatchers, config = fast,
+    )
+    sync.syncNow(SyncReason.APP_START)
+    store.deletedFilesEmptyForApps = true
+    store.remove(PRIMARY, 2)
+    store.diskReadable = false
+    delay(150)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    try {
+      sync.attach(scope)
+      withTimeout(15_000) {
+        while (store.fileProbes == 0) delay(10)
+      }
+      // La prima prova e' finita in "non so": adesso il disco risponde.
+      assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+      store.diskReadable = true
+      withTimeout(15_000) {
+        while (stateAt(rows[1]) != LocationState.ABSENT) delay(20)
+      }
+    } finally {
+      sync.detach()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun unaCancellazioneDettaSenzaProvaAttualeEntraFraLeAnnotazioni() = runBlocking<Unit> {
+    // FS3-3: il cestino dice la 2 cancellata; subito dopo la lettura del cestino l'utente la ripristina, ma come riga in scrittura di un'altra
+    // app che il controllo puntuale non vede, e il disco non sa (Android 10). Non si scrive: si annota.
+    val rows = photos(1L..3L)
+    newSync().syncNow(SyncReason.APP_START)
+    store.trash(PRIMARY, 2)
+    var restored = false
+    val restoring = object : MediaStoreSource by store {
+      override suspend fun deletedSince(volume: String, generation: Long): List<DeletedRow>? =
+        store.deletedSince(volume, generation).also {
+          if (!restored) {
+            restored = true
+            store.untrash(PRIMARY, 2)
+            store.putPending(rows[1])
+          }
+        }
+    }
+    val hidingPending = object : MediaStorePointCheck {
+      override suspend fun stillThere(volume: String, ids: Collection<Long>, places: Collection<PhonePlace>): List<PointRow> =
+        store.stillThere(volume, ids, places).filter { !it.pending }
+    }
+    store.diskReadable = false
+    val sync = syncOn(restoring, pointCheck = hidingPending)
+    assertThat(sync.syncNow(SyncReason.CONTENT_CHANGE).vanished).isEqualTo(0)
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+    assertThat(suspected(sync)).isEqualTo(1)
+    // L'altra app pubblica la riga: torna visibile, l'annotazione se ne va.
+    store.publish(PRIMARY, 2)
+    advance(3 * MINUTE)
+    sync.syncNow(SyncReason.FOREGROUND)
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+    assertThat(suspected(sync)).isEqualTo(0)
+  }
+
+  @Test
+  fun senzaProvaDelDiscoUnaCancellazioneDettaNonSiScrive() = runBlocking<Unit> {
+    val rows = photos(1L..3L)
+    newSync().syncNow(SyncReason.APP_START)
+    store.remove(PRIMARY, 2)
+    val sync = syncOn(store, fileProbe = null)
+    assertThat(sync.syncNow(SyncReason.CONTENT_CHANGE).vanished).isEqualTo(0)
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+    assertThat(suspected(sync)).isEqualTo(1)
+  }
+
+  @Test
+  fun unaRigaRipristinataDopoIlControlloPuntualeNonDiventaAssente() = runBlocking<Unit> {
+    // Il controllo puntuale non trova la 2 (nel cestino); appena dopo l'utente la ripristina (generazione nuova) e FUSE non la mostra ancora.
+    val rows = photos(1L..3L)
+    newSync().syncNow(SyncReason.APP_START)
+    store.trash(PRIMARY, 2)
+    var restored = false
+    val restoringAfter = object : MediaStorePointCheck {
+      override suspend fun stillThere(volume: String, ids: Collection<Long>, places: Collection<PhonePlace>): List<PointRow> {
+        val answer = store.stillThere(volume, ids, places)
+        if (!restored && 2L in ids) {
+          restored = true
+          store.untrash(PRIMARY, 2)
+          store.diskHidden += 2L
+        }
+        return answer
+      }
+    }
+    val sync = syncOn(store, pointCheck = restoringAfter)
+    assertThat(sync.syncNow(SyncReason.CONTENT_CHANGE).vanished).isEqualTo(0)
+    assertThat(restored).isTrue()
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+  }
+
+  @Test
+  fun unFileInScritturaDiUnAltraAppNascostoTornaQuandoVienePubblicato() = runBlocking<Unit> {
+    // Limite dichiarato (FS3-1): un'altra app riscrive la 2 come riga in scrittura che ne' il MediaStore ne' FUSE ci mostrano. Per noi e'
+    // identica a un file cancellato: dopo la seconda osservazione diventa assente. Quando l'altra app la pubblica torna presente da sola.
+    val rows = photos(1L..3L)
+    val sync = newSync()
+    sync.syncNow(SyncReason.APP_START)
+    val id = mediaAt(rows[1])!!
+    store.deletedFilesEmptyForApps = true
+    store.putPending(rows[1])
+    store.diskHidden += 2L
+    val hidingPending = object : MediaStorePointCheck {
+      override suspend fun stillThere(volume: String, ids: Collection<Long>, places: Collection<PhonePlace>): List<PointRow> =
+        store.stillThere(volume, ids, places).filter { !it.pending }
+    }
+    val hidden = syncOn(store, pointCheck = hidingPending)
+    advance(3 * MINUTE)
+    hidden.syncNow(SyncReason.FOREGROUND)
+    advance(wait)
+    assertThat(hidden.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(1)
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.ABSENT)
+    store.publish(PRIMARY, 2)
+    store.diskHidden -= 2L
+    hidden.syncNow(SyncReason.CONTENT_CHANGE)
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+    assertThat(mediaAt(rows[1])).isEqualTo(id)
+  }
+
+  @Test
+  fun unRipristinatoSottoMoltiIdSconosciutiTornaInPochiGiri() = runBlocking<Unit> {
+    // FS3-4: undici righe che il catalogo non registra mai (zero byte: sconosciute per sempre) con _ID piu' alti del ripristinato. Con un
+    // tetto di tre per giro, lo scorrimento arriva al ripristinato in un numero finito di giri invece di guardare sempre le stesse.
+    val capped = config.copy(recoverCap = 3)
+    val rows = photos(1L..3L)
+    (100L..110L).forEach { store.put(photo(it, taken = T0 + it * MINUTE, size = 0)) }
+    val sync = syncOn(store, config = capped)
+    sync.syncNow(SyncReason.APP_START)
+    val id = mediaAt(rows[1])!!
+    val trashed = store.samsungTrash(PRIMARY, 2)
+    assertThat(sync.syncNow(SyncReason.CONTENT_CHANGE).vanished).isEqualTo(1)
+    store.samsungRestore(trashed, newId = 50)
+    catalog.saveMediaStoreCursor(catalog.mediaStoreCursor(PRIMARY)!!.copy(generation = store.generation(PRIMARY)))
+    advance(3 * MINUTE)
+    sync.syncNow(SyncReason.FOREGROUND)
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.ABSENT)
+    var rounds = 1
+    while (stateAt(rows[1]) != LocationState.PRESENT && rounds < 6) {
+      advance(3 * MINUTE)
+      sync.syncNow(SyncReason.FOREGROUND)
+      rounds++
+    }
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+    assertThat(mediaAt(rows[1])).isEqualTo(id)
+    assertThat(rounds).isAtMost(5)
+  }
+
+  @Test
+  fun lUltimaFotoCancellataDiventaAssente() = runBlocking<Unit> {
+    // FS3-5: zero _ID vivi non ferma piu' tutto. Senza vivi di controllo decide la cartella visibile del disco, file per file.
+    val only = photos(1L..1L).single()
+    val sync = newSync()
+    sync.syncNow(SyncReason.APP_START)
+    store.deletedFilesEmptyForApps = true
+    store.remove(PRIMARY, 1)
+    advance(3 * MINUTE)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    advance(wait)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(1)
+    assertThat(stateAt(only)).isEqualTo(LocationState.ABSENT)
+  }
+
+  @Test
+  fun unVolumeSvuotatoDopoUnCambioDiVersioneSiProvaFilePerFile() = runBlocking<Unit> {
+    // Tutte e cinque le foto cancellate e il MediaStore ricostruito: la scansione completa non ha righe e resta aperta, ma le posizioni si
+    // annotano e si provano file per file (sotto la soglia dell'ondata).
+    val rows = photos(1L..5L)
+    newSync().syncNow(SyncReason.APP_START)
+    (1L..5L).forEach { store.remove(PRIMARY, it) }
+    store.bumpVersion(PRIMARY, "v2")
+    val sync = newSync()
+    advance(MINUTE)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    assertThat(suspected(sync)).isEqualTo(5)
+    advance(wait)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(5)
+    rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.ABSENT) }
+    assertThat(catalog.mediaStoreCursor(PRIMARY)!!.scanEpoch).isNotNull()
+  }
+
+  @Test
+  fun unVolumeGrandeSvuotatoTuttoRestaConISuoiFantasmi() = runBlocking<Unit> {
+    // Limite dichiarato: 60 foto (oltre la soglia dell'ondata, 50) cancellate tutte. Senza vivi di controllo un'ondata non si prova: restano
+    // presenti finche' non arriva una prova o una scelta dell'utente.
+    val rows = photos(1L..60L)
+    newSync().syncNow(SyncReason.APP_START)
+    store.deletedFilesEmptyForApps = true
+    (1L..60L).forEach { store.remove(PRIMARY, it) }
+    val sync = newSync()
+    advance(3 * MINUTE)
+    sync.syncNow(SyncReason.FOREGROUND)
+    advance(wait)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    advance(day)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
+    assertThat(sync.stats.snapshot.value.absencesBlocked).isAtLeast(1)
   }
 }

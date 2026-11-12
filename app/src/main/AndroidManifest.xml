@@ -64,6 +64,9 @@
 
         taskAffinity vuota (revisione 2, F13): nessun task di un'altra app con la nostra affinita' puo' ospitare l'activity (StrandHogg, soprattutto su Android 10).
         Il blocco app vale per il PROCESSO, non per la finestra: ogni finestra ha il suo AppLockGate (D17, C434).
+
+        I5 (12/11/2026): l'activity NON ha piu' il filtro MAIN/LAUNCHER suo. L'icona nel launcher la danno i tre activity-alias qui sotto, uno per icona; resta
+        esportata come prima (la aprono per nome notifiche, widget, finestre, benchmark e strumenti con `am start -n`).
     -->
     <activity
         android:name=".MainActivity"
@@ -75,11 +78,56 @@
       <layout
           android:minHeight="400dp"
           android:minWidth="320dp" />
+    </activity>
+
+    <!--
+        I5 (12/11/2026, richiesta dell'utente): l'icona dell'app a scelta, Impostazioni -> Icona dell'app. Tre ingressi del launcher, tre alias della MainActivity
+        (nessuna classe nuova: un alias e' solo un altro nome con la sua icona), UNO SOLO abilitato alla volta:
+        - LauncherAuto, di serie: @mipmap/ic_launcher, lo sfondo segue il tema del telefono (scuro di base: se il launcher non segue il tema si vede la scura);
+        - LauncherLight: @mipmap/ic_launcher_light, sfondo chiaro fisso;
+        - LauncherDark: @mipmap/ic_launcher_dark, sfondo scuro fisso.
+        Il cambio lo fa `AppIconSwitcher` (app/.../appicon/) con setComponentEnabledSetting(DONT_KILL_APP): prima abilita il nuovo, poi disabilita gli altri, mai zero
+        ingressi; lo fa quando l'app passa in secondo piano, perche' disabilitare l'alias da cui e' stata aperta chiuderebbe la finestra davanti all'utente.
+        Forma pretesa da verifyReleaseManifest (launcherAliasPolicy), da tools/check.ps1 e da tools/release (stessa regola): alias della MainActivity, esportati,
+        un solo filtro con la sola azione MAIN e la sola categoria LAUNCHER, nessun permesso diverso da quello della MainActivity, solo LauncherAuto abilitato di serie.
+        Nomi completi (non ".LauncherAuto"): sono quelli che l'app passa al PackageManager e che i controlli cercano.
+    -->
+    <activity-alias
+        android:name="dev.pampa.mycloudgallery.LauncherAuto"
+        android:enabled="true"
+        android:exported="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:targetActivity="dev.pampa.mycloudgallery.MainActivity">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
-    </activity>
+    </activity-alias>
+    <activity-alias
+        android:name="dev.pampa.mycloudgallery.LauncherLight"
+        android:enabled="false"
+        android:exported="true"
+        android:icon="@mipmap/ic_launcher_light"
+        android:label="@string/app_name"
+        android:targetActivity="dev.pampa.mycloudgallery.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias
+        android:name="dev.pampa.mycloudgallery.LauncherDark"
+        android:enabled="false"
+        android:exported="true"
+        android:icon="@mipmap/ic_launcher_dark"
+        android:label="@string/app_name"
+        android:targetActivity="dev.pampa.mycloudgallery.MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
 
     <!--
         Fase 4B (D29): il JobService delle operazioni lunghe sui file del NAS avviate dall'utente (UIDT). NON esportato e protetto da

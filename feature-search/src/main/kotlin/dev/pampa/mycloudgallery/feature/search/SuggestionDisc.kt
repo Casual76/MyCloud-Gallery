@@ -5,12 +5,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Celebration
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.ImageSearch
 import androidx.compose.material.icons.rounded.MotionPhotosOn
 import androidx.compose.material.icons.rounded.Panorama
 import androidx.compose.material.icons.rounded.Photo
@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.rememberGalleryIconColors
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbRequest
@@ -41,7 +42,10 @@ import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
 // porte della griglia), il volto di una persona (dal cancello dei volti), e solo se non c'e' niente il segno del suo tipo sul colore della sua famiglia
 // (le stesse famiglie delle piastrelle di I3). Sotto la foto c'e' sempre il colore (e il segnaposto sfocato): l'anteprima che arriva non salta.
 // **Nascosti mai** (D29): una foto si disegna solo se il suo media e' nell'istantanea della Libreria di adesso (che non ha i nascosti), un volto solo se
-// una delle sue foto d'origine c'e'.
+// una delle sue foto d'origine c'e' e se il cancello l'ha dato con il segno delle revoche di adesso (CG-1: [SuggestionFaces], letto qui a ogni composizione del tondo).
+
+/** Il segno nelle prove del volto disegnato in un tondo (CG-1: dopo una revoca non c'e' piu'). */
+internal const val SuggestionFaceTag: String = "suggerimento-volto"
 
 /** Chi tiene le anteprime della barra accanto alla finestra del caricatore (`ThumbnailLoader.keep`). */
 internal const val SuggestionKeepOwner: String = "ricerca-suggerimenti"
@@ -67,7 +71,8 @@ internal fun glyphOf(suggestion: Suggestion): Pair<ImageVector, GalleryIconFamil
     when {
       CalendarCompletions.MONTHS.any { SearchText.normalize(it) == first } -> Icons.Rounded.CalendarMonth to GalleryIconFamily.Memories
       CalendarCompletions.HOLIDAYS.any { SearchText.normalize(it) == SearchText.normalize(suggestion.label) } -> Icons.Rounded.Celebration to GalleryIconFamily.Memories
-      else -> Icons.Rounded.AutoAwesome to GalleryIconFamily.Search
+      // Una cosa cercata per contenuto (CU-25: le scintille sono i Ricordi).
+      else -> Icons.Rounded.ImageSearch to GalleryIconFamily.Search
     }
   }
 }
@@ -81,19 +86,26 @@ internal fun previewRequest(media: MediaId, library: TimelineSnapshot?, thumbnai
 
 /**
  * Il tondo di [item] (riempie il posto che gli da' la barra, gia' ritagliato tondo). [library] e' l'istantanea di adesso, [thumbnails] le miniature della
- * Libreria; senza, solo il segno.
+ * Libreria, [faces] i volti con il segno delle revoche; senza, solo il segno.
  */
 @Composable
-internal fun SuggestionDisc(item: SuggestionItem, library: TimelineSnapshot?, thumbnails: SearchThumbnails?) {
+internal fun SuggestionDisc(item: SuggestionItem, library: TimelineSnapshot?, thumbnails: SearchThumbnails?, faces: SuggestionFaces? = null) {
   val (glyph, family) = remember(item.suggestion) { glyphOf(item.suggestion) }
   val colors = rememberGalleryIconColors(family)
   Box(modifier = Modifier.fillMaxSize().background(Brush.linearGradient(listOf(colors.top, colors.bottom))), contentAlignment = Alignment.Center) {
     val drawn = when (val art = item.art) {
       is SuggestionArt.Photo -> photoArt(art.media, library, thumbnails)
       is SuggestionArt.Face -> {
-        val shown = remember(library, art) { library != null && art.origins.any { library.indexOf(it) >= 0 } }
-        if (shown) Image(bitmap = art.image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        shown
+        // Uno stato letto qui: una revoca o una foto d'origine nascosta ricompongono il tondo, che al fotogramma dopo non ha piu' il volto.
+        val image = faces?.image(art.person, library)
+        when {
+          image != null -> {
+            Image(bitmap = image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().testTag(SuggestionFaceTag))
+            true
+          }
+          art.fallback != null -> photoArt(art.fallback, library, thumbnails)
+          else -> false
+        }
       }
       null -> false
     }
@@ -127,7 +139,13 @@ private fun photoArt(media: MediaId, library: TimelineSnapshot?, thumbnails: Sea
 @Composable
 internal fun KeepSuggestionPreviews(items: List<SuggestionItem>, library: TimelineSnapshot?, thumbnails: SearchThumbnails) {
   val requests = remember(items, library, thumbnails) {
-    items.mapNotNull { (it.art as? SuggestionArt.Photo)?.media }.mapNotNull { previewRequest(it, library, thumbnails) }.distinctBy { it.key }
+    items.mapNotNull { item ->
+      when (val art = item.art) {
+        is SuggestionArt.Photo -> art.media
+        is SuggestionArt.Face -> art.fallback
+        null -> null
+      }
+    }.mapNotNull { previewRequest(it, library, thumbnails) }.distinctBy { it.key }
   }
   LaunchedEffect(requests, thumbnails) { thumbnails.loader.keep(SuggestionKeepOwner, requests) }
   DisposableEffect(thumbnails) { onDispose { thumbnails.loader.keep(SuggestionKeepOwner, emptyList()) } }

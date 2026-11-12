@@ -63,4 +63,30 @@ internal object SettingsDimens {
 
   /** La larghezza massima di un valore a destra di una riga: il titolo resta leggibile. */
   val ValueMaxWidth: Dp = 120.dp
+
+  // --- I5 (icona dell'app a scelta) -------------------------------------------------------------------------------------------------
+
+  /** Il lato di un'anteprima grande dell'icona dell'app: tre in fila stanno a 360 dp con il loro anello. */
+  val AppIconPreview: Dp = 80.dp
+
+  /** L'angolo di quell'anteprima, come le icone del launcher di One UI (circa un terzo del lato). */
+  val AppIconRadius: Dp = 24.dp
+
+  /** Il lato dell'anteprima piccola nella riga «Icona dell'app» (quello delle piastrelle delle righe). */
+  val AppIconRow: Dp = 32.dp
+
+  /** L'angolo dell'anteprima piccola. */
+  val AppIconRowRadius: Dp = 9.dp
+
+  /** Lo spessore dell'anello attorno all'icona scelta. */
+  val AppIconRing: Dp = 3.dp
+
+  /** Lo spazio fra l'icona e il suo anello. */
+  val AppIconRingGap: Dp = 4.dp
+
+  /** Il segno di spunta sull'angolo dell'icona scelta. */
+  val AppIconMark: Dp = 24.dp
+
+  /** Il filo attorno a un'anteprima: la «Scura» sul fondo scuro e la «Chiara» sul fondo chiaro hanno ancora il loro bordo. */
+  val AppIconOutline: Dp = 1.dp
 }

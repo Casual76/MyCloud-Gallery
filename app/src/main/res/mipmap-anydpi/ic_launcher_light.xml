@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    I5 (12/11/2026): l'icona «Chiara», scelta nelle Impostazioni (Icona dell'app). Lo stesso primo piano e lo stesso livello a un colore
+    dell'icona automatica (mipmap-anydpi/ic_launcher.xml), con lo sfondo chiaro fisso. La porta l'ingresso LauncherLight del manifest.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+  <background android:drawable="@drawable/ic_launcher_background_light" />
+  <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+  <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
+</adaptive-icon>

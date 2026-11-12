@@ -73,7 +73,7 @@ param(
 $ErrorActionPreference = "Stop"
 $script:Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $script:Overlay = $null
-foreach ($lib in @("release-lib-core.ps1", "release-lib-apk.ps1", "release-lib-check.ps1", "release-lib-verify.ps1", "release-lib-report.ps1")) {
+foreach ($lib in @("release-lib-core.ps1", "release-lib-apk.ps1", "release-lib-launcher.ps1", "release-lib-check.ps1", "release-lib-verify.ps1", "release-lib-report.ps1")) {
   . (Join-Path $PSScriptRoot $lib)
 }
 

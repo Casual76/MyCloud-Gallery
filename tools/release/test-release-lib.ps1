@@ -37,13 +37,35 @@ function Get-AndroidJar([string]$SdkDir) {
   return $jar
 }
 
+# I5 (12/11/2026): gli ingressi del launcher come nell'app vera: la MainActivity senza filtro e tre activity-alias, uno per icona, solo il primo
+# abilitato. [Changes] cambia un alias (nome corto Auto, Light, Dark -> hashtable con Enabled, Target, Extra dentro il filtro), [MainLauncher] rimette
+# il filtro LAUNCHER alla MainActivity, [ExtraAlias] aggiunge un quarto alias esportato con il suo filtro MAIN/LAUNCHER.
+function New-LauncherXml([hashtable]$Changes = @{}, [switch]$MainLauncher, [string]$ExtraAlias = "") {
+  $filter = '<intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/>{0}</intent-filter>'
+  $main = if ($MainLauncher) { '    <activity android:name="dev.pampa.mycloudgallery.MainActivity" android:exported="true">' + ($filter -f "") + '</activity>' }
+          else { '    <activity android:name="dev.pampa.mycloudgallery.MainActivity" android:exported="true"/>' }
+  $lines = @($main)
+  $aliases = [ordered]@{ Auto = $true; Light = $false; Dark = $false }
+  if ($ExtraAlias) { $aliases[$ExtraAlias] = $false }
+  foreach ($short in $aliases.Keys) {
+    $c = if ($Changes.ContainsKey($short)) { $Changes[$short] } else { @{} }
+    $enabled = if ($c.ContainsKey("Enabled")) { $c.Enabled } else { $aliases[$short] }
+    $target = if ($c.ContainsKey("Target")) { $c.Target } else { "dev.pampa.mycloudgallery.MainActivity" }
+    $extra = if ($c.ContainsKey("Extra")) { $c.Extra } else { "" }
+    $lines += ('    <activity-alias android:name="dev.pampa.mycloudgallery.Launcher{0}" android:enabled="{1}" android:exported="true" android:targetActivity="{2}">' -f $short, ([string]$enabled).ToLowerInvariant(), $target) +
+      ($filter -f $extra) + '</activity-alias>'
+  }
+  return ($lines -join "`n")
+}
+
 # Un APK piccolo e FIRMATO. Opzioni (tutte facoltative, i valori di base fanno passare release.ps1):
 #   Keystore, Password, Package, VersionCode, VersionName, Debuggable, Lib ("aligned" | "align4096" | "unaligned" | "none"), Changelog (testo o $null),
-#   V3 ($false = firma senza v3), ExtraClasses (nome completo -> corpo della classe), Permissions, ExportedComponents, ManifestAttributes.
+#   V3 ($false = firma senza v3), ExtraClasses (nome completo -> corpo della classe), Permissions, ExportedComponents, ManifestAttributes,
+#   Launcher (gli ingressi del launcher: di base quelli di New-LauncherXml, come nell'app vera).
 function New-MiniApk([string]$Dir, [string]$Name, [hashtable]$Options) {
   $tools = Get-BuildTools
   $o = @{ Package = "dev.pampa.mycloudgallery"; VersionCode = 1; VersionName = "1.0.0"; Debuggable = $false; Lib = "aligned"; Changelog = $null; V3 = $true
-          ExtraClasses = @{}; Permissions = @(); ExportedComponents = @(); ManifestAttributes = ""; Password = "prova-12345" }
+          ExtraClasses = @{}; Permissions = @(); ExportedComponents = @(); ManifestAttributes = ""; Password = "prova-12345"; Launcher = (New-LauncherXml) }
   foreach ($key in $Options.Keys) { $o[$key] = $Options[$key] }
   if (-not $o.Keystore) { throw "New-MiniApk vuole un keystore di prova" }
   $work = Join-Path $Dir $Name
@@ -78,9 +100,7 @@ function New-MiniApk([string]$Dir, [string]$Name, [hashtable]$Options) {
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="$($o.Package)" $($o.ManifestAttributes)>
 $permissions
   <application android:allowBackup="false" android:debuggable="$(([string]$o.Debuggable).ToLowerInvariant())">
-    <activity android:name="dev.pampa.mycloudgallery.MainActivity" android:exported="true">
-      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
-    </activity>
+$($o.Launcher)
 $extra
   </application>
 </manifest>

@@ -21,7 +21,7 @@ param([switch]$KeepWork)
 $ErrorActionPreference = "Stop"
 $script:Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $script:Overlay = $null
-foreach ($lib in @("release-lib-core.ps1", "release-lib-apk.ps1", "release-lib-check.ps1", "release-lib-verify.ps1", "release-lib-report.ps1", "test-release-lib.ps1")) {
+foreach ($lib in @("release-lib-core.ps1", "release-lib-apk.ps1", "release-lib-launcher.ps1", "release-lib-check.ps1", "release-lib-verify.ps1", "release-lib-report.ps1", "test-release-lib.ps1")) {
   . (Join-Path $PSScriptRoot $lib)
 }
 $realRoot = $script:Root
@@ -54,7 +54,11 @@ $common = @("-TestKeystore", $ksA, "-TestStorePassword", $password)
 # --- L'overlay di base: i file del repository come devono essere per una release di prova ---------------------------------------------
 $base = Join-Path $work "overlay-base"
 foreach ($dir in @("docs", "tools\release", "release", "core-release\src\main\kotlin\dev\pampa\mycloudgallery\core\release\keys")) { New-Item -ItemType Directory -Path (Join-Path $base $dir) -Force | Out-Null }
-Copy-Item -LiteralPath (Join-Path $realRoot "docs\sicurezza.md") -Destination (Join-Path $base "docs\sicurezza.md")
+# Il documento vero ha gia' l'impronta di pampa.jks (dal 03/11/2026): le prove partono da una copia senza, come prima della prima scrittura.
+$docBlank = (((Read-Utf8 (Join-Path $realRoot "docs\sicurezza.md")) -split '\r?\n') | ForEach-Object {
+  if ($_.StartsWith('| `pampa.jks` |')) { [regex]::Replace($_, '`[0-9a-fA-F]{64}`', 'da scrivere') } else { $_ }
+}) -join "`n"
+[System.IO.File]::WriteAllText((Join-Path $base "docs\sicurezza.md"), $docBlank, $utf8)
 $keysRel = "core-release\src\main\kotlin\dev\pampa\mycloudgallery\core\release\keys\ReleaseKeys.kt"
 $keysText = (Read-Utf8 (Join-Path $realRoot $keysRel)) -replace 'const val PROVISIONAL: Boolean = true', 'const val PROVISIONAL: Boolean = false'
 [System.IO.File]::WriteAllText((Join-Path $base $keysRel), $keysText, $utf8)
@@ -81,7 +85,13 @@ function New-CaseOverlay([string]$Name, [hashtable]$Files = @{}) {
   Copy-Item -LiteralPath $base -Destination $dir -Recurse
   foreach ($relative in $Files.Keys) {
     $target = Join-Path $dir $relative
-    if ($null -eq $Files[$relative]) { Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue; continue }
+    if ($null -eq $Files[$relative]) {
+      # Un file che deve mancare: via dalla sostituzione, e un segnaposto perche' non valga quello vero del repository (Resolve-RepoFile).
+      Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+      New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
+      [System.IO.File]::WriteAllText(($target + ".assente"), "", $utf8)
+      continue
+    }
     New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
     [System.IO.File]::WriteAllText($target, $Files[$relative], $utf8)
   }
@@ -118,7 +128,7 @@ Check "il testo del Pampa Store ha le quattro voci e nessun cancelletto" ($store
 Write-Host "`nLa firma" -ForegroundColor Cyan
 Expect-Fail "un APK con un'altra chiave fa fallire" (Invoke-Case (New-MiniApk $apkDir "altra-chiave" (Good @{ Keystore = $ksB })) $base) "non e' quella di pampa.jks"
 Expect-Fail "un APK senza firma v3 fa fallire" (Invoke-Case (New-MiniApk $apkDir "senza-v3" (Good @{ V3 = $false })) $base) "firma v3"
-Expect-Fail "l'impronta non scritta nel documento fa fallire" (Invoke-Case $goodApk (New-CaseOverlay "senza-impronta" @{ "docs\sicurezza.md" = (Read-Utf8 (Join-Path $realRoot "docs\sicurezza.md")) })) "manca l'impronta"
+Expect-Fail "l'impronta non scritta nel documento fa fallire" (Invoke-Case $goodApk (New-CaseOverlay "senza-impronta" @{ "docs\sicurezza.md" = $docBlank })) "manca l'impronta"
 
 Write-Host "`nIl contenuto dell'APK" -ForegroundColor Cyan
 Expect-Fail "un APK debuggable fa fallire" (Invoke-Case (New-MiniApk $apkDir "debuggable" (Good @{ Debuggable = $true })) $base) "DEBUGGABLE"
@@ -132,6 +142,13 @@ Expect-Fail "la libreria nativa a 4 KB fa fallire" (Invoke-Case (New-MiniApk $ap
 Expect-Fail "la libreria nativa non allineata nel file fa fallire" (Invoke-Case (New-MiniApk $apkDir "libnoalign" (Good @{ Lib = "unaligned" })) $base) "non e' allineata a 16 KB"
 Expect-Fail "nessuna libreria nativa fa fallire (lettura non affidabile)" (Invoke-Case (New-MiniApk $apkDir "senza-lib" (Good @{ Lib = "none" })) $base) "nessuna libreria nativa"
 Expect-Fail "un componente esportato fuori elenco fa fallire" (Invoke-Case (New-MiniApk $apkDir "esportato" (Good @{ ExportedComponents = @("dev.pampa.mycloudgallery.Intruso") })) $base) "componente esportato non ammesso"
+# I5 (12/11/2026): gli ingressi del launcher. Il caso buono (i tre alias, solo l'automatica abilitata) e' l'APK "giusto" qui sopra.
+Expect-Fail "un quarto alias del launcher fa fallire" (Invoke-Case (New-MiniApk $apkDir "alias-quarto" (Good @{ Launcher = (New-LauncherXml -ExtraAlias "Rainbow") })) $base) "ingresso del launcher fuori elenco"
+Expect-Fail "un alias con un filtro in piu' (VIEW) fa fallire" (Invoke-Case (New-MiniApk $apkDir "alias-filtro" (Good @{ Launcher = (New-LauncherXml @{ Auto = @{ Extra = '<action android:name="android.intent.action.VIEW"/>' } }) })) $base) "la sola azione MAIN"
+Expect-Fail "un alias verso un'altra attivita' fa fallire" (Invoke-Case (New-MiniApk $apkDir "alias-bersaglio" (Good @{ Launcher = (New-LauncherXml @{ Dark = @{ Target = "dev.pampa.mycloudgallery.Altra" } }) })) $base) "deve puntare a dev.pampa.mycloudgallery.MainActivity"
+Expect-Fail "due alias abilitati di serie fanno fallire" (Invoke-Case (New-MiniApk $apkDir "alias-due" (Good @{ Launcher = (New-LauncherXml @{ Light = @{ Enabled = $true } }) })) $base) "un solo ingresso del launcher alla volta"
+Expect-Fail "nessun alias abilitato di serie fa fallire" (Invoke-Case (New-MiniApk $apkDir "alias-zero" (Good @{ Launcher = (New-LauncherXml @{ Auto = @{ Enabled = $false } }) })) $base) "deve essere abilitato"
+Expect-Fail "la MainActivity con il suo filtro LAUNCHER fa fallire" (Invoke-Case (New-MiniApk $apkDir "alias-main" (Good @{ Launcher = (New-LauncherXml -MainLauncher) })) $base) "fuori elenco"
 Expect-Fail "sharedUserId fa fallire" (Invoke-Case (New-MiniApk $apkDir "shared" (Good @{ ManifestAttributes = 'android:sharedUserId="dev.pampa.altro"' })) $base) "sharedUserId"
 Expect-Fail "un permesso fuori dall'elenco chiuso fa fallire" (Invoke-Case (New-MiniApk $apkDir "permesso" (Good @{ Permissions = @("android.permission.READ_SMS") })) $base) "permesso fuori dall'elenco chiuso"
 

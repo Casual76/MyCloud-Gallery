@@ -419,7 +419,7 @@ private fun GallerySearchLine(
           Icon(imageVector = icon, contentDescription = null, tint = style.ink, modifier = Modifier.size(LineIconSize))
         }
         if (spec.progress != null || spec.busy) {
-          GallerySearchProgress(progress = spec.progress, ink = style.ink, modifier = Modifier.width(GallerySearchBarDefaults.LineBarWidth))
+          GallerySearchProgress(progress = spec.progress, modifier = Modifier.width(GallerySearchBarDefaults.LineBarWidth))
         }
         val text = spec.text
         if (text != null) {

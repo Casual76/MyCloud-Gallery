@@ -18929,3 +18929,64 @@ Il disegno della ricerca della fase H resta (H4). Cambia come si esprime: antepr
   Libreria (griglia condivisa, non toccata). La selezione nei risultati e' quella della Libreria (I4).
 - **Da provare sul telefono**: vedi il report di I2 (aperture ripetute, tempo delle anteprime alla prima apertura, barra della copertura che avanza,
   pagina Ricerca e modelli a 360 dp e testo grande, nessun calo del pinch e dello scorrimento con la barra aperta).
+
+### I5, l'icona dell'app a scelta (fase I, 12 novembre 2026)
+
+Ramo `fix/i3-backup-impostazioni` (dopo il merge di `integra/beta-grafica`, icona nuova `36a8b87c`). Richiesta dell'utente del 12/11: un'icona fissa per chi
+non vuole quella che segue il tema; di serie resta l'**Automatica** (scura dove il launcher non segue il tema). Prima e dopo in `docs/I5-prima-dopo.md`.
+
+- **Tre ingressi del launcher**: nel manifest di `:app` la `MainActivity` non ha piu' il filtro MAIN/LAUNCHER; ci sono tre `activity-alias` (`LauncherAuto`
+  con `@mipmap/ic_launcher`, `LauncherLight` con `@mipmap/ic_launcher_light`, `LauncherDark` con `@mipmap/ic_launcher_dark`), uno solo abilitato (di serie
+  l'automatica). Le due icone nuove hanno lo stesso primo piano (`ic_launcher_foreground`, non ridisegnato) e lo stesso livello a un colore, con lo sfondo
+  fisso (`ic_launcher_background_light` / `_dark`); `ic_launcher_background` ora rimanda a quei due colori (stessi valori di prima). La `MainActivity` resta
+  esportata: notifiche, widget, finestre, `ProcessRestart` (che passa da `getLaunchIntentForPackage`, quindi dall'alias abilitato), benchmark e strumenti
+  la aprono per nome. Un alias porta alla stessa `MainActivity` (`launchMode`, tema, finestre, blocco: invariati) e il sistema riconosce il task dalla
+  `MainActivity` vera, quindi un'apertura dall'icona riporta in primo piano il task aperto da una notifica, come prima.
+- **Il cambio** (`app/.../appicon/AppIconSwitcher.kt`): la scelta si ricorda nelle preferenze dell'app (`mcg_app_icon`, mai sincronizzata) e la pagina la
+  segna al tocco; l'ingresso del launcher cambia **quando l'app passa in secondo piano** (l'ultima activity si ferma, una rotazione non conta), perche' per
+  Android un'activity aperta da un alias porta il nome dell'alias e disabilitarlo la chiude anche con DONT_KILL_APP. Prima si abilita il nuovo, poi si
+  disabilitano gli altri, mai zero ingressi; un errore riporta all'automatica. All'avvio si riallinea: nessun ingresso abilitato -> si abilita subito quello
+  scelto (abilitare non chiude niente); uno stato diverso dalla scelta -> si corregge al primo passaggio in secondo piano. Le chiamate al PackageManager
+  girano fuori dal thread principale, una alla volta (un filo che nasce quando serve); le preferenze si leggono alla prima richiesta, non all'avvio.
+- **Le Impostazioni**: la voce «Icona dell'app» nel gruppo «Foto», dopo «Widget» (le due cose dell'app che stanno sulla Home), con l'icona scelta vera in
+  piccolo e il nome a destra; la pagina ha tre anteprime grandi disegnate con le risorse vere (`AppIconArt`, scritto da `:app`), l'anello e la spunta sulla
+  scelta, e una riga sola: «Su alcuni telefoni l'icona sparisce un attimo dalla Home e torna in un altro posto.» Per TalkBack ogni anteprima e' una scelta con
+  il nome e lo stato. La porta `AppIconSettings` e' opzionale (`@BindsOptionalOf`): senza `:app` la voce non c'e'.
+- **Il controllo della release**: i tre alias sono componenti esposti **voluti**, ammessi per nome e per forma con `launcherAliasPolicy` (fuori da
+  `allowedExported`, che resta l'elenco chiuso di `Phase5BArchitectureTest`): `verifyLauncherAliases` in `verifyReleaseManifest`, la stessa regola in
+  `tools/check.ps1` (passo dell'APK di release) e in `tools/release` (`release-lib-launcher.ps1`, usata da `release.ps1`), e la voce S13 di `tools/security`
+  li conta fra gli ammessi. Prove sintetiche: `tools/release/test-launcher-gradle.groovy` (12 casi sulla funzione Groovy vera) e sei casi cattivi nuovi in
+  `tools/release/test-release.ps1` (APK di prova costruiti con gli alias come l'app vera). Righe C17, 4-bis e registro in `docs/sicurezza.md`.
+- **Prove sul telefono** (le fa l'orchestratore; nessun dispositivo qui): (1) installata la build, sulla Home c'e' **una** icona MyCloud Gallery, che segue il
+  tema del telefono (cambia tema chiaro/scuro: lo sfondo dell'icona cambia; difetto: due icone, o nessuna); (2) Impostazioni -> Icona dell'app -> «Scura»:
+  l'anello passa subito sulla scura e l'app resta aperta (difetto: l'app si chiude o torna indietro); (3) Home: entro un paio di secondi l'icona e' quella
+  scura e c'e' **una sola** icona (annotare se cambia posto o pagina sulla Home di One UI: e' l'avviso della pagina; difetto: due icone o nessuna);
+  (4) tema del telefono chiaro: l'icona resta scura; (5) «Chiara» e poi «Automatica», uscendo ogni volta: stessa cosa; (6) aprire l'app dall'icona nuova,
+  da una notifica e dal widget: si apre come prima, nessuna seconda finestra; (7) con l'icona «Scura» scelta, chiudere l'app dai recenti e riaprirla: l'icona
+  resta la scura; (8) TalkBack sulla pagina: «Automatica, selezionato» e le altre due «non selezionato».
+
+### I2, giro 1 della review (12/11 notte)
+- **CG-1 (privacy dei volti negli esempi)**: lo stesso contratto delle Raccolte. I ritagli stanno in un posto solo (`SuggestionFaces`) con il segno
+  delle revoche e le foto d'origine; esempi, terna pronta per la prossima apertura, recenti e completamenti tengono solo la persona
+  (`SuggestionArt.Face(person, fallback)`), mai il bitmap. A ogni segno di `CollectionFaceCrops.revocations` (la stessa porta e lo stesso segno delle
+  Raccolte: `AppSearchFaces` ora sta sopra `AppCollectionFaceCrops`) si buttano tutti i volti e le persone degli esempi, che si rifanno dalle sorgenti di
+  adesso; il tondo legge lo stato e al fotogramma dopo non disegna piu' il volto; una risposta in volo con il segno vecchio non entra; il cancello
+  riconferma i volti della terna a ogni apertura (cosi' un volto torna solo se il cancello lo ripermette). Prove: `SearchFacesRevocationTest`,
+  `AppSearchFacesTest` (CS-11), e tre mutazioni (senza la revoca, senza il controllo del segno, senza il controllo delle origini) fanno cadere ciascuna
+  la sua prova.
+- **Le foto degli esempi e delle recenti** (una foto nascosta dopo che la terna e' pronta): la voce tiene solo l'id; il tondo la disegna, e il
+  caricatore la tiene, solo se e' nell'istantanea della Libreria visibile di adesso (`photoArt`, `previewRequest`), che lo stato raccolto dalla barra
+  aggiorna: sparita dall'istantanea, al disegno dopo c'e' il segno del tipo. Il filtro finale dei nascosti vale quando la terna si prepara.
+- **CU-19**: sotto l'analisi e sotto la lettura del testo **un tasto solo** con la sua icona (il rimedio di un problema, «Riprova» la misura, «Indicizza
+  ora»; «Scopri e attiva», «Leggi e conferma», «Leggi il nuovo testo», «Usa anche su questo dispositivo»); le altre scelte, con le frasi intere,
+  dietro il tocco sulla riga dello stato o della lettura (un foglio: per decidere). Lo stato dell'analisi e' un segno con il tempo che manca, non un
+  secondo anello con «1.240 / 15.000» sotto «12.300 / 15.000». Niente «0» accanto a «Cancella le ricerche recenti».
+- **CU-25 e i segni comuni**: le scintille restano ai Ricordi; la ricerca per contenuto e' la lente sull'immagine (`ImageSearch`), l'analisi il chip
+  (`Memory`), in corso il tempo che scorre. Pausa per una condizione (regole, rete, NAS, spazio, caldo) = il segno del perche' con `Paused`; attesa o
+  preparazione = la clessidra e basta (anche la riga «sto preparando la ricerca», senza barra); in corso = `Running`.
+- **Componenti comuni** (I4, `f329e9c3`): gli anelli sono `GalleryProgressRing` (testata `Hero`, modelli `Card`, il modello in verifica con l'arco che
+  gira); la «i» della copertura e' `GalleryInfoButton` e la frase si apre nella pagina (`GalleryInfoDetail`); la barra della copertura nella ricerca ha
+  il colore (`galleryRingColor(Search)`, pista al 28%) e il tratto (4 dp) dell'anello. La testata ha l'anello al centro e i numeri sotto, a tutta
+  larghezza: a 360 dp e a 1,3x non vanno a capo.
+- **CS-10 e CS-15**: tolte le stringhe orfane (`models_indexer_title`, `models_section_areas`, `models_status_title`, e quelle rese orfane qui); «foto e
+  video» al posto di «media», niente «CPU»/«GPU» («2,8 foto/s»; nelle frasi «con il processore grafico»).

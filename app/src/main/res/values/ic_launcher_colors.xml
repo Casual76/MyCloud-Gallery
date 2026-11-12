@@ -2,7 +2,12 @@
 <!--
     Lo sfondo dell'icona dell'app. Quello di base e' lo scuro (scelta dell'utente: se un launcher non segue il tema, si vede la scura);
     con il tema chiaro del telefono vale values-notnight.
+
+    I5 (12/11/2026): i due sfondi fissi delle icone a scelta (Impostazioni -> Icona dell'app, «Chiara» e «Scura»: mipmap-anydpi/ic_launcher_light.xml e
+    ic_launcher_dark.xml) e delle loro anteprime. Non cambiano con il tema: sono gli stessi due colori che l'icona automatica alterna.
 -->
 <resources>
-  <color name="ic_launcher_background">#15141A</color>
+  <color name="ic_launcher_background">@color/ic_launcher_background_dark</color>
+  <color name="ic_launcher_background_dark">#15141A</color>
+  <color name="ic_launcher_background_light">#FFFFFF</color>
 </resources>

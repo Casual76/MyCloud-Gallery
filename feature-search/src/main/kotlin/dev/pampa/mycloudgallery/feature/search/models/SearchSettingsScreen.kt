@@ -35,6 +35,7 @@ import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Thermostat
+import androidx.compose.material.icons.rounded.Timelapse
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material.icons.rounded.Groups
@@ -443,10 +444,11 @@ internal fun codeActionIcon(action: CodeAction): ImageVector = when (action) {
 /**
  * Il segno di uno stato dell'analisi (le regole comuni del giro 1): **in corso** = il chip con `Running`; **fatto** = `Done`; **in pausa** per una
  * condizione (le regole, la rete, il NAS, lo spazio, il caldo) = il segno del perche' con `Paused`; **in attesa** che le foto siano preparate o della
- * prossima tappa = la clessidra, e solo quella; il modello che manca = la freccia con `Attention`; spento = `Stopped`; un problema = `Problem`.
+ * prossima tappa = la clessidra, e solo quella; in corso il segno del tempo che scorre (accanto c'e' quanto manca); il modello che manca = la freccia con `Attention`; spento = `Stopped`; un problema = `Problem`.
  */
 internal fun statusSign(status: AiStatus): Triple<ImageVector, GalleryIconFamily, GalleryIconStatus?> = when (status) {
-  is AiStatus.Running -> Triple(Icons.Rounded.Memory, GalleryIconFamily.Search, GalleryIconStatus.Running)
+  // Il tempo che scorre: la riga dice quanto manca; il chip resta all'interruttore, subito sopra (un segno non si ripete).
+  is AiStatus.Running -> Triple(Icons.Rounded.Timelapse, GalleryIconFamily.Search, GalleryIconStatus.Running)
   is AiStatus.Idle, is AiStatus.BufferOnlyDone -> Triple(Icons.Rounded.Memory, GalleryIconFamily.Search, GalleryIconStatus.Done)
   is AiStatus.Waiting -> when (status.reason) {
     AiWaitReason.PREPARATION, AiWaitReason.NEXT_STAGE -> Triple(Icons.Rounded.HourglassTop, GalleryIconFamily.System, null)

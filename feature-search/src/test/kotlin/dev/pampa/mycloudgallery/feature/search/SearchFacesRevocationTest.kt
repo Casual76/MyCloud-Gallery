@@ -72,7 +72,8 @@ class SearchFacesRevocationTest {
     override suspend fun face(person: PersonId, sizePx: Int): SearchFace? {
       asked++
       val permitted = allow
-      hold?.await()
+      val wait = hold
+      wait?.await()
       return if (permitted) SearchFace(Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888), setOf(origin)) else null
     }
 
@@ -199,11 +200,12 @@ class SearchFacesRevocationTest {
     // Gli esempi sono pronti, il volto di Anna e' stato chiesto (con il permesso), ma il ritaglio e' ancora in volo.
     assertThat(gate.asked).isAtLeast(1)
     assertThat(w.annaDrawn()).isFalse()
-    // La revoca arriva mentre e' in volo; da qui il cancello rifiuta.
-    gate.allow = false
+    // La revoca arriva mentre e' in volo. Le domande fatte dopo restano senza risposta: conta solo che la risposta vecchia, quando arriva, non entri.
+    val inFlight = gate.hold!!
+    gate.hold = CompletableDeferred()
     gate.token.value = 1
     runCurrent()
-    gate.hold!!.complete(Unit)
+    inFlight.complete(Unit)
     advanceTimeBy(1_000)
     runCurrent()
     assertThat(w.annaDrawn()).isFalse()

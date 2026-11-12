@@ -18929,3 +18929,29 @@ Il disegno della ricerca della fase H resta (H4). Cambia come si esprime: antepr
   Libreria (griglia condivisa, non toccata). La selezione nei risultati e' quella della Libreria (I4).
 - **Da provare sul telefono**: vedi il report di I2 (aperture ripetute, tempo delle anteprime alla prima apertura, barra della copertura che avanza,
   pagina Ricerca e modelli a 360 dp e testo grande, nessun calo del pinch e dello scorrimento con la barra aperta).
+
+### I2, giro 1 della review (12/11 notte)
+- **CG-1 (privacy dei volti negli esempi)**: lo stesso contratto delle Raccolte. I ritagli stanno in un posto solo (`SuggestionFaces`) con il segno
+  delle revoche e le foto d'origine; esempi, terna pronta per la prossima apertura, recenti e completamenti tengono solo la persona
+  (`SuggestionArt.Face(person, fallback)`), mai il bitmap. A ogni segno di `CollectionFaceCrops.revocations` (la stessa porta e lo stesso segno delle
+  Raccolte: `AppSearchFaces` ora sta sopra `AppCollectionFaceCrops`) si buttano tutti i volti e le persone degli esempi, che si rifanno dalle sorgenti di
+  adesso; il tondo legge lo stato e al fotogramma dopo non disegna piu' il volto; una risposta in volo con il segno vecchio non entra; il cancello
+  riconferma i volti della terna a ogni apertura (cosi' un volto torna solo se il cancello lo ripermette). Prove: `SearchFacesRevocationTest`,
+  `AppSearchFacesTest` (CS-11), e tre mutazioni (senza la revoca, senza il controllo del segno, senza il controllo delle origini) fanno cadere ciascuna
+  la sua prova.
+- **Le foto degli esempi e delle recenti** (una foto nascosta dopo che la terna e' pronta): la voce tiene solo l'id; il tondo la disegna, e il
+  caricatore la tiene, solo se e' nell'istantanea della Libreria visibile di adesso (`photoArt`, `previewRequest`), che lo stato raccolto dalla barra
+  aggiorna: sparita dall'istantanea, al disegno dopo c'e' il segno del tipo. Il filtro finale dei nascosti vale quando la terna si prepara.
+- **CU-19**: sotto l'analisi e sotto la lettura del testo **un tasto solo** con la sua icona (il rimedio di un problema, «Riprova» la misura, «Indicizza
+  ora»; «Scopri e attiva», «Leggi e conferma», «Leggi il nuovo testo», «Usa anche su questo dispositivo»); le altre scelte, con le frasi intere,
+  dietro il tocco sulla riga dello stato o della lettura (un foglio: per decidere). Lo stato dell'analisi e' un segno con il tempo che manca, non un
+  secondo anello con «1.240 / 15.000» sotto «12.300 / 15.000». Niente «0» accanto a «Cancella le ricerche recenti».
+- **CU-25 e i segni comuni**: le scintille restano ai Ricordi; la ricerca per contenuto e' la lente sull'immagine (`ImageSearch`), l'analisi il chip
+  (`Memory`), in corso il tempo che scorre. Pausa per una condizione (regole, rete, NAS, spazio, caldo) = il segno del perche' con `Paused`; attesa o
+  preparazione = la clessidra e basta (anche la riga «sto preparando la ricerca», senza barra); in corso = `Running`.
+- **Componenti comuni** (I4, `f329e9c3`): gli anelli sono `GalleryProgressRing` (testata `Hero`, modelli `Card`, il modello in verifica con l'arco che
+  gira); la «i» della copertura e' `GalleryInfoButton` e la frase si apre nella pagina (`GalleryInfoDetail`); la barra della copertura nella ricerca ha
+  il colore (`galleryRingColor(Search)`, pista al 28%) e il tratto (4 dp) dell'anello. La testata ha l'anello al centro e i numeri sotto, a tutta
+  larghezza: a 360 dp e a 1,3x non vanno a capo.
+- **CS-10 e CS-15**: tolte le stringhe orfane (`models_indexer_title`, `models_section_areas`, `models_status_title`, e quelle rese orfane qui); «foto e
+  video» al posto di «media», niente «CPU»/«GPU» («2,8 foto/s»; nelle frasi «con il processore grafico»).

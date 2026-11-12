@@ -213,7 +213,7 @@ internal abstract class MapFailureScenes(private val dark: Boolean) : MapScreenT
   }
 
   @Test
-  fun mappaConErrore() = shoot("mappa-errore", "Non riesco a leggere le posizioni delle foto", "Le foto non sono perse", "Riprova", content = mapScene())
+  fun mappaConErrore() = shoot("mappa-errore", "Non riesco a leggere le posizioni delle foto", "Riprova", content = mapScene())
 
   @Test
   fun zonaConErrore() = shoot("zona-errore", "Non riesco a leggere le posizioni delle foto", "Riprova", "Torna alla mappa") {

@@ -174,8 +174,11 @@ internal class MapScreensTest : MapScreenTest() {
     scene(readyUi(notice = MapNotice.WIFI_ONLY), "Mappa dettagliata solo sul Wi-Fi", PlacesAttribution.MAP_ONLINE_SHORT)
     scene(readyUi(notice = MapNotice.OFFLINE), "Nessuna rete: la carta semplice e le zone scaricate")
     scene(readyUi(notice = null), PlacesAttribution.MAP_ONLINE_SHORT, notShown = listOf("Carta semplice", "solo sul Wi-Fi", "Nessuna rete"))
-    scene(MapUi(MapScreenState.Empty(320), MapStyles.choose(MapOnline.On(true), false, false), readyUi().initial), "Nessuna foto con la posizione", "320 foto senza posizione")
-    scene(MapUi(MapScreenState.Empty(0), MapStyles.choose(MapOnline.Off, false, false), readyUi().initial), "Nessuna foto con la posizione", "Le foto con la posizione compaiono qui")
+    // Giro 2 (CS-17): lo stato vuoto e' la figura e il titolo; quante sono senza posizione (o dove compaiono) lo dice la «i».
+    scene(MapUi(MapScreenState.Empty(320), MapStyles.choose(MapOnline.On(true), false, false), readyUi().initial), "Nessuna foto con la posizione")
+    assertSays("vuota con il conto", "320 foto senza posizione")
+    scene(MapUi(MapScreenState.Empty(0), MapStyles.choose(MapOnline.Off, false, false), readyUi().initial), "Nessuna foto con la posizione")
+    assertSays("vuota", "Le foto con la posizione compaiono qui")
     // Il credito di MapLibre apre un collegamento nel browser e non c'e' (L430): mai la scritta del suo pulsante.
     assertDoesNotShow("credito", "MapLibre", "Mapbox", "http")
   }
@@ -252,7 +255,8 @@ internal class MapScreensTest : MapScreenTest() {
     // Senza l'interruttore di build: la pagina dice che la mappa dettagliata non c'e', senza interruttori.
     composeRule.runOnUiThread { state.value = MapPrivacyState.Unavailable }
     composeRule.waitForIdle()
-    assertShows("non disponibile", "La mappa dettagliata non c’è in questa versione", "non esce niente dal telefono")
+    assertShows("non disponibile", "La mappa dettagliata non c’è in questa versione")
+    assertSays("non disponibile", "non esce niente dal telefono")
     assertDoesNotShow("non disponibile", "Solo sul Wi-Fi", "Accesa su questo dispositivo")
   }
 
@@ -287,5 +291,6 @@ internal class MapScreensTest : MapScreenTest() {
     composeRule.runOnUiThread { state.value = ZoneGridState.Empty }
     composeRule.waitForIdle()
     assertShows("vuota", "Nessuna foto qui", "Torna alla mappa")
+    assertSays("vuota", "oppure sono nascoste")
   }
 }

@@ -1,7 +1,5 @@
 package dev.pampa.mycloudgallery.feature.map.privacy
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudDownload
@@ -19,7 +17,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -28,6 +25,8 @@ import dev.pampa.mycloudgallery.core.map.contract.MapOnline
 import dev.pampa.mycloudgallery.feature.map.R
 import dev.pampa.mycloudgallery.feature.map.contract.MapPrivacyState
 import dev.pampa.mycloudgallery.feature.map.ui.MapDimens
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIcons
+import dev.pampa.mycloudgallery.feature.map.ui.MapFigureState
 
 // IMPOSTAZIONI -> MAPPA (Fase 9, P4; docs/fase9-progetto.md §1.5 `MapPrivacyState`, §2.8, D24, Q1 (c)). Righe raggruppate di Fluid (regola 2 del design system: il tono sulla piastrella, mai sulla riga): l'interruttore
 // della mappa dettagliata con la nota breve sotto (cosa esce, a chi, come evitarlo), "Solo sul Wi-Fi" con l'avviso sul consumo di dati quando e' spento, "Zone senza Internet". Ogni controllo e' da almeno 48 dp e
@@ -75,10 +74,13 @@ private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChang
 internal fun MapPrivacyScreen(state: MapPrivacyState, handlers: MapPrivacyHandlers, modifier: Modifier = Modifier) {
   FluidScreen(title = stringResource(R.string.mappa_settings_title), modifier = modifier, onBack = handlers::onBack, contentMaxWidth = MapDimens.SheetWidth) {
     when (state) {
+      // Giro 2 (CS-17): la forma unica degli stati vuoti; che cosa resta (la carta semplice, niente che esce dal telefono) dietro la «i».
       MapPrivacyState.Unavailable -> item(key = "unavailable") {
-        Column(verticalArrangement = Arrangement.spacedBy(MapDimens.BlockGap)) {
-          FluidEmptyState(title = stringResource(R.string.mappa_settings_unavailable_title), detail = stringResource(R.string.mappa_settings_unavailable_detail))
-        }
+        MapFigureState(
+          icon = GalleryIcons.Map.icon,
+          title = stringResource(R.string.mappa_settings_unavailable_title),
+          why = stringResource(R.string.mappa_settings_unavailable_detail),
+        )
       }
       is MapPrivacyState.Shown -> shown(state, handlers)
     }

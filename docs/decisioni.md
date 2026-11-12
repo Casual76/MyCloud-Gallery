@@ -18843,6 +18843,17 @@ di I4 (`f329e9c3`: stato vuoto, «i», anello), la scheda di copertina corretta 
   persona e poi scorrere le Raccolte a sinistra: le copertine arrivano anche per le schede mai viste, e la griglia accanto non perde le sue; (c) un
   tocco sulla «i» di uno stato vuoto apre la frase sotto, un altro la chiude; TalkBack la dice senza tocco.
 
+#### I1, giro di correzione 2 (12/11/2026)
+
+- **CS-17 (la forma unica dello stato vuoto, nella Mappa).** I sei `FluidEmptyState` di `feature-map` (la mappa vuota e con errore, la griglia di
+  una zona vuota e con errore, Impostazioni -> Mappa quando la mappa dettagliata non c'e', «La zona attorno a un luogo» senza l'elenco dei luoghi)
+  sono ora `GalleryFigureState` attraverso `MapFigureState` (`ui/MapParts.kt`): la figura, il titolo, i tasti. La frase resta solo dove rassicura o
+  spiega (le foto non sono perse, sparite o nascoste, quante sono senza posizione, la carta semplice che resta sul telefono) e sta dietro la «i»
+  comune. Nella zona attorno a un luogo il titolo dello stato ripeteva quello della pagina: ora e' lo stato, «Elenco dei luoghi non disponibile»
+  (la frase di prima e' tolta). Nelle altre cartelle di I1 (Persone, Ricordi, Raccolte, Nascosti, cestino) non resta nessun `FluidEmptyState` ne'
+  un'illustrazione chiamata a mano. La «i» sotto la figura e' scritta in tre posti (Raccolte, Persone, Mappa) con i due pezzi comuni: se
+  `GalleryFigureState` prendesse un parametro `why` sparirebbero tutte e tre le copie.
+
 ### I4, il resto dell'app con meno testo (fase I, 11/11 notte)
 
 Il metro dell'utente: «se non sapessi leggere o sentire, potrei usare l'app?». Censimento in `docs/i4-censimento.md`, prima e dopo in

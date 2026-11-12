@@ -53,7 +53,8 @@ class LibraryCloudTest {
       upToDate to GalleryCloudState.Saved,
       LibraryNasStatus.Frozen(FreezeReason.VANISHED, sinceNasMillis = 0L) to GalleryCloudState.Alarm,
       LibraryNasStatus.AreasUnavailable(setOf(NasArea.COMMON)) to GalleryCloudState.Attention,
-      LibraryNasStatus.LocalOnly to GalleryCloudState.Waiting,
+      // CU-1: la pubblicazione limitata dalle recinzioni e' la stessa pausa del backup vero non ancora acceso.
+      LibraryNasStatus.LocalOnly to GalleryCloudState.Paused,
     )
     for ((nas, expected) in cases) assertWithMessage("$nas").that(stateOf(nas = nas)).isEqualTo(expected)
     assertThat(stateOf(nas = LibraryNasStatus.Idle)).isNull()
@@ -98,10 +99,12 @@ class LibraryCloudTest {
         assertWithMessage(where).that(cloud.problems).isEmpty()
         assertWithMessage(where).that(cloud.showsSpace).isFalse()
       } else {
-        // Fermato da Android: un'attesa fra i lavori (riprende da solo), che si tocca e porta alla pagina Backup.
-        assertWithMessage(where).that(cloud.state).isEqualTo(GalleryCloudState.Waiting)
+        // Fermato da Android: un'attesa fra i lavori (riprende da solo), che si tocca e porta alla pagina Backup. Con l'indice del NAS fermo dalle
+        // recinzioni (CU-1) la nuvola e' in pausa per quello, ma il backup resta un'attesa.
+        val fenced = nas == LibraryNasStatus.LocalOnly
+        assertWithMessage(where).that(cloud.state).isEqualTo(if (fenced) GalleryCloudState.Paused else GalleryCloudState.Waiting)
         assertWithMessage(where).that(cloud.activity).contains(CloudItem.Backup(paused, GalleryCloudState.Waiting))
-        assertWithMessage(where).that(cloud.paused).isEmpty()
+        assertWithMessage(where).that(cloud.paused).isEqualTo(if (fenced) listOf(CloudItem.Nas(LibraryNasStatus.LocalOnly, GalleryCloudState.Paused)) else emptyList())
       }
     }
   }
@@ -207,5 +210,21 @@ class LibraryCloudTest {
     assertThat(tenths(3_600_000_000_000L, 1_000_000_000_000L)).isEqualTo("3,6")
     assertThat(tenths(1_250_000_000_000L, 1_000_000_000_000L)).isEqualTo("1,2")
     assertThat(tenths(12_340_000_000L, 1_000_000_000L)).isEqualTo("12,3")
+  }
+
+  /** CU-1 (fase I): con le recinzioni accese tutte insieme la pausa e' una sola voce (quella del backup), nel titolo, e lo spazio resta. */
+  @Test
+  fun conLeRecinzioniAcceseLaPausaEUnaSola() {
+    val cloud = checkNotNull(libraryCloud(network(LibraryNetworkSeverity.Fine), LibraryNasStatus.LocalOnly, LibraryBackupStatus.TestOnly))
+    assertThat(cloud.state).isEqualTo(GalleryCloudState.Paused)
+    assertThat(cloud.paused).containsExactly(CloudItem.Backup(LibraryBackupStatus.TestOnly, GalleryCloudState.Paused))
+    assertThat(cloud.activity).isEmpty()
+    assertThat(cloud.pauseInTitle).isEqualTo(CloudItem.Backup(LibraryBackupStatus.TestOnly, GalleryCloudState.Paused))
+    assertThat(cloud.showsSpace).isTrue()
+
+    // L'indice fermo da solo (il backup gia' a posto): la stessa pausa, detta dal NAS nel titolo.
+    val onlyNas = checkNotNull(libraryCloud(network(LibraryNetworkSeverity.Fine), LibraryNasStatus.LocalOnly, allSafe))
+    assertThat(onlyNas.pauseInTitle).isEqualTo(CloudItem.Nas(LibraryNasStatus.LocalOnly, GalleryCloudState.Paused))
+    assertThat(onlyNas.showsSpace).isTrue()
   }
 }

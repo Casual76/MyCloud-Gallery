@@ -27,10 +27,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -43,11 +47,14 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidPressGrip
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
+import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoGlyph
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
@@ -116,8 +123,9 @@ internal fun NasOperationsScreen(
   NasPage(
     label = NasLabel(
       title = stringResource(R.string.nas_ops_title),
+      // CU-13: a pagina vuota il vuoto lo dice la figura; la capsula in alto non lo ripete.
       subtitle = if (state.active.isEmpty()) {
-        stringResource(R.string.nas_ops_subtitle_none)
+        null
       } else {
         pluralStringResource(R.plurals.nas_ops_subtitle_active, state.active.size, GalleryNumbers.format(state.active.size))
       },
@@ -228,14 +236,21 @@ private fun ActiveCard(op: NasOperationState, onStop: (OpId) -> Unit) {
   val progress = progressOf(op)
   val family = kindFamily(op.kind)
   val ring = rememberGalleryIconColors(family).bottom
-  val spoken = listOf(title, status, detailOf(op)).joinToString(". ")
+  val reason = reasonOf(op)
+  var open by rememberSaveable(op.id.value) { mutableStateOf(false) }
+  // TalkBack sente anche il perche' (a schermo dietro la «i»), senza tocco.
+  val spoken = listOfNotNull(title, status, detailOf(op), reason).joinToString(". ")
   FluidListGroup {
     Column(
       modifier = Modifier.fillMaxWidth().padding(NasDimens.CardPadding),
       verticalArrangement = Arrangement.spacedBy(NasDimens.CardGap),
     ) {
       Row(
-        modifier = Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = spoken },
+        modifier = Modifier
+          .fillMaxWidth()
+          // CU-13 (fase I): con un perche' la testata intera apre la frase sotto (la «i» accanto al conto); niente riga in piu'.
+          .then(if (reason != null) Modifier.fluidPressable(onClick = { open = !open }, role = Role.Button) else Modifier)
+          .clearAndSetSemantics { contentDescription = spoken },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(NasDimens.CardGap),
       ) {
@@ -248,11 +263,15 @@ private fun ActiveCard(op: NasOperationState, onStop: (OpId) -> Unit) {
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
           )
-          Text(
-            text = shortDetailOf(op),
-            style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
+          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(NasDimens.LineGap)) {
+            Text(
+              text = shortDetailOf(op),
+              style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.weight(1f, fill = false),
+            )
+            if (reason != null) GalleryInfoGlyph(open = open)
+          }
         }
         if (progress != null) {
           Box(modifier = Modifier.size(OpRing), contentAlignment = Alignment.Center) {
@@ -266,9 +285,8 @@ private fun ActiveCard(op: NasOperationState, onStop: (OpId) -> Unit) {
           }
         }
       }
-      reasonOf(op)?.let { reason ->
-        Text(text = reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
-      }
+      // CU-13 (fase I): la frase lunga (perche' e' in pausa, i file aperti altrove) dietro il tocco sulla testata.
+      if (reason != null) GalleryInfoDetail(text = reason, visible = open, color = MaterialTheme.colorScheme.onSurfaceVariant)
       val stopDescription = stringResource(R.string.nas_ops_stop_for, title)
       FluidButton(
         text = stringResource(R.string.nas_ops_stop),

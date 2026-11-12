@@ -41,6 +41,9 @@ internal object AlbumDimens {
   val ExampleThumb: Dp = 72.dp
 
   /** I4: la scheda di una proposta nella griglia di «Viaggi», larga almeno quanto quelle di «Tutti i ricordi» (I1). */
+  /** CU-15: l'anello di una striscia che avanza (la condivisione di un album). */
+  val StripRing: Dp = 40.dp
+
   val TripCardMin: Dp = 140.dp
 
   /** I4: il tondo velato sotto la ✕ di «Non mi interessa». */

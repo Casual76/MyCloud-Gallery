@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.nas.folders
 
+import dev.pampa.mycloudgallery.feature.nas.contract.NasPreviewDose
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -171,6 +172,9 @@ class NasFoldersViewModel @Inject constructor(
 
   init {
     viewModelScope.launch { areas.areas.collect { list -> mutable.update { it.copy(areas = list) } } }
+    // CG-2 (fase I): quando la Libreria visibile cambia (una foto nascosta, un'area esclusa, un backup che aggiunge) le copertine si rileggono dal
+    // catalogo, fuori dal thread principale e con la dose; le righe intanto hanno gia' smesso di disegnare cio' che non e' piu' visibile.
+    viewModelScope.launch { NasPreviewDose.collect(thumbnails.visible) { rereadPreviews() } }
     viewModelScope.launch { areas.privateExclusions.collect { excluded -> mutable.update { it.copy(exclusions = excluded) } } }
     viewModelScope.launch {
       operations.operations.collect { ops ->
@@ -271,6 +275,20 @@ class NasFoldersViewModel @Inject constructor(
       mutable.update { current -> if (current.where == where && current.listing === listing) current.copy(previews = answer) else current }
     }
   }
+
+  /** CG-2: rilegge le anteprime dell'elenco aperto (se c'e'), tenendo quelle di adesso finche' arriva la risposta. */
+  private fun rereadPreviews() {
+    val current = mutable.value
+    val where = current.where ?: return
+    val listing = current.listing as? NasFolderState.Listing ?: return
+    previewRereads++
+    loadPreviews(where, listing)
+  }
+
+  /** Quante riletture per cambio della Libreria visibile (per le prove della dose). */
+  @Volatile
+  internal var previewRereads: Int = 0
+    private set
 
   /**
    * Fase 7 (P9, D23, I8): chiede a `:app` quali file dell'elenco sono nascosti nella Libreria. Mentre aspetta, e se non risponde, i file non si

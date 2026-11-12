@@ -14,7 +14,7 @@
   <string name="diag_nas_index_maintenance_title">Manutenzione dell\'indice sul NAS</string>
   <string name="diag_nas_index_maintenance_guide">Una volta al giorno l\'app riordina l\'indice che ha pubblicato e toglie i suoi file superati. Non tocca mai le foto e i video.</string>
   <string name="diag_nas_personal_state_title">Preferiti e nascosti fra i tuoi dispositivi</string>
-  <string name="diag_nas_personal_state_guide">Preferiti, nascosti e impostazioni personali viaggiano fra i dispositivi del tuo account, nella tua area privata del NAS. Sulle aree vere restano sul telefono finché la pubblicazione è limitata alle aree di prova.</string>
+  <string name="diag_nas_personal_state_guide">Preferiti, nascosti e impostazioni personali viaggiano fra i dispositivi del tuo account, nella tua area privata del NAS. Finché il backup vero non è acceso restano su questo telefono.</string>
   <string name="diag_nas_personal_rejected_title">Dati personali scartati</string>
   <string name="diag_nas_personal_rejected_guide">Alcune voci non vengono da un dispositivo approvato del tuo account, hanno un\'ora nel futuro o un tipo non ancora previsto: l\'app le ignora. Se il numero cresce, controlla i dispositivi in Impostazioni.</string>
 </resources>

@@ -164,7 +164,7 @@ abstract class NasScreenshotBase(private val dark: Boolean, private val device: 
   /** I4: le anteprime arrivate a meta' (la Libreria conosce i file ma le miniature non sono ancora in cache): le piastrelle, alla stessa misura. */
   @Test
   fun cartelleConLeAnteprimeNonAncoraInCache() =
-    shoot("cartelle-anteprime-in-arrivo") { FoldersPage(folders(previews = tripPreviews()), thumbnails = NasThumbnails(NoThumbnailLoader, previewThumbs.request)) }
+    shoot("cartelle-anteprime-in-arrivo") { FoldersPage(folders(previews = tripPreviews()), thumbnails = NasThumbnails(NoThumbnailLoader, request = previewThumbs.request)) }
 
   @Test
   fun cartelleUnaCartellaTestoGrande() = shoot("cartelle-cartella", fontScale = LARGE_TEXT) { FoldersPage(folders()) }

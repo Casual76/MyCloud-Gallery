@@ -24,7 +24,7 @@
   <string name="diag_nas_scan_skipped_names_guide">Alcuni file hanno nomi con caratteri che non si possono usare in modo sicuro: sono stati saltati. Rinominali dal PC se vuoi vederli nella Libreria.</string>
   <string name="diag_nas_scan_album_covers_title">Copertine degli album escluse</string>
   <string name="diag_nas_scan_album_covers_guide">Le immagini nelle cartelle di musica (copertine) non entrano nella Libreria. Puoi mostrarle dalle Impostazioni.</string>
-  <string name="diag_nas_scan_not_media_title">File vuoti o non media</string>
+  <string name="diag_nas_scan_not_media_title">File vuoti, né foto né video</string>
   <string name="diag_nas_scan_not_media_guide">Alcuni file hanno un\'estensione da foto o video ma dentro sono altro (o sono vuoti): non entrano nella Libreria.</string>
   <string name="diag_nas_scan_arriving_title">File in arrivo</string>
   <string name="diag_nas_scan_arriving_guide">Alcuni file si stanno ancora copiando sul NAS: entreranno nella Libreria quando saranno stabili.</string>
@@ -44,12 +44,12 @@
   <string name="diag_index_rollback_guide">L\'indice di un dispositivo sul NAS è più vecchio di quello già letto, o è sparito: si tiene quello che si conosceva.</string>
   <string name="diag_index_newer_format_title">Indice di una versione più nuova</string>
   <string name="diag_index_newer_format_guide">Un altro dispositivo usa una versione più recente dell\'app: aggiorna MyCloud Gallery per leggere i suoi dati.</string>
-  <string name="diag_index_identity_conflict_title">Identità dei media in conflitto</string>
-  <string name="diag_index_identity_conflict_guide">Un dispositivo ha pubblicato per un file un\'identità già usata qui per un altro contenuto: non è stata adottata e i media restano separati.</string>
+  <string name="diag_index_identity_conflict_title">Identità delle foto in conflitto</string>
+  <string name="diag_index_identity_conflict_guide">Un dispositivo ha pubblicato per un file un\'identità già usata qui per un altro contenuto: non è stata adottata e le due foto restano separate.</string>
   <string name="diag_index_outbox_pending_title">Indice in attesa di pubblicazione</string>
   <string name="diag_index_outbox_pending_guide">Miniature e dati preparati qui aspettano di essere scritti sul NAS (NAS pieno, quota, scritture ferme o non raggiungibile). Niente si perde: si riprova.</string>
   <string name="diag_index_local_only_title">Indice solo su questo telefono</string>
-  <string name="diag_index_local_only_guide">Finché la fase di prova non è chiusa, l\'indice si pubblica solo sulle aree di prova: sulle aree vere il telefono lavora in solo locale.</string>
+  <string name="diag_index_local_only_guide">Il backup vero non è ancora acceso: finché non lo accendi l\'indice resta su questo telefono e non si pubblica sulle aree vere.</string>
   <string name="diag_index_clock_jump_title">L\'ora del NAS ha fatto un salto</string>
   <string name="diag_index_clock_jump_guide">L\'ora del NAS è cambiata di oltre 5 minuti: le prenotazioni e le pulizie aspettano finché l\'ora non torna stabile.</string>
   <string name="diag_index_area_read_only_title">Area in sola lettura</string>
@@ -65,7 +65,7 @@
 
   <!-- Preparazione (PrepDiag, P6). -->
   <string name="diag_prep_state_title">Ultima preparazione</string>
-  <string name="diag_prep_state_guide">Quanti media sono stati preparati (miniature, anteprime, fotogrammi), quanti non riusciti e perché il giro si è fermato.</string>
+  <string name="diag_prep_state_guide">Quante foto e video sono stati preparati (miniature, anteprime, fotogrammi), quanti non riusciti e perché il giro si è fermato.</string>
   <string name="diag_prep_decoder_missing_title">Formati non leggibili qui</string>
   <string name="diag_prep_decoder_missing_guide">Questo telefono non sa decodificare alcuni formati: li proverà un altro Preparatore. Se nessuno ci riesce, resta il segnaposto.</string>
   <string name="diag_prep_unreadable_title">File non leggibili</string>

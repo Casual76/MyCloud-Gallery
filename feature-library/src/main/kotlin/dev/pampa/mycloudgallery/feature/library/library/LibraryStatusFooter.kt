@@ -6,7 +6,6 @@ import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.GppGood
 import androidx.compose.material.icons.rounded.PauseCircle
 import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -16,6 +15,8 @@ import androidx.compose.ui.res.stringResource
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryLiveAnnouncement
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.icon.glyph
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupWait
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
@@ -53,7 +54,8 @@ internal fun LibraryCloudAnnouncer(state: LibraryTabState) {
  */
 @Composable
 internal fun StatusAnnouncer(notes: List<GalleryFooterNote?>) {
-  val news = notes.filterNotNull().filter { it.tone != GalleryFooterTone.Calm }
+  // CU-1: lo stesso stato detto da due parti (la recinzione del NAS e del backup) si annuncia una volta.
+  val news = notes.filterNotNull().filter { it.tone != GalleryFooterTone.Calm }.distinctBy { it.label to it.detail }
   val kind = news.joinToString("|") { it.label.replace(Digits, "#") }
   val spoken = remember(kind) { news.joinToString(". ") { listOfNotNull(it.label, it.detail).joinToString(", ") } }
   if (kind.isNotEmpty()) GalleryLiveAnnouncement(spoken)
@@ -232,10 +234,11 @@ internal fun nasFooterNote(status: LibraryNasStatus): GalleryFooterNote? = when 
       detail = stringResource(R.string.nas_footer_unavailable_detail),
     )
   }
+  // CU-1, CS-3: la recinzione si chiama «In pausa» ovunque, con le due barre (la stessa voce del backup vero non ancora acceso).
   LibraryNasStatus.LocalOnly -> GalleryFooterNote(
     tone = GalleryFooterTone.Waiting,
     label = stringResource(R.string.nas_footer_local_only),
-    glyph = Icons.Rounded.HourglassTop,
+    glyph = GalleryIconStatus.Paused.glyph(),
     detail = stringResource(R.string.nas_footer_local_only_detail),
   )
 }

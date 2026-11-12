@@ -195,7 +195,7 @@
   <string name="diag_and_media_denied_guide">Backup e indicizzazione sono in pausa: i permessi sono stati negati o ritirati dal sistema. I file non risultano cancellati. Concedi di nuovo l\'accesso a foto e video.</string>
   <string name="diag_and_media_partial_title">Accesso solo alle foto selezionate</string>
   <string name="diag_and_media_partial_guide">L\'app vede soltanto le foto scelte (modalità limitata). Per il backup completo concedi tutte le foto e i video.</string>
-  <string name="diag_and_media_location_denied_title">Posizione dei media non concessa</string>
+  <string name="diag_and_media_location_denied_title">Posizione delle foto non concessa</string>
   <string name="diag_and_media_location_denied_guide">Senza questo permesso Android oscura il GPS nelle copie: il backup perderebbe la posizione delle foto.</string>
   <string name="diag_and_camera_denied_title">Fotocamera non concessa</string>
   <string name="diag_and_camera_denied_guide">I QR si possono inserire a mano. Per scansionarli concedi la fotocamera.</string>

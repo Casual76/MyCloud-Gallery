@@ -49,29 +49,29 @@ import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTab
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBar
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarDefaults
 import dev.pampa.mycloudgallery.core.designsystem.design.ContentRange
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeCloudButton
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeContent
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeIconButton
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTagPrefix
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryCloudState
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeCloudButton
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryTopChrome
 import dev.pampa.mycloudgallery.core.designsystem.design.galleryTopChromeHeight
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
-import dev.pampa.mycloudgallery.core.library.text.GalleryDates
 import dev.pampa.mycloudgallery.core.library.contract.GridLevel
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupWait
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.library.contract.SectionInfo
+import dev.pampa.mycloudgallery.core.library.text.GalleryDates
 import dev.pampa.mycloudgallery.core.model.FreezeReason
 import dev.pampa.mycloudgallery.core.model.NasArea
 import dev.pampa.mycloudgallery.feature.library.grid.GridText
 import dev.pampa.mycloudgallery.feature.library.grid.RegisterComponentActivity
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
+import java.time.LocalDate
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
-import java.time.LocalDate
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -311,6 +311,24 @@ internal abstract class LibraryCloudScreenshotBase(private val dark: Boolean, pr
     composeRule.onNodeWithTag(PauseTitleTag).performClick()
     settle()
     shootRoot("pop-up-backup-non-ancora-acceso-frase-aperta", I4)
+  }
+
+  /**
+   * CU-1 (fase I): lo stato vero di oggi sul telefono dell'utente, con le recinzioni accese tutte insieme: il backup vero non ancora acceso **e**
+   * l'indice del NAS solo sul telefono. «In pausa» si dice una volta, nel titolo; nessuna seconda riga, niente «in prova» ne' «share».
+   */
+  @Test
+  fun popUpConLeRecinzioniAccese() {
+    show(library(nas = LibraryNasStatus.LocalOnly, backup = LibraryBackupStatus.TestOnly))
+    openCloud()
+    assertThat(texts("In pausa")).isAtLeast(1)
+    assertThat(composeRule.onAllNodesWithText("prova", substring = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+    assertThat(composeRule.onAllNodesWithText("share", substring = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+    assertThat(composeRule.onAllNodesWithTag(ActivityRowTag, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+    shootRoot("pop-up-recinzioni-accese", I4)
+    composeRule.onNodeWithTag(PauseTitleTag).performClick()
+    settle()
+    shootRoot("pop-up-recinzioni-accese-frase-aperta", I4)
   }
 
   @Test

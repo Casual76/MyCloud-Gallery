@@ -40,6 +40,10 @@ import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRing
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRingDefaults
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryRingPercent
+import dev.pampa.mycloudgallery.core.designsystem.media.galleryRingColor
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
 
@@ -151,6 +155,7 @@ internal fun StripRow(
   onClick: (() -> Unit)? = null,
   family: GalleryIconFamily? = null,
   status: GalleryIconStatus? = null,
+  progress: Float? = null,
 ) {
   // I4 (fase I, «l'app parla troppo»): a schermo il segno e il titolo; la frase che spiega resta solo dove c'e' un rischio o un
   // problema (il tono di avviso). Altrove la dice TalkBack, dopo il titolo.
@@ -160,9 +165,20 @@ internal fun StripRow(
     subtitle = shown,
     tone = tone,
     leading = {
-      if (family != null) GalleryIconTile(icon = icon, family = family, status = status) else Icon(imageVector = icon, contentDescription = null)
+      when {
+        // CU-15 (fase I): un lavoro che avanza ha l'anello della galleria (lo stesso del pop-up e delle operazioni del NAS), con il percento.
+        progress != null -> GalleryProgressRing(
+          progress = progress,
+          modifier = Modifier.size(AlbumDimens.StripRing),
+          color = galleryRingColor(family ?: GalleryIconFamily.Backup),
+          strokeWidth = GalleryProgressRingDefaults.stroke(AlbumDimens.StripRing),
+          animate = true,
+        ) { GalleryRingPercent(progress) }
+        family != null -> GalleryIconTile(icon = icon, family = family, status = status)
+        else -> Icon(imageVector = icon, contentDescription = null)
+      }
     },
-    leadingTile = family == null,
+    leadingTile = family == null && progress == null,
     onClick = onClick,
     modifier = modifier
       .heightIn(min = AlbumDimens.Touch)

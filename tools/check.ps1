@@ -1364,7 +1364,7 @@ Step "D34 nella release: FeatureFlags.facesSyncTestSharesOnly e facesSyncMayUse 
 
 # --- Fase 10 (P10): le quattro recinzioni in UN passo (docs/fase10-progetto.md par. 2.10, D35, Q6 (b), C446) ------------------------------
 # Lo stato atteso di ogni recinzione (F4-D31, F5-D12, F7-D30, F8-D34) e il consenso unico del passo stanno in tools\release\recinzioni.json;
-# le funzioni in tools\release\recinzioni.ps1. Oggi sono tutte accese e il consenso e' vuoto: i passi sono verdi come prima. Il giorno del passo
+# le funzioni in tools\release\recinzioni.ps1. Dal passo unico del 12/11/2026 sono tutte spente, con il consenso. Il giorno del passo
 # l'orchestratore cambia FeatureFlags e recinzioni.json insieme, con il si' dell'utente, e il controllo accetta solo "spenta" dichiarata con la riga
 # del consenso in docs\decisioni.md. Lo stato misto passa solo con un ritorno indietro parziale dichiarato. Il bytecode (R8 ripiega le costanti di
 # FeatureFlags nei getter, nelle decisioni e nel toString) e' letto dal dex della release: se non si legge, il passo FALLISCE.

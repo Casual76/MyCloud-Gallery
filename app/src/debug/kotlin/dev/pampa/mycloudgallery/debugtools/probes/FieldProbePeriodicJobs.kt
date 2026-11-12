@@ -20,17 +20,17 @@ import dev.pampa.mycloudgallery.work.PreparationWorker
  * Prima, per far partire la pulizia del cestino, la convergenza delle anteprime o le scansioni (F20, F12), le prove modificavano il database di
  * WorkManager dell'app (`last_enqueue_time` di 25 ore fa) con l'app ferma: lento e fragile (un `cat >` con `run-as` aveva troncato il file).
  */
-internal enum class FieldProbePeriodicJob(val code: String) {
+internal enum class FieldProbePeriodicJob(val code: String, val writes: Boolean = true) {
   /** La pulizia del cestino scaduto del NAS (`NasTrashPurgeWorker`, giornaliera). */
   TRASH("trash"),
 
-  /** Lo scaricamento delle anteprime HQ (`HqPreviewsWorker`, solo con la qualita' "Alta"). */
-  HQ("hq"),
+  /** Lo scaricamento delle anteprime HQ (`HqPreviewsWorker`, solo con la qualita' "Alta"): legge soltanto. */
+  HQ("hq", writes = false),
 
   /** La preparazione delle anteprime sul NAS (`PreparationWorker`). */
   PREPARATION("prep"),
 
-  /** La sincronizzazione dell'indice (`IndexSyncWorker`): scarica e rilascia le classi della qualita' scelta. */
+  /** La sincronizzazione dell'indice (`IndexSyncWorker`): scarica e rilascia le classi della qualita' scelta, poi album e volti. */
   SYNC("sync"),
 
   /** La verifica del NAS e, dopo, la sincronizzazione dell'indice e dei dati personali (`NasWorkScheduling.scanNow`). */
@@ -57,6 +57,9 @@ internal enum class FieldProbePeriodicJob(val code: String) {
  *
  * Due strade: [FieldProbePeriodicJobsReceiver] (`adb shell am broadcast`, per gli agenti) e la sezione "Lavori periodici" di "Prove guidate".
  * Solo in `app/src/debug`: la release non lo contiene (`FieldProbe` e `debugtools/probes` sono nei resti di debug cercati da `tools/check.ps1`).
+ *
+ * PU-3 (passo unico, 12/11/2026): i lavori che scrivono ([FieldProbePeriodicJob.writes]) si accodano solo con un account di prova
+ * ([FieldProbeAccounts.refusal]): con l'account vero, dal passo, scriverebbero sulle share vere.
  */
 internal object FieldProbePeriodicJobs {
 
@@ -79,6 +82,10 @@ internal object FieldProbePeriodicJobs {
     }
     return FieldProbePeriodicJob.ALL.filter { it in jobs }
   }
+
+  /** PU-3: null se [jobs] si possono accodare adesso (nessuno scrive, o l'account attivo e' di prova), altrimenti il motivo. */
+  fun refusal(context: Context, jobs: Collection<FieldProbePeriodicJob>): String? =
+    if (jobs.none { it.writes }) null else FieldProbeAccounts.refusal(context)
 
   /**
    * Accoda [jobs] adesso; restituisce i nomi dei lavori unici accodati (per il resoconto). Ogni lavoro e' quello del giro periodico, con i suoi
@@ -125,7 +132,8 @@ internal object FieldProbePeriodicJobs {
 /**
  * SOLO debug: il broadcast `adb shell am broadcast -a dev.pampa.mycloudgallery.debug.PERIODIC_NOW -p dev.pampa.mycloudgallery.debug --es jobs all`.
  * Dichiarato nel manifest di debug **con il permesso `android.permission.DUMP`**: lo possiede la shell di `adb` e nessuna app normale, quindi un'altra
- * app non puo' far partire niente. Risponde (broadcast ordinato, `am` lo stampa) con i lavori accodati, o con un errore se un nome non esiste.
+ * app non puo' far partire niente. Risponde (broadcast ordinato, `am` lo stampa) con i lavori accodati, o con un errore se un nome non esiste, o
+ * (PU-3) con [FieldProbeAccounts.RESULT_NOT_TEST_ACCOUNT] e il motivo se l'account attivo non e' di prova: niente in coda.
  */
 class FieldProbePeriodicJobsReceiver : BroadcastReceiver() {
 
@@ -134,6 +142,10 @@ class FieldProbePeriodicJobsReceiver : BroadcastReceiver() {
     val jobs = FieldProbePeriodicJobs.parse(intent.getStringExtra(FieldProbePeriodicJobs.EXTRA_JOBS))
     if (jobs == null) {
       if (isOrderedBroadcast) setResult(RESULT_BAD_JOB, "lavoro sconosciuto: usa all o ${FieldProbePeriodicJob.ALL.joinToString(",") { it.code }}", null)
+      return
+    }
+    FieldProbePeriodicJobs.refusal(context, jobs)?.let { why ->
+      if (isOrderedBroadcast) setResult(FieldProbeAccounts.RESULT_NOT_TEST_ACCOUNT, why, null)
       return
     }
     val queued = FieldProbePeriodicJobs.enqueue(context, jobs)

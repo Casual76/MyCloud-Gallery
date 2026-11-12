@@ -7,7 +7,8 @@
   fotografia "dopo" e confronta. Prova: nessuna scrittura nelle radici (impronta dell'albero uguale prima e dopo), il passo "tutto
   dentro" (codice 0, con le sorgenti di un album spostate), i file aggiunti, cambiati e tolti fuori dalle cartelle attese (codice 3),
   un backup che cambia un file (codice 3), conteggi degli album diversi (codice 3), le uscite dentro una radice o gia' esistenti
-  (codice 1). Codice di uscita 0 solo se tutte le prove passano. Lo lancia anche tools\check.ps1.
+  (codice 1), le versioni automatiche del backup e gli scambi riconosciuti (codice 0) e quelli che non tornano (codice 3).
+  Codice di uscita 0 solo se tutte le prove passano. Lo lancia anche tools\check.ps1.
 #>
 [CmdletBinding()]
 param()
@@ -197,6 +198,66 @@ $al = Invoke-Scenario "album-conti" {
   Remove-Item -LiteralPath (Join-Path $p "Foto\IMG_001.jpg")
 }
 Assert-That "album con due copie e una sola sorgente tolta: codice 3, conteggi diversi" ($al.Code -eq 3 -and $al.Text -match "conteggi diversi") $al.Text
+
+# 5b. Le versioni automatiche del backup (D17, D18, E-E7; consenso del 12/11/2026 "Come progettato"): il file attuale va nello specchio in Versioni/
+#     con la sua dimensione e la modifica prende il suo posto. Riconosciute e contate a parte; uno specchio o una dimensione che non tornano no.
+function Move-File([string]$base, [string]$from, [string]$to) {
+  $target = Join-Path $base ($to.Replace("/", "\"))
+  $dir = Split-Path -Parent $target
+  if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+  Move-Item -LiteralPath (Join-Path $base ($from.Replace("/", "\"))) -Destination $target
+}
+
+function Invoke-Pair([string]$name, [scriptblock]$prepare, [scriptblock]$mutate) {
+  $dir = Join-Path $work $name
+  Copy-Item -LiteralPath $base -Destination $dir -Recurse
+  & $prepare (Join-Path $dir "privata") (Join-Path $dir "comune")
+  $p1 = Join-Path $work ($name + "-prima.snap")
+  $p2 = Join-Path $work ($name + "-dopo.snap")
+  [void](Invoke-Tool @("-Modo", "Foto", "-Privata", (Join-Path $dir "privata"), "-Comune", (Join-Path $dir "comune"), "-Uscita", $p1))
+  & $mutate (Join-Path $dir "privata") (Join-Path $dir "comune")
+  [void](Invoke-Tool @("-Modo", "Foto", "-Privata", (Join-Path $dir "privata"), "-Comune", (Join-Path $dir "comune"), "-Uscita", $p2))
+  return Invoke-Tool @("-Modo", "Confronta", "-Prima", $p1, "-Dopo", $p2, "-Report", (Join-Path $work ($name + ".json")))
+}
+
+Write-Host "Versioni automatiche del backup"
+$ver = Invoke-Scenario "versione-archivio" {
+  param($p, $c)
+  Move-File $p "Foto/IMG_002.jpg" "Versioni/Foto/IMG_002 (originale).jpg"
+  Put-File $p "Foto/IMG_002.jpg" 230 -age 60
+}
+Assert-That "versione di un file dell'archivio (fuori dalle aree): codice 0, contata come versione" ($ver.Code -eq 0 -and $ver.Text -match "Versioni/\): 1\s+scambi: 0") $ver.Text
+$verJson = Get-Content -LiteralPath (Join-Path $work "versione-archivio.json") -Raw | ConvertFrom-Json
+Assert-That "versione: il resoconto JSON la conta e non la mette fra i file fuori" ($verJson.versioni -eq 1 -and @($verJson.fuori.cambiati).Count -eq 0 -and @($verJson.problemi).Count -eq 0)
+$verBk = Invoke-Pair "versione-backup" { param($p, $c) Put-File $p "Backup/Pixel/2026/10/IMG_1.jpg" 100 } {
+  param($p, $c)
+  Move-File $p "Backup/Pixel/2026/10/IMG_1.jpg" "Versioni/Backup/Pixel/2026/10/IMG_1 (versione del 2026-11-12 10.00).jpg"
+  Put-File $p "Backup/Pixel/2026/10/IMG_1.jpg" 160 -age 60
+}
+Assert-That "versione di una copia del backup (dentro un'area che aggiunge soltanto): codice 0" ($verBk.Code -eq 0 -and $verBk.Text -match "Versioni/\): 1") $verBk.Text
+$swap = Invoke-Pair "scambio" {
+  param($p, $c)
+  Put-File $p "Foto/IMG_5.jpg" 300
+  Put-File $p "Versioni/Foto/IMG_5 (originale).jpg" 250
+} {
+  param($p, $c)
+  Move-File $p "Foto/IMG_5.jpg" "Versioni/Foto/IMG_5 (versione del 2026-11-12 10.00).jpg"
+  Move-File $p "Versioni/Foto/IMG_5 (originale).jpg" "Foto/IMG_5.jpg"
+}
+Assert-That "scambio (Ripristina originale, riallineamento): codice 0, contato come scambio" ($swap.Code -eq 0 -and $swap.Text -match "scambi: 1") $swap.Text
+$wrongSize = Invoke-Scenario "versione-dimensione-diversa" {
+  param($p, $c)
+  Remove-Item -LiteralPath (Join-Path $p "Foto\IMG_002.jpg")
+  Put-File $p "Versioni/Foto/IMG_002 (originale).jpg" 999
+  Put-File $p "Foto/IMG_002.jpg" 230 -age 60
+}
+Assert-That "uno specchio con una dimensione che non e' quella di prima: codice 3, il file cambiato e' fuori" ($wrongSize.Code -eq 3 -and $wrongSize.Text -match "Foto/IMG_002\.jpg") $wrongSize.Text
+$wrongDir = Invoke-Scenario "versione-altra-cartella" {
+  param($p, $c)
+  Move-File $p "Foto/IMG_002.jpg" "Versioni/Altro/IMG_002 (originale).jpg"
+  Put-File $p "Foto/IMG_002.jpg" 230 -age 60
+}
+Assert-That "un originale in uno specchio che non e' quello del file: codice 3" ($wrongDir.Code -eq 3 -and $wrongDir.Text -match "Foto/IMG_002\.jpg") $wrongDir.Text
 
 # 6. Fotografie con aree diverse non si confrontano.
 Write-Host "Fotografie e aree"

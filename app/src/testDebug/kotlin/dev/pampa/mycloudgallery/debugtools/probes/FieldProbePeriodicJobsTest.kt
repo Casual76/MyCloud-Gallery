@@ -15,6 +15,7 @@ import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.work.BackupWorkScheduling
 import dev.pampa.mycloudgallery.work.NasWorkScheduling
 import java.io.File
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -36,6 +37,13 @@ class FieldProbePeriodicJobsTest {
   @Before
   fun setUp() {
     WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().setExecutor(SynchronousExecutor()).build())
+    // PU-3: i comandi che scrivono partono solo con un account di prova; qui l'app e' configurata con `test`.
+    FieldProbeAccounts.active = { "test" }
+  }
+
+  @After
+  fun tearDown() {
+    FieldProbeAccounts.active = FieldProbeAccounts.FROM_GRAPH
   }
 
   private fun queued(name: String): List<WorkInfo> = workManager.getWorkInfosForUniqueWork(name).get().filter { !it.state.isFinished }
@@ -108,6 +116,34 @@ class FieldProbePeriodicJobsTest {
     // Un nome che non esiste non accoda niente di nuovo.
     receiver.onReceive(context, Intent(FieldProbePeriodicJobs.ACTION).putExtra(FieldProbePeriodicJobs.EXTRA_JOBS, "hq,boh"))
     assertThat(queued(NasWorkScheduling.HQ_NOW_WORK)).isEmpty()
+  }
+
+  /**
+   * PU-3 (passo unico, 12/11/2026): con l'account vero, o con un account che non si conosce ancora, il ricevitore non accoda i lavori che scrivono (dal passo
+   * scriverebbero sulle share vere); un lavoro che legge soltanto (le anteprime HQ) si'. Lo stesso controllo vale per i pulsanti di "Prove guidate".
+   */
+  @Test
+  fun pu3_conUnAccountCheNonEDiProvaILavoriCheScrivonoNonSiAccodano() {
+    val receiver = FieldProbePeriodicJobsReceiver()
+    for (account in listOf("alessio", "Public", null)) {
+      FieldProbeAccounts.active = { account }
+      receiver.onReceive(context, Intent(FieldProbePeriodicJobs.ACTION).putExtra(FieldProbePeriodicJobs.EXTRA_JOBS, "all"))
+      receiver.onReceive(context, Intent(FieldProbePeriodicJobs.ACTION).putExtra(FieldProbePeriodicJobs.EXTRA_JOBS, "trash,backup"))
+      for (name in listOf(NasWorkScheduling.TRASH_PURGE_NOW_WORK, NasWorkScheduling.SYNC_NOW_WORK, NasWorkScheduling.SCAN_NOW_WORK, BackupWorkScheduling.PHOTOS_WORK)) {
+        assertWithMessage("$account: $name").that(queued(name)).isEmpty()
+      }
+      assertWithMessage("$account").that(FieldProbePeriodicJobs.refusal(context, FieldProbePeriodicJob.ALL)).isNotNull()
+    }
+    // Le anteprime HQ leggono soltanto: si accodano anche con l'account vero.
+    FieldProbeAccounts.active = { "alessio" }
+    assertThat(FieldProbePeriodicJobs.refusal(context, listOf(FieldProbePeriodicJob.HQ))).isNull()
+    receiver.onReceive(context, Intent(FieldProbePeriodicJobs.ACTION).putExtra(FieldProbePeriodicJobs.EXTRA_JOBS, "hq"))
+    assertThat(queued(NasWorkScheduling.HQ_NOW_WORK)).isNotEmpty()
+    // Con un account di prova tutto come prima.
+    FieldProbeAccounts.active = { "Test2" }
+    assertThat(FieldProbePeriodicJobs.refusal(context, FieldProbePeriodicJob.ALL)).isNull()
+    receiver.onReceive(context, Intent(FieldProbePeriodicJobs.ACTION).putExtra(FieldProbePeriodicJobs.EXTRA_JOBS, "trash"))
+    assertThat(queued(NasWorkScheduling.TRASH_PURGE_NOW_WORK)).hasSize(1)
   }
 
   @Test

@@ -31,6 +31,7 @@ import dev.pampa.mycloudgallery.core.backup.plan.PhoneConditionsSource
 import dev.pampa.mycloudgallery.core.backup.plan.SimilarCopyLookup
 import dev.pampa.mycloudgallery.core.backup.safety.BackupSafetyFactory
 import dev.pampa.mycloudgallery.core.backup.safety.BackupSafetyVerifier
+import dev.pampa.mycloudgallery.core.backup.safety.FirstBackupGate
 import dev.pampa.mycloudgallery.core.backup.safety.PrivateCopyFinder
 import dev.pampa.mycloudgallery.core.backup.settings.DefaultBackupSettings
 import dev.pampa.mycloudgallery.core.backup.store.RoomBackupStore
@@ -360,7 +361,8 @@ class BackupGraph(
       store = store,
       catalog = backupCatalog,
       phone = phone,
-      gate = gate,
+      // PU-2 (passo unico, 12/11/2026): finche' il primo backup non e' stato scelto (cartella del dispositivo null) il guardiano non scrive niente.
+      gate = FirstBackupGate(gate) { settings.deviceFolder.value != null },
       clock = clock,
       privateShare = ::privateShare,
       commonShare = ::commonShare,

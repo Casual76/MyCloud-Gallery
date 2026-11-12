@@ -13,6 +13,12 @@
   Come si usa e come si legge il risultato: docs/prova-500.md.
 
 .DESCRIPTION
+  PREREQUISITO DI OGNI MODO (PU-3, passo unico del 12/11/2026): dal passo le recinzioni D12, D30 e D34 sono spente anche nella build debug. Ogni modo
+  vale SOLO con l'app debug configurata con un account di prova (test o test2): con l'account vero il backup, la condivisione e i volti scriverebbero
+  sulle share vere (la recinzione del telefono D13 e ShareFence D33 valgono solo con gli account di prova). I ricevitori di prova dell'app
+  (FACES_SCENARIO, PERIODIC_NOW) rifiutano cio' che scrive se l'account attivo non e' di prova (risultato 3 con il motivo, e lo script si ferma), ma
+  lo script controlla il pacchetto e la share di destinazione, NON l'account dentro l'app: controllalo nell'app prima di seminare o di interrompere.
+
   --- Modo move ---
   L'utente avvia nell'app una mossa di massa (di norma tra due share di prova, sotto mcg-it/<giro>/), poi lancia questo script.
   A intervalli casuali lo script fa UNA di due cose:
@@ -1316,6 +1322,11 @@ function Invoke-Clean {
 # Avvia uno scenario del pannello di debug "Prove della Fase 8": un broadcast mirato al solo pacchetto dell'app di debug (-p), con il nome dello scenario.
 function Invoke-FacesScenario([string]$scenario) {
   $result = Invoke-Adb @("shell", "am", "broadcast", "-a", $FacesBroadcastAction, "-p", $Package, "--es", "scenario", $scenario)
+  # PU-3: l'app rifiuta uno scenario che scrive se l'account attivo non e' di prova (test, test2): risultato 3 con il motivo.
+  if ($result.Text -match 'result=3\b') {
+    Write-Log ("RIFIUTATO: lo scenario {0} scrive sul NAS e l'account attivo nell'app non e' di prova (adb dice: '{1}'). Entra con test o test2." -f $scenario, $result.Text)
+    return $false
+  }
   if ($result.Code -ne 0 -or $result.Text -match '(?i)exception|error:') {
     Write-Log ("ATTENZIONE: lo scenario {0} non risulta avviato (adb dice: '{1}')." -f $scenario, $result.Text)
     return $false

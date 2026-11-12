@@ -17,19 +17,19 @@ import java.io.File
  * Gli scenari che il banco delle persone sul telefono (`tools/chaos/s25.ps1 -Mode faces`, F103) e la ricetta forzata (F109) chiedono all'app di debug.
  * [code] e' il nome per `adb` (`--es scenario <nome>`): `f103-compute`, `f103-erase` e `f103-status` sono quelli che lo script gia' manda, `f109-recipe` e' nuovo.
  */
-internal enum class FieldProbeFacesScenario(val code: String) {
+internal enum class FieldProbeFacesScenario(val code: String, val writes: Boolean = false) {
   /**
    * "Analizza ora" sull'area di prova, per la strada vera del lavoro (`FacesStages`, regole di `AI_COMPUTE`) e poi il raggruppamento notturno; `phase=computed` a
    * calcolo e raggruppamento finiti. **Non attiva Persone**: l'attivazione e' un consenso dell'utente (D3) e lo da' solo la pagina di attivazione; senza, lo stato
    * dice `phase=needs_activation`.
    */
-  COMPUTE("f103-compute"),
+  COMPUTE("f103-compute", writes = true),
 
   /**
    * Riprende e segue fino in fondo "Disattiva e cancella": `phase=erased` a cancellazione locale e sul NAS finite. **Non la avvia**: la conferma e' del foglio
    * "Disattiva e cancella" (la sua impronta la costruisce solo quel foglio); senza una cancellazione cominciata lo stato dice `phase=needs_erase`.
    */
-  ERASE("f103-erase"),
+  ERASE("f103-erase", writes = true),
 
   /** Riscrive soltanto il file di stato (nessun lavoro). */
   STATUS("f103-status"),
@@ -137,7 +137,9 @@ internal object FieldProbeFacesScenarios {
 /**
  * SOLO debug: il ricevitore di [FieldProbeFacesScenarios]. Dichiarato nel manifest di debug **con il permesso `android.permission.DUMP`** (lo possiede la shell di
  * `adb`, nessuna app normale) e **ascolta una sola azione**: ogni altra azione, e ogni scenario che non esiste, non fa niente. Risponde (broadcast ordinato, `am` lo
- * stampa) con il nome del lavoro accodato, o con un errore. Non tocca mai le share: il lavoro che accoda passa dai cancelli di sempre.
+ * stampa) con il nome del lavoro accodato, o con un errore. Non tocca mai le share: il lavoro che accoda passa dai cancelli di sempre. PU-3 (passo unico,
+ * 12/11/2026): gli scenari che scrivono sul NAS ([FieldProbeFacesScenario.writes]) partono solo con un account di prova; altrimenti
+ * [FieldProbeAccounts.RESULT_NOT_TEST_ACCOUNT] con il motivo, e niente in coda.
  */
 class FieldProbeFacesScenarioReceiver : BroadcastReceiver() {
 
@@ -149,6 +151,12 @@ class FieldProbeFacesScenarioReceiver : BroadcastReceiver() {
         setResult(RESULT_BAD_SCENARIO, "scenario sconosciuto: usa ${FieldProbeFacesScenario.entries.joinToString(",") { it.code }}", null)
       }
       return
+    }
+    if (scenario.writes) {
+      FieldProbeAccounts.refusal(context)?.let { why ->
+        if (isOrderedBroadcast) setResult(FieldProbeAccounts.RESULT_NOT_TEST_ACCOUNT, why, null)
+        return
+      }
     }
     val name = FieldProbeFacesScenarios.enqueue(context, scenario)
     if (isOrderedBroadcast) setResult(Activity.RESULT_OK, name, null)

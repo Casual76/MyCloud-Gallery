@@ -365,8 +365,9 @@ Cinque categorie nuove (prefissi non usati finora, controllati il 31/10): **E-W*
   "Ho controllato".
 - **E-SV5**: un familiare installa l'app prima che l'admin abbia finito il passo e le due settimane di beta: impossibile dal Pampa Store
   (stabile solo alla fine, per tutta la famiglia insieme, Q7 (a)); se succede a mano, valgono le recinzioni della sua build.
-- **E-SV6**: ritorno indietro dopo il passo: le scritture si fermano subito; i dati già scritti restano (sono copie e indici, additivi;
-  i file degli album condivisi restano nell'area comune finché non si riportano) e l'elenco di cosa resta è nel §2.10.
+- **E-SV6**: ritorno indietro dopo il passo: le scritture si fermano subito; i dati già scritti restano (sono copie e indici; le versioni
+  hanno spostato gli originali dei media modificati in `Versioni/`, da dove «Ripristina originale» li riporta; i file degli album condivisi
+  restano nell'area comune finché non si riportano) e l'elenco di cosa resta è nel §2.10.
 - **E-SV7**: account di prova ancora presenti dopo il rilascio: `backupBlocksTestAccounts` li ferma in release; la checklist chiede di
   toglierli o rafforzarli.
 
@@ -849,7 +850,7 @@ fase grafica (Q5 (a), D38), sui soli dispositivi dell'admin. La famiglia riceve 
 | Area | Recinzione | Che cosa comincia a scrivere | Prove prima (share di prova) | Controllo dopo | Che cosa resta se si torna indietro |
 |---|---|---|---|---|---|
 | Indice e dati personali | **F4-D31** (`indexPublishTestSharesOnly`) | segmenti dell'indice e prenotazioni in `.mycloudgallery/` delle share vere (`alessio`, area comune), dati personali nell'area privata | F1–F20 (4A/4B), F64 (Fase 6), F114 e F129 (dati personali dei ricordi) | fotografia "dopo": **niente** cambiato fuori da `.mycloudgallery/` per quest'area; Diagnostica: segmenti rifiutati 0 | i file in `.mycloudgallery/` (indice e dati personali): innocui, li ignora chi non li conosce; si possono togliere dal PC (solo quella cartella) |
-| Backup | **F5-D12** | copie dei media in `alessio/Backup/<dispositivo>/AAAA/MM/` e `Versioni/` | F21–F45 (Fase 5: backup, "Libera spazio", versioni) | `VERIFICA-COMPLETA` su un campione di 200 media (impronte uguali); niente fuori da `Backup/`, `Versioni/`, `.mycloudgallery/`; il primo backup vero a tappe di notte (E-SV3) | le copie caricate (additive, mai sovrascritte); nessun media del telefono toccato |
+| Backup | **F5-D12** | copie dei media in `alessio/Backup/<dispositivo>/AAAA/MM/` e `Versioni/`; **le versioni** (D17, consenso del 12/11/2026 «Come progettato»): una modifica fatta sul telefono sposta il file attuale in `Versioni/<stesso percorso>/` e pubblica la modifica al solito percorso, **anche nelle cartelle dell'archivio** (per esempio `alessio/Foto/2024/`) | F21–F45 (Fase 5: backup, "Libera spazio", versioni) | `VERIFICA-COMPLETA` su un campione di 200 media (impronte uguali); niente fuori da `Backup/`, `Versioni/`, `.mycloudgallery/` salvo le versioni, che la fotografia riconosce; il primo backup vero a tappe di notte (E-SV3) | le copie caricate (mai sovrascritte); le versioni: le modifiche al solito percorso e gli originali in `Versioni/` (niente si cancella: «Ripristina originale» li riporta); nessun media del telefono toccato |
 | Dati dei volti | **F8-D34** (scrive solo se l'utente usa Persone) | `faces/` nell'area privata | F94–F110 (Fase 8), F100–F103 ("Disattiva e cancella") | nessun file fuori da `faces/` e `.mycloudgallery/`; nomi solo nell'area privata | niente, dopo "Disattiva e cancella" (toglie anche dal NAS) |
 | Album condivisi | **F7-D30** | definizioni firmate e **spostamenti** nell'area comune vera (solo quando l'utente condivide un album) | F72–F93 (Fase 7), F84–F92 in particolare | il primo album condiviso sulla share vera è **un album di 3 foto di prova** dell'utente, controllato dal PC: l'album è nell'area comune, le sorgenti nel cestino del NAS (30 giorni), conteggi uguali | i file spostati restano nell'area comune finché non si riportano ("Smetti di condividere" con "Riporta nelle mie cartelle", proposta 6) |
 
@@ -864,6 +865,13 @@ fase grafica (Q5 (a), D38), sui soli dispositivi dell'admin. La famiglia riceve 
   `AlbumWriteGate`) riporta i propri media alla loro cartella d'origine. Sono fuori dalle cartelle attese, ma dopo un tocco e una conferma: un loro uso
   fra le due fotografie dà il codice 3 **senza essere un'anomalia**, e si riconosce dai percorsi (quelli scelti dall'utente o la cartella d'origine dei
   suoi media). Fino alla fotografia "dopo" meglio non usarle (nota anche in `recinzioni.json`, `scrittureSceltedallUtente`).
+- **Versioni automatiche del backup** (12/11/2026, consenso dell'utente «Come progettato», `docs/decisioni.md`): senza un gesto sul NAS, una modifica
+  fatta sul telefono sposta il file attuale in `Versioni/<stesso percorso>/` («<nome> (originale)», «<nome> (versione del …)») e pubblica la modifica
+  al solito percorso, ovunque sia la copia privata (anche fuori da `Backup/`); «Ripristina originale» e il riallineamento dopo un ripristino del telefono
+  scambiano i due file. Niente si cancella. Nel confronto delle fotografie sono un file **cambiato** al solito percorso più un file **aggiunto** nello
+  specchio in `Versioni/` con la dimensione di prima: `share-snapshot.ps1` le riconosce e le conta a parte («versioni», «scambi»), non sono E-SV2.
+- **Il primo backup** (PU-2): prima di «Inizia ora» o «Stanotte» nessuna scrittura del backup, guardiano compreso. Dove la cartella del dispositivo
+  era già scelta, il backup riparte da solo dopo l'aggiornamento.
 
 **Indietro** (comune alle quattro aree): subito "Ferma le scritture sul NAS" (c'è: chiude ogni cancello di scrittura), poi una build con le
 quattro costanti di nuovo vere (o solo quella dell'area che ha sbagliato, se la fotografia la isola e l'utente lo decide), `recinzioni.json`
@@ -1332,7 +1340,8 @@ Le voci confermate si correggono prima della chiusura.
 - **L556. Una chiave dell'APK persa senza copia** = nessun aggiornamento possibile: si reinstalla l'app da capo su ogni dispositivo (nuova
   approvazione). Con `pampa.jks` (D32) vale per **tutte** le app Pampa insieme. Per questo la copia offline è obbligatoria.
 - **L557. Dopo un ritorno indietro nel passaggio alle share vere** i dati già scritti restano (indice, copie del backup, file spostati
-  nell'area comune): sono additivi e si tolgono solo a mano. Con il passo unico (Q6 (b)) possono essere di tutte e quattro le aree.
+  nell'area comune, originali spostati in `Versioni/` dalle versioni automatiche): si tolgono o si riportano solo a mano. Con il passo unico
+  (Q6 (b)) possono essere di tutte e quattro le aree.
 - **L558.** *Non serve*: era il limite di Q8 (b) (GitHub che vede l'indirizzo IP di chi legge il manifest); con Q8 (a) il manifest si legge
   solo dal NAS. Numero non usato in `docs/sicurezza.md`.
 - **L559. La firma dell'APK è `pampa.jks`, condivisa con le altre app Pampa** (D32, decisione dell'utente del 31/10): chi ottiene quella

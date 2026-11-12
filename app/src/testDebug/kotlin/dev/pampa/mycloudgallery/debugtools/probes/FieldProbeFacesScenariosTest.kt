@@ -61,10 +61,13 @@ class FieldProbeFacesScenariosTest {
   fun setUp() {
     // Un lavoro che non finisce mai: resta in coda (come fra un giro e l'altro in produzione) e si guarda, senza eseguirlo davvero (lo scenario vero lo prova `run`).
     WorkManagerTestInitHelper.initializeTestWorkManager(app, Configuration.Builder().setExecutor(SynchronousExecutor()).setWorkerFactory(parked.factory).build())
+    // PU-3: gli scenari che scrivono partono solo con un account di prova; qui l'app e' configurata con `test`.
+    FieldProbeAccounts.active = { "test" }
   }
 
   @After
   fun tearDown() {
+    FieldProbeAccounts.active = FieldProbeAccounts.FROM_GRAPH
     // I lavori che non finiscono mai si chiudono a database aperto: lasciati appesi diventavano spazzatura piu' tardi e facevano cadere un test di un'altra classe.
     parked.release(workManager)
     rig?.close()
@@ -91,6 +94,23 @@ class FieldProbeFacesScenariosTest {
     assertThat(FieldProbeFacesScenario.of("")).isNull()
     assertThat(FieldProbeFacesScenario.of(null)).isNull()
     assertThat(FieldProbeFacesScenarios.ACTION).isEqualTo("dev.pampa.mycloudgallery.debug.action.FACES_SCENARIO")
+  }
+
+  /** PU-3 (passo unico, 12/11/2026): con l'account vero (o sconosciuto) gli scenari che scrivono sul NAS non si accodano; lo stato e la ricetta si'. */
+  @Test
+  fun pu3_conUnAccountCheNonEDiProvaGliScenariCheScrivonoNonSiAccodano() {
+    for (account in listOf("alessio", null)) {
+      FieldProbeAccounts.active = { account }
+      broadcast(FieldProbeFacesScenarios.ACTION, "f103-compute")
+      broadcast(FieldProbeFacesScenarios.ACTION, "f103-erase")
+      assertWithMessage("$account").that(queued(FieldProbeFacesScenarios.workName(FieldProbeFacesScenario.COMPUTE))).isEmpty()
+      assertWithMessage("$account").that(queued(FieldProbeFacesScenarios.workName(FieldProbeFacesScenario.ERASE))).isEmpty()
+    }
+    broadcast(FieldProbeFacesScenarios.ACTION, "f103-status")
+    assertThat(queued(FieldProbeFacesScenarios.workName(FieldProbeFacesScenario.STATUS))).hasSize(1)
+    FieldProbeAccounts.active = { "test2" }
+    broadcast(FieldProbeFacesScenarios.ACTION, "f103-compute")
+    assertThat(queued(FieldProbeFacesScenarios.workName(FieldProbeFacesScenario.COMPUTE))).hasSize(1)
   }
 
   @Test

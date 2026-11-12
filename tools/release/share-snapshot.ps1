@@ -32,6 +32,12 @@
     - spostaSorgenti (gli album condivisi): i file tolti da FUORI, con la stessa dimensione di un file aggiunto dentro le cartelle
       dell'area, sono "spostati" (le sorgenti dell'album), non sono inattesi; il numero dei tolti deve essere uguale a quello degli
       aggiunti fuori da .mycloudgallery/ in quell'area.
+    - versioni automatiche del backup (D17, D18, E-E7; il consenso dell'utente del 12/11/2026 "Come progettato", docs/decisioni.md): una
+      modifica fatta sul telefono sposta il file attuale del percorso P nello specchio Versioni/<cartella di P>/<nome> (<etichetta>)<estensione>
+      (una rinomina: stessa dimensione) e pubblica la modifica in P. Un file CAMBIATO in P (fuori dalle aree, o dentro un'area che aggiunge
+      soltanto) con un file AGGIUNTO nello specchio di P e la dimensione che P aveva prima e' una VERSIONE, non un'anomalia; se in piu' dallo
+      specchio di P e' TOLTO un file con la dimensione che P ha adesso e' uno SCAMBIO ("Ripristina originale", riallineamento dopo un ripristino
+      del telefono). Si contano a parte; ogni altro cambiamento resta un'anomalia.
 
   Codici di uscita: 0 tutto dentro le cartelle attese; 3 qualcosa fuori o anomalo (E-SV2); 1 errore (percorsi, fotografie).
 
@@ -411,6 +417,24 @@ function Show-List([string]$title, $items, [int]$max) {
   if ($items.Count -gt $max) { Write-Host ("    ... e altri {0}" -f ($items.Count - $max)) }
 }
 
+# Lo specchio in Versioni/ di un percorso di media (VersionPaths.mirrorOf e VersionNames.inVersions di core-backup): l'inizio del nome di una sua
+# versione ("versioni/<cartella>/<radice> (") e l'estensione, in minuscolo. Le etichette ("originale", "versione del ...") e i "(2)" stanno in mezzo.
+function Get-VersionPattern([string]$path) {
+  $slash = $path.LastIndexOf("/")
+  $dir = if ($slash -ge 0) { $path.Substring(0, $slash + 1) } else { "" }
+  $name = $path.Substring($slash + 1)
+  $dot = $name.LastIndexOf(".")
+  $ext = if ($dot -gt 0 -and ($name.Length - $dot) -le 12) { $name.Substring($dot) } else { "" }
+  $stem = $name.Substring(0, $name.Length - $ext.Length)
+  return [pscustomobject]@{ Prefix = ("versioni/" + $dir + $stem + " (").ToLowerInvariant(); Ext = $ext.ToLowerInvariant() }
+}
+
+function Test-VersionOf($pattern, $entry, [string]$role) {
+  if ($entry.Role -ne $role) { return $false }
+  $p = $entry.Path.ToLowerInvariant()
+  return $p.StartsWith($pattern.Prefix) -and $p.EndsWith($pattern.Ext) -and $p.Length -gt ($pattern.Prefix.Length + $pattern.Ext.Length)
+}
+
 function Invoke-Confronta {
   if (-not $Prima -or -not $Dopo) { Stop-Con "Confronta vuole -Prima e -Dopo" }
   $before = Read-Foto $Prima
@@ -426,6 +450,30 @@ function Invoke-Confronta {
   foreach ($e in $diff.Changed) { Add-Total $totals $e.Area "cambiati" $e.Size }
   foreach ($e in $diff.Removed) { Add-Total $totals $e.Area "tolti" $e.Size }
 
+  # Le versioni automatiche del backup e gli scambi (vedi le regole in cima): si riconoscono e si contano a parte.
+  $versions = 0
+  $swaps = 0
+  $explained = New-Object System.Collections.Generic.HashSet[string]
+  $soloAreas = @($aree | Where-Object { $_.soloAggiunte } | ForEach-Object { $_.id })
+  $addedVersions = New-Object System.Collections.Generic.List[object]
+  foreach ($e in $diff.Added) { if ($e.Path.ToLowerInvariant().StartsWith("versioni/")) { $addedVersions.Add($e) } }
+  $removedVersions = New-Object System.Collections.Generic.List[object]
+  foreach ($e in $diff.Removed) { if ($e.Path.ToLowerInvariant().StartsWith("versioni/")) { $removedVersions.Add($e) } }
+  foreach ($c in $diff.Changed) {
+    if ($c.Path.ToLowerInvariant().StartsWith("versioni/")) { continue }
+    if ($c.Area -ne "-" -and $soloAreas -notcontains $c.Area) { continue }
+    $old = $before.Map[$c.Key]
+    $pattern = Get-VersionPattern $c.Path
+    $hit = $null
+    foreach ($a in $addedVersions) { if ($a.Size -eq $old.Size -and (Test-VersionOf $pattern $a $c.Role)) { $hit = $a; break } }
+    if (-not $hit) { continue }
+    [void]$addedVersions.Remove($hit)
+    [void]$explained.Add($c.Key)
+    $back = $null
+    foreach ($r in $removedVersions) { if ($r.Size -eq $c.Size -and (Test-VersionOf $pattern $r $c.Role)) { $back = $r; break } }
+    if ($back) { [void]$removedVersions.Remove($back); [void]$explained.Add($back.Key); $swaps++ } else { $versions++ }
+  }
+
   $problems = New-Object System.Collections.Generic.List[string]
   $outside = @{ aggiunti = @(); cambiati = @(); tolti = @() }
   $nonAdditive = @()
@@ -433,12 +481,12 @@ function Invoke-Confronta {
   $removedOut = New-Object System.Collections.Generic.List[object]
   foreach ($e in $diff.Removed) { if ($e.Area -eq "-") { $removedOut.Add($e) } }
   $outside.aggiunti = @($diff.Added | Where-Object { $_.Area -eq "-" })
-  $outside.cambiati = @($diff.Changed | Where-Object { $_.Area -eq "-" })
+  $outside.cambiati = @($diff.Changed | Where-Object { $_.Area -eq "-" -and -not $explained.Contains($_.Key) })
   $sourceNotes = @()
   foreach ($a in $aree) {
     if ($a.soloAggiunte) {
-      $nonAdditive += @($diff.Changed | Where-Object { $_.Area -eq $a.id })
-      $nonAdditive += @($diff.Removed | Where-Object { $_.Area -eq $a.id })
+      $nonAdditive += @($diff.Changed | Where-Object { $_.Area -eq $a.id -and -not $explained.Contains($_.Key) })
+      $nonAdditive += @($diff.Removed | Where-Object { $_.Area -eq $a.id -and -not $explained.Contains($_.Key) })
     }
     if ($a.spostaSorgenti) {
       $copies = @($diff.Added | Where-Object { $_.Area -eq $a.id -and -not $_.Path.ToLowerInvariant().StartsWith(".mycloudgallery/") })
@@ -456,6 +504,7 @@ function Invoke-Confronta {
 
   Write-Host "Confronto prima e dopo, per area" -ForegroundColor Cyan
   Write-Host ("  prima: {0} file   dopo: {1} file   spostati (sorgenti degli album): {2}" -f $before.Map.Count, $after.Map.Count, $moved)
+  Write-Host ("  versioni automatiche del backup (file cambiato + il suo originale in Versioni/): {0}   scambi: {1}" -f $versions, $swaps)
   foreach ($a in $aree) {
     $t = $totals[$a.id]
     if ($t) {
@@ -482,7 +531,7 @@ function Invoke-Confronta {
 
   if ($Report) {
     $out = [ordered]@{
-      prima = $before.Header.creata; dopo = $after.Header.creata; spostati = $moved; problemi = @($problems)
+      prima = $before.Header.creata; dopo = $after.Header.creata; spostati = $moved; versioni = $versions; scambi = $swaps; problemi = @($problems)
       perArea = @($aree | ForEach-Object { $t = $totals[$_.id]; [ordered]@{ id = $_.id; aggiunti = $(if ($t) { $t.aggiunti[0] } else { 0 }); cambiati = $(if ($t) { $t.cambiati[0] } else { 0 }); tolti = $(if ($t) { $t.tolti[0] } else { 0 }) } })
       fuori = [ordered]@{
         aggiunti = @($outside.aggiunti | ForEach-Object { $_.Role + ":" + $_.Path }); cambiati = @($outside.cambiati | ForEach-Object { $_.Role + ":" + $_.Path })

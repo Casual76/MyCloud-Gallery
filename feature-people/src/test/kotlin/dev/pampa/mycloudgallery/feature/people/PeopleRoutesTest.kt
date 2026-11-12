@@ -213,12 +213,14 @@ class PeopleRoutesTest : PeopleScreenTest() {
     composeRule.onNodeWithContentDescription("Altre azioni").performClick()
     composeRule.onNodeWithText("Nascondi persona", useUnmergedTree = true).performClick()
     composeRule.waitForIdle()
-    assertShows("nascosta", "Persona nascosta", "Mostra di nuovo")
+    // Giro 3: "Persona nascosta" e' la riga della «i» comune (TalkBack: «Persona nascosta. …»).
+    assertShows("nascosta", "Mostra di nuovo")
+    assertThat(says("Persona nascosta")).isTrue()
     assertThat(world.people.edits.last()).isEqualTo(PeopleEdit.Hidden(world.anna, true))
     composeRule.onNodeWithText("Mostra di nuovo", useUnmergedTree = true).performClick()
     composeRule.waitForIdle()
     assertThat(world.people.edits.last()).isEqualTo(PeopleEdit.Hidden(world.anna, false))
-    assertDoesNotShow("di nuovo visibile", "Persona nascosta")
+    assertThat(says("Persona nascosta")).isFalse()
   }
 
   @Test

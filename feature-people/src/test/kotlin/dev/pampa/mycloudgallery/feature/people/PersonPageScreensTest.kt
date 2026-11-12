@@ -52,7 +52,8 @@ class PersonPageScreensTest : PeopleScreenTest() {
   fun paginaNascosta_dicePerchePoiOffreDiMostrarlaDiNuovo() {
     val handlers = RecordingPage()
     showAll(content = page(scenes.pageHidden(), handlers))
-    assertShows("pagina nascosta", "Persona nascosta", "Mostra di nuovo", "Dimentica persona")
+    assertShows("pagina nascosta", "Mostra di nuovo", "Dimentica persona")
+    assertSays("pagina nascosta", "Persona nascosta", "Non compare in Persone")
     assertThat(countDescribed("Foto, ")).isEqualTo(0) // le sue foto non si vedono qui
     composeRule.onNodeWithText("Mostra di nuovo", useUnmergedTree = true).performClick()
     composeRule.onNodeWithText("Dimentica persona", useUnmergedTree = true).performClick()

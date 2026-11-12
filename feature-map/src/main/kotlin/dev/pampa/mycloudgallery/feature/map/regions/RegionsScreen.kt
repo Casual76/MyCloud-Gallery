@@ -39,6 +39,8 @@ import dev.pampa.mycloudgallery.feature.map.R
 import dev.pampa.mycloudgallery.feature.map.ui.MapDimens
 import androidx.compose.material.icons.rounded.TravelExplore
 import dev.pampa.mycloudgallery.feature.map.ui.MapFigureState
+import androidx.compose.material.icons.rounded.HourglassTop
+import dev.pampa.mycloudgallery.core.map.contract.RegionStop
 
 // ZONE SENZA INTERNET: LA PAGINA (Fase 9, P5; docs/fase9-progetto.md §2.9, D26; decisione dell'utente del 31/10). Righe raggruppate di Fluid (come Impostazioni -> Mappa, regola 2 del design system: il tono
 // sulla piastrella, mai sulla riga): le zone scaricate (con l'avanzamento), le 20 regioni italiane, i paesi vicini e "La zona attorno a un luogo" (ricerca per nome, raggio di 15, 30 o 60 km). Ogni riga
@@ -200,7 +202,9 @@ private fun downloadedText(resources: Resources, state: RegionState) = when (sta
     resources.getString(R.string.regions_row_ready, RegionText.size(resources, state.bytes), RegionText.detail(resources, state.maxZoom)) to Icons.Rounded.CheckCircle
   RegionStatus.NEEDS_UPDATE -> resources.getString(R.string.regions_row_needs_update, RegionText.size(resources, state.bytes)) to Icons.Rounded.Update
   RegionStatus.DOWNLOADING -> resources.getString(R.string.regions_row_downloading, state.percent) to Icons.Rounded.CloudDownload
-  RegionStatus.PARTIAL -> resources.getString(R.string.regions_row_partial, state.percent, RegionText.stop(resources, state.stop)) to Icons.Rounded.Pause
+  // Giro 3: una zona che riprende da sola (all'apertura, quando torna il Wi-Fi) aspetta: la clessidra; quella che vuole un tocco e' in pausa: le barre.
+  RegionStatus.PARTIAL -> resources.getString(R.string.regions_row_partial, state.percent, RegionText.stop(resources, state.stop)) to
+    if (state.stop == null || state.stop == RegionStop.INTERRUPTED || state.stop == RegionStop.NETWORK) Icons.Rounded.HourglassTop else Icons.Rounded.Pause
 }
 
 @Composable

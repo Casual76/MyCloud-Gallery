@@ -7,7 +7,6 @@ import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.PhonelinkOff
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.runtime.Immutable
@@ -33,6 +32,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.HourglassTop
 
 // LA SEZIONE PERSONE DELLE RACCOLTE (Fase 8, P9; docs/fase8-progetto.md §1.5 `PeopleSectionState`, §2.6 "Cosa si vede", Q2 (b), D4, D25, D34;
 // "Fase 7 P11" in docs/decisioni.md, D33 della Fase 7). Ogni sezione delle Raccolte e' un dato che chi la possiede consegna con un
@@ -168,7 +169,8 @@ class PeopleSectionSources(
           row(
             PeopleEntryTarget.PROGRESS,
             state.percent?.let { resources.getString(R.string.persone_row_progress, it) } ?: resources.getString(R.string.persone_row_progress_waiting),
-            resources.getString(R.string.persone_row_progress_detail), Icons.Rounded.Schedule, FluidTone.Info,
+            // Giro 3: lo stesso segno dell'app per lo stesso stato: in corso le frecce che girano, in attesa (nessuna percentuale) la clessidra.
+            resources.getString(R.string.persone_row_progress_detail), if (state.percent != null) Icons.Rounded.Sync else Icons.Rounded.HourglassTop, FluidTone.Info,
           ),
         )
         is PeopleSectionState.NotComputedHere -> listOf(

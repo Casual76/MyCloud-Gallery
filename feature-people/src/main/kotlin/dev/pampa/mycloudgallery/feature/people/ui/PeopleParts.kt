@@ -55,12 +55,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.PersonCard
 import dev.pampa.mycloudgallery.core.model.FaceLocator
 import dev.pampa.mycloudgallery.feature.people.R
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleCrops
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoButton
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryCoverCardDefaults
 
@@ -202,8 +197,8 @@ internal fun personFadeHeight(height: Dp): Dp =
 
 /**
  * Giro 1 (CU-23): uno stato vuoto (o di fine) delle pagine delle persone nella forma unica della galleria ([GalleryFigureState]): la figura, il titolo,
- * al piu' [action]. Il perche' ([why]), dove spiega una regola (le foto nascoste, i tre volti, che cosa fa nascondere), sta dietro la «i»
- * ([GalleryInfoButton]): un tocco lo apre sotto, TalkBack lo dice nella descrizione della «i». Senza [why], niente «i».
+ * al piu' [action]. Il perche' ([why]), dove spiega una regola (le foto nascoste, i tre volti, che cosa fa nascondere), e' il `why` della forma
+ * comune: la «i» sotto il titolo (giro 2: niente piu' copia della «i» qui). Senza [why], niente «i».
  */
 @Composable
 internal fun PeopleFigureState(
@@ -217,23 +212,9 @@ internal fun PeopleFigureState(
     title = title,
     fill = false,
     modifier = Modifier.fillMaxWidth().padding(vertical = PeopleDimens.StatePadding),
-    action = if (why == null && action == null) {
-      null
-    } else {
-      {
-        if (why != null) FigureWhy(why)
-        action?.invoke()
-      }
-    },
+    why = why,
+    action = action,
   )
-}
-
-/** La «i» di uno stato e, aperta, la frase sotto. */
-@Composable
-private fun FigureWhy(why: String) {
-  var open by rememberSaveable(why) { mutableStateOf(false) }
-  GalleryInfoButton(label = why, open = open, onToggle = { open = !open })
-  GalleryInfoDetail(text = why, visible = open)
 }
 
 @Composable

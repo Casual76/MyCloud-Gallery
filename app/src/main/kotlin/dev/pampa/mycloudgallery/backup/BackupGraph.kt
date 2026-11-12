@@ -502,6 +502,8 @@ class BackupGraph(
    * sei ore non la scavalcano: il cancello e' `PAUSED`. Il segno vale subito (in memoria), il file segue.
    */
   fun requestStop(by: StopBy) {
+    // Fase I (BS2-2): «Ferma» toglie subito il «sto partendo».
+    if (by == StopBy.USER) starting = null
     // Dopo l'azzeramento (stop) niente si scrive piu' nella memoria locale: un segno rimasto vivrebbe nel setup dopo.
     if (by == StopBy.USER && !stopped.get()) {
       memory.pauseNow()
@@ -777,9 +779,8 @@ class BackupGraph(
     if (settings.deviceFolder.value == null || !gate.stateOf(p.share).open) return null
     val sources = settings.sources.value
     val counts = if (sources.isEmpty) SafetyCounts.ZERO else p.backupCatalog.safetyCounts(sources)
-    val marked = counts.problems.filterKeys { it.marksMedia }
     return BackupDailyFacts(
-      queued = (counts.noNasCopy + counts.unverified - marked.values.sum()).coerceAtLeast(0),
+      queued = BackupStatusReducers.queuedOf(counts),
       lastBeatAt = listOfNotNull(memory.photoBeat.lastBeatAt(), memory.videoBeat.lastBeatAt()).maxOrNull(),
       startedAt = memory.startedAt(),
       problem = memory.lastProblem(),
@@ -905,9 +906,17 @@ class BackupGraph(
   @Volatile
   private var nothingToDo = false
 
+  /**
+   * T-1: la coda vista al primo stato dopo un «niente da fare» ([nothingToDo]); -1 = non ancora vista. Finche' la coda non cresce oltre questa, e' una
+   * coda che il telefono non serve: la pagina non promette un giro. Una foto nuova la fa crescere e la promessa torna vera.
+   */
+  @Volatile
+  private var unservedQueue = -1
+
   /** D-11: vedi [nothingToDo]; lo stato si ricalcola. */
   fun noteNothingToDo() {
     nothingToDo = true
+    unservedQueue = -1
     kick()
   }
   private var progressLoaded = false
@@ -1035,7 +1044,6 @@ class BackupGraph(
     // R4: "In pausa" prima di tutto il resto (anche mentre il file in volo finisce), cosi' la pagina e la notifica dicono la stessa cosa.
     if (gateState == BackupGateState.PAUSED) return BackupStatus.Stopped(StopBy.USER)
 
-    val problems = counts.problems.filterKeys { it.marksMedia }
     val queued = queuedOf(counts)
     val engineStatus = parts?.engine?.status?.value
     // BK-5: l'avanzamento e' cumulativo (fatti + in coda), non quello del lotto da 60 secondi. D-11: con i byte veri che restano da caricare.
@@ -1062,10 +1070,13 @@ class BackupGraph(
       // che non risponde) vince: e' quella che fa aspettare adesso.
       val busy = (engineStatus is BackupStatus.Waiting && engineStatus.reason == WaitReason.NAS_BUSY) || memory.anyBusy()
       val rules = waitReason()
-      val wait = if (busy && rules == WaitReason.NEXT_RUN) WaitReason.NAS_BUSY else rules
+      // T-1: dopo un giro che non ha trovato niente da caricare (anche «Fai ora»), questa coda il telefono non la serve: niente «al prossimo giro».
+      val unserved = nothingToDo && queued <= (if (unservedQueue < 0) queued.also { unservedQueue = it } else unservedQueue)
+      val wait = BackupStatusReducers.queueWait(rules, busy, unserved)
       return waitingStatus(queued, bytes, wait, stalled = isStalled(queued), storageLow = phoneStorageLow())
     }
-    problems.entries.minByOrNull { it.key.ordinal }?.let { (code, count) -> return BackupStatus.Problem(code, count) }
+    // T-1: le foto cancellate prima del backup non tengono la testata lontana da «Al sicuro»: si dicono fra i problemi della pagina.
+    BackupStatusReducers.heroProblem(counts.problems)?.let { (code, count) -> return BackupStatus.Problem(code, count) }
     // P14 (5B, D17, E-E6): versioni ferme perche' il PC ha cambiato il file sul NAS. Non e' un problema di un media: lo dice la pagina, con la
     // Diagnostica; riparte da solo dopo la verifica del NAS.
     fiveB.sourceChangedHolds().takeIf { it > 0 }?.let { return BackupStatus.Problem(BackupProblemCode.SOURCE_CHANGED, it) }
@@ -1077,11 +1088,7 @@ class BackupGraph(
    * (`SOURCE_CHANGED`) non e' "in coda": lo dice "Versioni in attesa del computer". Prima contava fra i media in coda e la pagina diceva per
    * sempre "1 in coda · prossimo giro".
    */
-  private suspend fun queuedOf(counts: SafetyCounts): Int {
-    val problems = counts.problems.filterKeys { it.marksMedia }
-    val held = fiveB.sourceChangedCurrentMedia()
-    return (counts.noNasCopy + counts.unverified - problems.values.sum() - held).coerceAtLeast(0)
-  }
+  private suspend fun queuedOf(counts: SafetyCounts): Int = BackupStatusReducers.queuedOf(counts, held = fiveB.sourceChangedCurrentMedia())
 
   /**
    * D-9, D-11 (prove sul campo): i byte che restano da caricare: quelli dei media in coda sul catalogo (senza copia sul NAS) meno quelli gia'
@@ -1118,6 +1125,7 @@ class BackupGraph(
    */
   suspend fun roundStarting() {
     nothingToDo = false
+    unservedQueue = -1
     try {
       val catalog = backupCatalogOrNull() ?: return
       val sources = settings.sources.value
@@ -1177,17 +1185,24 @@ class BackupGraph(
    */
   @Volatile private var starting: Pair<Long, BackupTrigger>? = null
 
-  /** Fase I (BF-1): l'utente ha chiesto il lavoro adesso ed e' stato messo in coda: la pagina dice che sta partendo, al piu' per [USER_START_WINDOW_MS]. */
+  /**
+   * Fase I (BF-1, BS2-2): l'utente ha chiesto il lavoro adesso e **Android l'ha accettato**: la pagina dice che sta partendo, al piu' per
+   * [USER_START_WINDOW_MS]. Lo toglie il motore che prende il giro, la scadenza, una coda vuota o «Ferma».
+   */
   fun userStarting(trigger: BackupTrigger) {
     starting = (monotonicMs() + USER_START_WINDOW_MS) to trigger
     kick()
   }
 
+  /** Fase I (BS2-2): c'e' un «sto partendo» in corso? (Per le prove del produttore.) */
+  internal fun userStartPending(): Boolean = starting != null
+
   /**
-   * Fase I (BF-1): lo stato provvisorio «sto partendo» (un `Running` senza numeri fatti) finche' il motore non prende il giro; scaduta la finestra, o
-   * senza niente in coda, lo stato vero con il motivo vero.
+   * Fase I (BF-1, BS2-2): lo stato provvisorio «sto partendo» (un `Running` senza numeri fatti) finche' il motore non prende il giro; scaduta la finestra, o
+   * senza niente in coda, lo stato vero con il motivo vero. **Mai sopra un motivo di adesso che ferma proprio il lavoro dell'utente** (la rete, il NAS, il
+   * caldo critico, il congelamento: le regole di «Fai ora», non quelle del lavoro di fondo): quel motivo, subito.
    */
-  private suspend fun startingStatus(queued: Int, sources: BackupSources): BackupStatus.Running? {
+  private suspend fun startingStatus(queued: Int, sources: BackupSources): BackupStatus? {
     val (until, trigger) = starting ?: return null
     val left = until - monotonicMs()
     if (left <= 0L || queued <= 0) {
@@ -1195,12 +1210,16 @@ class BackupGraph(
       return null
     }
     recheckLater(left)
+    val bytes = remainingBytes(sources) ?: 0L
+    BackupStatusReducers.userStartBlock(userDecision(estimatedBytes = null, confirmed = true))?.let { reason ->
+      return waitingStatus(queued, bytes, reason, stalled = false, storageLow = phoneStorageLow())
+    }
     return BackupStatus.Running(
       kind = BackupKind.PHOTOS,
       done = 0,
       total = queued,
       bytesDone = 0L,
-      bytesTotal = remainingBytes(sources) ?: 0L,
+      bytesTotal = bytes,
       etaMillis = null,
       trigger = trigger,
       starting = true,
@@ -1228,14 +1247,13 @@ class BackupGraph(
       } else {
         catalog.safetyCounts(BackupSources(setOf(source)), outside = folders)
       }
-      val problems = counts.problems.filterKeys { it.marksMedia }
-      val media = counts.safe + counts.unverified + counts.onlyCommonCopy + counts.noNasCopy + counts.lost
+      // T-1: la riga conta cio' che si puo' ancora salvare o e' al sicuro; i persi restano nei problemi (la pagina li dice a parte, una volta).
       SourceStatus(
         source = source,
         active = source in chosen,
-        media = media,
+        media = BackupStatusReducers.mediaOf(counts),
         safe = counts.safe,
-        queued = (counts.noNasCopy + counts.unverified - problems.values.sum()).coerceAtLeast(0),
+        queued = BackupStatusReducers.queuedOf(counts),
         problems = counts.problems,
       )
     }
@@ -1252,23 +1270,29 @@ class BackupGraph(
    * simili), e al massimo una volta al minuto mentre i numeri sono ancora provvisori.
    */
   suspend fun summary(): BackupSummary = summaryLock.withLock {
+    // Fase I (BS2-3): la generazione **prima** delle parti; un riepilogo calcolato su parti che nel frattempo `start` ha cambiato non vale (ne' in cache ne'
+    // restituito). `summaryLock` non prende mai `startLock`: nessun ordine inverso.
+    val generation = summaryCache.generation()
     // Fase I (punto 4): senza le parti (il NAS non ancora pronto) il riepilogo non c'e' ancora: «cerco» (con il motivo, se una regola ferma la ricerca),
-    // mai uno zero "assestato".
-    val p = parts ?: return@withLock BackupSummary.COUNTING.let { it.copy(existing = live(it.existing)) }
+    // mai uno zero "assestato". Lo stesso con le parti di un'altra area (`start` le sta ricostruendo).
+    val p = parts
     val share = privateShare()
+    if (p == null || share == null || !p.share.equals(share, ignoreCase = true)) return@withLock counting()
     val sources = settings.sources.value
     // BK-8: la chiave comprende cio' che il backup ha fatto (media al sicuro e in coda, una query di conteggi): un riepilogo "assestato" non
     // resta piu' quello di una settimana fa, con i numeri e la stima dell'intero primo backup. Il calcolo pieno costa (due query per
     // candidato): si rifa' solo se qualcosa e' cambiato davvero.
     val counts = if (sources.isEmpty) SafetyCounts.ZERO else p.backupCatalog.safetyCounts(sources)
-    // Fase I (BS-1, BF-3): con l'account, l'area e la scansione finita o no: numeri e cancello si rifanno insieme quando cambiano.
+    // Fase I (BS-1, BF-3): con l'account, l'area delle parti e la scansione finita o no: numeri e cancello si rifanno insieme quando cambiano.
     val key = SummaryCache.keyOf(
-      sources.sources.map { it.id }, similar.progress.value.pending == 0, counts, nasInputs.account(), share, privateAreaScanned(),
+      sources.sources.map { it.id }, similar.progress.value.pending == 0, counts, nasInputs.account(), p.share, privateAreaScanned(),
     )
-    val now = monotonicMs()
-    val base = summaryCache.fresh(key, now) ?: p.planner.summary().also { summaryCache.put(key, now, it) }
+    val base = summaryCache.summaryOf(key, monotonicMs(), generation, stillCurrent = { parts === p }) { p.planner.summary() } ?: return@withLock counting()
     base.copy(existing = live(base.existing))
   }
+
+  /** «Sto contando»: il riepilogo non c'e' (ancora, o piu'), con il motivo che ferma la ricerca se ce n'e' uno. */
+  private suspend fun counting(): BackupSummary = BackupSummary.COUNTING.let { it.copy(existing = live(it.existing)) }
 
   /**
    * Fase I (12/11): sopra il riepilogo (anche quello in cache) quello che cambia da un minuto all'altro e non tocca i numeri ([ExistingCopiesLive]): il

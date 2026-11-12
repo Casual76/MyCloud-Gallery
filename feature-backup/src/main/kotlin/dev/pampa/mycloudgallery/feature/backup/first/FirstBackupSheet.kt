@@ -153,13 +153,33 @@ private fun headline(summary: BackupSummary): String {
   if (!summary.canStart) return stringResource(R.string.backup_first_headline_search)
   val upload = summary.toUpload
   val base = stringResource(R.string.backup_first_headline, BackupText.count(upload.items), BackupText.size(upload.bytes))
-  return if (summary.estimate?.neverFinishes == true) "$base ${stringResource(R.string.backup_first_headline_never)}" else base
+  return when {
+    summary.estimate?.neverFinishes == true -> "$base ${stringResource(R.string.backup_first_headline_never)}"
+    // Giro 2 (BF2-6): senza numero, una frase sola se il lavoro e' grande; sotto soglia niente.
+    LargeFirstBackup.of(summary) -> "$base ${stringResource(R.string.backup_first_long)}"
+    else -> base
+  }
+}
+
+/**
+ * Giro 2 (BF2-5, BF2-6): il primo backup e' **grande** (ore, non minuti)? Una soglia sulle quantita', non sul modello di serie (ottimista di circa tre
+ * volte): almeno [ITEMS] foto e video o [BYTES] byte, contando anche quelli gia' sul NAS (si rileggono per controllarli). Sul telefono dell'utente 7.105
+ * media: oltre un'ora e tre quarti al ritmo misurato (65 al minuto). Lo stesso giudizio nel foglio e nella pagina.
+ */
+internal object LargeFirstBackup {
+  const val ITEMS: Int = 2_000
+  const val BYTES: Long = 10_000_000_000L
+
+  fun isLarge(items: Int, bytes: Long): Boolean = items >= ITEMS || bytes >= BYTES
+
+  fun of(summary: BackupSummary): Boolean =
+    isLarge(summary.toUpload.items + summary.linked.items, summary.toUpload.bytes + summary.linked.bytes)
 }
 
 /**
  * Fase I: la ricerca sul NAS prima del primo backup, in una riga (BF-4, BF-9, BF-10):
  * - **gira** (lo scanner lavora): quanti file del NAS ha gia' guardato, come numero, e sotto la barra a tutta larghezza;
- * - **ferma per una regola**: quale, con la clessidra, e «riprende da sola» solo dove e' vero ([resumesAlone]);
+ * - **ferma per una regola**: quale, con la clessidra, e come riprende solo dove e' vero ([resumeRes]);
  * - **ferma per un motivo che il backup non nomina** (congelamento, attivita' spenta, profilo, limiti di Android): «Ricerca in pausa», il motivo e' nella
  *   Diagnostica, con il segno della pausa;
  * - **non gira ancora** (aspetta il suo lavoro, o il NAS appena aperta l'app): «Cerco… · Inizia fra poco», ferma.
@@ -182,7 +202,7 @@ private fun SearchRow(existing: ExistingCopiesState) {
       },
       subtitle = when {
         held == WaitReason.NEXT_RUN -> stringResource(R.string.backup_paused_elsewhere)
-        held != null -> if (resumesAlone(held)) stringResource(R.string.backup_first_search_resumes) else ""
+        held != null -> resumeRes(held)?.let { stringResource(it) }.orEmpty()
         scanning && seen > 0 -> pluralStringResource(R.plurals.backup_first_search_files, seen)
         scanning -> ""
         else -> stringResource(R.string.backup_first_search_soon)
@@ -277,20 +297,16 @@ private const val SearchSegment = 0.35f
 private const val SearchIdleMillis = 2_600L
 
 /**
- * Fase I: le foto che aspettano ancora il confronto con le copie simili. Una riga piccola che **non ferma niente** e non promette niente che non sia vero
- * (BS-3): un motivo c'e' solo se il confronto aspetta anteprime del NAS dalla Preparazione, e allora la riga lo attribuisce a quelle.
+ * Fase I: le foto che aspettano ancora il confronto con le copie simili. Una riga piccola che **non ferma niente** e non promette niente che non sia vero.
+ * Giro 2 (BS2-4): quando il confronto aspetta anteprime che non ci sono, la riga lo dice **senza una causa** (non sempre e' la Preparazione: puo' mancare
+ * solo la copia sul telefono) e senza promettere che riprende da sola: «Alcune anteprime non sono ancora pronte».
  */
 @Composable
 private fun CompareRow(count: Int, held: WaitReason?) {
   FluidListGroup {
     FluidListRow(
       title = pluralStringResource(R.plurals.backup_first_compare, count, BackupText.count(count)),
-      subtitle = when {
-        held == null -> stringResource(R.string.backup_first_compare_detail)
-        held == WaitReason.NEXT_RUN -> stringResource(R.string.backup_first_compare_paused)
-        resumesAlone(held) -> stringResource(R.string.backup_first_compare_held_resumes, stringResource(waitTitleRes(held)))
-        else -> stringResource(R.string.backup_first_compare_held, stringResource(waitTitleRes(held)))
-      },
+      subtitle = stringResource(if (held == null) R.string.backup_first_compare_detail else R.string.backup_first_compare_waiting),
       tone = FluidTone.Info,
       leading = { Icon(imageVector = if (held != null) GalleryIconStatus.Waiting.glyph() else Icons.Rounded.Compare, contentDescription = null) },
       disclosure = false,
@@ -313,16 +329,28 @@ internal fun waitTitleRes(reason: WaitReason): Int = when (reason) {
   WaitReason.DATA_CAP -> DesignR.string.gallery_wait_data_cap
   WaitReason.NAS -> DesignR.string.gallery_wait_nas
   WaitReason.NAS_BUSY -> R.string.backup_wait_nas_busy
+  WaitReason.NOT_ON_PHONE -> R.string.backup_wait_not_on_phone
   WaitReason.COMPARING, WaitReason.NEXT_RUN -> R.string.backup_first_search_paused
 }
 
 /**
- * Fase I (BF-9): l'attesa **riprende davvero da sola**? Si' per la fascia, la carica, la batteria, il risparmio energetico e il caldo: i lavori del NAS e del
- * backup si riprogrammano da soli (`RuleWaits.followUpOf`). No per la rete, il NAS spento e il tetto dei dati: si dice la condizione e basta.
+ * Fase I (BF-9, giro 2 BF2-1): **come** riprende la ricerca ferma per [reason], solo dove e' vero. Da sola per la fascia, la carica, la batteria e il caldo (i
+ * lavori del NAS si riprogrammano da soli, `RuleWaits.followUpOf`); con il risparmio energetico **quando lo si spegne** (finche' e' acceso i tentativi
+ * trovano lo stesso blocco). Null per la rete, il NAS spento e il tetto dei dati: si dice la condizione e basta.
  */
-internal fun resumesAlone(reason: WaitReason): Boolean = when (reason) {
-  WaitReason.CHARGING, WaitReason.BATTERY, WaitReason.NIGHT_WINDOW, WaitReason.POWER_SAVER, WaitReason.THERMAL -> true
-  WaitReason.WIFI, WaitReason.HOME_WIFI, WaitReason.NAS, WaitReason.DATA_CAP, WaitReason.NAS_BUSY, WaitReason.COMPARING, WaitReason.NEXT_RUN -> false
+internal fun resumeRes(reason: WaitReason): Int? = when (reason) {
+  WaitReason.CHARGING, WaitReason.BATTERY, WaitReason.NIGHT_WINDOW, WaitReason.THERMAL -> R.string.backup_first_search_resumes
+  WaitReason.POWER_SAVER -> R.string.backup_first_search_resumes_power_saver
+  WaitReason.WIFI, WaitReason.HOME_WIFI, WaitReason.NAS, WaitReason.DATA_CAP, WaitReason.NAS_BUSY, WaitReason.COMPARING, WaitReason.NEXT_RUN,
+  WaitReason.NOT_ON_PHONE,
+  -> null
+}
+
+/** La stessa promessa nella riga della testata («Il telefono è troppo caldo: la ricerca riprende da sola»), o null: solo il motivo. */
+internal fun heroResumeRes(reason: WaitReason): Int? = when (resumeRes(reason)) {
+  R.string.backup_first_search_resumes -> R.string.backup_hero_search_held
+  R.string.backup_first_search_resumes_power_saver -> R.string.backup_hero_search_held_power_saver
+  else -> null
 }
 
 /** I tre numeri del §2.11 punto 6, ognuno con il suo peso. */

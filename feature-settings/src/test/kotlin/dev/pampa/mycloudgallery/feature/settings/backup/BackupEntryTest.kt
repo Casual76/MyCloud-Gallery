@@ -157,6 +157,14 @@ class BackupEntryTest {
     assertThat(backupEntryMark(BackupStatus.FirstBackupReady(summary.copy(existing = ExistingCopiesState(false, 0))))).isEqualTo(GalleryIconStatus.Waiting)
   }
 
+  /** Giro 2 (BF2-4): chiesto adesso e accettato, la voce dice «Sto partendo» come la pagina e il piede, mai «0 / N». */
+  @Test
+  fun dopoInizia_OraLaVoceDiceCheStaPartendo() {
+    val starting = BackupStatus.Running(BackupKind.PHOTOS, 0, 7_105, 0L, 3_000_000_000, null, BackupTrigger.FIRST_BACKUP, starting = true)
+    assertThat(BackupEntryTexts.subtitleOf(rule.activity, starting)).isEqualTo("Sto partendo")
+    assertThat(backupEntryMark(starting)).isEqualTo(GalleryIconStatus.Running)
+  }
+
   @Test
   fun iSegniDiconoQuantoServeUnOcchio() {
     // I3: il segno sulla piastrella e' lo stesso della testata della pagina Backup.
@@ -185,6 +193,12 @@ abstract class BackupEntryShots(private val device: String) {
     null,
     BackupStatus.NotConfigured(setOf(BackupSetupStep.DEVICE_FOLDER)),
     BackupStatus.FirstBackupReady(BackupSummary.EMPTY),
+    // Giro 2 (BF2-7): a freddo (vuota, nessun segno), «Preparo» mentre la ricerca gira, «Sto partendo».
+    BackupStatus.FirstBackupReady(BackupSummary.COUNTING),
+    BackupStatus.FirstBackupReady(
+      BackupSummary.EMPTY.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0, scanSeen = 1_234, scanTotal = 5_559)),
+    ),
+    BackupStatus.Running(BackupKind.PHOTOS, 0, 7_105, 0L, 3_000_000_000, null, BackupTrigger.FIRST_BACKUP, starting = true),
     BackupStatus.UpToDate(6_658, null),
     BackupStatus.Running(BackupKind.PHOTOS, 1_240, 6_658, 2_100_000_000, 48_000_000_000, 4_800_000, BackupTrigger.FIRST_BACKUP),
     BackupStatus.Problem(BackupProblemCode.QUOTA, 0),

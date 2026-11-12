@@ -13,9 +13,10 @@ import dev.pampa.mycloudgallery.core.rules.WorkRequest
  * si prova senza il grafo.
  *
  * - **La ricerca** (l'area privata non e' ancora scandita): il motivo che ferma la scansione (`INDEX_SYNC`) e quanti file del NAS ha gia' guardato, se gira.
- * - **Il confronto** delle copie simili (ricerca finita, foto da confrontare): un motivo **solo se ci sono anteprime del NAS che aspettano la Preparazione**
- *   ([awaitingPreviews]); e' il motivo della preparazione delle anteprime (`PREPARATION`, che scrive sul NAS), e la pagina lo attribuisce a quella. Senza
- *   anteprime in attesa il confronto non dipende dalla Preparazione (ha gia' i pixel, firma, accorpa, aspetta l'indice): nessun motivo, la riga neutra.
+ * - **Il confronto** delle copie simili (ricerca finita, foto da confrontare): un motivo **solo se ci sono anteprime che il confronto aspetta**
+ *   ([awaitingPreviews]), chiesto alla preparazione delle anteprime (`PREPARATION`, che scrive sul NAS). Giro 2 (BS2-4): un'anteprima che manca puo' essere
+ *   non ancora prodotta (Preparazione) o soltanto non ancora copiata sul telefono (basta l'indice): la pagina **non attribuisce la causa** e non promette
+ *   niente, dice solo «alcune anteprime non sono ancora pronte». Senza anteprime in attesa nessun motivo, la riga neutra.
  *
  * Il motivo e' quello del contratto ([WaitReason]); un motivo che il backup non nomina (congelamento, attivita' spenta, profilo, limiti di Android) e'
  * [WaitReason.NEXT_RUN]: la pagina dice che e' fermo e che il motivo e' nella Diagnostica, mai «cerco» con la barra che passa. Un verdetto `Run` dice che

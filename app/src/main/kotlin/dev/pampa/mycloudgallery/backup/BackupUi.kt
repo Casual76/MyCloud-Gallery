@@ -487,9 +487,9 @@ class AppBackupActions(
             // R4: "Riprendi" e "Fai ora" finiscono la pausa di "Ferma", ma solo quando il lavoro parte davvero (BK-4): prima la pausa si
             // toglieva al tocco, anche se poi l'utente toccava "Annulla" sul foglio dei dati mobili, e il backup ripartiva al primo Wi-Fi.
             backup.resumeFromPause()
-            backup.jobs.userInitiated(trigger, confirmed)
-            // Fase I (BF-1): fino a quando il motore non prende il giro, la pagina dice che sta partendo (non «al prossimo giro»).
-            backup.userStarting(trigger)
+            // Fase I (BF-1, BS2-2): fino a quando il motore non prende il giro, la pagina dice che sta partendo (non «al prossimo giro»), ma **solo se
+            // Android ha accettato il lavoro**; un motivo di adesso che ferma proprio questo lavoro lo dice lo stato al posto di «sto partendo».
+            if (backup.jobs.userInitiated(trigger, confirmed)) backup.userStarting(trigger)
           }
         }
       } catch (e: CancellationException) {

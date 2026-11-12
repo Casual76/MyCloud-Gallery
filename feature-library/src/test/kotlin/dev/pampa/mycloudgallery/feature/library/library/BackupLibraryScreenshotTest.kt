@@ -119,6 +119,38 @@ internal abstract class BackupLibraryScreenshotBase(private val dark: Boolean, p
   @Test
   fun piedeRicercaInPausa() = shootFooter("piede-ricerca-in-pausa", LibraryBackupStatus.Comparing(wait = LibraryBackupWait.THERMAL))
 
+  // Giro 2 (BF2-7): gli stati che hanno cambiato di piu', anche con il testo grande.
+
+  /** BF2-4: «Sto partendo» dopo «Inizia ora», come la pagina (non «0 di N»). */
+  @Test
+  fun piedeStoPartendo() = shootFooter("piede-sto-partendo", LibraryBackupStatus.FirstBackup(done = 0, total = 7_105, etaMillis = null, starting = true))
+
+  @Test
+  fun piedeStoPartendoTestoGrande() =
+    shootFooter("piede-sto-partendo", LibraryBackupStatus.FirstBackup(done = 0, total = 7_105, etaMillis = null, starting = true), fontScale = LARGE_TEXT)
+
+  /** BF-4: la ricerca ferma per un motivo che il backup non nomina: la pausa e la Diagnostica. */
+  @Test
+  fun piedeRicercaInPausaSenzaMotivo() = shootFooter("piede-ricerca-in-pausa-senza-motivo", LibraryBackupStatus.Comparing(wait = LibraryBackupWait.OTHER))
+
+  /** BF2-2: appena aperta l'app il piede del backup tace (resta la voce del NAS). */
+  @Test
+  fun piedeAFreddo() = shootFooter("piede-a-freddo", LibraryBackupStatus.Idle)
+
+  @Test
+  fun piedeInCodaTestoGrande() = shootFooter("piede-in-coda", LibraryBackupStatus.Queued(items = 312, wait = LibraryBackupWait.CHARGING), fontScale = LARGE_TEXT)
+
+  @Test
+  fun piedeRicercaTestoGrande() = shootFooter("piede-ricerca", LibraryBackupStatus.Comparing(seen = 1_234, total = 5_559), fontScale = LARGE_TEXT)
+
+  @Test
+  fun piedePrimoBackupDaAvviareTestoGrande() =
+    shootFooter("piede-primo-backup-da-avviare", LibraryBackupStatus.Queued(items = 1_546, wait = LibraryBackupWait.FIRST_BACKUP), fontScale = LARGE_TEXT)
+
+  @Test
+  fun piedeRicercaInPausaTestoGrande() =
+    shootFooter("piede-ricerca-in-pausa", LibraryBackupStatus.Comparing(wait = LibraryBackupWait.THERMAL), fontScale = LARGE_TEXT)
+
   @Test
   fun piedeProblemaQuota() = shootFooter("piede-problema-quota", LibraryBackupStatus.Problem(code = "quota", count = 0))
 

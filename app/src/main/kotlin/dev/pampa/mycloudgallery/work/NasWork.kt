@@ -102,7 +102,10 @@ object NasWorkScheduling {
   const val MAINTENANCE_WAIT_WORK = "nas-index-maintenance-wait"
   const val PERSONAL_WAIT_WORK = "nas-personal-sync-wait"
 
-  /** Negli input della ripresa: questo lavoro **e'** la ripresa (se aspetta ancora si mette in coda dopo di se', non al posto di se'). */
+  /**
+   * Negli input della ripresa: **il nome unico** della ripresa che questo lavoro e' (BS2-1: la classe e' nel nome, [waitName]). Se aspetta ancora nella
+   * stessa classe si mette in coda dopo di se', non al posto di se'; in un'altra classe e' un produttore come gli altri.
+   */
   const val KEY_WAIT_RESUME = "nas_wait_resume"
 
   val PERIOD: Duration = 6.hours
@@ -174,15 +177,21 @@ object NasWorkScheduling {
    *   un telefono caldo. La ripresa rilegge le regole (anche l'headroom termico, che nessun ascoltatore vede);
    * - **cosa no**: le attese che non sono una regola da aspettare (NAS spento, rete, congelamento, tetto dei dati, profilo, limiti di Android) non
    *   programmano niente, come oggi (`followUpOf` da' null): riprendono il periodico, l'apertura dell'app, la rete;
-   * - **una sola** ripresa per lavoro, con il suo nome, e **nessuno la cancella**: chi non e' la ripresa (il periodico, la tappa dopo, «verifica
-   *   adesso») usa `KEEP` e lascia alla ripresa gia' registrata, in coda o in corso, la sua scadenza e il suo successore (BS-2 della critica: con
-   *   `REPLACE` e una lettura dello stato prima, una ripresa diventata RUNNING fra la lettura e l'accodamento veniva cancellata a meta' tappa; la
-   *   transizione di WorkManager non si puo' rendere atomica da qui). Si rinuncia all'azzeramento immediato della scala quando una ripresa c'e' gia':
-   *   l'attesa resta comunque sotto il tetto di un'ora. Solo la ripresa che aspetta ancora si mette in coda dopo di se' (`APPEND_OR_REPLACE`);
+   * - **una sola** ripresa per lavoro **e per classe di attesa** ([waitName], BS2-1), e **nessuno la cancella**: chi non e' quella ripresa (il periodico,
+   *   la tappa dopo, «verifica adesso», una ripresa di un'altra classe) usa `KEEP` e lascia alla ripresa gia' registrata, in coda o in corso, la sua scadenza
+   *   e il suo successore (BS-2 della critica: con `REPLACE` e una lettura dello stato prima, una ripresa diventata RUNNING fra la lettura e l'accodamento
+   *   veniva cancellata a meta' tappa; la transizione di WorkManager non si puo' rendere atomica da qui). Solo la ripresa che aspetta ancora nella sua
+   *   classe si mette in coda dopo di se' (`APPEND_OR_REPLACE`);
+   * - **le classi** (BS2-1): `KEEP` conserva anche il vincolo della ripresa che c'e'. In un nome solo, una ripresa «corrente» (vincolata alla carica)
+   *   faceva scartare quella «caldo» chiesta dopo, e con il telefono mai collegato la ripresa restava in coda per sempre; una ripresa per la fascia di
+   *   prima teneva il suo ritardo lungo dopo un cambio di fascia. Ora la carica, ogni inizio di fascia e le scale (caldo, risparmio energetico) hanno
+   *   nomi diversi: si scarta solo una richiesta della stessa classe, che ha lo stesso vincolo e un ritardo dello stesso genere (nella scala al piu'
+   *   un'ora: si rinuncia all'azzeramento immediato quando una ripresa c'e' gia'). Due riprese di classi diverse dello stesso lavoro possono stare in
+   *   coda insieme: rileggono le regole e la tappa resta serializzata dal suo lucchetto. Nessun risveglio in piu': i vincoli restano quelli esatti;
    * - **vincoli**: la rete dei lavori del NAS ([LanConstraints], la stessa del periodico), piu' la carica se la regola la chiede. Mai piu' larghi.
    *
-   * [input] sono gli input del lavoro che aspetta: il tentativo ([RuleWaits.KEY_ATTEMPT]) e se e' la ripresa ([KEY_WAIT_RESUME]).
-   * @return vero se ha chiesto una ripresa (con `KEEP` WorkManager la scarta se ce n'e' gia' una).
+   * [input] sono gli input del lavoro che aspetta: il tentativo ([RuleWaits.KEY_ATTEMPT]) e quale ripresa e' ([KEY_WAIT_RESUME]).
+   * @return vero se ha chiesto una ripresa (con `KEEP` WorkManager la scarta se ce n'e' gia' una della stessa classe).
    */
   fun afterWait(
     context: Context,
@@ -192,23 +201,39 @@ object NasWorkScheduling {
     input: Data,
     now: LocalDateTime = LocalDateTime.now(),
   ): Boolean {
-    val fromResume = input.getBoolean(KEY_WAIT_RESUME, false)
     val follow = RuleWaits.followUpOf(wait, now, input.getInt(RuleWaits.KEY_ATTEMPT, 0)) ?: return false
-    WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(name, waitPolicy(fromResume), waitRequest(worker, follow))
+    val target = waitName(name, wait)
+    val fromResume = input.getString(KEY_WAIT_RESUME) == target
+    WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(target, waitPolicy(fromResume), waitRequest(worker, follow, target))
     return true
   }
 
   /**
-   * Come mettere in coda la ripresa (punto 7, BS-2): la ripresa stessa dopo di se', chiunque altro senza toccare quella che c'e'. Pura, provata su JVM.
+   * Il nome unico della ripresa di [base] per [wait] (BS2-1): la **classe** dell'attesa e' nel nome. La carica (corrente, batteria: il vincolo della carica)
+   * `-power`; la fascia `-window-HHmm` con l'ora d'inizio (un cambio di fascia e' un'altra ripresa); le scale (caldo, risparmio energetico, solo ritardo) il
+   * nome di base. Pura, provata su JVM.
+   */
+  fun waitName(base: String, wait: WaitReason): String = when (wait) {
+    WaitReason.NeedsPower, is WaitReason.BatteryLow -> "$base$POWER_SUFFIX"
+    is WaitReason.OutsideWindow -> base + WINDOW_SUFFIX + wait.nextStart.hour.toString().padStart(2, '0') + wait.nextStart.minute.toString().padStart(2, '0')
+    else -> base
+  }
+
+  private const val POWER_SUFFIX = "-power"
+  private const val WINDOW_SUFFIX = "-window-"
+
+  /**
+   * Come mettere in coda la ripresa (punto 7, BS-2): la ripresa stessa, nella sua classe, dopo di se'; chiunque altro senza toccare quella che c'e'. Pura,
+   * provata su JVM.
    */
   fun waitPolicy(fromResume: Boolean): ExistingWorkPolicy = if (fromResume) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.KEEP
 
-  /** La richiesta della ripresa: la rete dei lavori del NAS piu' i vincoli della regola, il ritardo e il tentativo della regola unica. */
-  fun waitRequest(worker: Class<out ListenableWorker>, follow: RuleWaits.FollowUp): OneTimeWorkRequest =
+  /** La richiesta della ripresa [name]: la rete dei lavori del NAS piu' i vincoli della regola, il ritardo e il tentativo della regola unica. */
+  fun waitRequest(worker: Class<out ListenableWorker>, follow: RuleWaits.FollowUp, name: String): OneTimeWorkRequest =
     OneTimeWorkRequest.Builder(worker)
       .setConstraints(follow.constraints(LanConstraints.builder()))
       .setInitialDelay(follow.delay.inWholeMilliseconds, TimeUnit.MILLISECONDS)
-      .setInputData(workDataOf(RuleWaits.KEY_ATTEMPT to follow.attempt, KEY_WAIT_RESUME to true))
+      .setInputData(workDataOf(RuleWaits.KEY_ATTEMPT to follow.attempt, KEY_WAIT_RESUME to name))
       .addTag(TAG)
       .build()
 }

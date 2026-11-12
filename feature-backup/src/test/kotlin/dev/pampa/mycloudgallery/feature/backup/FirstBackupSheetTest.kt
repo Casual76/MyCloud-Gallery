@@ -17,6 +17,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.SummaryWarning
 import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.feature.backup.first.FirstBackupSheetContent
+import dev.pampa.mycloudgallery.feature.backup.first.LargeFirstBackup
 import dev.pampa.mycloudgallery.feature.backup.testing.BackupSamples
 import org.junit.Test
 
@@ -44,7 +45,7 @@ class FirstBackupSheetTest : ComposeBackupTest() {
     showSheet(BackupSamples.firstBackupSummary)
     composeRule.onNodeWithText("Primo backup").assertExists()
     composeRule.onNodeWithText("1.240 già sul NAS", substring = true).assertExists()
-    composeRule.onNodeWithText("Identici byte per byte", substring = true).assertExists()
+    composeRule.onNodeWithText("Già uguali: si controllano, non si ricaricano.", substring = true).assertExists()
     composeRule.onNodeWithText("312 con una copia simile sul NAS", substring = true).assertExists()
     composeRule.onNodeWithText("5.106 nuovi", substring = true).assertExists()
     // Da caricare: M + K = 312 + 5.106.
@@ -82,10 +83,30 @@ class FirstBackupSheetTest : ComposeBackupTest() {
     showSheet(BackupSamples.phoneSummary)
     composeRule.onNodeWithText("Da caricare: 1.546 foto e video", substring = true).assertExists()
     composeRule.onNodeWithText("5.559 già sul NAS", substring = true).assertExists()
-    composeRule.onNodeWithText("si rileggono dal NAS per controllarli", substring = true).assertExists()
+    composeRule.onNodeWithText("si controllano, non si ricaricano", substring = true).assertExists()
+    // Giro 2 (BF2-6): nessun numero, ma 7.105 media non sono minuti: una frase sola.
+    composeRule.onNodeWithText("Con tanti file ci vogliono alcune ore.", substring = true).assertExists()
     composeRule.onAllNodes(hasText("50 min", substring = true)).assertCountEquals(0)
     composeRule.onAllNodes(hasText("48 min", substring = true)).assertCountEquals(0)
     composeRule.onAllNodes(hasText("circa", substring = true)).assertCountEquals(0)
+  }
+
+  /** Giro 2 (BF2-6): sotto la soglia (200 foto e video, 1,3 GB) nessuna frase sulle ore: per un lavoro piccolo sarebbe falsa. */
+  @Test
+  fun unPrimoBackupPiccoloNonParlaDiOre() {
+    showSheet(BackupSamples.smallSummary)
+    composeRule.onNodeWithText("Da caricare: 50 foto e video", substring = true).assertExists()
+    composeRule.onAllNodes(hasText("ore", substring = true)).assertCountEquals(0)
+  }
+
+  /** Giro 2 (BF2-5, BF2-6): la soglia delle ore, sulle quantita' (non sul modello): 2.000 foto e video o 10 GB, contando quelli da rileggere. */
+  @Test
+  fun laSogliaDelleOre() {
+    assertThat(LargeFirstBackup.isLarge(1_999, 9_999_999_999L)).isFalse()
+    assertThat(LargeFirstBackup.isLarge(2_000, 0L)).isTrue()
+    assertThat(LargeFirstBackup.isLarge(10, 10_000_000_000L)).isTrue()
+    assertThat(LargeFirstBackup.of(BackupSamples.phoneSummary)).isTrue()
+    assertThat(LargeFirstBackup.of(BackupSamples.smallSummary)).isFalse()
   }
 
   @Test
@@ -189,19 +210,34 @@ class FirstBackupSheetTest : ComposeBackupTest() {
     assertThat(tonight).isEqualTo(1)
   }
 
-  /** BS-3: il motivo del confronto e' quello delle anteprime del NAS (la riga lo attribuisce a loro); le scelte restano accese. */
+  /**
+   * Giro 2 (BS2-4): il confronto che aspetta anteprime lo dice **senza una causa** (puo' mancare solo la copia sul telefono, non la Preparazione) e senza
+   * promettere che riprende da solo; le scelte restano accese.
+   */
   @Test
-  fun ilConfrontoFermoDiceCheAspettanoLeAnteprime() {
-    showSheet(BackupSamples.comparingSummary.copy(existing = BackupSamples.comparingSummary.existing.copy(heldBy = WaitReason.THERMAL)))
-    composeRule.onNodeWithText("Il telefono è troppo caldo · le anteprime del NAS aspettano e riprendono da sole. Si carica lo stesso.").assertExists()
+  fun ilConfrontoFermoDiceSoloCheAlcuneAnteprimeNonSonoPronte() {
+    showSheet(BackupSamples.comparingWaitingSummary)
+    composeRule.onNodeWithText("Alcune anteprime non sono ancora pronte. Si carica lo stesso.").assertExists()
+    composeRule.onAllNodes(hasText("caldo", substring = true)).assertCountEquals(0)
+    composeRule.onAllNodes(hasText("riprend", substring = true)).assertCountEquals(0)
+    composeRule.onAllNodes(hasText("Preparazione", substring = true)).assertCountEquals(0)
     button("Inizia ora").assertIsEnabled()
+  }
+
+  /** Giro 2 (BF2-1): con il risparmio energetico acceso la ricerca non «riprende da sola»: riprende quando lo si spegne. */
+  @Test
+  fun ilRisparmioEnergeticoNonPromette_RiprendeDaSola() {
+    showSheet(BackupSamples.heldSummary.copy(existing = BackupSamples.heldSummary.existing.copy(heldBy = WaitReason.POWER_SAVER)))
+    composeRule.onNodeWithText("Risparmio energetico attivo").assertExists()
+    composeRule.onNodeWithText("La ricerca riprende quando lo spegni.").assertExists()
+    composeRule.onAllNodes(hasText("da sola", substring = true)).assertCountEquals(0)
   }
 
   /** BF-9: per la rete, il NAS spento e il tetto dei dati si dice la condizione e basta, nessun «riprende da sola». */
   @Test
   fun laReteNonPromette_RiprendeDaSola() {
     showSheet(BackupSamples.heldSummary.copy(existing = BackupSamples.heldSummary.existing.copy(heldBy = WaitReason.HOME_WIFI)))
-    composeRule.onNodeWithText("In attesa del Wi-Fi di casa").assertExists()
+    composeRule.onNodeWithText("Serve il Wi-Fi di casa").assertExists()
     composeRule.onAllNodes(hasText("riprende", substring = true)).assertCountEquals(0)
   }
 

@@ -77,8 +77,9 @@ class BackupIntegrationTest {
     val started = AtomicInteger()
     val cancelled = AtomicInteger()
 
-    override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean) {
+    override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean): Boolean {
       started.incrementAndGet()
+      return true
     }
 
     override fun cancelAll() {

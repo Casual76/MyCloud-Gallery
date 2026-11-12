@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.FolderShared
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PhotoLibrary
@@ -70,7 +71,8 @@ import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryStatusMark
 import dev.pampa.mycloudgallery.core.designsystem.state.LocalWritesHeldByRelease
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
-import dev.pampa.mycloudgallery.feature.backup.first.resumesAlone
+import dev.pampa.mycloudgallery.feature.backup.first.LargeFirstBackup
+import dev.pampa.mycloudgallery.feature.backup.first.heroResumeRes
 import dev.pampa.mycloudgallery.feature.backup.first.searchText
 import dev.pampa.mycloudgallery.feature.backup.first.waitTitleRes
 import dev.pampa.mycloudgallery.feature.backup.BackupDimens
@@ -119,7 +121,8 @@ internal class HeroStep(val icon: ImageVector, val family: GalleryIconFamily, va
  */
 @Immutable
 internal class HeroModel(
-  val mark: GalleryIconStatus,
+  /** Null = nessun segno (giro 2, BF2-2: appena aperta l'app, finche' il riepilogo non c'e'). */
+  val mark: GalleryIconStatus?,
   val label: String,
   val line: String? = null,
   val detail: String? = null,
@@ -186,8 +189,13 @@ internal fun heroModel(status: BackupStatus, actions: BackupPageActions, share: 
   is BackupStatus.FirstBackupReady -> {
     val summary = status.summary
     // Fase I (12/11): «Preparo» solo finche' la ricerca sul NAS non e' finita (lo stesso cancello del piano); il confronto delle copie simili non
-    // ferma niente e la testata non lo dice.
-    if (!summary.canStart) searchHero(summary, actions) else readyHero(summary, share, actions)
+    // ferma niente e la testata non lo dice. Giro 2 (BF2-2): appena aperta l'app, finche' il riepilogo non c'e', lo stesso silenzio del piede e delle
+    // Impostazioni: il nome, nessun segno, nessuna riga, nessun tasto (niente da vedere ancora).
+    when {
+      !summary.counted -> HeroModel(mark = null, label = stringResource(R.string.backup_first_title))
+      !summary.canStart -> searchHero(summary, actions)
+      else -> readyHero(summary, share, actions)
+    }
   }
   is BackupStatus.UpToDate -> HeroModel(
     mark = GalleryIconStatus.Done,
@@ -215,10 +223,13 @@ internal fun heroModel(status: BackupStatus, actions: BackupPageActions, share: 
     val kind = stringResource(if (status.kind == BackupKind.VIDEOS) R.string.backup_kind_videos else R.string.backup_kind_photos)
     // Giro 1 (CU-11): quanto e' fatto lo dice l'anello (sulle sorgenti); la riga dice solo che cosa carica e quanto manca di tempo. Prima c'era una
     // seconda frazione con un altro totale («Foto: 2.052 di 6.968» sotto «2.052 / 5.314»).
+    val first = status.trigger == BackupTrigger.FIRST_BACKUP
+    // Giro 2 (BF2-5): il primo backup grande, finche' la durata misurata non c'e' (i primi 15 minuti), dice la stessa frase del foglio.
+    val long = first && status.etaMillis == null && LargeFirstBackup.isLarge(status.total, status.bytesTotal)
     HeroModel(
       mark = GalleryIconStatus.Running,
-      label = stringResource(if (status.trigger == BackupTrigger.FIRST_BACKUP) R.string.backup_hero_running_first else R.string.backup_hero_running),
-      line = listOfNotNull(kind, status.etaMillis?.let { etaText(it) }).joinToString(LineSeparator),
+      label = stringResource(if (first) R.string.backup_hero_running_first else R.string.backup_hero_running),
+      line = if (long) stringResource(R.string.backup_first_long) else listOfNotNull(kind, status.etaMillis?.let { etaText(it) }).joinToString(LineSeparator),
       actions = listOf(HeroAction(stringResource(R.string.backup_stop), Icons.Rounded.Pause, actions.stop)),
       calmAction = true,
     )
@@ -250,8 +261,8 @@ internal fun heroModel(status: BackupStatus, actions: BackupPageActions, share: 
 
 /**
  * Fase I (BF-4, BF-5): la testata mentre si cerca sul NAS. L'arco gira **solo se la scansione gira davvero**; ferma per una regola, quale (con la clessidra, e
- * «riprende da sola» solo dove e' vero); ferma per un motivo che il backup non nomina, la pausa e la Diagnostica; non ancora partita, «inizia fra poco», ferma.
- * Appena aperta l'app, senza un riepilogo ancora calcolato, nessuna riga provvisoria.
+ * come riprende solo dove e' vero); ferma per un motivo che il backup non nomina, la pausa e un tasto «Vedi perche'» che apre la Diagnostica (giro 2); non
+ * ancora partita, «inizia fra poco», ferma.
  */
 @Composable
 private fun searchHero(summary: BackupSummary, actions: BackupPageActions): HeroModel {
@@ -260,13 +271,17 @@ private fun searchHero(summary: BackupSummary, actions: BackupPageActions): Hero
   val see = listOf(HeroAction(stringResource(R.string.backup_status_first_see), Icons.Rounded.Checklist, actions.openSheet))
   val label = stringResource(R.string.backup_status_first_comparing_title)
   return when {
-    !summary.counted -> HeroModel(mark = GalleryIconStatus.Waiting, label = label, actions = see, calmAction = true)
-    held == WaitReason.NEXT_RUN ->
-      HeroModel(mark = GalleryIconStatus.Paused, label = label, line = stringResource(R.string.backup_hero_search_paused), actions = see, calmAction = true)
+    held == WaitReason.NEXT_RUN -> HeroModel(
+      mark = GalleryIconStatus.Paused,
+      label = label,
+      line = stringResource(R.string.backup_first_search_paused),
+      actions = see + HeroAction(stringResource(R.string.backup_hero_see_why), Icons.Rounded.Info) { actions.perform(BackupAction.DIAGNOSTICS) },
+      calmAction = true,
+    )
     held != null -> HeroModel(
       mark = GalleryIconStatus.Waiting,
       label = label,
-      line = if (resumesAlone(held)) stringResource(R.string.backup_hero_search_held, stringResource(waitTitleRes(held))) else stringResource(waitTitleRes(held)),
+      line = heroResumeRes(held)?.let { stringResource(it, stringResource(waitTitleRes(held))) } ?: stringResource(waitTitleRes(held)),
       actions = see,
       calmAction = true,
     )
@@ -357,6 +372,7 @@ internal fun waitRes(reason: WaitReason): Int = when (reason) {
   WaitReason.COMPARING -> R.string.backup_wait_comparing
   WaitReason.NEXT_RUN -> R.string.backup_wait_next_run
   WaitReason.NAS_BUSY -> R.string.backup_wait_nas_busy
+  WaitReason.NOT_ON_PHONE -> R.string.backup_wait_not_on_phone
 }
 
 /**
@@ -366,8 +382,9 @@ internal fun waitRes(reason: WaitReason): Int = when (reason) {
 @Composable
 internal fun BackupHero(model: HeroModel, share: SafeShare, modifier: Modifier = Modifier, still: Boolean = false) {
   val container = MaterialTheme.colorScheme.surfaceContainerLow
-  // Fase 10 P8 (D23 (6)): uno stato che cambia da solo si annuncia una volta (regione viva educata); quello di tutti i giorni non e' una notizia.
-  if (model.mark != GalleryIconStatus.Done) GalleryLiveAnnouncement(model.label)
+  // Fase 10 P8 (D23 (6)): uno stato che cambia da solo si annuncia una volta (regione viva educata); quello di tutti i giorni non e' una notizia, e
+  // nemmeno il nome senza stato dell'avvio a freddo (giro 2).
+  if (model.mark != null && model.mark != GalleryIconStatus.Done) GalleryLiveAnnouncement(model.label)
   Column(
     modifier = modifier
       .fillMaxWidth()
@@ -403,7 +420,7 @@ internal fun BackupHero(model: HeroModel, share: SafeShare, modifier: Modifier =
  * sull'arco in basso a destra. L'arco avanza con la molla dell'anello; il valore si legge nel disegno, non in composizione.
  */
 @Composable
-private fun SafeRing(share: SafeShare, mark: GalleryIconStatus, busy: Boolean, ringBackground: androidx.compose.ui.graphics.Color, still: Boolean) {
+private fun SafeRing(share: SafeShare, mark: GalleryIconStatus?, busy: Boolean, ringBackground: androidx.compose.ui.graphics.Color, still: Boolean) {
   val ring = GalleryProgressRingDefaults.Hero
   val description = if (share.total > 0 && !busy) {
     stringResource(R.string.backup_hero_ring_description, share.percent, BackupText.count(share.safe), BackupText.count(share.total))
@@ -431,14 +448,16 @@ private fun SafeRing(share: SafeShare, mark: GalleryIconStatus, busy: Boolean, r
       }
     }
     val place = Modifier.align(Alignment.BottomEnd).offset(x = -BackupDimens.HeroMarkInset, y = -BackupDimens.HeroMarkInset)
-    GalleryStatusMark(
-      status = mark,
-      size = BackupDimens.HeroMark,
-      ring = ringBackground,
-      // L'etichetta sotto l'anello dice gia' lo stato a voce: il segno non lo ripete.
-      contentDescription = null,
-      modifier = place,
-    )
+    if (mark != null) {
+      GalleryStatusMark(
+        status = mark,
+        size = BackupDimens.HeroMark,
+        ring = ringBackground,
+        // L'etichetta sotto l'anello dice gia' lo stato a voce: il segno non lo ripete.
+        contentDescription = null,
+        modifier = place,
+      )
+    }
   }
 }
 

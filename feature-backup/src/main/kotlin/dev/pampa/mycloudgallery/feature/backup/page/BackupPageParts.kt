@@ -104,11 +104,17 @@ import dev.pampa.mycloudgallery.feature.backup.ui.sourceName
  * Le sorgenti in una griglia di copertine: tre per riga sul telefono dell'utente (360 dp), di piu' sullo schermo largo. Non e' una lista che scorre
  * da sola: le sorgenti sono poche (le cartelle scelte) e stanno in un elemento solo della pagina.
  */
+/**
+ * T-1: i problemi che la copertina di una sorgente conta. I media persi (cancellati prima del backup, persi dall'area comune: nessuna posizione) non sono
+ * della riga, che conta cio' che si puo' ancora salvare: si dicono una volta, fra i problemi della pagina.
+ */
+internal fun SourceStatus.rowProblems(): Int = problems.filterKeys { !it.lostMedia }.values.sum()
+
 @Composable
 internal fun SourceGrid(sources: List<SourceStatus>, halt: SourcesHalt?) {
   // Giro 1 della fase I (CS-2): lo stato comune («In pausa», «In corso») lo dicono l'anello e l'etichetta in cima, una volta; il segno sta solo
   // sulla copertina diversa dalle altre (un problema, una cartella spenta). Prima la pausa si vedeva otto volte nella stessa pagina.
-  val states = sources.map { sourceState(it, it.problems.values.sum(), halt) }
+  val states = sources.map { sourceState(it, it.rowProblems(), halt) }
   // Giro 1 (CS-13): col testo grande la copertina cresce con il testo (a 1,3x due per riga sul telefono), e il nome va su due righe: prima a 1,3x
   // «Fotoca…», «Screens…», «WhatsA…» non si distinguevano.
   val scale = LocalDensity.current.fontScale
@@ -147,7 +153,7 @@ internal fun SourceGrid(sources: List<SourceStatus>, halt: SourcesHalt?) {
 @Composable
 private fun SourceCard(source: SourceStatus, halt: SourcesHalt?, cell: Dp, showMark: Boolean, nameLines: Int = NameLines) {
   val name = sourceName(source.source)
-  val problems = source.problems.values.sum()
+  val problems = source.rowProblems()
   val state = sourceState(source, problems, halt)
   val mark = if (state == SourceState.Halted && halt != null) halt.mark else state.mark
   val stateLabel = stringResource(if (state == SourceState.Halted && halt != null) halt.pill else state.label)

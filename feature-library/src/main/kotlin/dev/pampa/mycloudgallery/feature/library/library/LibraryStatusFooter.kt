@@ -97,18 +97,27 @@ internal fun backupFooterNote(status: LibraryBackupStatus): GalleryFooterNote? =
       detail = stringResource(waitRes(status.wait)),
     )
   }
-  is LibraryBackupStatus.FirstBackup -> workingNote(
-    label = stringResource(R.string.backup_footer_first, GalleryNumbers.format(status.done), GalleryNumbers.format(status.total)),
-    done = status.done,
-    total = status.total,
-    etaMillis = status.etaMillis,
-  )
-  is LibraryBackupStatus.Running -> workingNote(
-    label = stringResource(R.string.backup_footer_running, GalleryNumbers.format(status.done), GalleryNumbers.format(status.total)),
-    done = status.done,
-    total = status.total,
-    etaMillis = status.etaMillis,
-  )
+  // Giro 2 (BF2-4): chiesto adesso e accettato, il motore non l'ha ancora preso: «Sto partendo» come la pagina e le Impostazioni, mai «0 di N».
+  is LibraryBackupStatus.FirstBackup -> if (status.starting) {
+    startingNote()
+  } else {
+    workingNote(
+      label = stringResource(R.string.backup_footer_first, GalleryNumbers.format(status.done), GalleryNumbers.format(status.total)),
+      done = status.done,
+      total = status.total,
+      etaMillis = status.etaMillis,
+    )
+  }
+  is LibraryBackupStatus.Running -> if (status.starting) {
+    startingNote()
+  } else {
+    workingNote(
+      label = stringResource(R.string.backup_footer_running, GalleryNumbers.format(status.done), GalleryNumbers.format(status.total)),
+      done = status.done,
+      total = status.total,
+      etaMillis = status.etaMillis,
+    )
+  }
   // OA-10: il backup fermo si dice. La pausa dell'utente dura fino a "Riprendi" (nella pagina Backup: il tasto del pop-up porta li');
   // il lavoro fermato da Android riprende da solo, come una coda.
   is LibraryBackupStatus.Paused -> GalleryFooterNote(
@@ -168,6 +177,14 @@ private fun searchNote(status: LibraryBackupStatus.Comparing): GalleryFooterNote
   }
 }
 
+/** Giro 2 (BF2-4): «Sto partendo», l'anello che gira senza misura e nessun numero. */
+@Composable
+private fun startingNote(): GalleryFooterNote = GalleryFooterNote(
+  tone = GalleryFooterTone.Working,
+  label = stringResource(R.string.backup_footer_starting),
+  busy = true,
+)
+
 /** Un lavoro del backup in corso: l'anello nella capsula e la barra sotto se il totale e' noto, il tempo che manca se si sa stimare. */
 @Composable
 private fun workingNote(label: String, done: Int, total: Int, etaMillis: Long?): GalleryFooterNote {
@@ -207,6 +224,7 @@ private fun waitRes(wait: LibraryBackupWait): Int = when (wait) {
   LibraryBackupWait.NEXT_RUN -> R.string.backup_footer_wait_next_run
   LibraryBackupWait.NAS_BUSY -> R.string.backup_footer_wait_nas_busy
   LibraryBackupWait.OTHER -> R.string.backup_footer_wait_other
+  LibraryBackupWait.NOT_ON_PHONE -> R.string.backup_footer_wait_not_on_phone
 }
 
 /** "Oggi alle 03:12", "12 ottobre 2026 alle 03:12": l'ultimo giro del backup, in ora del NAS mostrata come ora di casa. */

@@ -69,9 +69,12 @@
     <item quantity="one">%1$s già sul NAS</item>
     <item quantity="other">%1$s già sul NAS</item>
   </plurals>
-  <string name="backup_hero_first_breakdown">Nelle cartelle scelte ci sono %1$s foto e video: %2$s già sul NAS, %3$s da caricare e %4$s che questo backup non carica adesso (già nell’area comune, non più sul telefono o con un problema da guardare).</string>
+  <!-- Giro 2 (BF2-8): corta e sicura; i 1.347 dell'utente sono soprattutto nell'area comune o da controllare. -->
+  <string name="backup_hero_first_breakdown">In tutto %1$s foto e video: %2$s già sul NAS, %3$s da caricare. Gli altri %4$s per ora restano fuori (già nell’area comune o da controllare).</string>
   <!-- Fase I (BF-1): fra il tocco su «Inizia ora» o «Fai ora» e l'avvio del lavoro. -->
-  <string name="backup_hero_starting">Sto partendo</string>
+  <string name="backup_hero_starting">@string/gallery_starting</string>
+  <!-- Giro 2: la ricerca ferma per un motivo che il backup non nomina porta alla Diagnostica con un tocco. -->
+  <string name="backup_hero_see_why">Vedi perché</string>
   <!-- D12: la recinzione non si tocca; si dice una volta, in piccolo, senza parole da cantiere. -->
   <string name="backup_hero_test_only_line">Il backup vero non è ancora acceso</string>
   <string name="backup_hero_percent">%1$d%%</string>

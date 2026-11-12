@@ -36,11 +36,14 @@ sealed interface LibraryBackupStatus {
   /** "312 in coda" · "Attesa carica": [items] media aspettano per [wait]. */
   data class Queued(val items: Int, val wait: LibraryBackupWait) : LibraryBackupStatus
 
-  /** "Primo backup: 1.240 di 6.658" · "circa 1 h 20 min". */
-  data class FirstBackup(val done: Int, val total: Int, val etaMillis: Long?) : LibraryBackupStatus
+  /**
+   * "Primo backup: 1.240 di 6.658" · "circa 1 h 20 min". [starting] (giro 2, BF2-4): chiesto adesso dall'utente e accettato da Android, il motore non l'ha
+   * ancora preso: "Sto partendo", mai "0 di N".
+   */
+  data class FirstBackup(val done: Int, val total: Int, val etaMillis: Long?, val starting: Boolean = false) : LibraryBackupStatus
 
-  /** Un giro (non il primo) in corso: "In corso: 12 di 40". */
-  data class Running(val done: Int, val total: Int, val etaMillis: Long?) : LibraryBackupStatus
+  /** Un giro (non il primo) in corso: "In corso: 12 di 40". [starting] come in [FirstBackup]. */
+  data class Running(val done: Int, val total: Int, val etaMillis: Long?, val starting: Boolean = false) : LibraryBackupStatus
 
   /**
    * Il backup e' **fermo** e ci sono (o possono esserci) foto ancora da salvare: non e' "niente da dire" e non e' mai "tutto al sicuro" (OA-10,
@@ -107,4 +110,7 @@ enum class LibraryBackupWait {
 
   /** Un altro motivo del motore delle regole (Diagnostica → Attivita' lo dice per esteso). */
   OTHER,
+
+  /** T-1: l'ultimo giro non ha trovato sul telefono nessuno dei media in coda: nessuna promessa di un giro. */
+  NOT_ON_PHONE,
 }

@@ -84,7 +84,7 @@ class Correzioni5BLiberaSpazioAppTest {
   private class RecordingJobs : BackupJobs {
     val freeSpace = AtomicInteger()
 
-    override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean) = Unit
+    override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean) = true
 
     override fun freeSpaceWork(): Boolean {
       freeSpace.incrementAndGet()

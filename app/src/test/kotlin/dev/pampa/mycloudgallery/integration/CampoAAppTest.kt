@@ -77,7 +77,7 @@ class CampoAAppTest {
       quickWork.incrementAndGet()
     }
 
-    override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean) = Unit
+    override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean) = true
 
     override fun versionWork(kind: BackupKind) {
       versionWork += kind

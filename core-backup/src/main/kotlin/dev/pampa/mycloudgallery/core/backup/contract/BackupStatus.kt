@@ -46,12 +46,16 @@ enum class BackupAction(override val code: String) : StableCode {
  * @property edgeCases gli edge case del piano coperti (per il catalogo della Diagnostica).
  * @property marksMedia il problema e' di un media e accende [dev.pampa.mycloudgallery.core.model.CellFlags.BACKUP_PROBLEM] (D15);
  *   gli altri fermano o rallentano il giro intero.
+ * @property lostMedia (T-1, 12/11) il problema e' di un media che **non esiste piu'** da nessuna parte (nessuna posizione: `SafetyStatus.LOST`). Non e'
+ *   ne' fra quelli da salvare ne' in coda: l'anello e le righe delle sorgenti non lo contano e la coda non lo sottrae (non c'e' dentro); si dice a parte,
+ *   una volta, fra i problemi della pagina.
  */
 enum class BackupProblemCode(
   override val code: String,
   val actions: List<BackupAction>,
   val edgeCases: Set<String>,
   val marksMedia: Boolean = false,
+  val lostMedia: Boolean = false,
 ) : StableCode {
   NAS_UNREACHABLE("nas_unreachable", listOf(BackupAction.RETRY, BackupAction.DIAGNOSTICS), setOf("E-R5")),
   NAS_FULL("nas_full", listOf(BackupAction.NAS_SPACE, BackupAction.RETRY), setOf("E-R9")),
@@ -66,7 +70,7 @@ enum class BackupProblemCode(
   FROZEN("frozen", listOf(BackupAction.DIAGNOSTICS), setOf("E-B19", "C11")),
   WRITES_STOPPED("writes_stopped", listOf(BackupAction.DIAGNOSTICS), setOf("E-B19")),
   TEST_ONLY("test_only", emptyList(), setOf("D12")),
-  LOST_BEFORE_BACKUP("lost_before_backup", listOf(BackupAction.OPEN_GALLERY_TRASH), setOf("E-B4"), marksMedia = true),
+  LOST_BEFORE_BACKUP("lost_before_backup", listOf(BackupAction.OPEN_GALLERY_TRASH), setOf("E-B4"), marksMedia = true, lostMedia = true),
   VERIFY_FAILED("verify_failed", listOf(BackupAction.RETRY, BackupAction.DIAGNOSTICS), setOf("E-B18", "E-B8"), marksMedia = true),
 
   /**
@@ -80,7 +84,7 @@ enum class BackupProblemCode(
    * L44 (proposto da P3): un media **proprio** la cui unica copia era nell'area comune, sparita prima che il guardiano ne facesse la copia
    * privata, senza piu' la copia del telefono (E-B13 con Q4 b). Resta solo il cestino del NAS, per 30 giorni.
    */
-  COMMON_COPY_LOST("common_copy_lost", listOf(BackupAction.OPEN_NAS_TRASH), setOf("E-B13", "L44"), marksMedia = true),
+  COMMON_COPY_LOST("common_copy_lost", listOf(BackupAction.OPEN_NAS_TRASH), setOf("E-B13", "L44"), marksMedia = true, lostMedia = true),
 
   /**
    * R1 della revisione 5A (difesa in profondita'): un errore che nessuna regola prevedeva (un nome rifiutato, un diario che dice di no,
@@ -126,6 +130,13 @@ enum class WaitReason(override val code: String) : StableCode {
    * la via d'uscita, che e' spegnere il risparmio energetico o l'interruttore.
    */
   POWER_SAVER("power_saver"),
+
+  /**
+   * T-1 (12/11): ci sono media in coda per i conteggi, ma l'ultimo giro (anche «Fai ora») non ne ha trovato **nessuno** da caricare sul telefono (nessuna
+   * riga del telefono che il backup possa leggere) e la coda non e' cresciuta da allora. La pagina non promette un giro («al prossimo giro») che non
+   * caricherebbe niente.
+   */
+  NOT_ON_PHONE("not_on_phone"),
 }
 
 /** Che cosa manca per poter fare il backup (`BackupStatus.NotConfigured`). */

@@ -36,6 +36,36 @@ internal class SummaryCache(private val refreshMs: Long) {
 
   private var entry: Entry? = null
 
+  /** BS2-3: cresce a ogni [clear] (le parti cambiano o si svuotano): un calcolo partito prima non entra in cache e non si restituisce. */
+  private var generation: Long = 0L
+
+  /** La generazione di adesso: chi calcola la prende **prima** di leggere le parti e la ripassa a [summaryOf]. */
+  @Synchronized
+  fun generation(): Long = generation
+
+  /**
+   * Fase I (BS2-3): il riepilogo per [key] dalla cache o calcolato con [compute], **solo se vale ancora** per la fotografia di [generation]. Fra la lettura
+   * delle parti e la fine del calcolo (secondi) `start` puo' ricostruirle per un'altra area e svuotare la cache: allora il calcolo vecchio **non** entra in
+   * cache (il controllo e la scrittura sono una cosa sola, sotto il lucchetto di questo oggetto) e non si restituisce: null, chi chiama dice «sto contando»
+   * e ricalcola al giro dopo. [stillCurrent] (le parti di adesso sono ancora quelle lette) si controlla prima di scrivere e prima di restituire.
+   */
+  suspend fun summaryOf(key: String, now: Long, generation: Long, stillCurrent: () -> Boolean, compute: suspend () -> BackupSummary): BackupSummary? {
+    fresh(key, now)?.let { cached -> return cached.takeIf { current(generation) && stillCurrent() } }
+    val computed = compute()
+    if (!stillCurrent()) return null
+    return computed.takeIf { putIfCurrent(generation, key, now, computed) }
+  }
+
+  @Synchronized
+  private fun current(generation: Long): Boolean = this.generation == generation
+
+  @Synchronized
+  private fun putIfCurrent(generation: Long, key: String, now: Long, summary: BackupSummary): Boolean {
+    if (this.generation != generation) return false
+    entry = Entry(key, now, summary)
+    return true
+  }
+
   /** Il riepilogo in cache se vale ancora per [key] all'ora [now], altrimenti null (da ricalcolare). */
   @Synchronized
   fun fresh(key: String, now: Long): BackupSummary? {
@@ -53,10 +83,14 @@ internal class SummaryCache(private val refreshMs: Long) {
   @Synchronized
   fun last(): BackupSummary? = entry?.summary
 
-  /** Fase I (BS-1): le parti del backup sono cambiate (un'altra area, un altro account, il NAS che va e viene): niente di prima vale. */
+  /**
+   * Fase I (BS-1, BS2-3): le parti del backup sono cambiate (un'altra area, un altro account, il NAS che va e viene): niente di prima vale, nemmeno un
+   * calcolo ancora in corso ([generation]).
+   */
   @Synchronized
   fun clear() {
     entry = null
+    generation++
   }
 
   /** Fra quanti ms un riepilogo provvisorio scade (almeno 1); null se quello in cache è definitivo o non c'è. */

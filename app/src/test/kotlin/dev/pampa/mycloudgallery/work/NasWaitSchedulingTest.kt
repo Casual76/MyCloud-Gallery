@@ -86,17 +86,17 @@ class NasWaitSchedulingTest {
     )
   }
 
-  private fun infos(): List<WorkInfo> = workManager.getWorkInfosForUniqueWork(NAME).get()
+  private fun infos(name: String = NAME): List<WorkInfo> = workManager.getWorkInfosForUniqueWork(name).get()
 
-  private fun pending(): List<WorkInfo> = infos().filter { !it.state.isFinished }
+  private fun pending(name: String = NAME): List<WorkInfo> = infos(name).filter { !it.state.isFinished }
 
   /** Una chiamata da un lavoro che non e' la ripresa (il periodico, la tappa dopo, «verifica adesso»): input senza tentativo. */
   private fun fromFreshRun(wait: WaitReason, input: Data = Data.EMPTY): Boolean =
     NasWorkScheduling.afterWait(context, NAME, FakeNasWorker::class.java, wait, input, now)
 
-  /** Fa girare la ripresa in coda (il suo ritardo e i suoi vincoli sono soddisfatti): il lavoro di prova la esegue. */
-  private fun runPending() {
-    val id: UUID = pending().single { it.state == WorkInfo.State.ENQUEUED }.id
+  /** Fa girare la ripresa in coda in [name] (il suo ritardo e i suoi vincoli sono soddisfatti): il lavoro di prova la esegue. */
+  private fun runPending(name: String = NAME) {
+    val id: UUID = pending(name).single { it.state == WorkInfo.State.ENQUEUED }.id
     val driver = checkNotNull(WorkManagerTestInitHelper.getTestDriver(context))
     driver.setAllConstraintsMet(id)
     driver.setInitialDelayMet(id)
@@ -117,22 +117,21 @@ class NasWaitSchedulingTest {
   fun fuoriFasciaLaRipresaEAllInizioDellaFascia() {
     val window = TimeWindow(LocalTime.of(1, 0), LocalTime.of(6, 0))
     fromFreshRun(WaitReason.OutsideWindow(window, now.plusHours(10)))
-    assertThat(pending().single().initialDelayMillis).isEqualTo((10.hours + RuleWaits.MIN_RETRY).inWholeMilliseconds)
+    assertThat(pending(WINDOW_0100).single().initialDelayMillis).isEqualTo((10.hours + RuleWaits.MIN_RETRY).inWholeMilliseconds)
   }
 
   /** Guardia «vincolo non piu' largo» (mutazione M7: i vincoli della regola senza la rete dei lavori del NAS). */
   @Test
   fun laRipresaChiedeLaStessaReteDelPeriodicoEInPiuLaCaricaSeLaRegolaLaChiede() {
     fromFreshRun(WaitReason.NeedsPower)
-    val charging = pending().single()
+    val charging = pending(POWER).single()
     assertThat(charging.initialDelayMillis).isEqualTo(RuleWaits.MIN_RETRY.inWholeMilliseconds)
     assertThat(charging.constraints.requiresCharging()).isTrue()
     val request = charging.constraints.requiredNetworkRequest
     assertWithMessage("la rete dei lavori del NAS").that(request).isNotNull()
     assertThat(request!!.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)).isFalse()
 
-    // (Una ripresa c'e' gia' e un produttore esterno non la tocca: si toglie per provare l'altra.)
-    workManager.cancelUniqueWork(NAME).result.get()
+    // La ripresa per il caldo e' di un'altra classe (BS2-1): c'e' accanto a quella della carica, senza il suo vincolo.
     fromFreshRun(WaitReason.Thermal(ThermalStatus.SEVERE))
     val hot = pending().single()
     assertThat(hot.constraints.requiresCharging()).isFalse()
@@ -221,6 +220,90 @@ class NasWaitSchedulingTest {
     assertThat(pending()).hasSize(1)
   }
 
+  // --- BS2-1: una classe per vincolo, cosi' KEEP non conserva un vincolo sbagliato -----------------------------------------------------------
+
+  /**
+   * Guardia «carica -> caldo» (BS2-1): Preparazione aspettava la corrente (ripresa vincolata alla carica); l'utente toglie quella regola e un giro esterno trova
+   * il caldo. La ripresa del caldo (5 minuti, senza vincolo della carica) **c'e'**: prima `KEEP` la scartava perche' esisteva quella della carica, e con il
+   * telefono mai collegato il lavoro restava fermo. Quella della carica resta (rilegge le regole quando si collega). Cadrebbe con un nome solo per le classi.
+   */
+  @Test
+  fun dopoUnaRipresaPerLaCaricaQuellaPerIlCaldoNonVieneScartata() {
+    fromFreshRun(WaitReason.NeedsPower)
+    val power = pending(POWER).single()
+    fromFreshRun(WaitReason.Thermal(ThermalStatus.SEVERE))
+    val hot = pending(NAME).single()
+    assertThat(hot.constraints.requiresCharging()).isFalse()
+    assertThat(hot.initialDelayMillis).isEqualTo(5.minutes.inWholeMilliseconds)
+    assertThat(pending(POWER).map { it.id }).containsExactly(power.id)
+  }
+
+  /** La ripresa della carica che, partita, trova il caldo: chiede la ripresa della scala (un'altra classe), non si accoda dietro di se' col vincolo sbagliato. */
+  @Test
+  fun unaRipresaDellaCaricaCheTrovaIlCaldoPassaAllaScala() {
+    Script.wait = WaitReason.Thermal(ThermalStatus.SEVERE)
+    fromFreshRun(WaitReason.NeedsPower)
+    runPending(POWER)
+    assertThat(pending(POWER)).isEmpty()
+    val hot = pending(NAME).single()
+    assertThat(hot.constraints.requiresCharging()).isFalse()
+    assertThat(hot.initialDelayMillis).isEqualTo(5.minutes.inWholeMilliseconds)
+  }
+
+  /**
+   * Una ripresa di un'altra classe e' un produttore come gli altri (BS2-1): la ripresa della carica che trova il caldo, con una ripresa della scala gia' in
+   * coda (40 minuti), **non** si accoda dietro di lei (sarebbero 40 minuti piu' i suoi, e due riprese in coda): `KEEP`, resta quella che c'e'. Solo la
+   * ripresa della stessa classe si accoda dopo di se'.
+   */
+  @Test
+  fun unaRipresaDiUnAltraClasseNonSiAccodaDietroAQuellaCheCe() {
+    fromFreshRun(WaitReason.Thermal(ThermalStatus.SEVERE), Data.Builder().putInt(RuleWaits.KEY_ATTEMPT, 3).build())
+    val ladder = pending(NAME).single()
+    Script.wait = WaitReason.Thermal(ThermalStatus.SEVERE)
+    fromFreshRun(WaitReason.NeedsPower)
+    runPending(POWER)
+    assertThat(pending(NAME).map { it.id }).containsExactly(ladder.id)
+    assertThat(pending(POWER)).isEmpty()
+  }
+
+  /**
+   * Guardia «cambio di fascia» (BS2-1): una ripresa per la fascia delle 22 e' in coda; l'utente sposta la fascia alle 20. Il giro dopo chiede la ripresa per
+   * le 20:01 e **c'e'**, con il suo ritardo: prima `KEEP` teneva quella delle 22 e il lavoro aspettava due ore in piu'. Quella vecchia rilegge le regole.
+   */
+  @Test
+  fun dopoUnCambioDiFasciaLaRipresaENuovaAllInizioNuovo() {
+    fromFreshRun(WaitReason.OutsideWindow(TimeWindow(LocalTime.of(22, 0), LocalTime.of(6, 0)), now.withHour(22)))
+    val old = pending("$NAME-window-2200").single()
+    assertThat(old.initialDelayMillis).isEqualTo((7.hours + RuleWaits.MIN_RETRY).inWholeMilliseconds)
+    fromFreshRun(WaitReason.OutsideWindow(TimeWindow(LocalTime.of(20, 0), LocalTime.of(6, 0)), now.withHour(20)))
+    assertThat(pending("$NAME-window-2000").single().initialDelayMillis).isEqualTo((5.hours + RuleWaits.MIN_RETRY).inWholeMilliseconds)
+    // La stessa fascia di nuovo: la stessa classe, KEEP (nessun doppione).
+    fromFreshRun(WaitReason.OutsideWindow(TimeWindow(LocalTime.of(20, 0), LocalTime.of(6, 0)), now.withHour(20)))
+    assertThat(pending("$NAME-window-2000")).hasSize(1)
+    assertThat(pending("$NAME-window-2200").map { it.id }).containsExactly(old.id)
+  }
+
+  /** Nessun ciclo stretto nella classe della carica: la ripresa che trova ancora la carica si accoda dopo di se', una sola, col vincolo e il minuto minimo. */
+  @Test
+  fun unaRipresaDellaCaricaCheAspettaAncoraSiAccodaDopoDiSe() {
+    Script.wait = WaitReason.NeedsPower
+    fromFreshRun(WaitReason.NeedsPower)
+    runPending(POWER)
+    val next = pending(POWER).single()
+    assertThat(next.constraints.requiresCharging()).isTrue()
+    assertThat(next.initialDelayMillis).isEqualTo(RuleWaits.MIN_RETRY.inWholeMilliseconds)
+  }
+
+  @Test
+  fun iNomiDelleClassi() {
+    assertThat(NasWorkScheduling.waitName(NAME, WaitReason.NeedsPower)).isEqualTo(POWER)
+    assertThat(NasWorkScheduling.waitName(NAME, WaitReason.BatteryLow(12, 20))).isEqualTo(POWER)
+    assertThat(NasWorkScheduling.waitName(NAME, WaitReason.Thermal(ThermalStatus.SEVERE))).isEqualTo(NAME)
+    assertThat(NasWorkScheduling.waitName(NAME, WaitReason.PowerSaver)).isEqualTo(NAME)
+    val window = TimeWindow(LocalTime.of(1, 5), LocalTime.of(6, 0))
+    assertThat(NasWorkScheduling.waitName(NAME, WaitReason.OutsideWindow(window, now.plusDays(1).withHour(1).withMinute(5)))).isEqualTo("$NAME-window-0105")
+  }
+
   @Test
   fun laPoliticaDellaRipresa() {
     assertThat(NasWorkScheduling.waitPolicy(fromResume = true)).isEqualTo(ExistingWorkPolicy.APPEND_OR_REPLACE)
@@ -260,6 +343,8 @@ class NasWaitSchedulingTest {
 
   private companion object {
     const val NAME = "nas-prova-wait"
+    const val POWER = "$NAME-power"
+    const val WINDOW_0100 = "$NAME-window-0100"
     val NOW: LocalDateTime = LocalDateTime.of(2026, 11, 12, 15, 0)
   }
 }

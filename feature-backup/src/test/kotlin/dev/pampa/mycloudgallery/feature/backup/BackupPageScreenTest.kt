@@ -159,8 +159,8 @@ class BackupPageScreenTest : ComposeBackupTest() {
   fun tuttoAlSicuroDiceQuantiEQuando() {
     start(BackupStatus.UpToDate(safeCount = 6_658, atNasMillis = 1_792_119_120_000))
     composeRule.onNodeWithText("Al sicuro").assertExists()
-    // L'anello: quanto e' al sicuro sul totale delle sorgenti attive (1.250 + 900 su 1.250 + 915), mai «100%» con una foto che manca.
-    composeRule.onNodeWithContentDescription("99% al sicuro: 2.150 su 2.165").assertExists()
+    // L'anello: quanto e' al sicuro sul totale delle sorgenti attive (1.250 + 900 su 1.250 + 912), mai «100%» con una foto che manca.
+    composeRule.onNodeWithContentDescription("99% al sicuro: 2.150 su 2.162").assertExists()
     composeRule.onNodeWithText("99%", useUnmergedTree = true).assertExists()
     composeRule.onNodeWithText("Ultimo giro:", substring = true).assertExists()
     composeRule.onNodeWithText("Fai ora").performClick()
@@ -171,8 +171,9 @@ class BackupPageScreenTest : ComposeBackupTest() {
   fun inCodaDiceQuantiEPerche() {
     start(BackupStatus.Waiting(items = 312, bytes = 1_400_000_000, reason = WaitReason.CHARGING))
     composeRule.onNodeWithText("In attesa").assertExists()
-    // Fase I (BF-8): la formula comune del motivo (la stessa del foglio, del piede e della Diagnostica).
-    composeRule.onNodeWithText("312 in coda · In attesa della corrente").assertExists()
+    // Fase I (BF-8): la formula comune del motivo (la stessa del foglio, del piede e della Diagnostica). Giro 2 (BF2-3): «In attesa» detto una volta sola.
+    composeRule.onNodeWithText("312 in coda · Serve la corrente").assertExists()
+    composeRule.onAllNodes(hasText("In attesa della", substring = true)).assertCountEquals(0)
     composeRule.onNodeWithText("Fai ora").performClick()
     assertThat(actions.backupNowCalls).isEqualTo(1)
   }
@@ -280,7 +281,8 @@ class BackupPageScreenTest : ComposeBackupTest() {
   fun leSorgentiDiconoStatoENumeroCheConta() {
     start(BackupStatus.UpToDate(6_658, null))
     composeRule.onNodeWithContentDescription("Fotocamera, Al sicuro. 1.250 al sicuro").assertExists()
-    composeRule.onNodeWithContentDescription("Screenshot, Da controllare. 3 con problemi").assertExists()
+    // T-1: le 3 foto cancellate prima del backup non sono della copertina (si dicono fra i problemi): la copertina dice le 12 da salvare.
+    composeRule.onNodeWithContentDescription("Screenshot, In corso. 12 da salvare").assertExists()
     composeRule.onNodeWithContentDescription("Telegram, Non salvata. 224 foto e video, non si salva").assertExists()
   }
 
@@ -346,8 +348,24 @@ class BackupPageScreenTest : ComposeBackupTest() {
     assertThat(sourceState(row(0, 10), 0, SourcesHalt.TEST_ONLY)).isEqualTo(SourceState.Halted)
     assertThat(sourceState(row(0, 10), 0, null)).isEqualTo(SourceState.Working)
     assertThat(sourceState(row(10, 0), 0, SourcesHalt.TEST_ONLY)).isEqualTo(SourceState.Safe)
-    assertThat(sourceState(row(5, 5, problems = mapOf(BackupProblemCode.LOST_BEFORE_BACKUP to 1)), 1, SourcesHalt.TEST_ONLY)).isEqualTo(SourceState.Problem)
+    assertThat(sourceState(row(5, 5, problems = mapOf(BackupProblemCode.VERIFY_FAILED to 1)), 1, SourcesHalt.TEST_ONLY)).isEqualTo(SourceState.Problem)
     assertThat(sourceState(row(0, 10, active = false), 0, SourcesHalt.TEST_ONLY)).isEqualTo(SourceState.Off)
+  }
+
+  /**
+   * T-1 (dal telefono vero): tutto cio' che esiste e' al sicuro e una foto e' stata cancellata prima del backup. La pagina dice «Al sicuro» e 100% (la foto
+   * persa non e' nel totale), la copertina e' a posto, e la foto persa si dice **una volta**, fra i problemi, con la sua azione.
+   */
+  @Test
+  fun unaFotoCancellataPrimaDelBackupSiDiceUnaVoltaEIlRestoEAlSicuro() {
+    val sources = listOf(
+      SourceStatus(BackupSource.Camera, active = true, media = 40, safe = 40, queued = 0, problems = mapOf(BackupProblemCode.LOST_BEFORE_BACKUP to 1)),
+    )
+    start(BackupStatus.UpToDate(40, null), sources)
+    composeRule.onNodeWithText("Al sicuro").assertExists()
+    composeRule.onNodeWithContentDescription("100% al sicuro: 40 su 40").assertExists()
+    composeRule.onNodeWithContentDescription("Fotocamera, Al sicuro. 40 al sicuro").assertExists()
+    composeRule.onAllNodes(hasText("1 foto cancellata prima del backup")).assertCountEquals(1)
   }
 
   @Test
@@ -401,11 +419,48 @@ class BackupPageScreenTest : ComposeBackupTest() {
     start(BackupStatus.FirstBackupReady(BackupSummary.EMPTY))
     composeRule.onNodeWithText("Pronto per partire").assertExists()
     composeRule.onAllNodes(hasText("0 foto e video", substring = true)).assertCountEquals(0)
-    // BF-5: appena aperta l'app (riepilogo non ancora calcolato) nessuna riga provvisoria.
+    // BF-5, giro 2 (BF2-2): appena aperta l'app (riepilogo non ancora calcolato) il silenzio del piede e delle Impostazioni: il nome, nessuna riga, nessun
+    // «Preparo», niente da vedere ancora.
     set(BackupStatus.FirstBackupReady(BackupSummary.COUNTING))
-    composeRule.onNodeWithText("Preparo il primo backup").assertExists()
+    composeRule.onNodeWithText("Primo backup").assertExists()
+    composeRule.onAllNodes(hasText("Preparo", substring = true)).assertCountEquals(0)
     composeRule.onAllNodes(hasText("Cerco", substring = true)).assertCountEquals(0)
+    composeRule.onAllNodes(hasText("Vedi il riepilogo")).assertCountEquals(0)
     composeRule.onAllNodes(hasText("0 foto e video", substring = true)).assertCountEquals(0)
+  }
+
+  /** Giro 2: la ricerca ferma per un motivo che il backup non nomina ha «Vedi perche'», che apre la Diagnostica (una volta). */
+  @Test
+  fun laRicercaInPausaSenzaMotivoPortaAllaDiagnostica() {
+    start(BackupStatus.FirstBackupReady(BackupSamples.pausedSearchSummary))
+    composeRule.onNodeWithText("Ricerca in pausa").assertExists()
+    composeRule.onNodeWithText("Vedi perché").performClick()
+    assertThat(actions.performed).containsExactly(BackupAction.DIAGNOSTICS)
+  }
+
+  /** Giro 2 (BF2-1): con il risparmio energetico la testata dice come riprende davvero. */
+  @Test
+  fun laRicercaFermaPerIlRisparmioEnergeticoDiceComeRiprende() {
+    start(BackupStatus.FirstBackupReady(BackupSamples.heldSummary.copy(existing = BackupSamples.heldSummary.existing.copy(heldBy = WaitReason.POWER_SAVER))))
+    composeRule.onNodeWithText("Risparmio energetico attivo: la ricerca riprende quando lo spegni").assertExists()
+    composeRule.onAllNodes(hasText("da sola", substring = true)).assertCountEquals(0)
+  }
+
+  /**
+   * Giro 2 (BF2-5): il primo backup grande, nei primi 15 minuti (nessuna durata misurata), dice la stessa frase del foglio; poi la durata vera. Un primo
+   * backup piccolo dice solo che cosa carica.
+   */
+  @Test
+  fun ilPrimoBackupGrandeNeiPrimiMinutiDiceCheCiVoglionoOre() {
+    fun first(eta: Long?, total: Int, bytes: Long) = BackupStatus.Running(BackupKind.PHOTOS, 40, total, 80_000_000, bytes, eta, BackupTrigger.FIRST_BACKUP)
+    start(first(eta = null, total = 8_445, bytes = 40_000_000_000))
+    composeRule.onNodeWithText("Con tanti file ci vogliono alcune ore.").assertExists()
+    set(first(eta = 95 * 60_000L, total = 8_445, bytes = 40_000_000_000))
+    composeRule.onNodeWithText("Foto · circa 1 h 35 min").assertExists()
+    composeRule.onAllNodes(hasText("alcune ore", substring = true)).assertCountEquals(0)
+    set(first(eta = null, total = 200, bytes = 1_000_000_000))
+    composeRule.onNodeWithText("Foto").assertExists()
+    composeRule.onAllNodes(hasText("alcune ore", substring = true)).assertCountEquals(0)
   }
 
   /** BF-c: la riga di «Pronto per partire» dice quanto viaggia, come il titolo del foglio (non i gia' sul NAS insieme ai nuovi). */

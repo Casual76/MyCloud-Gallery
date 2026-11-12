@@ -1,6 +1,8 @@
 package dev.pampa.mycloudgallery.backup
 
+import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
+import dev.pampa.mycloudgallery.core.backup.contract.SafetyCounts
 import dev.pampa.mycloudgallery.core.backup.contract.StopBy
 import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
@@ -43,8 +45,11 @@ object BackupStatusReducers {
   private fun footerOf(status: BackupStatus): LibraryBackupStatus = when (status) {
     is BackupStatus.NotConfigured -> LibraryBackupStatus.Idle
     BackupStatus.TestOnly -> LibraryBackupStatus.TestOnly
-    is BackupStatus.FirstBackupReady ->
-      if (!status.summary.canStart) {
+    is BackupStatus.FirstBackupReady -> when {
+      // Giro 2 (BF2-2): appena aperta l'app, finche' il riepilogo non c'e', il piede tace come le Impostazioni (prima: «Cerco… · Inizia fra poco» con la
+      // clessidra, una promessa, mentre la pagina diceva altro).
+      !status.summary.counted -> LibraryBackupStatus.Idle
+      !status.summary.canStart -> {
         // BF-7: la ricerca, con i file del NAS gia' guardati se gira; ferma per una regola, quale (un motivo che il backup non nomina: «altro»).
         val existing = status.summary.existing
         LibraryBackupStatus.Comparing(
@@ -52,16 +57,19 @@ object BackupStatusReducers {
           total = existing.scanTotal,
           wait = existing.heldBy?.let { if (it == WaitReason.NEXT_RUN) LibraryBackupWait.OTHER else waitOf(it) },
         )
-      } else {
+      }
+      else -> {
         // BF-6: il primo backup aspetta il tocco dell'utente, non il prossimo giro: «da avviare», con quanto c'e' da caricare (come il foglio).
         val items = status.summary.toUpload.items.takeIf { it > 0 } ?: status.summary.linked.items
         if (items > 0) LibraryBackupStatus.Queued(items, LibraryBackupWait.FIRST_BACKUP) else LibraryBackupStatus.Idle
       }
+    }
     is BackupStatus.UpToDate -> LibraryBackupStatus.AllSafe(status.atNasMillis)
     is BackupStatus.Waiting -> LibraryBackupStatus.Queued(status.items, waitOf(status.reason))
     is BackupStatus.Running -> when (status.trigger) {
-      dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger.FIRST_BACKUP -> LibraryBackupStatus.FirstBackup(status.done, status.total, status.etaMillis)
-      else -> LibraryBackupStatus.Running(status.done, status.total, status.etaMillis)
+      dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger.FIRST_BACKUP ->
+        LibraryBackupStatus.FirstBackup(status.done, status.total, status.etaMillis, starting = status.starting)
+      else -> LibraryBackupStatus.Running(status.done, status.total, status.etaMillis, starting = status.starting)
     }
     // OA-10 (review della beta): un backup fermo **si dice**. Prima diventava "niente da dire" e la nuvola, guardando solo il NAS, mostrava la spunta di
     // "tutto salvato" con le foto ancora da salvare. La pausa dell'utente ("Ferma", fino a "Riprendi") e il lavoro fermato da Android (riprende da solo)
@@ -88,6 +96,54 @@ object BackupStatusReducers {
     WaitReason.THERMAL -> LibraryBackupWait.THERMAL
     WaitReason.DATA_CAP -> LibraryBackupWait.DATA_CAP
     WaitReason.COMPARING -> LibraryBackupWait.OTHER
+    WaitReason.NOT_ON_PHONE -> LibraryBackupWait.NOT_ON_PHONE
+  }
+
+  // --- T-1 (12/11): che cosa contano l'anello, le righe e la coda --------------------------------------------------------------------------
+
+  /**
+   * I media di una sorgente (o di tutte) per l'anello e le righe: **quelli che si possono ancora salvare o sono al sicuro**. Prima contava anche i persi
+   * (`lost`: nessuna posizione da nessuna parte, le foto cancellate dal telefono prima del backup): tenevano l'anello sotto il 100% e la pagina lontana da
+   * «Al sicuro» fino alla pulizia (60 giorni), senza niente che l'utente potesse fare. Si dicono a parte, fra i problemi.
+   */
+  fun mediaOf(counts: SafetyCounts): Int = counts.safe + counts.unverified + counts.onlyCommonCopy + counts.noNasCopy
+
+  /**
+   * I media in coda: senza copia sul NAS o con la copia privata da verificare, meno quelli che un problema ferma ([BackupProblemCode.marksMedia]) e meno
+   * [held] (le versioni che aspettano il PC). I problemi dei media persi ([BackupProblemCode.lostMedia]) **non** si sottraggono: quei media non sono in coda
+   * (prima toglievano dalla coda media veri: una foto persa nascondeva una foto da caricare).
+   */
+  fun queuedOf(counts: SafetyCounts, held: Int = 0): Int {
+    val stopping = counts.problems.filterKeys { it.marksMedia && !it.lostMedia }.values.sum()
+    return (counts.noNasCopy + counts.unverified - stopping - held).coerceAtLeast(0)
+  }
+
+  /**
+   * Il problema dei media che la testata dice al posto di «Al sicuro», o null. Le foto **cancellate prima del backup** non ci sono: quando tutto cio' che
+   * esiste e' al sicuro la pagina dice «Al sicuro» (e il 100%), e quelle si dicono una volta nella sezione dei problemi («Da controllare»).
+   */
+  fun heroProblem(problems: Map<BackupProblemCode, Int>): Pair<BackupProblemCode, Int>? =
+    problems.filterKeys { it.marksMedia && it != BackupProblemCode.LOST_BEFORE_BACKUP }.entries.minByOrNull { it.key.ordinal }?.toPair()
+
+  /**
+   * Perche' aspetta una coda che non sta caricando: il motivo delle regole; se le regole lasciano partire ([WaitReason.NEXT_RUN]) e il NAS tiene occupato
+   * un file ([busy], D-13), «il NAS e' occupato»; se l'ultimo giro non ha trovato niente da caricare per questa coda ([unserved], T-1), «non li trovo sul
+   * telefono»: mai «al prossimo giro» per un giro che non caricherebbe niente.
+   */
+  fun queueWait(rules: WaitReason, busy: Boolean, unserved: Boolean): WaitReason = when {
+    rules != WaitReason.NEXT_RUN -> rules
+    busy -> WaitReason.NAS_BUSY
+    unserved -> WaitReason.NOT_ON_PHONE
+    else -> WaitReason.NEXT_RUN
+  }
+
+  /**
+   * Fase I (BS2-2): il motivo che ferma **adesso** il lavoro chiesto dall'utente ([decision] = il verdetto delle regole di «Fai ora», gia' confermato), o null se
+   * il lavoro puo' partire. Con un motivo, la pagina lo dice al posto di «sto partendo».
+   */
+  fun userStartBlock(decision: RuleDecision): WaitReason? = when (decision) {
+    is RuleDecision.Wait, is RuleDecision.Stop -> waitReasonOf(decision)
+    is RuleDecision.Run, is RuleDecision.NeedsConfirmation -> null
   }
 
   /**

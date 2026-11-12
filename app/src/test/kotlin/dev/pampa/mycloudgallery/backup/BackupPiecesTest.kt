@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupSummary
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.backup.contract.CopyToVerify
 import dev.pampa.mycloudgallery.core.backup.contract.ExistingCopiesState
+import dev.pampa.mycloudgallery.core.backup.contract.SafetyCounts
 import dev.pampa.mycloudgallery.core.backup.contract.NasCopyRef
 import dev.pampa.mycloudgallery.core.backup.contract.StopBy
 import dev.pampa.mycloudgallery.core.backup.contract.SummaryCount
@@ -91,6 +92,94 @@ class BackupPiecesTest {
     val frozen = settled.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0, heldBy = BackupWait.NEXT_RUN))
     assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(frozen))).isEqualTo(LibraryBackupStatus.Comparing(wait = LibraryBackupWait.OTHER))
     assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(BackupSummary.EMPTY), 0)).isEqualTo(LibraryBackupStatus.Idle)
+  }
+
+  /**
+   * Giro 2 (BF2-2): appena aperta l'app, finche' il riepilogo non c'e' (`counted` falso), il piede **tace** come le Impostazioni: prima diceva «Cerco… · Inizia
+   * fra poco» con la clessidra (una promessa) mentre la pagina diceva un'altra cosa. Anche con un motivo o una scansione gia' visibili sopra.
+   */
+  @Test
+  fun aFreddoIlPiedeTace() {
+    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(BackupSummary.COUNTING))).isEqualTo(LibraryBackupStatus.Idle)
+    val counting = BackupSummary.COUNTING.copy(existing = BackupSummary.COUNTING.existing.copy(heldBy = BackupWait.THERMAL, scanSeen = 3, scanTotal = 9))
+    assertThat(BackupStatusReducers.footer(BackupStatus.FirstBackupReady(counting))).isEqualTo(LibraryBackupStatus.Idle)
+  }
+
+  /** Giro 2 (BF2-4): «sto partendo» arriva al piede (e alla nuvola) come tale, non come «0 di N». */
+  @Test
+  fun ilPiedeSaCheStaPartendo() {
+    val first = BackupStatus.Running(BackupKind.PHOTOS, 0, 7_105, 0L, 3_000L, null, BackupTrigger.FIRST_BACKUP, starting = true)
+    assertThat(BackupStatusReducers.footer(first)).isEqualTo(LibraryBackupStatus.FirstBackup(0, 7_105, null, starting = true))
+    val now = first.copy(trigger = BackupTrigger.USER_NOW)
+    assertThat(BackupStatusReducers.footer(now)).isEqualTo(LibraryBackupStatus.Running(0, 7_105, null, starting = true))
+    assertThat(BackupStatusReducers.footer(first.copy(starting = false, done = 10))).isEqualTo(LibraryBackupStatus.FirstBackup(10, 7_105, null))
+  }
+
+  // --- T-1: che cosa contano l'anello, le righe e la coda ------------------------------------------------------------------------
+
+  /**
+   * T-1 (dal telefono vero): una foto cancellata prima del backup (persa: nessuna posizione, con il suo problema) e N al sicuro. La riga conta N (100%), la
+   * coda e' zero, la testata non porta quel problema (dice «Al sicuro»), e il problema resta nei conteggi: la pagina lo dice fra i problemi.
+   */
+  @Test
+  fun unaFotoPersaPrimaDelBackupNonTieneLAnelloSottoIlCento() {
+    val counts = SafetyCounts(safe = 40, unverified = 0, onlyCommonCopy = 0, noNasCopy = 0, lost = 1, problems = mapOf(BackupProblemCode.LOST_BEFORE_BACKUP to 1))
+    assertThat(BackupStatusReducers.mediaOf(counts)).isEqualTo(40)
+    assertThat(BackupStatusReducers.queuedOf(counts)).isEqualTo(0)
+    assertThat(BackupStatusReducers.heroProblem(counts.problems)).isNull()
+    assertThat(counts.problems).containsEntry(BackupProblemCode.LOST_BEFORE_BACKUP, 1)
+  }
+
+  /**
+   * T-1: la coda non sottrae i problemi dei media persi (non ci sono dentro): prima una foto persa toglieva dalla coda una foto da caricare. I problemi che
+   * fermano un media in coda (copia non integra, file illeggibile) si sottraggono come prima, e le versioni che aspettano il PC anche.
+   */
+  @Test
+  fun laCodaNonSottraeIMediaPersi() {
+    val counts = SafetyCounts(
+      safe = 10, unverified = 1, onlyCommonCopy = 2, noNasCopy = 5, lost = 3,
+      problems = mapOf(BackupProblemCode.LOST_BEFORE_BACKUP to 2, BackupProblemCode.COMMON_COPY_LOST to 1, BackupProblemCode.VERIFY_FAILED to 1),
+    )
+    assertThat(BackupStatusReducers.queuedOf(counts)).isEqualTo(5)
+    assertThat(BackupStatusReducers.queuedOf(counts, held = 2)).isEqualTo(3)
+    assertThat(BackupStatusReducers.mediaOf(counts)).isEqualTo(18)
+  }
+
+  /** T-1: la testata porta i problemi dei media che si possono ancora fare (e la copia persa dall'area comune, con il cestino del NAS), mai le foto cancellate. */
+  @Test
+  fun laTestataNonPortaLeFotoCancellatePrimaDelBackup() {
+    val problems = mapOf(BackupProblemCode.LOST_BEFORE_BACKUP to 2, BackupProblemCode.VERIFY_FAILED to 1)
+    assertThat(BackupStatusReducers.heroProblem(problems)).isEqualTo(BackupProblemCode.VERIFY_FAILED to 1)
+    assertThat(BackupStatusReducers.heroProblem(mapOf(BackupProblemCode.COMMON_COPY_LOST to 1))).isEqualTo(BackupProblemCode.COMMON_COPY_LOST to 1)
+    assertThat(BackupStatusReducers.heroProblem(mapOf(BackupProblemCode.LOST_BEFORE_BACKUP to 2))).isNull()
+    // Un problema che non e' di un media (il NAS spento) non arriva qui: lo dice il giro.
+    assertThat(BackupStatusReducers.heroProblem(mapOf(BackupProblemCode.NAS_UNREACHABLE to 1))).isNull()
+  }
+
+  /**
+   * T-1: «Fai ora» con zero candidati veri. Le regole lasciano partire, ma l'ultimo giro non ha trovato niente da caricare per questa coda: «non li trovo sul
+   * telefono», mai «al prossimo giro». Il NAS occupato vince (e' lui che fa aspettare); un motivo delle regole vince su tutti.
+   */
+  @Test
+  fun unaCodaCheIlTelefonoNonServeNonPromette_UnGiro() {
+    assertThat(BackupStatusReducers.queueWait(BackupWait.NEXT_RUN, busy = false, unserved = true)).isEqualTo(BackupWait.NOT_ON_PHONE)
+    assertThat(BackupStatusReducers.queueWait(BackupWait.NEXT_RUN, busy = false, unserved = false)).isEqualTo(BackupWait.NEXT_RUN)
+    assertThat(BackupStatusReducers.queueWait(BackupWait.NEXT_RUN, busy = true, unserved = true)).isEqualTo(BackupWait.NAS_BUSY)
+    assertThat(BackupStatusReducers.queueWait(BackupWait.CHARGING, busy = true, unserved = true)).isEqualTo(BackupWait.CHARGING)
+    assertThat(BackupStatusReducers.footer(BackupStatus.Waiting(503, 1L, BackupWait.NOT_ON_PHONE))).isEqualTo(LibraryBackupStatus.Queued(503, LibraryBackupWait.NOT_ON_PHONE))
+  }
+
+  /**
+   * Giro 2 (BS2-2): il motivo che ferma **adesso** il lavoro chiesto dall'utente (le regole di «Fai ora»): con un motivo la pagina lo dice al posto di «sto
+   * partendo»; un verdetto che lascia partire (o una conferma gia' data) non ferma niente.
+   */
+  @Test
+  fun ilMotivoCheFermaIlLavoroDellUtente() {
+    assertThat(BackupStatusReducers.userStartBlock(RuleDecision.Wait(WaitReason.Offline))).isEqualTo(BackupWait.WIFI)
+    assertThat(BackupStatusReducers.userStartBlock(RuleDecision.Wait(WaitReason.NasUnreachable))).isEqualTo(BackupWait.NAS)
+    assertThat(BackupStatusReducers.userStartBlock(RuleDecision.Stop(WaitReason.Thermal(dev.pampa.mycloudgallery.core.rules.ThermalStatus.CRITICAL))))
+      .isEqualTo(BackupWait.THERMAL)
+    assertThat(BackupStatusReducers.userStartBlock(RuleDecision.Run(network = NetworkClass.HOME_WIFI))).isNull()
   }
 
   @Test

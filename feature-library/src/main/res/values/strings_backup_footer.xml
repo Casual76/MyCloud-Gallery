@@ -44,7 +44,10 @@
   <string name="backup_footer_wait_next_run">Al prossimo giro</string>
   <!-- D-13: il NAS tiene ancora occupato un file del backup (una connessione caduta che il NAS non ha ancora chiuso): si riprova da soli. -->
   <string name="backup_footer_wait_nas_busy">File occupato sul NAS, riprovo tra poco.</string>
-  <string name="backup_footer_wait_other">Attesa delle regole</string>
+  <!-- Giro 2 (BF2-11): niente gergo («le regole»): il motivo sta nella Diagnostica. -->
+  <string name="backup_footer_wait_other">Il motivo è nella Diagnostica</string>
+  <string name="backup_footer_starting">@string/gallery_starting</string>
+  <string name="backup_footer_wait_not_on_phone">@string/gallery_wait_not_on_phone</string>
 
   <string name="backup_footer_first">Primo backup: %1$s di %2$s</string>
   <string name="backup_footer_running">Backup in corso: %1$s di %2$s</string>

@@ -15,6 +15,7 @@ import dagger.hilt.components.SingletonComponent
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.StopBy
+import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.RowValue
@@ -83,7 +84,7 @@ internal fun backupEntryMark(status: BackupStatus?): GalleryIconStatus? = when (
     !status.summary.counted -> null
     status.summary.canStart -> GalleryIconStatus.YourTurn
     status.summary.existing.heldBy == null && status.summary.existing.scanSeen != null -> GalleryIconStatus.Running
-    status.summary.existing.heldBy == dev.pampa.mycloudgallery.core.backup.contract.WaitReason.NEXT_RUN -> GalleryIconStatus.Paused
+    status.summary.existing.heldBy == WaitReason.NEXT_RUN -> GalleryIconStatus.Paused
     else -> GalleryIconStatus.Waiting
   }
   BackupStatus.TestOnly -> GalleryIconStatus.Paused
@@ -115,7 +116,12 @@ internal object BackupEntryTexts {
         }
       is BackupStatus.UpToDate -> res.getString(R.string.settings_backup_up_to_date)
       is BackupStatus.Waiting -> res.getString(R.string.settings_backup_waiting, ItalianCount.format(status.items))
-      is BackupStatus.Running -> res.getString(R.string.settings_backup_running, ItalianCount.format(status.done), ItalianCount.format(status.total))
+      // Giro 2 (BF2-4): chiesto adesso e accettato, il motore non l'ha ancora preso: «Sto partendo» come la pagina e il piede, mai «0 / N».
+      is BackupStatus.Running -> if (status.starting) {
+        res.getString(R.string.settings_backup_starting)
+      } else {
+        res.getString(R.string.settings_backup_running, ItalianCount.format(status.done), ItalianCount.format(status.total))
+      }
       is BackupStatus.Stopped -> res.getString(if (status.by == StopBy.USER) R.string.settings_backup_paused else R.string.settings_backup_stopped)
       is BackupStatus.Problem -> res.getString(R.string.settings_backup_problem)
     }

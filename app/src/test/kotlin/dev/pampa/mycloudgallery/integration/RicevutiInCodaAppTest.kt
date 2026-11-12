@@ -90,7 +90,7 @@ class RicevutiInCodaAppTest {
   private class RecordingJobs : BackupJobs {
     val incoming = CopyOnWriteArrayList<Boolean>()
 
-    override fun userInitiated(trigger: dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger, confirmed: Boolean) = Unit
+    override fun userInitiated(trigger: dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger, confirmed: Boolean) = true
 
     override fun incoming(userInitiated: Boolean) {
       incoming += userInitiated

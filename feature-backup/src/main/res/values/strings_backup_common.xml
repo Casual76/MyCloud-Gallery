@@ -32,6 +32,7 @@
   <string name="backup_wait_thermal">@string/gallery_wait_thermal</string>
   <string name="backup_wait_data_cap">@string/gallery_wait_data_cap</string>
   <string name="backup_wait_nas">@string/gallery_wait_nas</string>
+  <string name="backup_wait_not_on_phone">@string/gallery_wait_not_on_phone</string>
   <string name="backup_wait_comparing">Confronta con il NAS</string>
   <string name="backup_wait_next_run">Al prossimo giro</string>
   <!-- D-13: il NAS tiene ancora occupato un file del backup (una connessione caduta che il NAS non ha ancora chiuso). -->

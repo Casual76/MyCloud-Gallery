@@ -76,6 +76,23 @@ object BackupSamples {
   val heldSummary: BackupSummary =
     firstBackupSummary.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0, heldBy = WaitReason.THERMAL))
 
+  /** Giro 2 (BF2-7): la ricerca ferma per un motivo che il backup non nomina (congelamento, attivita' spenta, profilo, limiti di Android). */
+  val pausedSearchSummary: BackupSummary =
+    firstBackupSummary.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0, heldBy = WaitReason.NEXT_RUN))
+
+  /** Giro 2 (BS2-4): il confronto delle copie simili che aspetta anteprime non ancora pronte (qui la Preparazione e' ferma per il caldo). */
+  val comparingWaitingSummary: BackupSummary =
+    comparingSummary.copy(existing = ExistingCopiesState(privateAreaScanned = true, similarPending = 120, heldBy = WaitReason.THERMAL))
+
+  /** Giro 2 (BF2-6): un primo backup piccolo, sotto la soglia delle ore (200 foto e video, 1,3 GB). */
+  val smallSummary: BackupSummary = firstBackupSummary.copy(
+    linked = SummaryCount(photos = 150, videos = 0, photoBytes = 300_000_000, videoBytes = 0),
+    similar = SummaryCount.ZERO,
+    fresh = SummaryCount(photos = 40, videos = 10, photoBytes = 100_000_000, videoBytes = 900_000_000),
+    inCommonArea = SummaryCount.ZERO,
+    bySource = mapOf(BackupSource.Camera.id to SummaryCount(40, 10, 100_000_000, 900_000_000)),
+  )
+
   /** Un esempio per ogni caso di [BackupStatus] (problemi a parte: [problems]). */
   val statuses: List<BackupStatus> = listOf(
     BackupStatus.NotConfigured(setOf(BackupSetupStep.DEVICE_FOLDER)),
@@ -128,11 +145,14 @@ object BackupSamples {
   val existingFolderProposal: DeviceFolderProposal =
     DeviceFolderProposal(suggested = deviceFolder, existing = ExistingFolder(files = 1_234), alternative = DeviceFolder("S25 di Mario (2)"))
 
-  /** Le sorgenti della pagina Backup: una a posto, una con un problema, una spenta. */
+  /**
+   * Le sorgenti della pagina Backup: una a posto, una con 12 in coda e 3 foto cancellate prima del backup, una spenta. T-1: le 3 perse non sono nel totale
+   * della riga (912 = 900 al sicuro + 12 in coda) e non sono un problema della copertina: si dicono una volta, fra i problemi della pagina.
+   */
   val sources: List<SourceStatus> = listOf(
     SourceStatus(BackupSource.Camera, active = true, media = 1_250, safe = 1_250, queued = 0, problems = emptyMap()),
     SourceStatus(
-      BackupSource.Screenshots, active = true, media = 915, safe = 900, queued = 12,
+      BackupSource.Screenshots, active = true, media = 912, safe = 900, queued = 12,
       problems = mapOf(BackupProblemCode.LOST_BEFORE_BACKUP to 3),
     ),
     SourceStatus(

@@ -23,8 +23,11 @@ interface BackupJobs {
   /**
    * Un giro dell'utente: [trigger] e' `FIRST_BACKUP` ("Inizia ora") o `USER_NOW` ("Fai ora"); [confirmed] = l'utente ha visto la stima e
    * accettato i dati mobili (proposta 10), altrimenti sui dati mobili le regole chiedono conferma e il giro non parte.
+   *
+   * @return vero se Android ha **accettato** il lavoro (Fase I, BS2-2: solo allora la pagina dice «Sto partendo»); falso se lo ha rifiutato (un esito o
+   *   un'eccezione: l'app non era in primo piano, nessun JobScheduler) o se non c'e' un lavoro dell'utente (test, varianti senza NAS).
    */
-  fun userInitiated(trigger: BackupTrigger, confirmed: Boolean)
+  fun userInitiated(trigger: BackupTrigger, confirmed: Boolean): Boolean
 
   /**
    * D24 (P14): dei file in arrivo sono in coda nel diario ("Salva sul NAS"). [userInitiated] = la condivisione e' grande (oltre
@@ -67,7 +70,7 @@ interface BackupJobs {
   companion object {
     /** Nessun lavoro (test, varianti senza NAS): il backup gira solo con i lavori a tappe di WorkManager. */
     val NONE: BackupJobs = object : BackupJobs {
-      override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean) = Unit
+      override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean) = false
 
       override fun cancelAll() = Unit
     }
@@ -85,7 +88,7 @@ class JobSchedulerBackupJobs(context: Context) : BackupJobs {
   private val scheduler: JobScheduler? get() = app.getSystemService(JobScheduler::class.java)
   private val component = ComponentName(app, BackupJobService::class.java)
 
-  override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean) {
+  override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean): Boolean {
     require(trigger == BackupTrigger.FIRST_BACKUP || trigger == BackupTrigger.USER_NOW) { "Solo il primo backup e \"Fai ora\" sono lavori dell'utente." }
     val extras = PersistableBundle().apply {
       putString(EXTRA_TRIGGER, trigger.code)
@@ -94,17 +97,22 @@ class JobSchedulerBackupJobs(context: Context) : BackupJobs {
     // RE-11: una rete qualunque, anche senza internet (il NAS e' in LAN): `NETWORK_TYPE_ANY` chiede una rete validata.
     val builder = JobInfo.Builder(JOB_USER, component).setRequiredNetwork(LanConstraints.request()).setExtras(extras)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) builder.setUserInitiated(true)
-    try {
+    return try {
       // D-8 (prove sul campo): Android rifiuta un lavoro dell'utente chiesto con l'app non in primo piano con un esito, non con un'eccezione.
-      // Prima l'esito si ignorava e il tocco spariva senza una traccia: adesso almeno il log lo dice.
-      if (scheduler?.schedule(builder.build()) == JobScheduler.RESULT_FAILURE) GalleryLog.w(TAG) { "lavoro del backup rifiutato da Android" }
+      // Prima l'esito si ignorava e il tocco spariva senza una traccia: adesso il log lo dice e (BS2-2) la pagina non dice «Sto partendo».
+      val accepted = scheduler?.schedule(builder.build()) == JobScheduler.RESULT_SUCCESS
+      if (!accepted) GalleryLog.w(TAG) { "lavoro del backup rifiutato da Android" }
+      accepted
     } catch (e: IllegalStateException) {
       // UIDT chiesto con l'app non visibile: il backup riprende con i lavori a tappe.
       GalleryLog.w(TAG) { "lavoro del backup non programmato: ${e.javaClass.simpleName}" }
+      false
     } catch (e: SecurityException) {
       GalleryLog.w(TAG) { "lavoro del backup non programmato: ${e.javaClass.simpleName}" }
+      false
     } catch (e: IllegalArgumentException) {
       GalleryLog.w(TAG) { "lavoro del backup non programmato: ${e.javaClass.simpleName}" }
+      false
     }
   }
 

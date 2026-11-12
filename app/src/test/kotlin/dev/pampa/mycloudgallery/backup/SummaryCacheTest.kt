@@ -3,6 +3,11 @@ package dev.pampa.mycloudgallery.backup
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSummary
 import dev.pampa.mycloudgallery.core.backup.contract.ExistingCopiesState
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
 /**
@@ -60,6 +65,64 @@ class SummaryCacheTest {
     cache.clear()
     assertThat(cache.fresh("k", 0)).isNull()
     assertThat(cache.last()).isNull()
+  }
+
+  /**
+   * Fase I (BS2-3): il pianificatore delle parti di prima e' sospeso nel suo calcolo (secondi in un processo nuovo); intanto `start` ricostruisce le parti per
+   * un'altra area e svuota la cache. Il vecchio pianificatore finisce **dopo** lo svuotamento: il suo riepilogo non entra in cache e non si restituisce (null:
+   * chi chiama dice «sto contando» e ricalcola). Prima `put` lo rimetteva in cache dopo `clear`, sotto la chiave nuova, e i tasti si accendevano sui numeri
+   * dell'area di prima. Cadrebbe senza la generazione (o con un `clear` che non la fa crescere).
+   */
+  @Test
+  fun unCalcoloFinitoDopoLoSvuotamentoNonEntraInCacheENonSiRestituisce() = runBlocking<Unit> {
+    val cache = SummaryCache(minute)
+    val generation = cache.generation()
+    val planner = CompletableDeferred<Unit>()
+    val started = CompletableDeferred<Unit>()
+    val old = async(start = CoroutineStart.UNDISPATCHED) {
+      cache.summaryOf("k", 0, generation, stillCurrent = { true }) {
+        started.complete(Unit)
+        planner.await()
+        settled
+      }
+    }
+    started.await()
+    // Le parti cambiano mentre il vecchio pianificatore calcola: la cache si svuota (e la generazione cresce).
+    cache.clear()
+    planner.complete(Unit)
+    assertThat(old.await()).isNull()
+    assertThat(cache.fresh("k", 0)).isNull()
+    assertThat(cache.last()).isNull()
+  }
+
+  /** BS2-3: le parti lette all'inizio non sono piu' quelle di adesso alla fine del calcolo (lo dice chi chiama): niente cache, niente risultato. */
+  @Test
+  fun lePartiCambiateDuranteIlCalcoloNonDannoUnRiepilogo() = runBlocking<Unit> {
+    val cache = SummaryCache(minute)
+    var same = true
+    val result = cache.summaryOf("k", 0, cache.generation(), stillCurrent = { same }) {
+      same = false
+      settled
+    }
+    assertThat(result).isNull()
+    assertThat(cache.last()).isNull()
+  }
+
+  /** BS2-3: con la stessa generazione il riepilogo si calcola una volta e poi viene dalla cache; con una generazione vecchia, nemmeno quello in cache. */
+  @Test
+  fun stessaGenerazioneUnCalcoloSolo_GenerazioneVecchiaNiente() = runBlocking<Unit> {
+    val cache = SummaryCache(minute)
+    val calls = AtomicInteger()
+    val first = cache.generation()
+    assertThat(cache.summaryOf("k", 0, first, { true }) { calls.incrementAndGet(); settled }).isSameInstanceAs(settled)
+    assertThat(cache.summaryOf("k", 1_000, first, { true }) { calls.incrementAndGet(); settled }).isSameInstanceAs(settled)
+    assertThat(calls.get()).isEqualTo(1)
+    cache.clear()
+    val second = cache.generation()
+    assertThat(second).isGreaterThan(first)
+    assertThat(cache.summaryOf("k", 0, second, { true }) { calls.incrementAndGet(); settled }).isSameInstanceAs(settled)
+    // Chi aveva letto le parti con la generazione di prima non riceve nemmeno il riepilogo in cache della generazione nuova.
+    assertThat(cache.summaryOf("k", 0, first, { true }) { calls.incrementAndGet(); settled }).isNull()
   }
 
   @Test

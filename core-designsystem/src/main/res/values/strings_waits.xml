@@ -2,14 +2,22 @@
 <resources>
   <!-- Fase I (12/11, BF-8 della critica del primo backup): perche' un lavoro e' fermo adesso, **una formula sola per motivo**. La usano il foglio del primo
        backup e la testata (feature-backup), il piede della Libreria (feature-library) e i titoli della Diagnostica (feature-diagnostics), per riferimento
-       (`@string/…`), mai copiandola. Etichette: senza punto finale. Nessuna promessa di ripartenza qui: chi la dice la aggiunge solo dove e' vera. -->
-  <string name="gallery_wait_charging">In attesa della corrente</string>
+       (`@string/…`), mai copiandola. Etichette: senza punto finale. Nessuna promessa di ripartenza qui: chi la dice la aggiunge solo dove e' vera.
+       Giro 2 (BF2-3): **mai «In attesa» dentro il motivo**. Lo stato «In attesa» lo dicono gia' l'etichetta, la clessidra e il titolo del pop-up: il motivo
+       dice che cosa serve («Serve la corrente»), e insieme si legge «In attesa · 312 in coda · Serve la corrente», non «In attesa … In attesa della corrente». -->
+  <string name="gallery_wait_charging">Serve la corrente</string>
   <string name="gallery_wait_battery">Batteria sotto la soglia</string>
-  <string name="gallery_wait_night_window">In attesa della fascia oraria</string>
+  <string name="gallery_wait_night_window">Fuori dalla fascia oraria</string>
   <string name="gallery_wait_power_saver">Risparmio energetico attivo</string>
   <string name="gallery_wait_thermal">Il telefono è troppo caldo</string>
   <string name="gallery_wait_data_cap">Tetto dati del mese raggiunto</string>
-  <string name="gallery_wait_wifi">In attesa del Wi-Fi</string>
-  <string name="gallery_wait_home_wifi">In attesa del Wi-Fi di casa</string>
+  <string name="gallery_wait_wifi">Serve il Wi-Fi</string>
+  <string name="gallery_wait_home_wifi">Serve il Wi-Fi di casa</string>
   <string name="gallery_wait_nas">NAS spento o non raggiungibile</string>
+  <!-- T-1: media in coda per i conteggi che l'ultimo giro non ha trovato sul telefono: nessuna promessa di un giro. -->
+  <string name="gallery_wait_not_on_phone">Non li trovo sul telefono</string>
+
+  <!-- Giro 2 (BF2-4): un lavoro chiesto adesso dall'utente e accettato da Android, prima che il motore lo prenda. Le stesse parole nella pagina Backup, nel
+       piede della Libreria e nelle Impostazioni, per riferimento. -->
+  <string name="gallery_starting">Sto partendo</string>
 </resources>

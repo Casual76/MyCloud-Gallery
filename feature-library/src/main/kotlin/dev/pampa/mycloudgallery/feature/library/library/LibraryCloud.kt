@@ -503,12 +503,17 @@ private fun ProblemNote(note: GalleryFooterNote) {
 @Immutable
 private data class CloudGauge(val glyph: ImageVector, val count: String, val eta: String?)
 
-/** Il conto dei lavori che hanno un totale; null per gli altri (la coda, il confronto, la rete che si sveglia): restano la loro frase. */
+/**
+ * Il conto dei lavori che hanno un totale; null per gli altri (la coda, il confronto, la rete che si sveglia, il backup che sta partendo: giro 2, BF2-4, mai
+ * «0 / N»): restano la loro frase.
+ */
 @Composable
 private fun gaugeOf(item: CloudItem): CloudGauge? = when (item) {
   is CloudItem.Backup -> when (val s = item.status) {
-    is LibraryBackupStatus.Running -> CloudGauge(Icons.Rounded.CloudUpload, ofTotal(GalleryNumbers.format(s.done), GalleryNumbers.format(s.total)), etaText(s.etaMillis))
-    is LibraryBackupStatus.FirstBackup -> CloudGauge(Icons.Rounded.CloudUpload, ofTotal(GalleryNumbers.format(s.done), GalleryNumbers.format(s.total)), etaText(s.etaMillis))
+    is LibraryBackupStatus.Running ->
+      if (s.starting) null else CloudGauge(Icons.Rounded.CloudUpload, ofTotal(GalleryNumbers.format(s.done), GalleryNumbers.format(s.total)), etaText(s.etaMillis))
+    is LibraryBackupStatus.FirstBackup ->
+      if (s.starting) null else CloudGauge(Icons.Rounded.CloudUpload, ofTotal(GalleryNumbers.format(s.done), GalleryNumbers.format(s.total)), etaText(s.etaMillis))
     else -> null
   }
   is CloudItem.Nas -> when (val s = item.status) {

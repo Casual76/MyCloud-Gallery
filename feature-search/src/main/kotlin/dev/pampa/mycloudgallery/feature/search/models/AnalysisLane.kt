@@ -15,6 +15,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -101,6 +103,13 @@ import kotlinx.coroutines.flow.conflate
 // disegna sempre **filtrato dal nastro di adesso** ([visibleNow]): un media che il flusso non da' piu' come anteprima (revocato, nascosto, nel
 // cestino) diventa la casella neutra nello stesso fotogramma in cui il flusso lo toglie, anche a meta' di un passo e con il movimento ridotto; e
 // riferimento e ThumbHash vengono sempre dal valore di adesso, mai da quello trattenuto.
+//
+// GENERAZIONE (giro 3, contratto `AnalysisFlow.visibilityGeneration`): `:app` la alza a ogni cambio di visibilita' (permessi, selezione, nascosti,
+// cestino) e nello stesso istante emette uno stato tutto neutro. Qui: (1) un fotogramma trattenuto di una generazione piu' vecchia di quella
+// dell'ultimo valore **non si usa piu'**: si disegna l'ultimo valore cosi' com'e' ([frameBase]); (2) subito dopo il passo trattenuto e il
+// fotogramma della corsia si buttano (nessun riferimento vecchio resta in memoria) e il movimento si ferma; (3) ogni anteprima a schermo ha
+// un'identita' **legata alla generazione** in cui e' nata ([laneKey]): al cambio la sua composizione (miniatura, segnaposto ricordato) si smonta e
+// ne nasce una nuova, mai riusata; (4) lo stato neutro di passaggio non fa aspettare il passo ([rememberPaced]).
 
 /** Un'anteprima della corsia e il suo posto: 0 = nel mirino, negativo = finita (a sinistra), positivo = in arrivo (a destra). */
 @Immutable
@@ -120,7 +129,8 @@ internal fun AnalysisLane(
   frozenShift: Float? = null,
 ) {
   val reduced = LocalFluidMotionPolicy.current.reducedMotion
-  val paced = rememberPaced(flow)
+  val pacedState = rememberPaced(flow)
+  val paced = pacedState.value
   var held by remember { mutableStateOf(paced) }
   val shift = remember { Animatable(frozenShift ?: 0f) }
   val focus = remember { Animatable(1f) }
@@ -152,8 +162,22 @@ internal fun AnalysisLane(
       }
     }
   }
-  // XS2-1: il fotogramma trattenuto si disegna filtrato dal nastro di adesso (lo stesso fotogramma in cui il flusso revoca).
-  val frame = visibleNow(held, flow)
+  // XS2-1: il fotogramma trattenuto si disegna filtrato dal nastro di adesso (lo stesso fotogramma in cui il flusso revoca); se e' di una
+  // generazione piu' vecchia non si usa affatto (giro 3).
+  val frame = visibleNow(frameBase(held, flow), flow)
+  // Giro 3: alla generazione nuova il passo trattenuto e la corsia si buttano subito dopo questo fotogramma (nessun riferimento vecchio in
+  // memoria) e il movimento si ferma dov'e': la corsia riparte dal valore di adesso.
+  if (held.visibilityGeneration < flow.visibilityGeneration || pacedState.value.visibilityGeneration < flow.visibilityGeneration) {
+    SideEffect {
+      if (pacedState.value.visibilityGeneration < flow.visibilityGeneration) pacedState.value = flow
+      if (held.visibilityGeneration < flow.visibilityGeneration) held = flow
+    }
+  }
+  LaunchedEffect(flow.visibilityGeneration) {
+    shift.snapTo(0f)
+    focus.snapTo(1f)
+    light.snapTo(1f)
+  }
   val running = frame.current != null
   val description = laneDescription(frame)
   BoxWithConstraints(
@@ -176,7 +200,7 @@ internal fun AnalysisLane(
     }
     // Una chiave per anteprima; se lo stesso media comparisse due volte (finito e di nuovo in coda), la seconda prende anche il posto.
     val seen = HashSet<Any>()
-    val keys = entries.map { entry -> laneKey(entry).let { if (seen.add(it)) it else "$it@${entry.slot}" } }
+    val keys = entries.map { entry -> laneKey(entry, frame.visibilityGeneration).let { if (seen.add(it)) it else "$it@${entry.slot}" } }
     // XU-15: le miniature nella finestra del caricatore solo per le anteprime che la corsia mostra (quelle del NAS "in arrivo", mai l'originale), e
     // solo quando cambiano quelle mostrate: non a ogni emissione del motore. Sono gia' filtrate dal nastro di adesso (XS2-1).
     val requests = entries.mapNotNull { (it.thumb as? AnalysisThumb.Shown)?.request }
@@ -210,7 +234,7 @@ internal fun AnalysisLane(
           key(keys[index]) {
           when {
             entry.slot == 0 && thumb == null -> RestCard(status, current)
-            thumb != null -> LaneThumb(thumb, thumbnails, current)
+            thumb != null -> LaneThumb(thumb, thumbnails, current, frame.visibilityGeneration)
             else -> Box(Modifier)
           }
           // Il segno «fatto» (solo le finite e quella di adesso, che lo prende uscendo) e il segno del video: a misura fissa.
@@ -351,8 +375,10 @@ private fun DrawScope.drawGate(geometry: LaneGeometry, gate: GateMetrics, color:
 
 /** Un'anteprima: la miniatura locale (o il segnaposto sfocato, gia' pronto) in una tessera piena; un media non mostrabile e' la casella neutra. */
 @Composable
-private fun LaneThumb(thumb: AnalysisThumb, thumbnails: SearchThumbnails?, side: Dp) {
+private fun LaneThumb(thumb: AnalysisThumb, thumbnails: SearchThumbnails?, side: Dp, generation: Long) {
   val shape = ContinuousCornerShape(FluidRadius.Card)
+  // La generazione in cui questa composizione e' nata: con la chiave legata alla generazione ([laneKey]) non sopravvive a un cambio di visibilita'.
+  val born = remember { generation }
   Box(
     modifier = Modifier
       .size(side)
@@ -362,7 +388,7 @@ private fun LaneThumb(thumb: AnalysisThumb, thumbnails: SearchThumbnails?, side:
       .semantics {
         hideFromAccessibility()
         // Solo per le prove (XS2-1: quale media e' a schermo); TalkBack non lo legge.
-        (thumb as? AnalysisThumb.Shown)?.let { this[AnalysisMediaKey] = it.id.value }
+        (thumb as? AnalysisThumb.Shown)?.let { this[AnalysisMediaKey] = it.id.value; this[AnalysisBornKey] = born }
       },
   ) {
     when (thumb) {
@@ -439,17 +465,25 @@ private fun laneDescription(frame: AnalysisFlow): String {
   }
 }
 
-private fun laneKey(entry: LaneEntry): Any = when (val thumb = entry.thumb) {
-  is AnalysisThumb.Shown -> thumb.id.value
+/** L'identita' di un'anteprima: il media **e la generazione** in cui e' nata (giro 3): al cambio di visibilita' non se ne riusa nessuna. */
+private fun laneKey(entry: LaneEntry, generation: Long): Any = when (val thumb = entry.thumb) {
+  is AnalysisThumb.Shown -> "${thumb.id.value}#$generation"
   AnalysisThumb.Quiet -> "nascosta-${entry.slot}"
   null -> "riposo"
 }
 
 /**
+ * Giro 3: da che cosa parte il fotogramma. Il trattenuto [held] solo se e' della stessa generazione dell'ultimo valore [now]; se e' piu' vecchio si
+ * disegna [now] cosi' com'e' (lo stato neutro di passaggio, poi quello risolto), e nessuna sua anteprima arriva a schermo.
+ */
+internal fun frameBase(held: AnalysisFlow, now: AnalysisFlow): AnalysisFlow =
+  if (held.visibilityGeneration < now.visibilityGeneration) now else held
+
+/**
  * Di quanti posti e' scorsa la corsia da [old] a [new]: dalla prima anteprima di [new] che c'era anche in [old].
  *  - XU-4: dalla corsia vuota (la pagina appena aperta) alle prime anteprime, la corsia **entra da destra** di [EntrySteps] posti, una volta;
  *  - XU-9: senza anteprime in comune (una fila di caselle neutre) ma con il mirino occupato prima e dopo, il motore e' andato avanti: un posto.
- *    Non scorre se l'unica differenza e' una revoca (un'anteprima diventata casella neutra al suo posto: [onlyRevoked]).
+ *    Non scorre se l'unica differenza e' una revoca (un'anteprima diventata casella neutra al suo posto: [sameShape]).
  * Zero se non si sa.
  */
 internal fun laneStep(old: AnalysisFlow, new: AnalysisFlow): Int {
@@ -460,18 +494,24 @@ internal fun laneStep(old: AnalysisFlow, new: AnalysisFlow): Int {
     val was = before[id] ?: continue
     return (was - slot).coerceIn(0, MaxStep)
   }
-  val oldEmpty = old.current == null && old.recent.isEmpty() && old.next.isEmpty()
-  if (oldEmpty && new.current != null) return EntrySteps
-  if (old.current != null && new.current != null && old != new && !onlyRevoked(old, new)) return 1
+  // Giro 3: il nastro arriva vuoto, poi neutro, poi risolto. La corsia entra da destra quando compaiono le prime anteprime vere (non con le
+  // caselle neutre di passaggio): da un nastro senza anteprime (vuoto o tutto neutro) a uno con anteprime.
+  if (!old.hasShown() && new.hasShown() && new.current != null) return EntrySteps
+  // Lo stesso nastro con alcune caselle diventate anteprime o viceversa (risolto dopo il neutro, o una revoca) non e' un passo del motore.
+  if (sameShape(old, new)) return 0
+  if (old.current != null && new.current != null && old != new) return 1
   return 0
 }
 
-/** Vero se [new] e' [old] con qualche anteprima diventata casella neutra allo stesso posto (una revoca, non un passo del motore). */
-private fun onlyRevoked(old: AnalysisFlow, new: AnalysisFlow): Boolean {
+private fun AnalysisFlow.hasShown(): Boolean =
+  current is AnalysisThumb.Shown || recent.any { it is AnalysisThumb.Shown } || next.any { it is AnalysisThumb.Shown }
+
+private fun AnalysisFlow.isEmpty(): Boolean = current == null && recent.isEmpty() && next.isEmpty()
+
+/** Vero se [old] e [new] hanno gli stessi posti e in ogni posto la stessa cosa, o una casella neutra da una parte (revoca o risoluzione). */
+private fun sameShape(old: AnalysisFlow, new: AnalysisFlow): Boolean {
   if (old.recent.size != new.recent.size || old.next.size != new.next.size || (old.current == null) != (new.current == null)) return false
-  val before = slotsOf(old)
-  val after = slotsOf(new)
-  return before.zip(after).all { (b, a) -> a.second == b.second || a.second == AnalysisThumb.Quiet }
+  return slotsOf(old).zip(slotsOf(new)).all { (b, a) -> a.second == b.second || a.second == AnalysisThumb.Quiet || b.second == AnalysisThumb.Quiet }
 }
 
 /**
@@ -486,7 +526,7 @@ internal fun visibleNow(held: AnalysisFlow, now: AnalysisFlow): AnalysisFlow {
     is AnalysisThumb.Shown -> allowed[thumb.id] ?: AnalysisThumb.Quiet
     AnalysisThumb.Quiet -> AnalysisThumb.Quiet
   }
-  return AnalysisFlow(held.current?.let(::clean), held.recent.map(::clean), held.next.map(::clean))
+  return AnalysisFlow(held.current?.let(::clean), held.recent.map(::clean), held.next.map(::clean), now.visibilityGeneration)
 }
 
 private fun slotsOf(flow: AnalysisFlow): List<Pair<Int, AnalysisThumb>> = buildList {
@@ -495,16 +535,22 @@ private fun slotsOf(flow: AnalysisFlow): List<Pair<Int, AnalysisThumb>> = buildL
   flow.recent.forEachIndexed { index, thumb -> add(-(index + 1) to thumb) }
 }
 
-/** Il nastro al passo della pagina: il valore piu' recente, mai piu' di uno ogni [LaneStepMillis] (gli intermedi si saltano). */
+/**
+ * Il nastro al passo della pagina: il valore piu' recente, mai piu' di uno ogni [LaneStepMillis] (gli intermedi si saltano). Nessuna attesa dopo
+ * un nastro vuoto (la pagina appena aperta, XU-4) ne' dopo lo stato neutro di una generazione nuova (giro 3: subito dopo arriva quello risolto).
+ * Lo stato e' restituito perche' la corsia lo possa buttare al cambio di generazione.
+ */
 @Composable
-private fun rememberPaced(flow: AnalysisFlow): AnalysisFlow {
+private fun rememberPaced(flow: AnalysisFlow): MutableState<AnalysisFlow> {
   val latest = rememberUpdatedState(flow)
-  var paced by remember { mutableStateOf(flow) }
+  val paced = remember { mutableStateOf(flow) }
   LaunchedEffect(Unit) {
+    var generation = flow.visibilityGeneration
     snapshotFlow { latest.value }.conflate().collect { value ->
-      paced = value
-      // XU-4: dopo un nastro vuoto (la pagina appena aperta) nessuna attesa: le prime anteprime entrano appena arrivano.
-      if (value.current != null || value.recent.isNotEmpty() || value.next.isNotEmpty()) delay(LaneStepMillis)
+      val bridge = !value.hasShown() && value.visibilityGeneration > generation
+      generation = maxOf(generation, value.visibilityGeneration)
+      paced.value = value
+      if (!value.isEmpty() && !bridge) delay(LaneStepMillis)
     }
   }
   return paced
@@ -512,6 +558,9 @@ private fun rememberPaced(flow: AnalysisFlow): AnalysisFlow {
 
 /** Il media di un'anteprima a schermo, per le prove di riservatezza (nessun lettore lo legge). */
 internal val AnalysisMediaKey: SemanticsPropertyKey<String> = SemanticsPropertyKey("AnalysisMedia")
+
+/** La generazione in cui e' nata la composizione di un'anteprima a schermo, per le prove (giro 3). */
+internal val AnalysisBornKey: SemanticsPropertyKey<Long> = SemanticsPropertyKey("AnalysisBorn")
 
 internal const val AnalysisLaneTag: String = "analisi-nastro"
 internal const val AnalysisShownTag: String = "analisi-anteprima"

@@ -4,6 +4,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import dev.pampa.mycloudgallery.feature.search.models.visibleNow
 import dev.pampa.mycloudgallery.feature.search.models.AnalysisMediaKey
+import dev.pampa.mycloudgallery.feature.search.models.AnalysisBornKey
+import dev.pampa.mycloudgallery.feature.search.models.frameBase
 import dev.pampa.mycloudgallery.feature.search.contract.AnalysisThumb
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.runtime.setValue
@@ -238,8 +240,91 @@ class AnalysisScreenTest {
     assertThat(rule.onAllNodesWithTag(AnalysisQuietTag, useUnmergedTree = true).fetchSemanticsNodes().size).isAtLeast(4)
   }
 
+  // --- Giro 3: la generazione di visibilita' ----------------------------------------------------------------------------------------------------
+
+  private fun showMutable(initial: AnalysisFlow): androidx.compose.runtime.MutableState<AnalysisFlow> {
+    val state = mutableStateOf(initial)
+    rule.mainClock.autoAdvance = false
+    rule.setSearchContent {
+      AnalysisScreen(AnalysisScenes.RUNNING, state.value, AnalysisScenes.thumbnails, Recording(), onBack = {})
+    }
+    rule.mainClock.advanceTimeByFrame()
+    rule.waitForIdle()
+    return state
+  }
+
+  private fun emit(state: androidx.compose.runtime.MutableState<AnalysisFlow>, value: AnalysisFlow) {
+    rule.runOnIdle { state.value = value }
+    rule.waitForIdle()
+    rule.mainClock.advanceTimeByFrame()
+    rule.waitForIdle()
+  }
+
+  private fun bornOf(thumb: AnalysisThumb.Shown): List<Long> =
+    nodesOf(thumb).map { it.config[AnalysisBornKey] }
+
+  /**
+   * XS2-1 parte 2 (giro 3): a una generazione nuova nessuna anteprima nata nella vecchia resta a schermo, nemmeno se lo stesso media e' ancora
+   * mostrabile e il valore neutro di passaggio e' stato saltato (uno StateFlow puo' unire le due emissioni): la sua composizione rinasce.
+   */
+  @Test
+  fun unaGenerazioneNuovaNonRiusaNessunaAnteprimaDellaVecchia() {
+    val gen1 = AnalysisScenes.flow().copy(visibilityGeneration = 1)
+    val target = gen1.recent[0] as AnalysisThumb.Shown
+    val state = showMutable(gen1)
+    assertThat(bornOf(target)).containsExactly(1L)
+    // Dentro il passo (1,2 s): la visibilita' cambia e arriva direttamente il risolto della generazione 2 con lo stesso media.
+    rule.mainClock.advanceTimeBy(STEP_INSIDE)
+    emit(state, gen1.copy(visibilityGeneration = 2))
+    assertThat(bornOf(target)).containsExactly(2L)
+  }
+
+  /** Giro 3: il neutro di passaggio toglie subito tutte le anteprime, anche quelle trattenute dal passo. */
+  @Test
+  fun ilNeutroDiUnaGenerazioneNuovaToglieTutteLeAnteprimeSubito() {
+    val gen1 = AnalysisScenes.flow().copy(visibilityGeneration = 1)
+    val state = showMutable(gen1)
+    assertThat(rule.onAllNodesWithTag(AnalysisShownTag, useUnmergedTree = true).fetchSemanticsNodes()).isNotEmpty()
+    rule.mainClock.advanceTimeBy(STEP_INSIDE)
+    emit(state, neutralOf(gen1, generation = 2))
+    assertThat(rule.onAllNodesWithTag(AnalysisShownTag, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+  }
+
+  /** Giro 3 (XU-4 con l'ordine nuovo): vuoto, neutro, risolto: le anteprime vere compaiono subito, senza aspettare il passo del neutro. */
+  @Test
+  fun vuotoNeutroRisoltoLeAnteprimeArrivanoSubito() {
+    val resolved = AnalysisScenes.flow().copy(visibilityGeneration = 1)
+    val target = resolved.current as AnalysisThumb.Shown
+    val state = showMutable(AnalysisFlow.EMPTY)
+    emit(state, neutralOf(resolved, generation = 1))
+    emit(state, resolved)
+    rule.mainClock.advanceTimeBy(FEW_FRAMES)
+    rule.waitForIdle()
+    assertThat(nodesOf(target)).isNotEmpty()
+  }
+
+  @Test
+  fun laBaseDelFotogrammaSegueLaGenerazione() {
+    val old = AnalysisScenes.flow().copy(visibilityGeneration = 1)
+    val now = neutralOf(old, generation = 2)
+    assertThat(frameBase(old, now)).isSameInstanceAs(now)
+    assertThat(frameBase(old, old.copy(next = emptyList()))).isSameInstanceAs(old)
+    // Dal neutro al risolto la corsia entra da destra; dal vuoto al neutro non scorre.
+    assertThat(laneStep(now, old.copy(visibilityGeneration = 2))).isEqualTo(2)
+    assertThat(laneStep(AnalysisFlow.EMPTY, now)).isEqualTo(0)
+    assertThat(laneStep(old, neutralOf(old, generation = 1))).isEqualTo(0)
+  }
+
+  private fun neutralOf(flow: AnalysisFlow, generation: Long): AnalysisFlow = AnalysisFlow(
+    flow.current?.let { AnalysisThumb.Quiet },
+    flow.recent.map { AnalysisThumb.Quiet },
+    flow.next.map { AnalysisThumb.Quiet },
+    generation,
+  )
+
   private companion object {
     const val STEP_INSIDE = 300L
     const val STEP_AFTER = 1_500L
+    const val FEW_FRAMES = 100L
   }
 }

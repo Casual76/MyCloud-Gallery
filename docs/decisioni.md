@@ -19321,3 +19321,68 @@ M21 sha256 obbligatorio gia' al controllo (niente avviso), M22 rete solo in `net
 
 **Non fatto.** Niente telefono (l'aggiornamento vero, beta 1 -> beta 2, e' descritto in `docs/aggiornamenti-in-app.md`); `tools/check.ps1` intero
 non lanciato (build di release e dex: il passo 7e nuovo e' scritto ma non provato su un APK); `publisher.py` non toccato ne' lanciato.
+
+### Pacchetto U, giro 1 delle critiche (12 novembre 2026)
+
+**Le critiche.** Sicurezza (Sol): nessun modo di installare un pacchetto estraneo, ma «no» per US-1 (il publisher non scriveva lo sha256) e US-2 (il
+ritorno dal permesso valeva come consenso ai dati mobili). Interfaccia (Opus): la pagina regge, ma il percorso del genitore no (P 4): un'attesa senza
+tasti (UU-1), l'app che si chiude senza dirlo e nessun «fatto» (UU-2), il permesso senza guida e senza ripresa (UU-3), «Dopo» che voleva dire «mai»
+(UU-4), l'avviso sopra la barra delle schede (UU-5), frasi dell'engine a schermo (UU-6). L'orchestratore ha accettato tutto; l'utente ha deciso di
+correggere `publisher.py` (fatto dall'orchestratore nel repository dello store).
+
+**Sicurezza.**
+- US-2: il consenso ai dati mobili e' del **tentativo** (`Attempt.meteredConsent`); al ritorno dal permesso si riguarda la rete e, a consumo senza
+  consenso, si chiede. La prova che congelava il difetto e' sostituita dai due casi (Wi-Fi → dati mobili: chiede; consenso dato → permesso → riparte).
+- US-3: forma della versione esplicita e corta (`UpdateRules.VERSION`: tre numeri, beta `-beta.NN` a due cifre); note tagliate a 2.000 caratteri
+  **prima** di ogni trasformazione, senza caratteri di controllo, di direzione o a larghezza zero; «Dopo» rimanda di tre giorni tutte le versioni
+  (al piu' tre volte per la versione installata): due nomi alternati non fanno tornare l'avviso.
+- US-4: i certificati sono sempre `apkContentsSigners`, uguaglianza esatta degli insiemi; la rotazione resta un limite (L614).
+- Punto 7: `instanceFollowRedirects = false` (e niente cache) provati anche sullo scaricamento; `UpdateWiringTest` vieta un `EngineHttp` non avvolto
+  (costruito fuori dalla sottoclasse, preso di serie da `AndroidAppUpdateInstaller`, o fuori dalla fabbrica); il tetto dell'elenco provato anche senza
+  Content-Length. Le mutazioni, con la modifica, la prova che cade e il comando, sono in `docs/aggiornamenti-in-app-mutazioni.md`.
+- In piu': il `versionName` dell'APK deve essere quello annunciato (prima lo controllava solo l'engine, con una frase sua); il file pronto si
+  ricontrolla prima della sessione.
+- US-1: il publisher (corretto dall'orchestratore) scrive `sha256` e `sizeBytes` nella voce del canale: e' la chiave che `EngineAppUpdater` legge
+  (`PublisherManifestTest` ora con lo sha256). Nuovo `tools/release/verifica-elenco.ps1`: dopo la pubblicazione scarica esattamente l'asset della voce
+  (host ammessi a ogni salto, come l'app), lo confronta byte per byte con l'APK finale conservato, controlla firma `pampa.jks`, pacchetto,
+  `versionName` e versionCode di `release/versions.txt`, e che sha256 e peso dell'elenco siano quelli; li scrive solo se mancano e solo se l'elenco
+  non e' cambiato nel frattempo (due controlli). `-Prova` su file finti sotto `build\`; `verifica-elenco-prove.ps1` (29 prove, ogni controllo con il
+  suo caso). Non lanciato in modo vero (rete, SDK).
+- Nomi delle versioni: la regola (nome e versionCode crescenti a ogni APK nuovo, stabile solo numerica, beta a due cifre, niente `v`/`+`/quarto
+  numero) e' in `docs/aggiornamenti-in-app.md`, «Le versioni», e la controllano l'app, `release-lib-core.ps1` (`Test-VersionName`,
+  `Compare-EngineVersion`, la crescita del nome in `Test-VersionRows`), `release.ps1 -Version` e `app/build.gradle`; `versioni-prove.ps1` (36 prove).
+  **La prossima beta dopo la `1.0.0` (versionCode 1) si chiama `1.1.0-beta.01`, versionCode 2.**
+
+**Interfaccia.**
+- UU-1: l'installazione e' in due tempi (`UpdateInstaller.prepare`/`commit`). Il file verificato va alla sessione di Android solo con l'app davanti
+  (`foreground`, da `:app`: `IMPORTANCE_FOREGROUND`); altrimenti «Pronta da installare» con «Installa» e «Annulla». La finestra di Android che si
+  aspettava torna «Pronta» al ritorno davanti; «Installa» riprova senza riscaricare.
+- UU-2: prima della sessione la riga «L'app si chiude per aggiornarsi: poi riaprila»; il tentativo si salva (con `commit()`, prima della sessione) e
+  alla prima apertura con la versione nuova l'avviso dice «Aggiornata · X» una volta (confronto della versione, non l'evento `Installed`).
+- UU-3: la figura e' l'interruttore, «Serve un permesso», «Accendi l'interruttore e torna indietro», il perche' dietro la «i»; il tentativo salvato si
+  riprende anche dopo un riavvio (entro un'ora).
+- UU-4: la versione trovata si salva (`SavedOffer`) e si mostra subito; «Dopo» rimanda di tre giorni; la pagina aperta controlla se sono passate 24 ore;
+  con una versione nuova la voce «Aggiornamenti» sale in cima alle Impostazioni. Il segno sull'ingresso alle Impostazioni dalla Libreria non e'
+  fatto (toccherebbe la chrome della Libreria).
+- UU-5: l'avviso e' appoggiato sopra la pillola dallo scaffold della galleria (`LocalTabBarNotice`), solo quando la pillola c'e'; il visore e le altre
+  pagine gli stanno sopra o fuori. Entra dal basso con `FluidMotion` (fermo con le animazioni ridotte).
+- UU-6: ogni messaggio dell'engine diventa un `UpdateProblem` (`EngineMessages`), uno sconosciuto quello generico; «annullata» torna «Pronta» con la
+  riga di Play Protect; «Riprova» solo per rete, file rovinato, spazio e guasto sconosciuto (senza riscaricare se il file c'e'); per gli altri
+  «Chiudi» e «Avvisa chi ti ha dato l'app».
+- UU-7: la figura e' l'icona vera dell'app (`AppIconFigure` di feature-settings, data da `:app` con `LocalUpdateAppIcon`) con un segno solo; il titolo
+  e' «Nuova versione», il dettaglio «1.0.0 → 1.1.0 · 110 MB»; la riga «Versione installata» non c'e' piu' (la dice la figura).
+- UU-8: la pagina «versione fermata» ha una figura sola (quella dell'aggiornamento), il perche' dietro la «i», «Diagnostica» leggero; l'avviso di sola
+  lettura ha «Aggiorna» quando c'e' una versione.
+- UU-9: figure sulla scala comune (64/44), `GalleryChoiceMark` nel design system (usato da Impostazioni e Aggiornamenti), una famiglia di colore per
+  tutto l'aggiornamento (l'Ametista dell'app). `UpdatePanel` non e' costruito su `GalleryFigureState` (la figura cambia fra icona e anello): stessa
+  forma, misure comuni.
+- UU-10: «Controlla adesso» leggero con l'app aggiornata; mentre scarica l'avviso ha solo «Annulla» e la «×»; scelte del canale piu' tenui e spente.
+- UU-11: figura muta per TalkBack (le parole dicono lo stato una volta), l'anello e' una barra d'avanzamento che annuncia ogni quarto, tasti da 48 dp,
+  scelte `disabled`.
+- UU-12: «Versioni da ricevere», la «i» «Tornare a Stabile». UU-13: «110 MB», «Sto scaricando», «Quasi pronto», «Sto installando», punti delle note
+  con le righe rientrate, entrata animata. UU-14: 54 screenshot in `docs/screenshots/beta-grafica/U/` (stati nuovi, scuro, 1,3x, tablet anche in
+  orizzontale; l'avviso sopra la Libreria vera, la pagina fermata e la voce in cima alle Impostazioni da `:app`, con l'icona vera).
+- Non fatto: il tasto «Novita'» sull'«Aggiornata» (la pagina delle novita' non e' una rotta: e' un interruttore dentro «Informazioni»); la notifica
+  a `MY_PACKAGE_REPLACED`.
+
+**Prove.** Vedi il resoconto del giro e `docs/aggiornamenti-in-app.md`, «Prove e mutazioni». Mutazioni: 45 mutazioni del codice dell'app (M01-M46, senza M23 che e' diventata M46) e 16 degli strumenti di rilascio: tutte cadono.

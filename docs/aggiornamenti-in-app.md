@@ -1,8 +1,8 @@
-# L'aggiornamento dentro l'app (pacchetto U, 12/11/2026)
+# L'aggiornamento dentro l'app (pacchetto U, 12/11/2026; giro 1 delle critiche)
 
 Richiesta dell'utente del 12/11: i genitori non hanno il Pampa Store e devono poter aggiornare MyCloud Gallery, canale **Stabile** (di serie) o
 **Beta** a scelta, «da internet, come le altre app». Supera D33 («nessun installatore», niente `REQUEST_INSTALL_PACKAGES`) e la regola «nessun host
-nuovo» per questa sola funzione (`docs/decisioni.md`, «Pacchetto U»; `docs/sicurezza.md` C480-C486, L610-L614, righe in 4-bis). Il manifest firmato
+nuovo» per questa sola funzione (`docs/decisioni.md`, «Pacchetto U»; `docs/sicurezza.md` C480-C489, L610-L615, righe in 4-bis). Il manifest firmato
 dei blocchi (K1/K2, `core-release`, letto dal NAS) non cambia e non c'entra.
 
 ## Che cosa fa e dove sta
@@ -10,14 +10,16 @@ dei blocchi (K1/K2, `core-release`, letto dal NAS) non cambia e non c'entra.
 | Pezzo | Dove |
 |---|---|
 | Sorgente (repository, URL dell'elenco, modello dell'URL dell'APK, host ammessi, tetti, 24 ore): **l'unico posto da cambiare** se gli APK si spostano | `feature-update/.../source/UpdateSource.kt` (`UpdateSourceConfig`) |
-| Regole pure (sha256 e peso obbligatori, nomi, indirizzo, questa app, versionCode crescente, firma uguale, 24 ore, avviso una volta per versione) | `feature-update/.../policy/UpdateRules.kt` |
+| Regole pure (sha256 e peso obbligatori, forma della versione, note pulite, nomi, indirizzo, questa app, versione annunciata, versionCode crescente, firma uguale, 24 ore, «Dopo» che rimanda, quali guasti si riprovano) | `feature-update/.../policy/UpdateRules.kt` |
 | Client di rete: `EngineHttp` dell'engine avvolto (host ammessi a ogni salto, rimandi a mano, tetti, niente cookie) — terza eccezione di rete | `feature-update/.../net/` (classi `internal`) |
-| Installazione: le due meta' pubbliche dell'engine (`download`, `installFile`) con i controlli dell'app in mezzo | `feature-update/.../install/GuardedUpdateInstaller.kt` |
-| Stato, controlli, canale, avviso, dati mobili, ripresa dopo il permesso | `feature-update/.../AppUpdates.kt` (uno per processo, lo crea `:app`: `di/UpdateModule.kt`) |
-| Pagina Impostazioni → Aggiornamenti, avviso all'apertura, pezzo per la pagina «versione fermata» | `feature-update/.../ui/` |
-| Voce «Aggiornamenti» nelle Impostazioni (sezione Avanzate, con il segno quando c'e' una versione nuova) | `feature-settings/.../update/UpdateEntry.kt` (porta legata da `:app`) |
-| Controllo silenzioso all'apertura (dopo il primo disegno, al piu' ogni 24 ore), pulizia della cache all'avvio | `app/.../MyCloudGalleryApp.kt` |
-| Avviso alla radice (sotto il blocco dell'app) e «Aggiorna» nella pagina «versione fermata» | `app/.../AppRoot.kt`, `app/.../release/ReleaseRootUi.kt` |
+| Installazione in due tempi: «prepara» (fino al file verificato, «Pronta») e «installa» (la sessione di Android), con le due meta' pubbliche dell'engine (`download`, `installFile`) e i controlli dell'app in mezzo; ogni messaggio dell'engine tradotto in un problema dell'app | `feature-update/.../install/GuardedUpdateInstaller.kt` |
+| Stato, controlli, canale, versione trovata ricordata, avviso e promemoria, dati mobili per tentativo, tentativo salvato (permesso, installazione), «Aggiornata» | `feature-update/.../AppUpdates.kt`, `UpdateStore.kt` (uno per processo, lo crea `:app`: `di/UpdateModule.kt`) |
+| Pagina Impostazioni → Aggiornamenti, avviso, pezzo per la pagina «versione fermata» | `feature-update/.../ui/` |
+| Voce «Aggiornamenti» nelle Impostazioni: **in cima** (sotto la famiglia) con una versione nuova, in «Avanzate» senza | `feature-settings/.../update/UpdateEntry.kt`, `SettingsScreen.kt` (porta legata da `:app`) |
+| Avviso appoggiato sopra la barra delle schede (mai sopra la pillola, il visore o le altre pagine), icona vera dell'app nella figura, ritorno davanti | `app/.../main/TabBarNotice.kt`, `MainScaffold.kt`, `AppRoot.kt` |
+| Controllo silenzioso all'apertura (dopo il primo disegno, al piu' ogni 24 ore) | `app/.../MyCloudGalleryApp.kt` |
+| «Aggiorna» nella pagina «versione fermata» (una figura sola) e nell'avviso di sola lettura | `app/.../release/ReleaseRootUi.kt` |
+| Verifica dell'elenco dopo la pubblicazione; regola dei nomi delle versioni | `tools/release/verifica-elenco.ps1`, `release-lib-core.ps1` |
 
 Moduli dell'engine aggiunti con il suo script (`engine\tools\engine-install.ps1 -AppRoot . -Modules engine-foundation,engine-ui,engine-widget,engine-update`):
 `engine-update` ed `engine-net`. Nessuna dipendenza esterna nuova (i due moduli dichiarano solo `project(...)`). `engine/` non e' modificato.
@@ -25,6 +27,29 @@ Moduli dell'engine aggiunti con il suo script (`engine\tools\engine-install.ps1 
 **Host**: l'elenco solo da `raw.githubusercontent.com`; l'APK solo da `github.com`, `release-assets.githubusercontent.com` (quello a cui GitHub rimanda
 oggi: letto il 12/11 sulla risposta 302 di un asset pubblico) e `objects.githubusercontent.com` (quello di prima). Un rimando verso altro si rifiuta
 senza aprirlo.
+
+## Il percorso di chi usa l'app
+
+1. **All'apertura** (al piu' una volta ogni 24 ore, dopo il primo disegno) l'app legge l'elenco in silenzio. Con una versione nuova compare l'avviso,
+   appoggiato **sopra** la barra delle schede della galleria (Libreria, Album, Raccolte): l'icona dell'app con il segno, «Nuova versione»,
+   «1.1.0 · 110 MB», «Dopo» e «Aggiorna». Non copre la pillola, non sta sopra il visore ne' sopra le Impostazioni.
+2. **«Dopo»** lo rimanda di tre giorni; dopo tre «Dopo» non torna piu' finche' l'app non si aggiorna. La versione trovata resta: la voce «Aggiornamenti»
+   sale in cima alle Impostazioni con il segno, anche dopo un riavvio, e la pagina la mostra subito (e, aperta, ricontrolla se sono passate 24 ore).
+3. **«Aggiorna»**: sui dati mobili prima chiede («Scarica lo stesso», il peso una volta). Il consenso vale per quel tentativo.
+4. **Il permesso** «installa app sconosciute», la prima volta: l'interruttore nella figura, «Serve un permesso», «Accendi l'interruttore e torna
+   indietro», «Consenti». Il tentativo e' salvato: tornando (anche se Android ha chiuso l'app per darlo) riparte da solo; se nel frattempo il telefono
+   e' passato ai dati mobili, chiede di nuovo.
+5. **Lo scaricamento**: l'anello che si riempie (TalkBack lo sente come avanzamento, ogni quarto), «Annulla»; la «×» nasconde l'avviso, lo scaricamento
+   continua.
+6. **Pronta**: il file e' controllato (sha256, questa app, la versione annunciata, piu' nuova, stessa firma). Con l'app davanti si passa subito ad
+   Android; se l'app era dietro, «Pronta da installare» con «Installa» e «Annulla». Prima della finestra di Android una riga: «L'app si chiude per
+   aggiornarsi: poi riaprila».
+7. **La finestra di Android**: «Tocca «Aggiorna» nella finestra di Android». Se si chiude senza installare (Annulla, o Play Protect), o non si apre
+   perche' l'app era dietro, al ritorno si e' di nuovo su «Pronta»: «Installa» riprova **senza riscaricare**.
+8. **Riaperta** con la versione nuova: l'avviso dice «Aggiornata · 1.1.0», una volta, con «Ok».
+9. **Un guasto**: frasi dell'app, mai dell'engine. «Riprova» solo per la rete, il file rovinato, lo spazio e cio' che non si riconosce (senza
+   riscaricare se il file verificato c'e'); per un'altra firma, un'altra app, una versione non piu' nuova, un elenco scritto male: «Chiudi» e
+   «Avvisa chi ti ha dato l'app».
 
 ## La sorgente (decisione dell'utente del 12/11)
 
@@ -44,46 +69,48 @@ Per ogni canale (`app.stable`, `app.beta`) un oggetto con:
 
 | campo | obbligatorio | da dove |
 |---|---|---|
-| `version` | si' | `versionName` dell'APK, **identico** (l'engine rifiuta un APK con un `versionName` diverso) |
+| `version` | si' | `versionName` dell'APK, **identico** e nella forma ammessa (sotto, «Le versioni») |
 | `releaseTag` | si' | il tag della GitHub Release (`publisher.py`: `<canale>-mycloud-gallery-v<versione>`) |
 | `apkAsset` | si' | il nome del file nella release (`publisher.py`: `mycloud-gallery-<versione>.apk`) |
 | `sizeBytes` | **si' (l'app)** | il peso esatto dell'APK in byte |
-| `sha256` | **si' (l'app)** | lo SHA-256 esadecimale dell'APK |
-| `changelog` | no | la nota (Markdown): l'app mostra il primo paragrafo senza simboli |
+| `sha256` | **si' (l'app)** | lo SHA-256 esadecimale dell'APK (64 cifre) |
+| `changelog` | no | la nota (Markdown): l'app ne tiene al piu' 2.000 caratteri, toglie i caratteri invisibili e di direzione e mostra il primo paragrafo |
 
 piu' `app.repository` con `repoOwner` e `repoName` (senza, l'engine non propone niente). Lettere, cifre, `.`, `-`, `_` nei nomi; niente barre.
 
 Regole dell'engine: il canale **Stabile** legge `app.stable` e non propone mai una versione con il trattino; il canale **Beta** legge `app.beta` e, se
 manca, `app.stable`. `publisher.py --channel stable` scrive la stessa versione in `stable` **e** in `beta`.
 
-### Prima di pubblicare: lo sha256 (da decidere)
+### Lo sha256: lo scrive il publisher (correzione del 12/11)
 
-**`publisher.py` oggi non scrive lo sha256 nell'elenco**: lo calcola (`inspect_apk`) ma `build_version_info` non lo riceve. Tutte le altre chiavi
-combaciano con cio' che legge `EngineAppUpdater.check` (lo prova `PublisherManifestTest`). Senza lo sha256 l'app trova la versione ma la segna «non
-installabile» e non la annuncia (fallisce chiusa, L612). Due strade:
+Il primo giro aveva trovato che `publisher.py` calcolava lo sha256 (`inspect_apk`) senza scriverlo nell'elenco: l'app, che lo pretende, avrebbe
+segnato ogni versione «non ancora pronta» (fallisce chiusa). **L'utente ha deciso il 12/11 di correggere il publisher** (repository `Pampa-store-src`):
+`build_version_info` ora pretende `sha256` (64 cifre esadecimali minuscole) e `sizeBytes` e li scrive nella voce del canale, accanto agli altri campi;
+l'APK si legge una volta sola prima di creare la release e si rifiuta se non e' piu' quello ispezionato (`read_inspected_apk`). E' il campo `sha256`
+della voce che `EngineAppUpdater` legge (`EngineManifest`, chiave `sha256`): lo prova `PublisherManifestTest`.
 
-1. **(consigliata)** una correzione di tre righe nel publisher del Pampa Store (repository `Pampa-store-src`, non toccato da questo pacchetto):
-   ```python
-   # in publish(): passare lo sha256 gia' calcolato
-   version_info = build_version_info(..., size_bytes=apk_stats.get("sizeBytes", 0), sha256=apk_stats.get("sha256", ""))
-   # in build_version_info(): un parametro sha256: str = "" e la riga
-   "sha256": sha256,
-   ```
-   Il Pampa Store e l'engine ignorano o usano il campo (l'engine lo legge dalla 2.10.0): nessun effetto sulle altre app.
-2. aggiungere a mano `"sha256": "<impronta>"` in `app.beta` (e `app.stable`) del `manifest.json` su GitHub dopo ogni pubblicazione (l'impronta e' in
-   `build\release\<versione>\MyCloudGallery-<versione>.apk.sha256`). Un passaggio a mano a ogni rilascio: si sbaglia.
+Dopo ogni pubblicazione **`tools/release/verifica-elenco.ps1`** controlla che sia davvero cosi' (sotto). Per un elenco scritto prima della correzione,
+lo stesso strumento scrive i campi mancanti, ma solo dopo aver verificato l'asset pubblicato.
 
 ## Le versioni
 
-Oggi `release/versions.txt` ha `1.0.0`, versionCode 1, canale beta. Con `compareVersions` dell'engine:
+Il confronto dell'app e' `compareVersions` dell'engine: i numeri uno per uno, poi il suffisso **come testo** (senza suffisso viene dopo). Da qui la
+**regola di pubblicazione**, che l'app (`UpdateRules.VERSION`, una versione fuori forma non si offre) e gli strumenti (`release-lib-core.ps1`:
+`Test-VersionName`, `Compare-EngineVersion`, `Test-VersionRows`; `app/build.gradle`) controllano:
 
-- **versione corrente = `versionName` intero**: una `1.1.0-beta.2` riceve la stabile `1.1.0` (tagliando il suffisso non la vedrebbe mai);
-- le pre-release si confrontano **come testo**: dopo `-beta.9` il canale Beta non propone `-beta.10` (il publisher invece la accetta come piu' nuova).
-  **Regola**: al piu' nove beta per versione (poi si passa alla versione dopo, `1.1.1-beta.1`), oppure due cifre fin dall'inizio (`beta.01`);
-- il canale Stabile ignora ogni versione con il trattino: una beta chiamata senza suffisso (come la prima, `1.0.0` sul canale beta) la vede solo chi e'
-  sul canale Beta, e chi e' su Stabile (di serie: i genitori) aspetta la prima pubblicazione stabile;
-- versionCode **sempre crescente** (gia' la regola di `versions.txt`): l'app rifiuta un APK con versionCode uguale o minore anche se il nome e' piu' nuovo;
-  lo stesso APK promosso da beta a stabile ha lo stesso versionCode e chi l'ha gia' non se lo vede riproporre (stessa versione).
+1. **ogni APK nuovo ha nome E versionCode piu' alti** di ogni versione gia' pubblicata. L'unica eccezione e' lo **stesso** APK promosso da beta a
+   stabile (stesso nome, stesso versionCode, stessa impronta). Un APK rifatto con lo stesso nome non arriverebbe a nessuno; uno con il nome piu' nuovo e
+   il versionCode non piu' alto l'app lo rifiuta prima di Android;
+2. la **stabile** ha solo numeri: `X.Y.Z` (al piu' quattro cifre l'uno, senza zeri davanti);
+3. la **beta** e' `X.Y.Z-beta.NN` con **due cifre fin dall'inizio** (`beta.01` ... `beta.99`): come testo `beta.10` verrebbe prima di `beta.9`. Dopo
+   `beta.99` si passa alla base dopo;
+4. **mai** una `v` davanti, un `+qualcosa`, un quarto numero, `-rc` o altri suffissi: l'app non li offre, gli strumenti li rifiutano;
+5. la **versione corrente** e' il `versionName` intero: una `1.1.0-beta.02` riceve la stabile `1.1.0`.
+
+**Oggi**: la prima beta e' `1.0.0`, versionCode 1, canale beta (un nome senza suffisso: la vede solo chi e' su Beta; chi e' su Stabile, di serie,
+aspetta la prima stabile). **La prossima beta si chiama `1.1.0-beta.01`, versionCode 2** (una `1.0.0-beta.02` sembrerebbe un passo indietro rispetto
+alla `1.0.0` e non arriverebbe a nessuno). Poi `1.1.0-beta.02` (3), ..., e la stabile `1.1.0` (lo stesso APK dell'ultima beta promosso, oppure un
+APK nuovo con il versionCode dopo).
 
 ## Il comando per la beta
 
@@ -92,49 +119,69 @@ Dopo `tools\release\release.ps1 -Version <versione> -Channel beta` (che produce 
 
 ```powershell
 python "C:\VibeCoded Projects\Pampa-store-src\plugins\pampa-store-publisher\mcp\publisher.py" publish `
-  --repo-root "C:\VibeCoded Projects\MyCloud-Gallery-2" --channel beta --version <versione> `
+  --repo-root "C:\VibeCoded Projects\MyCloud-Gallery-2" --channel beta --version 1.1.0-beta.01 `
   --app-id mycloud-gallery --app-name "MyCloud Gallery" --package-name dev.pampa.mycloudgallery `
-  --apk-path "C:\VibeCoded Projects\MyCloud-Gallery-2\build\release\<versione>\MyCloudGallery-<versione>.apk" --skip-build `
-  --changelog-file "C:\VibeCoded Projects\MyCloud-Gallery-2\build\release\<versione>\changelog-store.txt" --dry-run
+  --apk-path "C:\VibeCoded Projects\MyCloud-Gallery-2\build\release\1.1.0-beta.01\MyCloudGallery-1.1.0-beta.01.apk" --skip-build `
+  --changelog-file "C:\VibeCoded Projects\MyCloud-Gallery-2\build\release\1.1.0-beta.01\changelog-store.txt" --dry-run
 ```
 
 poi lo stesso senza `--dry-run` (con il token in `PAMPA_GH_TOKEN`, che mette l'utente). **Niente `--repo-owner/--repo-name` ne' `--release-owner/
---release-repo`**: release ed elenco stanno nel repository dell'app (`origin`). `--app-id mycloud-gallery` tiene fissi tag e nomi degli asset.
-Per la stabile: `--channel stable`.
+--release-repo`**: release ed elenco stanno nel repository dell'app (`origin`). `--app-id mycloud-gallery` tiene fissi tag e nomi degli asset
+(`beta-mycloud-gallery-v1.1.0-beta.01`, `mycloud-gallery-1.1.0-beta.01.apk`: l'app li accetta, lo prova `UpdateRulesTest`). Per la stabile: `--channel stable`.
 
 ## Che cosa controllare dopo la pubblicazione
 
 1. L'elenco si legge **senza token**: `curl -s https://raw.githubusercontent.com/Casual76/MyCloud-Gallery/main/manifest.json` (con il repository ancora
    privato risponde 404: va reso pubblico).
-2. Nel canale pubblicato ci sono `sha256` (64 cifre) e `sizeBytes`, e sono quelli dell'APK (`.apk.sha256` e il peso del file).
-3. `version` e' esattamente il `versionName` dell'APK (`aapt2 dump badging`), `releaseTag` e `apkAsset` sono quelli della release.
-4. L'APK si scarica senza token: `curl -sIL <https://github.com/Casual76/MyCloud-Gallery/releases/download/<tag>/<asset>>` → 302 verso
+2. Dopo un `git pull` dell'elenco, **la verifica**:
+   ```powershell
+   .\tools\release\verifica-elenco.ps1 -Canale beta -Versione 1.1.0-beta.01 `
+     -Apk "C:\VibeCoded Projects\MyCloud-Gallery-2\build\release\1.1.0-beta.01\MyCloudGallery-1.1.0-beta.01.apk"
+   ```
+   Controlla la forma della versione, che l'elenco sia del repository dell'app, che la voce dica quella versione con un tag e un file dal nome sicuro;
+   che l'APK locale sia firmato con `pampa.jks` (l'impronta di `docs/sicurezza.md` par. 5.6, un firmatario), sia `dev.pampa.mycloudgallery` con
+   quel `versionName` e il versionCode di `release/versions.txt`; scarica **esattamente** l'asset della voce (ogni rimando verso un host ammesso,
+   come l'app) e lo confronta byte per byte con l'APK locale; `sha256` e `sizeBytes` della voce devono essere quelli. Se mancano (un elenco di prima
+   della correzione) li scrive nella voce del canale (e in quella dell'altro canale se indica lo stesso file), solo se l'elenco non e' cambiato nel
+   frattempo. **Niente commit ne' push**: l'elenco cambiato lo pubblica l'orchestratore. Codice di uscita 0 solo se tutto e' a posto.
+   `verifica-elenco.ps1 -Prova` fa lo stesso su file finti sotto `build\`, senza rete; le prove sono in `verifica-elenco-prove.ps1`.
+3. L'APK si scarica senza token: `curl -sIL <https://github.com/Casual76/MyCloud-Gallery/releases/download/<tag>/<asset>>` → 302 verso
    `release-assets.githubusercontent.com` (o `objects.githubusercontent.com`) e poi 200 con il peso giusto. Un host diverso va aggiunto a
-   `UpdateSourceConfig.DOWNLOAD_HOSTS` (e alle righe C482 e 4-bis) prima che i telefoni possano scaricare.
+   `UpdateSourceConfig.DOWNLOAD_HOSTS` (e alle righe C482 e 4-bis, e alla lista dello strumento) prima che i telefoni possano scaricare.
 
 ## Come si prova l'aggiornamento vero (sul telefono, non fatto qui)
 
-1. Installare a mano la beta 1 (l'APK firmato con `pampa.jks`), canale **Beta** in Impostazioni → Aggiornamenti.
-2. Pubblicare la beta 2 (versionCode piu' alto, sha256 nell'elenco), repository pubblico.
-3. Riaprire l'app dopo 24 ore dall'ultimo controllo, oppure «Controlla adesso»: compare «Versione …» con il peso; all'apertura successiva (controllo
-   silenzioso) l'avviso in basso, una volta.
-4. «Aggiorna» → (sui dati mobili la domanda con il peso) → la prima volta la riga del permesso e «Consenti» → pagina di Android → indietro: riparte da solo
-   → l'anello si riempie → «Controllo il file» → finestra di Android → installata (l'app si riavvia). Riaperta: «App aggiornata», nessun avviso.
-5. Le prove del no: un elenco con lo sha256 sbagliato («non e' quello pubblicato»), con un APK firmato con la chiave di debug («non e' firmata come la
-   tua app»), con un versionCode uguale («non e' piu' nuova»); nessuna delle tre arriva alla finestra di Android.
-6. Sul canale Stabile la beta non compare; passando a Beta compare.
+Su un telefono che non sia quello di sviluppo, idealmente Android 11-13.
 
-## Prove (sul computer)
+1. Installare a mano la beta 1 (`1.0.0`, l'APK firmato con `pampa.jks`), canale **Beta** in Impostazioni → Aggiornamenti.
+2. Pubblicare la beta 2 (`1.1.0-beta.01`, versionCode 2), repository pubblico, `verifica-elenco.ps1` verde.
+3. Riaprire l'app dopo 24 ore dall'ultimo controllo, oppure aprire la pagina Aggiornamenti: «Nuova versione», «1.0.0 → 1.1.0-beta.01 · … MB». Tornando
+   alla Libreria: l'avviso sopra la barra delle schede.
+4. «Dopo»: l'avviso sparisce, la voce resta in cima alle Impostazioni (anche chiudendo l'app dai recenti).
+5. «Aggiorna» sul Wi-Fi → la prima volta «Serve un permesso» → «Consenti» → accendere l'interruttore → indietro: riparte da solo (su Android 11 Android
+   puo' chiudere l'app: riaprendola, riparte). Spegnere il Wi-Fi mentre si e' nella pagina di Android: tornando chiede dei dati mobili.
+6. Mentre scarica, uscire dall'app fino alla fine: rientrando, «Pronta da installare» con «Installa»; «Installa» → finestra di Android → «Annulla» →
+   di nuovo «Pronta» (nessun guasto rosso), «Installa» → la finestra senza riscaricare → «Aggiorna»: l'app si chiude.
+7. Riaperta: «Aggiornata · 1.1.0-beta.01», una volta.
+8. Le prove del no: un elenco con lo sha256 sbagliato, un APK firmato con la chiave di debug, un versionCode uguale: nessuno arriva alla finestra di
+   Android; il primo ha «Riprova», gli altri due «Avvisa chi ti ha dato l'app».
+9. Sul canale Stabile la beta non compare; passando a Beta compare.
+
+## Prove e mutazioni (sul computer)
 
 | Prova | Che cosa |
 |---|---|
-| `UpdateRulesTest` | sha256 e peso obbligatori, nomi, indirizzo, checksum, questa app, versionCode crescente, firma uguale, 24 ore, avviso una volta, numerazione delle versioni |
-| `GuardedUpdateHttpTest` | host ammessi a ogni salto (un rimando cattivo non si apre), 404, tetti, cookie, header, `.part` |
-| `PublisherManifestTest` | l'elenco di `publisher.py` letto da `EngineAppUpdater.check`; lo sha256 che manca |
-| `GuardedUpdateInstallerTest` | ogni controllo ferma l'installazione prima di `installFile` e cancella il file; permesso; messaggi dell'engine |
-| `AppUpdatesTest` | 24 ore (anche dopo un errore), canale salvato, avviso una volta per versione, tocco, dati mobili, ripresa dopo il permesso |
-| `UpdatesScreenTest`, `UpdatePhoneShots`/`UpdateLargeTextShots`/`UpdateTabletShots` | la pagina e l'avviso (Robolectric), screenshot in `docs/screenshots/beta-grafica/U/` |
-| `ReleaseStoppedUpdateTest` (`:app`) | la versione fermata offre «Aggiorna» (o «Controlla adesso») |
+| `UpdateRulesTest` | sha256 e peso obbligatori, forma della versione, note tagliate prima e pulite, nomi del publisher, indirizzo, checksum, questa app, versione annunciata, versionCode crescente, firma uguale, quali guasti si riprovano, 24 ore, «Dopo» per tre giorni al piu' tre volte, tentativo recente, numerazione |
+| `GuardedUpdateHttpTest` | host ammessi a ogni salto (un rimando cattivo non si apre), rimandi a mano e niente cache anche sullo scaricamento, 404, tetti (l'elenco anche senza Content-Length), cookie, header, `.part` |
+| `PublisherManifestTest` | l'elenco di `publisher.py` (con lo sha256 della correzione) letto da `EngineAppUpdater.check`; uno di prima, senza, non installa; la prossima beta `1.1.0-beta.01` |
+| `GuardedUpdateInstallerTest` | i due tempi; ogni controllo ferma prima di `installFile` e cancella il file; il ricontrollo prima della sessione; permesso; ogni messaggio dell'engine tradotto; «annullata» torna a «Pronta» |
+| `AppUpdatesTest` | 24 ore, canale, versione ricordata, «Dopo», nomi alternati, dati mobili per tentativo (Wi-Fi → mobile; consenso dato → permesso), permesso dopo un riavvio, «Pronta» con l'app dietro e dopo la finestra di Android, «Riprova» senza riscaricare, «Aggiornata», cache all'avvio |
+| `UpdateWiringTest` | nessun `EngineHttp` non avvolto: ne' costruito fuori dalla sottoclasse, ne' preso di serie da `AndroidAppUpdateInstaller`, ne' fuori dalla fabbrica |
+| `UpdatesScreenTest`, `UpdatePhoneShots`/`UpdateLargeTextShots`/`UpdateTabletShots`/`UpdateTabletLandShots` | la pagina e l'avviso (Robolectric): parole, TalkBack (avanzamento, scelte spente), tasti da 48 dp, nessuna parola dell'engine; screenshot in `docs/screenshots/beta-grafica/U/` |
+| `UAggiornamento*ScreenshotTest` (`:app`) | l'avviso sopra la Libreria vera, «Aggiornata», la pagina «versione fermata», la voce in cima alle Impostazioni, con l'icona vera |
+| `ReleaseStoppedUpdateTest` (`:app`), `UpdateEntryTest` (feature-settings) | la versione fermata offre «Aggiorna» (o «Controlla adesso»); la voce sale in cima con una versione nuova |
 | `Phase6ArchitectureTest`, `Phase10ArchitectureTest`, `NoNetworkSourcesTest`/`NoWallClockSourcesTest` di feature-update | la terza eccezione di rete, l'host dell'elenco in un solo file |
+| `tools/release/verifica-elenco-prove.ps1`, `versioni-prove.ps1` | lo strumento della verifica (ogni controllo con il suo caso), la regola dei nomi |
 
-Le mutazioni (ogni controllo di sicurezza tolto fa cadere almeno una prova) sono nel resoconto del pacchetto in `docs/decisioni.md`.
+**Mutazioni**: ogni controllo tolto a mano fa cadere almeno una prova. L'elenco, con la modifica e la prova che cade, e' in
+`docs/aggiornamenti-in-app-mutazioni.md`, con i comandi per rifarle.

@@ -148,6 +148,7 @@ internal fun BatteryScreen(
         tone = NoticeTone.Info,
         icon = Icons.Rounded.Info,
         title = stringResource(R.string.battery_why_title),
+        bodyBehindInfo = true,
         body = stringResource(R.string.battery_why_detail),
       )
     }

@@ -249,7 +249,8 @@ internal fun TrashInfoLine(glyph: ImageVector, label: String, detail: String, mo
 /** Una voce del cestino del NAS: il nome, da dove veniva e quanto pesa, i giorni rimasti e chi l'ha eliminata. */
 @Composable
 internal fun NasTrashRowItem(entry: NasTrashEntry, selecting: Boolean, selected: Boolean, onToggle: () -> Unit) {
-  val row = entry.row
+  // Il nome e la cartella di un file del NAS (registro dei Nascosti: questa pagina sta dietro il cancello).
+  val row: NasTrashRow = entry.row
   val name = row.name ?: stringResource(R.string.trash_nas_no_name)
   val icon = when {
     row.isFolder -> Icons.Rounded.Folder

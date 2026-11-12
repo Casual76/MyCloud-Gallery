@@ -27,7 +27,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -41,6 +43,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -62,6 +65,7 @@ import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoGlyph
 import dev.pampa.mycloudgallery.feature.onboarding.R
 
 // I pezzi che le schermate dell'onboarding condividono. Tutti i colori vengono da `MaterialTheme.colorScheme`
@@ -123,9 +127,15 @@ internal fun NoticeCard(
   body: String? = null,
   compact: Boolean = false,
   onDismiss: (() -> Unit)? = null,
+  bodyBehindInfo: Boolean = false,
   actions: @Composable ColumnScope.() -> Unit = {},
 ) {
   val colors = noticeColors(tone)
+  // Fase I (CU-18, «l'app parla troppo»): una scheda che spiega (non che avverte) mostra il segno e il titolo; la frase sta dietro la «i» e si apre
+  // con un tocco sul titolo. TalkBack la sente sempre. Gli avvertimenti (chiavi, recupero, gesti distruttivi) restano aperti: [bodyBehindInfo] falso.
+  val folded = bodyBehindInfo && body != null
+  // La regola del modulo vuole niente stato salvato nelle schermate (le password): la «i» aperta si richiude a una rotazione, e va bene.
+  var open by remember(title) { mutableStateOf(false) }
   val padding = if (compact) OnboardingDimens.CompactPadding else OnboardingDimens.CardPadding
   Column(
     modifier = modifier
@@ -147,20 +157,29 @@ internal fun NoticeCard(
       Column(
         modifier = Modifier
           .weight(1f)
-          .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+          .then(if (folded) Modifier.fluidPressable(onClick = { open = !open }, role = Role.Button) else Modifier)
+          .semantics(mergeDescendants = true) {
+            liveRegion = LiveRegionMode.Polite
+            if (folded) contentDescription = "$title. $body"
+          },
         verticalArrangement = Arrangement.spacedBy(OnboardingDimens.TextGap),
       ) {
-        Text(
-          text = title,
-          style = if (compact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
-          fontWeight = FontWeight.SemiBold,
-          color = colors.onContainer,
-        )
-        if (body != null) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(OnboardingDimens.TextGap)) {
+          Text(
+            text = title,
+            style = if (compact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.onContainer,
+            modifier = Modifier.weight(1f, fill = false).then(if (folded) Modifier.semantics { hideFromAccessibility() } else Modifier),
+          )
+          if (folded) GalleryInfoGlyph(open = open, tint = colors.onContainer)
+        }
+        if (body != null && (!folded || open)) {
           Text(
             text = body,
             style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
             color = colors.onContainer,
+            modifier = if (folded) Modifier.semantics { hideFromAccessibility() } else Modifier,
           )
         }
       }

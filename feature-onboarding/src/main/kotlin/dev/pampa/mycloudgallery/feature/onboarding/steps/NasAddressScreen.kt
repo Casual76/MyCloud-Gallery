@@ -130,6 +130,7 @@ internal fun NasAddressScreen(
           tone = NoticeTone.Info,
           icon = Icons.Rounded.Dns,
           title = stringResource(R.string.address_checking_title),
+          bodyBehindInfo = true,
           body = stringResource(R.string.address_checking_detail),
         )
       }

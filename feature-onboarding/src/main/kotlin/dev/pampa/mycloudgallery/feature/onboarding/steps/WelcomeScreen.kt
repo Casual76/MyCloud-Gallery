@@ -99,6 +99,7 @@ internal fun WelcomeScreen(
           tone = NoticeTone.Info,
           icon = Icons.Rounded.TabletAndroid,
           title = stringResource(R.string.welcome_profile_title),
+          bodyBehindInfo = true,
           body = stringResource(R.string.welcome_profile_detail),
         )
       }

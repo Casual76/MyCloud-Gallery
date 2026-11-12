@@ -110,6 +110,7 @@ internal fun VpnScreen(
         tone = NoticeTone.Info,
         icon = Icons.Rounded.Home,
         title = stringResource(R.string.vpn_why_title),
+        bodyBehindInfo = true,
         body = stringResource(R.string.vpn_why_detail),
       )
     }
@@ -259,6 +260,7 @@ private fun TestResult(test: VpnTestUi, onOpenWireGuard: () -> Unit) {
       tone = NoticeTone.Info,
       icon = Icons.Rounded.VpnKey,
       title = stringResource(if (test.up) R.string.vpn_test_waiting_up else R.string.vpn_test_waiting_down),
+      bodyBehindInfo = true,
       body = stringResource(R.string.vpn_test_waiting_detail),
     )
     is VpnTestUi.Done -> {

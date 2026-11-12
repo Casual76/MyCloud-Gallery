@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.library.trash
 
+import androidx.compose.ui.test.onFirst
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -102,11 +103,11 @@ class RecentlyDeletedNasScreenTest : ComposeScreenTest() {
     // Le voci del NAS dicono i giorni rimasti, la cartella e chi l'ha eliminata.
     composeRule.onNodeWithContentDescription("Cena da Marco.jpg", substring = true).assertExists()
     composeRule.onNodeWithContentDescription("Restano 2 giorni", substring = true).assertExists()
-    composeRule.onNodeWithContentDescription("Eliminato da Tablet di casa", substring = true).assertExists()
+    composeRule.onAllNodesWithContentDescription("Eliminato da Tablet di casa", substring = true).onFirst().assertExists()
     // Quella senza record valido lo dice e non finge un nome.
     composeRule.onNodeWithContentDescription("Senza nome", substring = true).assertExists()
     // CU-3 (fase I): niente «Senza record» su ogni riga; il segno del problema e una riga della sezione con il perche' dietro la «i».
-    composeRule.onNodeWithContentDescription("Da controllare dal PC", substring = true).assertExists()
+    composeRule.onAllNodesWithContentDescription("Da controllare dal PC. ", substring = true).onFirst().assertExists()
     // La voce piu' lontana dalla scadenza e' in fondo: la lista scorre fin li'.
     scrollTo("IMG_20261012_184501.jpg")
     composeRule.onNodeWithContentDescription("IMG_20261012_184501.jpg", substring = true).assertExists()

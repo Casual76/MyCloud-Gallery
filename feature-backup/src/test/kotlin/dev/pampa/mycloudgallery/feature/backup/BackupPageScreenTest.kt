@@ -29,6 +29,7 @@ import dev.pampa.mycloudgallery.feature.backup.page.SourceState
 import dev.pampa.mycloudgallery.feature.backup.page.SourcesHalt
 import dev.pampa.mycloudgallery.feature.backup.page.sourceState
 import dev.pampa.mycloudgallery.feature.backup.page.coverMarkShown
+import dev.pampa.mycloudgallery.feature.backup.page.coverNameLines
 import dev.pampa.mycloudgallery.feature.backup.page.sourcesHalt
 import dev.pampa.mycloudgallery.feature.backup.page.otherProblems
 import dev.pampa.mycloudgallery.feature.backup.testing.BackupSamples
@@ -277,6 +278,16 @@ class BackupPageScreenTest : ComposeBackupTest() {
    * Giro 1 (CS-2): lo stato di tutte le copertine lo dice la testata, una volta; il segno sta solo sulla copertina diversa dalle altre (un problema,
    * una cartella spenta). Prima la pausa era sull'anello e su ognuna delle sei copertine.
    */
+  /** I6 (CS-27): due righe al nome solo nelle righe di copertine dove un nome ne ha bisogno; le altre righe restano basse. */
+  @Test
+  fun leDueRigheDelNomeSoloDoveServono() {
+    // Tre per riga: la prima riga ha «WhatsApp Images» su due righe, la seconda solo nomi corti.
+    assertThat(coverNameLines(listOf(1, 1, 2, 1, 1, 1), columns = 3)).containsExactly(2, 2, 2, 1, 1, 1).inOrder()
+    assertThat(coverNameLines(listOf(1, 1), columns = 3)).containsExactly(1, 1).inOrder()
+    // Mai piu' di due righe, mai meno di una.
+    assertThat(coverNameLines(listOf(3, 0), columns = 2)).containsExactly(2, 2).inOrder()
+  }
+
   @Test
   fun ilSegnoStaSoloSullaCopertinaDiversaDalleAltre() {
     val all = List(6) { SourceState.Halted }

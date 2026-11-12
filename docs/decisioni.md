@@ -19263,3 +19263,49 @@ Dettagli, tabella delle mutazioni e prove sul telefono in `docs/I3-giro2.md`.
   delle Impostazioni; `GalleryIconStatus.Waiting` per l'attesa.
 - **Prove di privacy con la mutazione**: sette controlli tolti uno alla volta, ognuno fa cadere almeno una prova; quella del tetto per sorgente non
   cadeva ed e' stata corretta.
+
+### Pacchetto U: l'aggiornamento dentro l'app (12 novembre 2026)
+
+**Decisione dell'utente (12/11).** «Manca l'updater in-app. I miei genitori non avranno il Pampa Store installato, ma avranno bisogno di poter
+aggiornare l'app, sia canale beta sia canale stable a loro scelta (stable default).» Alla domanda «dal NAS o da internet?»: «Da internet, come le
+altre app» (il modulo `engine-update` dell'engine, elenco pubblico + APK da GitHub), sapendo che l'app si collega a un server internet nuovo, che
+l'APK deve essere scaricabile pubblicamente e che l'elenco non e' firmato con K1. **Supera D33 («nessun installatore», niente
+`REQUEST_INSTALL_PACKAGES`) e la regola «nessun host nuovo» per questa sola funzione.** Dove stanno gli APK (seconda decisione del 12/11): il
+repository dell'app, `Casual76/MyCloud-Gallery`, diventa pubblico con la release beta; elenco `https://raw.githubusercontent.com/Casual76/
+MyCloud-Gallery/main/manifest.json` (quello che scrive `publisher.py`), APK dalle GitHub Releases dello stesso repository. Il manifest firmato dei
+blocchi (K1/K2, `core-release`, NAS) non cambia.
+
+**Che cosa c'e'** (dettagli e comando di pubblicazione in `docs/aggiornamenti-in-app.md`; sicurezza in `docs/sicurezza.md` C480-C486, L610-L614):
+- `engine-update` ed `engine-net` aggiunti con `engine-install.ps1` (nessuna dipendenza esterna nuova; `engine/` non toccato);
+- modulo nuovo `:feature-update` (scelta: un modulo e non `:app`, come la mappa: la rete in un pacchetto suo, `net/`, terza eccezione dichiarata;
+  regole pure in `policy/`; installazione in `install/`; pagina, avviso e pezzo per la pagina «versione fermata» in `ui/`); la voce «Aggiornamenti»
+  in feature-settings (porta opzionale `UpdateEntryStatus`, sezione Avanzate, con il segno quando c'e' una versione nuova); `:app` crea `AppUpdates`
+  (`di/UpdateModule.kt`), controlla in silenzio all'apertura dopo il primo disegno (al piu' ogni 24 ore, mai nelle varianti di misura), svuota la
+  cache all'avvio, mette l'avviso alla radice sotto il blocco e «Aggiorna» nella pagina «versione fermata»;
+- **pagina mia, non quella dell'engine**: `fluidUpdateSection` usa righe e frasi sue che stonano con le Impostazioni ridisegnate (fase I) e il suo
+  controllore taglia il suffisso beta e chiama `install()` dell'engine tutto d'un fiato (niente punto per versionCode e firma). Dell'engine restano
+  `EngineAppUpdater.check`, `AndroidAppUpdateInstaller.download`/`installFile`, i tipi di foundation e le funzioni pure di `FluidUpdate` (peso,
+  percento, note senza Markdown). La pagina: la figura (la piastrella con il suo segno, o l'anello comune `GalleryProgressRing`), due parole, un tasto;
+  la nota corta; il canale come due scelte con il segno; la versione installata una volta;
+- `EngineHttp` non si puo' vincolare agli host senza toccare l'engine (rimandi verso qualunque host): e' **avvolto** (`GuardedUpdateHttp`, sottoclasse
+  che riscrive `readText` e `download`), host ammessi a ogni salto: `raw.githubusercontent.com` per l'elenco; `github.com`,
+  `release-assets.githubusercontent.com` (letto il 12/11 sulla 302 di un asset pubblico), `objects.githubusercontent.com` per l'APK;
+- testi «aggiornala dal Pampa Store» tolti (versione fermata, sola lettura, album, backup, Diagnostica, integrazioni, piede della Libreria) e il
+  changelog della 1.0.0 (le due copie) con la novita' e la riga di Sicurezza riscritta.
+
+**Trovato leggendo `publisher.py` (non lanciato): non scrive lo sha256 nell'elenco** (`inspect_apk` lo calcola, `build_version_info` non lo
+riceve). Con lo sha256 obbligatorio una versione pubblicata cosi' risulta «non installabile» (fallisce chiusa, L612): serve la correzione di tre righe
+nel publisher (o lo sha256 aggiunto a mano). Da decidere all'utente/orchestratore. Tutte le altre chiavi combaciano (`PublisherManifestTest`).
+
+**Versioni.** Versione corrente = `versionName` intero. `compareVersions` confronta le pre-release come testo: al piu' nove beta per versione
+(oppure `beta.01`...), L613. La prima beta (`1.0.0`, canale beta) la vede solo chi sceglie Beta; i genitori (Stabile di serie) aspettano la prima
+stabile.
+
+**Gradle.** Con `:feature-update` nel grafo Gradle visitava `androidx.annotation` 1.8.0 (la chiede navigation-compose 2.9.8) e 1.7.1 (hilt-android;
+il suo file JVM `annotation-jvm` 1.7.1) prima di scegliere la 1.9.1: metadati senza impronta e la verifica delle dipendenze cadeva in tutto il build
+(anche `core-model`). Trovato per bisezione (senza `feature-update` passa; senza le sue dipendenze dei test passa). Rimedio nel `build.gradle` di radice,
+come la regola gia' scritta per `lifecycle-viewmodel-compose` 2.9.0: le richieste di 1.7.1 e 1.8.0 vanno alla 1.8.1 (che ha le impronte). Nessuna
+versione risolta cambia: 1.7.1 e 1.8.0 non vincevano mai (i loro file JVM non hanno impronte). `gradle/verification-metadata.xml` non cambia.
+
+**Non fatto.** Niente telefono (l'aggiornamento vero, beta 1 -> beta 2, e' descritto in `docs/aggiornamenti-in-app.md`); `tools/check.ps1` intero
+non lanciato (build di release e dex: il passo 7e nuovo e' scritto ma non provato su un APK); `publisher.py` non toccato ne' lanciato.

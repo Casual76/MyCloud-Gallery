@@ -22,12 +22,13 @@ Come si scrive (per chi prepara una versione):
 - Sul tablet: due finestre insieme, i pannelli affiancati, la tastiera e il mouse. Puoi trascinare una foto in un'altra app e un file dentro l'app.
 - Per chi usa TalkBack o testi grandi: ogni schermata si legge a voce e ogni foto ha la sua descrizione.
 - Questa pagina: "Novità di questa versione".
+- Gli aggiornamenti dentro l'app, da Impostazioni → Aggiornamenti: "Stabile" (di serie) oppure "Beta", che arriva prima. Quando c'è una versione nuova l'app lo dice una volta, e si aggiorna con un tocco.
 
 ### Correzioni
 - È la prima versione per la famiglia: non c'è niente da correggere rispetto a prima.
 
 ### Sicurezza
-- Gli aggiornamenti arrivano solo dal Pampa Store, e Android li installa solo se hanno la stessa firma dell'app che hai già.
+- Gli aggiornamenti arrivano da internet, dalla pagina delle versioni dell'app. Prima di installarne uno l'app controlla che il file sia proprio quello pubblicato e che abbia la stessa firma dell'app che hai già; Android fa lo stesso controllo sulla firma.
 - Chi amministra può fermare una versione che dà problemi: l'app smette di scrivere sul NAS finché non la aggiorni, ma le tue foto restano dove sono.
 - Le foto nascoste non compaiono mai nel widget, e il widget non mostra mai nomi di persone. Il titolo di un ricordo può dire dove è stato.
 - Con il blocco dell'app acceso, il widget mostra solo le foto che sono anche nel telefono.

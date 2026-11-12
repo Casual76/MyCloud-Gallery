@@ -29,7 +29,7 @@
   <string name="diag_backup_frozen_guide">Sul NAS sono cambiati o spariti molti file in una volta (potrebbe essere un errore o un virus): le scritture sono ferme. Controlla dal PC, poi «Ho controllato, continua».</string>
   <string name="diag_backup_writes_stopped_title">Backup: scritture sul NAS ferme</string>
   <!-- CA-1 (Fase 10): la stessa voce quando a fermare le scritture e' il manifest firmato, non l'interruttore di questa Diagnostica. -->
-  <string name="diag_backup_writes_held_by_release">Questa versione di MyCloud Gallery va aggiornata: finché non la aggiorni dal Pampa Store il backup non scrive sul NAS. Non dipende dall’interruttore delle scritture.</string>
+  <string name="diag_backup_writes_held_by_release">Questa versione di MyCloud Gallery va aggiornata: finché non la aggiorni il backup non scrive sul NAS. Non dipende dall’interruttore delle scritture.</string>
   <string name="diag_backup_writes_stopped_guide">Hai fermato le scritture sul NAS da questa Diagnostica. Il backup riprende quando le riattivi.</string>
   <string name="diag_backup_test_only_title">Backup in pausa</string>
   <string name="diag_backup_test_only_guide">Il backup vero non è ancora acceso: per ora sul NAS si scrive solo in un’area di prova e le tue foto non si copiano. Restano al sicuro sul telefono.</string>

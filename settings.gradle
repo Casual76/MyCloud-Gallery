@@ -111,12 +111,20 @@ include ':core-release'      // manifest di rilascio firmato: formato, verifica,
 include ':core-describe'     // le descrizioni dei media per superficie (dentro l'app, Nascosti, widget, notifiche), dai fatti delle porte
 include ':feature-widget'    // il widget "MyCloud Gallery" (Glance sopra engine-widget, P3), ricevitore non esportato, ridisegno
 
+// Pacchetto U (12/11/2026, richiesta dell'utente; docs/aggiornamenti-in-app.md): l'aggiornamento dentro l'app da internet, sopra engine-update. Il suo
+// pacchetto `net/` e' la TERZA eccezione di rete dichiarata (solo HTTPS verso raw.githubusercontent.com per l'elenco e github.com con gli host dei file
+// delle release per l'APK, a ogni salto), classi `internal` (Phase6ArchitectureTest, tools/check.ps1 sul dex). Nessun altro feature lo vede; la voce
+// delle Impostazioni e' una porta di feature-settings legata da :app.
+include ':feature-update'    // Impostazioni -> Aggiornamenti, avviso all'apertura, canale Stabile/Beta, controlli prima dell'installazione
+
 // --- fluid-engine (inizio) ---
 def engineDir = file('engine')
 if (engineDir.exists()) {
   [
    'engine-foundation',
    'engine-ui',
+   'engine-net',
+   'engine-update',
    'engine-widget'
   ].each { name ->
     include ":$name"

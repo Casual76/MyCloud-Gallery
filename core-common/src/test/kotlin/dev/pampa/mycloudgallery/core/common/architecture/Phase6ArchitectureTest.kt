@@ -19,7 +19,8 @@ import org.junit.Test
  * 4. un `TextReadingConsent` costruito fuori dalla pagina di attivazione di `feature-search` (`TextReadingActivation*.kt`);
  * 5. codice HTTP/TLS (`javax.net.ssl`, `java.net.URL`, `URLConnection`, `SSLSocket`, `android.net.http`, librerie; I3 della revisione:
  *    anche `Network.openConnection`, `DownloadManager`, `WebView`, `HttpEngine`, `java.net.http`) fuori da
- *    `core-models/.../download/https/` e (Fase 9, D23: la seconda eccezione dichiarata) da `feature-map/.../net/`, **nei moduli dell'engine
+ *    `core-models/.../download/https/`, (Fase 9, D23: la seconda eccezione dichiarata) da `feature-map/.../net/` e (pacchetto U, 12/11/2026, decisione
+ *    dell'utente: la terza) da `feature-update/.../net/` con il client dell'engine che avvolge (`engine-net/.../net/`), **nei moduli dell'engine
  *    compresi** (`engine-foundation`, `engine-ui`: l'APK li contiene ma `settings.gradle` li include con un ciclo); un altro modulo che nomina
  *    il pacchetto dei modelli; una classe non `internal` in uno dei due pacchetti; un'eccezione a `NoNetworkSources` usata da altri moduli o
  *    diversa da quelle due (le regole della mappa in piu': Phase9ArchitectureTest);
@@ -167,7 +168,10 @@ class Phase6ArchitectureTest {
   @Test
   fun ilControlloHttpsVedeAncheLEngine() {
     // Fase 10 (P3): con il widget entra anche `engine-widget` (engine.properties e settings.gradle); come gli altri, e' codice dell'engine letto dal controllo, non rete.
-    assertThat(engineModules).containsExactly("engine/engine-foundation", "engine/engine-ui", "engine/engine-widget")
+    // Pacchetto U (12/11/2026): entrano `engine-net` (il client HTTP dell'engine, ammesso solo nel suo pacchetto: regola 5) ed `engine-update`.
+    assertThat(engineModules).containsExactly(
+      "engine/engine-foundation", "engine/engine-ui", "engine/engine-net", "engine/engine-update", "engine/engine-widget",
+    )
     for (module in engineModules) {
       assertWithMessage("$module senza sorgenti").that(sources(module, PRODUCTION_SETS).count()).isGreaterThan(0)
     }
@@ -215,7 +219,8 @@ class Phase6ArchitectureTest {
     assertWithMessage("codice HTTP/TLS fuori da core-models/.../download/https/ e feature-map/.../net/").that(http).isEmpty()
     val users = productionMentions(DOWNLOAD_PACKAGE, ALL_SETS).filter { !it.startsWith("$MODELS/") }
     assertWithMessage("moduli che nominano il pacchetto download di core-models").that(users).isEmpty()
-    val httpsFiles = HTTP_DIRS.flatMap { dir ->
+    // Le classi `internal` si pretendono nei pacchetti NOSTRI; il client dell'engine (`EngineHttp`) e' pubblico e `open` apposta (lo avvolge feature-update).
+    val httpsFiles = OWN_HTTP_DIRS.flatMap { dir ->
       File(root, dir).takeIf { it.isDirectory }?.walkTopDown()?.filter { it.isFile && it.extension == "kt" }?.toList().orEmpty()
     }
     for (file in httpsFiles) {
@@ -228,13 +233,20 @@ class Phase6ArchitectureTest {
     val exceptions = modules.flatMap { module ->
       sources(module, ALL_SETS).filter { NETWORK_EXCEPTION.containsMatchIn(code(it)) }.map { rel(it) }.toList()
     }
-    assertWithMessage("eccezioni a NoNetworkSources fuori dai test di core-models e feature-map").that(exceptions - NETWORK_EXCEPTION_USERS).isEmpty()
+    assertWithMessage("eccezioni a NoNetworkSources fuori dai test di core-models, feature-map e feature-update").that(exceptions - NETWORK_EXCEPTION_USERS).isEmpty()
     val modelsTest = File(root, "$MODELS/src/test/kotlin/dev/pampa/mycloudgallery/core/models/NoNetworkSourcesTest.kt").readText()
     assertThat(modelsTest).contains("\"kotlin/dev/pampa/mycloudgallery/core/models/download/https/\"")
     // Fase 9 (D23): la seconda eccezione e' esattamente il pacchetto net/ di feature-map, e nient'altro.
     val mapTest = code(File(root, "feature-map/src/test/kotlin/dev/pampa/mycloudgallery/feature/map/NoNetworkSourcesTest.kt"))
     val allowed = Regex("""listOf\(([^)]*)\)""").find(mapTest.substringAfter(NETWORK_EXCEPTION_NAME))?.groupValues?.get(1)?.trim()
     assertThat(allowed).isEqualTo("\"kotlin/dev/pampa/mycloudgallery/feature/map/net/\"")
+    // Pacchetto U (12/11/2026, decisione dell'utente): la terza eccezione e' esattamente il pacchetto net/ di feature-update, e nient'altro.
+    val updateTest = code(File(root, "feature-update/src/test/kotlin/dev/pampa/mycloudgallery/feature/update/NoNetworkSourcesTest.kt"))
+    val updateAllowed = Regex("""listOf\(([^)]*)\)""").find(updateTest.substringAfter(NETWORK_EXCEPTION_NAME))?.groupValues?.get(1)?.trim()
+    assertThat(updateAllowed).isEqualTo("\"kotlin/dev/pampa/mycloudgallery/feature/update/net/\"")
+    // Il pacchetto net/ dell'aggiornamento non lo nomina nessun altro modulo (il client si ottiene con `UpdateHttp.create`).
+    val updateNetUsers = productionMentions(UPDATE_NET_PACKAGE, ALL_SETS).filter { !it.startsWith("feature-update/") }
+    assertWithMessage("moduli che nominano il pacchetto net/ di feature-update").that(updateNetUsers).isEmpty()
   }
 
   /** 6. D33: core-search non vede ne' rete ne' NAS ne' i modelli; di core-ai solo i contratti. */
@@ -371,7 +383,16 @@ class Phase6ArchitectureTest {
 
     /** Fase 9 (D23): il client delle tessere della mappa, la seconda eccezione dichiarata. */
     const val MAP_NET_DIR = "feature-map/src/main/kotlin/dev/pampa/mycloudgallery/feature/map/net/"
-    val HTTP_DIRS = listOf(HTTPS_DIR, MAP_NET_DIR)
+
+    /**
+     * Pacchetto U (12/11/2026, decisione dell'utente; supera D33 per questa sola funzione): l'aggiornamento dentro l'app, la terza eccezione dichiarata, e il
+     * client dell'engine che avvolge (`EngineHttp`, i cui due metodi di rete il client avvolto riscrive: host ammessi a ogni salto).
+     */
+    const val UPDATE_NET_DIR = "feature-update/src/main/kotlin/dev/pampa/mycloudgallery/feature/update/net/"
+    const val ENGINE_NET_DIR = "engine/engine-net/src/main/kotlin/dev/antigravity/fluidengine/net/"
+    val UPDATE_NET_PACKAGE = Regex("""\bdev\.pampa\.mycloudgallery\.feature\.update\.n""" + """et\b""")
+    val HTTP_DIRS = listOf(HTTPS_DIR, MAP_NET_DIR, UPDATE_NET_DIR, ENGINE_NET_DIR)
+    val OWN_HTTP_DIRS = listOf(HTTPS_DIR, MAP_NET_DIR, UPDATE_NET_DIR)
 
     val NEW_MODULES = listOf(MODELS, AI, SEARCH, FEATURE_SEARCH)
     val PRODUCTION_SETS = listOf("main", "debug", "release", "benchmarkRelease")
@@ -411,6 +432,7 @@ class Phase6ArchitectureTest {
     const val NETWORK_EXCEPTION_NAME = "violations" + "Except"
     val NETWORK_EXCEPTION = Regex("""\bviolations""" + """Except\b""")
     val NETWORK_EXCEPTION_USERS = setOf(
+      "feature-update/src/test/kotlin/dev/pampa/mycloudgallery/feature/update/NoNetworkSourcesTest.kt",
       "core-models/src/test/kotlin/dev/pampa/mycloudgallery/core/models/NoNetworkSourcesTest.kt",
       "feature-map/src/test/kotlin/dev/pampa/mycloudgallery/feature/map/NoNetworkSourcesTest.kt",
       "core-common/src/test/kotlin/dev/pampa/mycloudgallery/core/common/testing/NoNetworkSourcesTest.kt",

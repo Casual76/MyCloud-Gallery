@@ -1,0 +1,72 @@
+// L'aggiornamento dentro l'app (pacchetto U, 12/11/2026; docs/aggiornamenti-in-app.md, docs/decisioni.md "Aggiornamento dentro l'app").
+//
+// Richiesta dell'utente del 12/11: «I miei genitori non avranno il Pampa Store installato, ma avranno bisogno di poter aggiornare l'app, sia canale
+// beta sia canale stable a loro scelta (stable default)», «da internet, come le altre app». Supera D33 (nessun installatore, niente
+// REQUEST_INSTALL_PACKAGES) e la regola «nessun host nuovo» per questa sola funzione.
+//
+// Il controllo e l'installazione sono di `engine-update` (Fluid Engine 3.0.4, non modificato); qui le garanzie dell'app sopra l'engine:
+//  - `net/` e' la TERZA eccezione di rete dichiarata (dopo `core-models/.../download/https/` e `feature-map/.../net/`): il client dell'engine
+//    (`EngineHttp`) avvolto da una sottoclasse che ammette solo HTTPS verso un elenco chiuso di host a OGNI salto, con i tetti, senza cookie ne'
+//    identificativi (classi `internal`; Phase6ArchitectureTest, NoNetworkSourcesTest di questo modulo, tools/check.ps1 sul dex);
+//  - `policy/` sono le regole pure (sha256 e peso obbligatori, nomi, versionCode crescente, stessa firma, ogni 24 ore, una volta per versione);
+//  - `install/` mette quelle regole fra lo scaricamento e la sessione di installazione dell'engine;
+//  - `ui/` la pagina Impostazioni -> Aggiornamenti e l'avviso all'apertura, con i componenti comuni della galleria.
+//
+// Nessun orologio del telefono qui dentro (NoWallClockSourcesTest): l'ora arriva da `:app`. Nessun altro feature come dipendenza; la voce delle
+// Impostazioni e' di feature-settings (porta `UpdateEntryStatus`), legata da `:app`.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
+  id 'org.jetbrains.kotlin.plugin.serialization'
+  id 'com.google.devtools.ksp'
+  id 'com.google.dagger.hilt.android'
+  id 'io.github.takahirom.roborazzi'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.feature.update'
+
+  buildFeatures {
+    compose = true
+  }
+
+  testOptions {
+    unitTests.all {
+      maxHeapSize = '2g'
+    }
+  }
+}
+
+dependencies {
+  implementation project(':core-designsystem')
+  implementation project(':core-common')
+  // api: AvailableAppUpdate e UpdateChannel (engine-foundation, attraverso engine-update) compaiono nelle firme di AppUpdates.
+  api project(':engine-update')
+
+  implementation appDeps.hiltAndroid
+  ksp appDeps.hiltCompiler
+  implementation appDeps.hiltNavigationCompose
+  implementation appDeps.navigationCompose
+  implementation appDeps.lifecycleViewModelCompose
+  implementation appDeps.lifecycleRuntimeCompose
+  implementation appDeps.coroutinesAndroid
+  implementation appDeps.serializationCore
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  testImplementation appDeps.composeUiTestManifest
+  testImplementation appDeps.roborazzi
+  testImplementation appDeps.roborazziCompose
+  testImplementation appDeps.roborazziJunitRule
+  testImplementation appDeps.roborazziAccessibilityCheck
+}

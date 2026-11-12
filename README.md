@@ -99,6 +99,7 @@ Package base `dev.pampa.mycloudgallery`, namespace `dev.pampa.mycloudgallery.<mo
 | `:core-release` | Fase 10: il manifest di rilascio firmato (P-256, due chiavi fissate), letto solo dal NAS (Q8 (a)); stato dei blocchi solo piu' severo, anti-rigioco, indirizzi aggiuntivi dei modelli. **JVM puro**, vede solo le fondamenta | common, model |
 | `:core-describe` | Fase 10: le descrizioni dei media per superficie (dentro l'app, Nascosti, widget, notifiche), mai salvate ne' esportate. **JVM puro** | common, model, library (contratti), places (contratti) |
 | `:feature-widget` | Fase 10: il widget "MyCloud Gallery" (Glance sopra `engine-widget`, P3), ricevitore non esportato, ridisegno; in P0 lo stato sigillato `WidgetUiState` | widget (contratti); da P3 imaging, designsystem, engine-widget |
+| `:feature-update` | Pacchetto U (12/11/2026, decisione dell'utente): l'aggiornamento dentro l'app da internet (Impostazioni -> Aggiornamenti, avviso all'apertura, canale Stabile/Beta) sopra `engine-update`. Il suo `net/` e' la terza eccezione di rete dichiarata (solo HTTPS verso l'elenco su `raw.githubusercontent.com` e gli APK delle GitHub Releases, host ammessi a ogni salto). `docs/aggiornamenti-in-app.md` | designsystem, common, engine-update |
 
 Nessun ciclo: `core-common` e `core-model` sono le foglie. I `feature-*` non si conoscono fra loro: ogni
 passaggio da una funzione all'altra e' una callback scritta da `:app` (`navigation/AppNavHost.kt`).

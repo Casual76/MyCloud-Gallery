@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- L'aggiornamento dentro l'app (pacchetto U, 12/11/2026). Poche parole: l'icona e l'anello dicono lo stato, il testo lo nomina una volta. -->
+<resources>
+  <string name="update_title">Aggiornamenti</string>
+
+  <!-- La testata: lo stato in due parole. -->
+  <string name="update_installed_version">Versione installata</string>
+  <string name="update_up_to_date">App aggiornata</string>
+  <string name="update_checking">Sto controllando…</string>
+  <string name="update_unavailable">Non riesco a controllare adesso</string>
+  <string name="update_found">Versione %1$s</string>
+  <string name="update_unusable">Versione %1$s non installabile</string>
+  <string name="update_unusable_detail">Pubblicata senza impronta o peso del file: chi pubblica deve rifarla.</string>
+  <string name="update_whats_new">Novità</string>
+
+  <!-- I tasti. -->
+  <string name="update_action">Aggiorna</string>
+  <string name="update_check_now">Controlla adesso</string>
+  <string name="update_later">Dopo</string>
+  <string name="update_retry">Riprova</string>
+  <string name="update_cancel">Annulla</string>
+  <string name="update_close">Chiudi</string>
+  <string name="update_allow">Consenti</string>
+  <string name="update_download_anyway">Scarica %1$s</string>
+
+  <!-- Le richieste, una riga. -->
+  <string name="update_metered">Sei sui dati mobili</string>
+  <string name="update_permission">Android chiede il permesso di installare. Si dà una volta sola.</string>
+
+  <!-- L'avanzamento. -->
+  <string name="update_downloading">Scarico</string>
+  <string name="update_verifying">Controllo il file</string>
+  <string name="update_installing">Installo</string>
+  <string name="update_awaiting">Conferma nella finestra di Android</string>
+  <string name="update_installed">Aggiornata</string>
+  <string name="update_progress_spoken">Scaricato il %1$d per cento</string>
+
+  <!-- Gli errori: corti, senza gergo. Quando e' Android a non installare si mostra il suo messaggio (dall'engine). -->
+  <string name="update_failed">Aggiornamento non riuscito</string>
+  <string name="update_problem_published">Questa versione non è pubblicata bene: non si installa.</string>
+  <string name="update_problem_download">Download non riuscito. Riprova più tardi.</string>
+  <string name="update_problem_checksum">Il file non è quello pubblicato: non si installa.</string>
+  <string name="update_problem_unreadable">Il file scaricato non si apre.</string>
+  <string name="update_problem_other_app">Il file è di un\'altra app: non si installa.</string>
+  <string name="update_problem_not_newer">Non è più nuova di quella che hai.</string>
+  <string name="update_problem_signature">Non è firmata come la tua app: non si installa.</string>
+  <string name="update_problem_install">Android non l\'ha installata.</string>
+
+  <!-- Il canale. -->
+  <string name="update_channel">Canale</string>
+  <string name="update_channel_stable">Stabile</string>
+  <string name="update_channel_stable_detail">Le versioni collaudate</string>
+  <string name="update_channel_beta">Beta</string>
+  <string name="update_channel_beta_detail">Arrivano prima, ma possono avere difetti</string>
+  <string name="update_selected">Scelto</string>
+
+  <!-- L'avviso all'apertura. -->
+  <string name="update_prompt_title">Nuova versione</string>
+</resources>

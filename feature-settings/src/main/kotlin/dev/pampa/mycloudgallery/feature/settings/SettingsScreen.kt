@@ -74,6 +74,9 @@ import dev.pampa.mycloudgallery.feature.settings.widget.WidgetEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.widget.WidgetRefresh
 import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.RowValue
+import dev.pampa.mycloudgallery.feature.settings.update.UpdateEntryRow
+import dev.pampa.mycloudgallery.feature.settings.update.UpdateEntrySummary
+import dev.pampa.mycloudgallery.feature.settings.update.UpdateEntryViewModel
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import androidx.compose.runtime.getValue
@@ -133,6 +136,11 @@ class SettingsLinks(
   val openWidget: (() -> Unit)? = null,
   /** I5: la voce "Icona dell'app" (automatica, chiara, scura). La pagina e' delle Impostazioni; la voce compare solo se `:app` ha collegato l'icona. */
   val openAppIcon: (() -> Unit)? = null,
+  /**
+   * Pacchetto U (12/11/2026): la voce "Aggiornamenti" porta alla pagina di feature-update, che le Impostazioni non conoscono (la callback la scrive
+   * `:app`). Null = la voce non c'e'.
+   */
+  val openUpdates: (() -> Unit)? = null,
 ) {
   companion object {
     val None = SettingsLinks()
@@ -169,6 +177,8 @@ internal fun SettingsRoute(
   val appIconViewModel: AppIconViewModel = hiltViewModel()
   val appIconChoice by appIconViewModel.choice.collectAsStateWithLifecycle()
   val appIconArt = appIconViewModel.art
+  val updateViewModel: UpdateEntryViewModel = hiltViewModel()
+  val updateSummary by updateViewModel.summary.collectAsStateWithLifecycle()
   SettingsScreen(
     state = state,
     onBack = onBack,
@@ -186,6 +196,7 @@ internal fun SettingsRoute(
     mapSummary = mapSummary,
     widgetSummary = WidgetEntrySummary(widgetContent, widgetPeriod),
     appIcon = appIconChoice?.let { choice -> appIconArt?.let { AppIconEntry(choice, it) } },
+    updateSummary = updateSummary,
   )
 }
 
@@ -218,6 +229,7 @@ fun SettingsScreen(
   mapSummary: MapEntrySummary? = null,
   widgetSummary: WidgetEntrySummary = WidgetEntrySummary(WidgetContent.DEFAULT, WidgetRefresh.DEFAULT),
   appIcon: AppIconEntry? = null,
+  updateSummary: UpdateEntrySummary? = null,
 ) {
   val family = familyHero(state)
   FluidScreen(
@@ -427,6 +439,11 @@ fun SettingsScreen(
     item { GallerySectionHeader(title = stringResource(R.string.settings_section_advanced)) }
     item {
       FluidListGroup {
+        // Pacchetto U: "Aggiornamenti" (con il segno quando c'e' una versione nuova), solo se `:app` ha scritto dove porta.
+        links.openUpdates?.let { openUpdates ->
+          UpdateEntryRow(summary = updateSummary, onClick = openUpdates)
+          FluidListDivider()
+        }
         FluidListRow(
           title = stringResource(R.string.settings_diagnostics),
           subtitle = NO_SUBTITLE,

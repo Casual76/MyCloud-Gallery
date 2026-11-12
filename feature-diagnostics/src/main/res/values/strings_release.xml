@@ -6,10 +6,10 @@
   <string name="diagnostics_section_release">Versione e aggiornamenti</string>
   <string name="diagnostics_hint_release">Questa versione dell\'app, il suo canale e l\'avviso firmato che l\'admin può mettere sul NAS per chiedere di aggiornare o per fermare una versione difettosa.</string>
   <string name="diag_release_state_title">Stato della versione</string>
-  <string name="diag_release_state_guide">La versione installata, se c\'è un avviso firmato dell\'admin e che cosa chiede: niente, aggiornare dal Pampa Store, oppure fermare questa versione.</string>
+  <string name="diag_release_state_guide">La versione installata, se c\'è un avviso firmato dell\'admin e che cosa chiede: niente, aggiornare, oppure fermare questa versione.</string>
   <!-- P13: i codici del §2.13 (solo numeri e codici). -->
   <string name="diag_release_rejected_title">Avvisi dell\'admin scartati</string>
   <string name="diag_release_rejected_guide">Quante volte un avviso trovato sul NAS è stato scartato, e perché. Un avviso con una firma non valida o firmato con una chiave sconosciuta non dovrebbe esserci: segnalalo all\'admin.</string>
   <string name="diag_release_blocked_title">Questa versione è bloccata</string>
-  <string name="diag_release_blocked_guide">Un avviso firmato dell\'admin chiede di aggiornare questa versione: finché non aggiorni l\'app non scrive sul NAS, oppure è del tutto ferma. Apri il Pampa Store e aggiorna MyCloud Gallery.</string>
+  <string name="diag_release_blocked_guide">Un avviso firmato dell\'admin chiede di aggiornare questa versione: finché non aggiorni l\'app non scrive sul NAS, oppure è del tutto ferma. Aggiorna MyCloud Gallery da Impostazioni → Aggiornamenti.</string>
 </resources>

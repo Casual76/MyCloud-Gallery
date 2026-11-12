@@ -330,6 +330,9 @@ dependencies {
   // (`MediaDescribers.install` con le porte vere di persone e testo letto). `:app` vede di core-release solo stato, fabbrica e fiducia opaca (Phase10ArchitectureTest).
   implementation project(':core-release')
   implementation project(':core-describe')
+  // Pacchetto U (12/11/2026, decisione dell'utente; docs/aggiornamenti-in-app.md): l'aggiornamento dentro l'app (engine-update sotto). Porta nel manifest fuso
+  // REQUEST_INSTALL_PACKAGES e il ricevitore NON esportato degli esiti dell'installazione (elenco chiuso di releaseManifestPolicy, docs/sicurezza.md 4-bis).
+  implementation project(':feature-update')
 
   // --- Il design system (engine-ui porta Compose, Material 3, activity-compose e lifecycle) ----------
   implementation project(':engine-ui')

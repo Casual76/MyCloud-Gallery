@@ -152,6 +152,8 @@ fun NavGraphBuilder.settingsGraph(
   openMemories: (() -> Unit)? = null,
   /** Fase 9 (P4, D24, Q1 (c)): la pagina Impostazioni -> Mappa di feature-map (la scrive `:app`); null = la voce "Mappa" non c'e'. */
   openMap: (() -> Unit)? = null,
+  /** Pacchetto U (12/11/2026): la pagina Impostazioni -> Aggiornamenti di feature-update (la scrive `:app`); null = la voce "Aggiornamenti" non c'e'. */
+  openUpdates: (() -> Unit)? = null,
 ) {
   val back: () -> Unit = { nav.popBackStack() }
   navigation<SettingsGraphRoute>(startDestination = SettingsHomeRoute) {
@@ -183,6 +185,7 @@ fun NavGraphBuilder.settingsGraph(
                 openMap = openMap,
                 openWidget = { open(SettingsPage.WIDGET) },
                 openAppIcon = { open(SettingsPage.APP_ICON) },
+                openUpdates = openUpdates,
               ),
               openDiagnostics = openDiagnostics,
               resumeStep = resumeStep,

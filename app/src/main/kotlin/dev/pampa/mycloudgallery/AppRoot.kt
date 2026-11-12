@@ -7,8 +7,15 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.ContextWrapper
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import dev.pampa.mycloudgallery.feature.update.ui.UpdateInline
+import dev.pampa.mycloudgallery.feature.update.ui.UpdatePromptHost
+import dev.pampa.mycloudgallery.feature.update.ui.UpdatesViewModel
 import androidx.compose.runtime.withFrameNanos
 import dev.pampa.mycloudgallery.core.common.perf.AfterFirstDraw
 import androidx.compose.runtime.getValue
@@ -40,6 +47,7 @@ internal fun AppRoot(
   authenticator: SystemCredentialAuthenticator,
   rootViewModel: RootViewModel = hiltViewModel(),
   releaseViewModel: ReleaseRootViewModel = hiltViewModel(),
+  updatesViewModel: UpdatesViewModel = hiltViewModel(),
 ) {
   AppLockGate(
     controller = lockController,
@@ -89,8 +97,14 @@ internal fun AppRoot(
     }
     // Fase 10 (P13, §2.8, E-REL5, E-REL6): il manifest firmato alla radice. Con la versione fermata solo la sua pagina e la Diagnostica; in sola lettura l'avviso "Aggiorna".
     val release by releaseViewModel.status.collectAsStateWithLifecycle()
-    ReleaseRoot(ReleaseUi.of(release)) {
-      AppNavHost(destination = destination, status = status, actions = actions)
+    val releaseUi = ReleaseUi.of(release)
+    // Pacchetto U (12/11/2026): l'aggiornamento dentro l'app. Con la versione fermata sta nella sua pagina (e' il rimedio); altrimenti l'avviso discreto in basso, una volta
+    // per versione, sopra la navigazione (la pagina sotto resta usabile).
+    Box(modifier = Modifier.fillMaxSize()) {
+      ReleaseRoot(releaseUi, update = { UpdateInline(updatesViewModel) }) {
+        AppNavHost(destination = destination, status = status, actions = actions)
+      }
+      if (releaseUi !is ReleaseUi.Stopped) UpdatePromptHost(updatesViewModel, modifier = Modifier.align(Alignment.BottomCenter))
     }
   }
 }

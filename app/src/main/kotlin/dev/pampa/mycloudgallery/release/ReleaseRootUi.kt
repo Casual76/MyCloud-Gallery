@@ -30,6 +30,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.navigation.FluidNavHost
 import dev.antigravity.fluidengine.ui.navigation.composable
 import dev.antigravity.fluidengine.ui.theme.FluidCard
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.pampa.mycloudgallery.R
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.LocalWritesHeldByRelease
@@ -81,9 +82,9 @@ class ReleaseRootViewModel @Inject constructor(release: ReleaseGraph) : ViewMode
  * (`LocalWritesHeldByRelease`).
  */
 @Composable
-fun ReleaseRoot(ui: ReleaseUi, content: @Composable () -> Unit) {
+fun ReleaseRoot(ui: ReleaseUi, update: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
   if (ui is ReleaseUi.Stopped) {
-    ReleaseStoppedHost(ui.message)
+    ReleaseStoppedHost(ui.message, update)
     return
   }
   val banner = (ui as? ReleaseUi.UpdateBanner)?.message
@@ -103,19 +104,25 @@ fun ReleaseRoot(ui: ReleaseUi, content: @Composable () -> Unit) {
 @Serializable
 internal data object ReleaseStoppedRoute
 
-/** La versione fermata: la sua pagina e la Diagnostica (con l'esportazione), nient'altro. Pagine del Fluid Engine 3.0 (la Diagnostica e' un grafo di pagine Fluid). */
+/**
+ * La versione fermata: la sua pagina e la Diagnostica (con l'esportazione), nient'altro. Pagine del Fluid Engine 3.0 (la Diagnostica e' un grafo di pagine Fluid).
+ * Pacchetto U (12/11/2026): [update] e' l'aggiornamento dentro l'app (`UpdateInline` di feature-update), che la versione fermata NON blocca: e' proprio il rimedio.
+ */
 @Composable
-private fun ReleaseStoppedHost(message: ReleaseMessage) {
+private fun ReleaseStoppedHost(message: ReleaseMessage, update: (@Composable () -> Unit)?) {
   val nav = rememberNavController()
   FluidNavHost(navController = nav, startDestination = ReleaseStoppedRoute) {
-    composable<ReleaseStoppedRoute> { ReleaseStoppedScreen(message, onDiagnostics = { nav.navigate(DiagnosticsGraphRoute) }) }
+    composable<ReleaseStoppedRoute> { ReleaseStoppedScreen(message, onDiagnostics = { nav.navigate(DiagnosticsGraphRoute) }, update = update) }
     diagnosticsGraph(nav = nav)
   }
 }
 
-/** "Questa versione e' stata fermata" (E-REL6): il perche' dal catalogo, cosa fare (aggiornare dal Pampa Store), la Diagnostica. Nessun dato si cancella. */
+/**
+ * "Questa versione e' stata fermata" (E-REL6): il perche' dal catalogo, cosa fare (aggiornare), la Diagnostica. Nessun dato si cancella. Pacchetto U: sotto il perche',
+ * l'aggiornamento dentro l'app ([update]): la versione nuova con «Aggiorna», oppure «Controlla adesso».
+ */
 @Composable
-fun ReleaseStoppedScreen(message: ReleaseMessage, onDiagnostics: () -> Unit) {
+fun ReleaseStoppedScreen(message: ReleaseMessage, onDiagnostics: () -> Unit, update: (@Composable () -> Unit)? = null) {
   FluidScreen(title = stringResource(R.string.release_stopped_title)) {
     item {
       Column(
@@ -126,6 +133,16 @@ fun ReleaseStoppedScreen(message: ReleaseMessage, onDiagnostics: () -> Unit) {
         // CS-17 (fase I): la forma comune; la frase resta aperta (dice che cosa resta fermo).
         GalleryFigureState(icon = Icons.Rounded.NewReleases, title = stringResource(R.string.release_stopped_title), fill = false) {
           BlockingText(stringResource(stoppedText(message)))
+          if (update == null) {
+            FluidButton(text = stringResource(R.string.release_open_diagnostics), onClick = onDiagnostics, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
+          }
+        }
+      }
+    }
+    if (update != null) {
+      item { FluidListGroup { update() } }
+      item {
+        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
           FluidButton(text = stringResource(R.string.release_open_diagnostics), onClick = onDiagnostics, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
         }
       }

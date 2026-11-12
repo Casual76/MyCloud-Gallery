@@ -8,6 +8,8 @@ import dev.pampa.mycloudgallery.core.database.CatalogSource
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreRow
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreSource
+import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccess
+import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccessReader
 import dev.pampa.mycloudgallery.core.mediastore.contract.SyncReason
 import dev.pampa.mycloudgallery.core.model.FileStamp
 import dev.pampa.mycloudgallery.core.model.Fingerprint
@@ -22,6 +24,8 @@ import dev.pampa.mycloudgallery.core.model.PersonalFlags
 import dev.pampa.mycloudgallery.core.model.Presence
 import dev.pampa.mycloudgallery.core.model.SafetyStatus
 import dev.pampa.mycloudgallery.core.model.domain.Observation
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -549,6 +553,44 @@ class MediaSparitiTest : PhoneSyncTestBase() {
     rows.forEach { assertThat(stateAt(it)).isEqualTo(LocationState.PRESENT) }
     assertThat(sync.stats.snapshot.value.absencesBlocked).isEqualTo(1)
     assertThat(suspected(sync)).isEqualTo(0)
+  }
+
+  @Test
+  fun lAccessoSiRicontrollaPrimaDiOgniLottoDiAssenze() = runBlocking<Unit> {
+    val rows = photos(1L..5L)
+    newSync().syncNow(SyncReason.APP_START)
+    store.deletedFilesEmptyForApps = true
+    listOf(2L, 3L, 4L).forEach { store.remove(PRIMARY, it) }
+    // Un lettore dei permessi che passa a "foto selezionate" alla rilettura numero [flipAt] del giro.
+    var refreshes = 0
+    var flipAt = Int.MAX_VALUE
+    val counting = object : PhoneAccessReader {
+      private val flow = MutableStateFlow(PhoneAccess(MediaAccess.FULL, mediaLocation = true, volumes = setOf(PRIMARY)))
+      override val state: StateFlow<PhoneAccess> = flow
+
+      override fun refresh() {
+        refreshes++
+        if (refreshes == flipAt) flow.value = PhoneAccess(MediaAccess.PARTIAL, mediaLocation = true, volumes = setOf(PRIMARY))
+      }
+    }
+    val sync = DefaultPhoneLibrarySync(
+      source = store, access = counting, catalog = catalog, reads = reads, clock = { now }, monotonicMs = { mono },
+      dispatchers = InlineDispatchers, config = config,
+    )
+    advance(3 * MINUTE)
+    sync.syncNow(SyncReason.FOREGROUND)
+    assertThat(suspected(sync)).isEqualTo(3)
+    advance(wait)
+    // Il giro di conferma rilegge i permessi: all'inizio (1), dopo gli _ID (2), dopo il controllo puntuale (3), prima di ogni lotto di due
+    // assenze (4, 5). Al secondo lotto l'accesso e' cambiato: quel lotto non si scrive.
+    refreshes = 0
+    flipAt = 5
+    val report = sync.syncNow(SyncReason.FOREGROUND)
+    assertThat(report.vanished).isEqualTo(2)
+    assertThat(report.completed).isFalse()
+    assertThat(rows.subList(1, 4).count { stateAt(it) == LocationState.ABSENT }).isEqualTo(2)
+    assertThat(stateAt(rows[0])).isEqualTo(LocationState.PRESENT)
+    assertThat(stateAt(rows[4])).isEqualTo(LocationState.PRESENT)
   }
 
   @Test

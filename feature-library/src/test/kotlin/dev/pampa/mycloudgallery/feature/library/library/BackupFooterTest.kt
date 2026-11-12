@@ -163,7 +163,7 @@ class BackupFooterTest {
       // Giro 2 (BF2-11): niente gergo.
       LibraryBackupWait.OTHER to "Il motivo è nella Diagnostica",
       // T-1: una coda che l'ultimo giro non ha trovato sul telefono non promette un giro.
-      LibraryBackupWait.NOT_ON_PHONE to "Non li trovo sul telefono",
+      LibraryBackupWait.NOT_ON_PHONE to "Niente da caricare adesso",
       // BF-6: il primo backup pronto e' «da avviare», non «in coda al prossimo giro».
       LibraryBackupWait.FIRST_BACKUP to "Primo backup da avviare",
     )

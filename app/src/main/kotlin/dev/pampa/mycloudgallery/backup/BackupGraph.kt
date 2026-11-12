@@ -1288,7 +1288,11 @@ class BackupGraph(
       sources.sources.map { it.id }, similar.progress.value.pending == 0, counts, nasInputs.account(), p.share, privateAreaScanned(),
     )
     val base = summaryCache.summaryOf(key, monotonicMs(), generation, stillCurrent = { parts === p }) { p.planner.summary() } ?: return@withLock counting()
-    base.copy(existing = live(base.existing))
+    val summary = base.copy(existing = live(base.existing))
+    // BS3-1 (critico, giro 3): `live` sospende (rilegge le regole). Se intanto `start` ha cambiato le parti o svuotato la cache, questo riepilogo e'
+    // di prima: non si restituisce (il foglio non si riaccende con i numeri di un'altra area), si torna a «sto contando».
+    if (summaryCache.generation() != generation || parts !== p) return@withLock counting()
+    summary
   }
 
   /** «Sto contando»: il riepilogo non c'e' (ancora, o piu'), con il motivo che ferma la ricerca se ce n'e' uno. */

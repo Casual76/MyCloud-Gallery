@@ -15,7 +15,8 @@
   <string name="gallery_wait_home_wifi">Serve il Wi-Fi di casa</string>
   <string name="gallery_wait_nas">NAS spento o non raggiungibile</string>
   <!-- T-1: media in coda per i conteggi che l'ultimo giro non ha trovato sul telefono: nessuna promessa di un giro. -->
-  <string name="gallery_wait_not_on_phone">Non li trovo sul telefono</string>
+  <!-- BS3-2 (critico, giro 3): il segnale e' «l'ultimo giro non ha trovato niente da caricare», non una prova che i file non siano sul telefono: frase neutra. -->
+  <string name="gallery_wait_not_on_phone">Niente da caricare adesso</string>
 
   <!-- Giro 2 (BF2-4): un lavoro chiesto adesso dall'utente e accettato da Android, prima che il motore lo prenda. Le stesse parole nella pagina Backup, nel
        piede della Libreria e nelle Impostazioni, per riferimento. -->

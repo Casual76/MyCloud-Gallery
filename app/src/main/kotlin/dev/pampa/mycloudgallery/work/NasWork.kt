@@ -187,7 +187,9 @@ object NasWorkScheduling {
    *   prima teneva il suo ritardo lungo dopo un cambio di fascia. Ora la carica, ogni inizio di fascia e le scale (caldo, risparmio energetico) hanno
    *   nomi diversi: si scarta solo una richiesta della stessa classe, che ha lo stesso vincolo e un ritardo dello stesso genere (nella scala al piu'
    *   un'ora: si rinuncia all'azzeramento immediato quando una ripresa c'e' gia'). Due riprese di classi diverse dello stesso lavoro possono stare in
-   *   coda insieme: rileggono le regole e la tappa resta serializzata dal suo lucchetto. Nessun risveglio in piu': i vincoli restano quelli esatti;
+   *   coda insieme: rileggono le regole, e i corpi delle tappe sono serializzati dai loro lucchetti. I vincoli restano quelli esatti. Limiti noti
+   *   (BS3-3 del critico, giro 3): una ripresa «carica» di una regola poi tolta resta in coda finche' non arriva la carica (non blocca: il lavoro
+   *   riparte dalle altre classi), e dopo piu' cambi di fascia possono scadere riprese vecchie che fanno un giro a vuoto (qualche risveglio in piu');
    * - **vincoli**: la rete dei lavori del NAS ([LanConstraints], la stessa del periodico), piu' la carica se la regola la chiede. Mai piu' larghi.
    *
    * [input] sono gli input del lavoro che aspetta: il tentativo ([RuleWaits.KEY_ATTEMPT]) e quale ripresa e' ([KEY_WAIT_RESUME]).

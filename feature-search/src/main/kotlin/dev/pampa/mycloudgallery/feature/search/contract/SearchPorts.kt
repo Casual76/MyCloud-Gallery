@@ -95,8 +95,21 @@ sealed interface AnalysisThumb {
   data object Quiet : AnalysisThumb
 }
 
-/** Il calcolo mentre scorre, per la pagina: il media di adesso, gli ultimi finiti, i prossimi in coda. */
-data class AnalysisFlow(val current: AnalysisThumb?, val recent: List<AnalysisThumb>, val next: List<AnalysisThumb>) {
+/**
+ * Il calcolo mentre scorre, per la pagina: il media di adesso, gli ultimi finiti, i prossimi in coda.
+ *
+ * [visibilityGeneration] (XS2-1, additivo, di serie 0): il **numero d'ordine di cio' che la Libreria mostra** (permessi, selezione, nascosti, cestino).
+ * `:app` lo alza a **ogni** cambio di visibilita' e, nello stesso istante, emette uno stato con **tutte le anteprime `Quiet`** della nuova generazione:
+ * chi disegna deve trattare ogni `Shown` nata in una generazione **piu' vecchia** di quella dell'ultimo valore ricevuto come **non piu' autorizzata**
+ * (niente byte, niente ThumbHash, niente riferimento: neutra) **subito**, anche se la sta trattenendo per un'animazione. Il pacing riguarda il movimento,
+ * mai l'autorizzazione. Il solo avanzare del motore (un media finito) **non** alza la generazione.
+ */
+data class AnalysisFlow(
+  val current: AnalysisThumb?,
+  val recent: List<AnalysisThumb>,
+  val next: List<AnalysisThumb>,
+  val visibilityGeneration: Long = 0L,
+) {
   companion object {
     val EMPTY = AnalysisFlow(null, emptyList(), emptyList())
   }

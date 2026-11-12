@@ -83,15 +83,21 @@ function Test-ReleaseApk([string]$Apk, [string]$ExpectedFingerprint, $Tools) {
     if ($defined.Name -notmatch '\.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION$') { $problems.Add("l'APK definisce un permesso proprio ($($defined.Name)): nessun permesso definito dall'app o dalle librerie (D32, C443)") }
   }
   $allowed = Get-AllowedExported
+  $policyText = Read-Utf8 (Resolve-RepoFile "gradle\verify-release-manifest.gradle")
+  $launcherPolicy = Get-LauncherAliasPolicy $policyText
   $exported = @($manifest.Components | Where-Object { $_.Exported })
   foreach ($component in $exported) {
+    # I5: un ingresso del launcher dell'elenco e' ammesso per nome qui; la forma la guarda Test-ApkLauncherAliases (release-lib-launcher.ps1).
+    if (Test-LauncherAliasName $component $launcherPolicy) { continue }
     if (-not $allowed.ContainsKey($component.Name)) {
       $problems.Add(("componente esportato non ammesso: <{0}> {1}" -f $component.Kind, $component.Name))
     } elseif ($allowed[$component.Name] -and $component.Permission -ne $allowed[$component.Name]) {
       $problems.Add(("<{0}> {1} e' esportato senza il permesso {2}" -f $component.Kind, $component.Name, $allowed[$component.Name]))
     }
   }
-  if (-not ($exported | Where-Object { $_.Name -eq "$($script:AppId).MainActivity" })) { $problems.Add("la launcher activity non risulta esportata: il lettore del manifest non funziona o l'app non si avvia") }
+  if (-not ($exported | Where-Object { $_.Name -eq "$($script:AppId).MainActivity" })) { $problems.Add("la MainActivity (bersaglio degli ingressi del launcher) non risulta esportata: il lettore del manifest non funziona o l'app non si avvia") }
+  # I5: i tre ingressi del launcher (alias della MainActivity), per nome e per forma; nessun altro componente con la categoria LAUNCHER.
+  foreach ($problem in @(Test-ApkLauncherAliases $Tools.Aapt2 $Apk $policyText)) { $problems.Add($problem) }
   foreach ($component in @($manifest.Components | Where-Object { $_.Name -match 'debugtools\.probes\.|FieldProbe|androidx\.profileinstaller\.ProfileInstallReceiver' })) {
     $problems.Add("un componente di debug o di misura e' nella release: <$($component.Kind)> $($component.Name)")
   }

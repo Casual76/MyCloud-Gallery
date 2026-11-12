@@ -160,6 +160,9 @@ function Get-SecAllowedExported([string]$Root) {
       if ($m.Success) { $allowed[$m.Groups[1].Value] = $true }
     }
   }
+  # I5 (12/11/2026): i tre ingressi del launcher (alias della MainActivity, uno per icona) di launcherAliasPolicy: esportati e voluti.
+  $aliases = [regex]::Match($gradle, "(?s)launcherAliasPolicy\s*:\s*\[.*?'aliases'\s*:\s*'([^']+)'")
+  if ($aliases.Success) { foreach ($name in ($aliases.Groups[1].Value -split '\|')) { $allowed[$name] = $true } }
   return $allowed
 }
 

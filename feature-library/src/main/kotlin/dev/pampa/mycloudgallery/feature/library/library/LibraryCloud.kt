@@ -70,6 +70,7 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterPill
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
 import dev.pampa.mycloudgallery.core.designsystem.design.glyph
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRing
+import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.library.text.GalleryDates
@@ -176,7 +177,18 @@ internal data class LibraryCloud(
   /** Le voci con il loro tasto: i problemi e, sotto, la pausa. */
   val withAction: List<CloudItem> get() = problems + paused
 
-  val showsSpace: Boolean get() = problems.isEmpty() && paused.isEmpty()
+  /**
+   * Lo spazio, l'ultima sincronizzazione e "Libera spazio": senza problemi e senza la pausa **dell'utente** (OA-10). Il backup vero non ancora acceso
+   * (`TestOnly`, I4) e' una pausa che l'utente non ha chiesto e che non ferma la lettura del NAS: lo spazio resta.
+   */
+  val showsSpace: Boolean get() = problems.isEmpty() && paused.all { (it as? CloudItem.Backup)?.status == LibraryBackupStatus.TestOnly }
+
+  /**
+   * I4 (fase I, «uno stato si dice una volta»): la pausa del backup quando e' l'**unica** cosa che la nuvola ha da dire. Allora la dice solo il titolo
+   * («In pausa», le parole della pagina Backup), con la «i» che apre il perche'; sotto resta il tasto. Null in ogni altro caso: la pausa ha la sua capsula.
+   */
+  val pauseInTitle: CloudItem.Backup?
+    get() = (paused.singleOrNull() as? CloudItem.Backup)?.takeIf { state == GalleryCloudState.Paused && problems.isEmpty() }
 }
 
 /**
@@ -186,7 +198,7 @@ internal data class LibraryCloud(
  *   ([LibraryNetworkStatus.severity]);
  * - **il NAS**: lettura e allineamento sono lavori, "aggiornato" e' salvato, i lavori fermi sono un allarme, le aree non raggiungibili
  *   un'attenzione, la pubblicazione di prova un'attesa;
- * - **il backup**: confronto e giri sono lavori, la coda e la prova sono attese, "tutto al sicuro" e' salvato, un problema prende il
+ * - **il backup**: confronto e giri sono lavori, la coda e' un'attesa, il backup vero non ancora acceso e' una pausa (I4), "tutto al sicuro" e' salvato, un problema prende il
  *   tono della sua riga in [BackupFooterProblems] (allarme, attenzione, o attesa se riparte da solo). **Fermo** (OA-10) non e' mai
  *   "salvato": la pausa dell'utente ha il suo stato, il lavoro fermato da Android e' un'attesa (riprende da solo).
  *
@@ -232,7 +244,9 @@ private fun nasItem(status: LibraryNasStatus): CloudItem? = when (status) {
 
 private fun backupItem(status: LibraryBackupStatus): CloudItem? = when (status) {
   LibraryBackupStatus.Idle -> null
-  LibraryBackupStatus.TestOnly, is LibraryBackupStatus.Queued -> CloudItem.Backup(status, GalleryCloudState.Waiting)
+  // I4: il backup vero non ancora acceso si dice come nella pagina Backup, «In pausa» (la recinzione non cambia: cambia come si mostra).
+  LibraryBackupStatus.TestOnly -> CloudItem.Backup(status, GalleryCloudState.Paused)
+  is LibraryBackupStatus.Queued -> CloudItem.Backup(status, GalleryCloudState.Waiting)
   is LibraryBackupStatus.Comparing, is LibraryBackupStatus.FirstBackup, is LibraryBackupStatus.Running -> CloudItem.Backup(status, GalleryCloudState.Syncing)
   is LibraryBackupStatus.AllSafe -> CloudItem.Backup(status, GalleryCloudState.Saved)
   // OA-10: un backup fermo non sparisce dalla nuvola (prima, con "NAS aggiornato", restava la spunta di "tutto salvato").
@@ -285,7 +299,7 @@ internal fun LibraryCloudButton(
   // Cio' che TalkBack dice dopo lo stato: il problema piu' grave o, in pausa, che cosa e' in pausa.
   val problem by remember(network) { derivedStateOf { libraryCloud(network, nas.value, backup.value)?.withAction?.firstOrNull() } }
   val title = cloudTitle(state, savedByBackup = backup.value is LibraryBackupStatus.AllSafe)
-  val headline = problem?.let { noteOf(it).label }
+  val headline = problem?.let { item -> noteOf(item).let { note -> if (note.label.equals(title, ignoreCase = true)) note.detail else note.label } }
   val description = if (headline == null) {
     stringResource(R.string.library_cloud_button, title)
   } else {
@@ -346,19 +360,24 @@ internal fun LibraryCloudPanel(
       .padding(horizontal = PanelPaddingH, vertical = PanelPaddingV),
     verticalArrangement = Arrangement.spacedBy(PanelGap),
   ) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TitleGap)) {
-      Icon(imageVector = cloud.state.glyph(), contentDescription = null, tint = ink, modifier = Modifier.size(TitleGlyph))
-      Text(
-        text = cloudTitle(cloud.state, cloud.savedByBackup),
-        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-        color = ink,
-        modifier = Modifier.semantics { heading() },
-      )
+    val inTitle = cloud.pauseInTitle
+    if (inTitle == null) {
+      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TitleGap)) {
+        Icon(imageVector = cloud.state.glyph(), contentDescription = null, tint = ink, modifier = Modifier.size(TitleGlyph))
+        Text(
+          text = cloudTitle(cloud.state, cloud.savedByBackup),
+          style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+          color = ink,
+          modifier = Modifier.semantics { heading() },
+        )
+      }
+    } else {
+      PauseTitle(state = cloud.state, title = cloudTitle(cloud.state, cloud.savedByBackup), detail = noteOf(inTitle).detail)
     }
     for (item in cloud.withAction) {
       val action = actionLabel(item)
       val note = noteOf(item)
-      ProblemNote(note = if (note.detail.sameWordsAs(action)) note.copy(detail = null) else note)
+      if (item != inTitle) ProblemNote(note = if (note.detail.sameWordsAs(action)) note.copy(detail = null) else note)
       FluidButton(
         text = action,
         onClick = {
@@ -397,6 +416,48 @@ internal fun LibraryCloudPanel(
           leading = { Icon(imageVector = Icons.Rounded.CleaningServices, contentDescription = null, modifier = Modifier.size(ButtonGlyph)) },
         )
       }
+    }
+  }
+}
+
+/**
+ * I4: il titolo del pannello quando la pausa del backup e' l'unica cosa da dire: il segno della pausa, «In pausa» e la «i»; un tocco apre il perche' sotto
+ * (e lo richiude). TalkBack sente il titolo come intestazione e il perche' nella sua descrizione, senza tocco.
+ */
+@Composable
+private fun PauseTitle(state: GalleryCloudState, title: String, detail: String?) {
+  val ink = MaterialTheme.colorScheme.onSurface
+  var open by rememberSaveable(title) { mutableStateOf(false) }
+  val spoken = listOfNotNull(title, detail).joinToString(". ")
+  Column(verticalArrangement = Arrangement.spacedBy(LineGap)) {
+    Row(
+      modifier = Modifier
+        .defaultMinSize(minHeight = GalleryDimens.MinTouchTarget)
+        .semantics(mergeDescendants = true) {
+          heading()
+          contentDescription = spoken
+        }
+        .then(if (detail != null) Modifier.fluidPressable(onClick = { open = !open }, role = Role.Button, focusShape = ContinuousCornerShape(FluidRadius.Control)) else Modifier)
+        .testTag(PauseTitleTag),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(TitleGap),
+    ) {
+      Icon(imageVector = state.glyph(), contentDescription = null, tint = ink, modifier = Modifier.size(TitleGlyph))
+      Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+        color = ink,
+        modifier = Modifier.semantics { hideFromAccessibility() },
+      )
+      if (detail != null) Icon(imageVector = Icons.Outlined.Info, contentDescription = null, tint = ink, modifier = Modifier.size(InlineGlyph))
+    }
+    if (open && detail != null) {
+      Text(
+        text = detail,
+        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+        color = ink,
+        modifier = Modifier.testTag(ProblemDetailTag).semantics { hideFromAccessibility() },
+      )
     }
   }
 }
@@ -755,3 +816,4 @@ private const val PercentScale = 100f
 internal const val ActivityRowTag: String = "nuvola-lavoro"
 internal const val SpaceRowTag: String = "nuvola-spazio"
 internal const val ProblemDetailTag: String = "nuvola-frase"
+internal const val PauseTitleTag: String = "nuvola-titolo-pausa"

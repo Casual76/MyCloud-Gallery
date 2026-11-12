@@ -302,6 +302,17 @@ internal abstract class LibraryCloudScreenshotBase(private val dark: Boolean, pr
     shootRoot("pop-up-lettura-nas-e-coda", I4)
   }
 
+  /** I4: il backup vero non ancora acceso, come nella pagina Backup: «In pausa» detto una volta nel titolo, lo spazio resta. */
+  @Test
+  fun popUpBackupVeroNonAncoraAcceso() {
+    show(library(backup = LibraryBackupStatus.TestOnly))
+    openCloud()
+    shootRoot("pop-up-backup-non-ancora-acceso", I4)
+    composeRule.onNodeWithTag(PauseTitleTag).performClick()
+    settle()
+    shootRoot("pop-up-backup-non-ancora-acceso-frase-aperta", I4)
+  }
+
   @Test
   fun popUpConUnProblema() {
     show(library(nas = LibraryNasStatus.Frozen(FreezeReason.VANISHED, sinceNasMillis = 0L), backup = LibraryBackupStatus.Problem(code = "nas_full", count = 0)))
@@ -357,8 +368,9 @@ internal abstract class LibraryCloudScreenshotBase(private val dark: Boolean, pr
     composeRule.onNodeWithTag("${GalleryChromeTagPrefix}comandi").captureRoboImage("$K2/nuvola-in-pausa-$look-$device.png")
 
     openCloud()
+    // I4: la pausa si dice una volta, nel titolo («In pausa», come la pagina Backup); niente capsula «Backup in pausa» sotto.
     assertThat(texts("In pausa")).isAtLeast(1)
-    assertThat(texts("Backup in pausa")).isAtLeast(1)
+    assertThat(texts("Backup in pausa")).isEqualTo(0)
     // I4: la frase sta dietro il tocco della capsula.
     assertThat(texts("Le foto nuove non si salvano finché non lo riprendi dalla pagina Backup.")).isEqualTo(0)
     for (gone in listOf("Tutto al sicuro", "NAS aggiornato", "Libera spazio")) {
@@ -366,7 +378,7 @@ internal abstract class LibraryCloudScreenshotBase(private val dark: Boolean, pr
     }
     assertThat(composeRule.onAllNodesWithTag(SpaceRowTag).fetchSemanticsNodes()).isEmpty()
     shootRoot("pop-up-backup-in-pausa", I4)
-    composeRule.onAllNodesWithText("Backup in pausa", substring = true)[0].performClick()
+    composeRule.onNodeWithTag(PauseTitleTag).performClick()
     settle()
     assertThat(texts("Le foto nuove non si salvano finché non lo riprendi dalla pagina Backup.")).isEqualTo(1)
     shootRoot("pop-up-backup-in-pausa-frase-aperta", I4)

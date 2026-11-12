@@ -53,11 +53,11 @@ import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreenDefaults
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryCoverCard
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTileDefaults
 import dev.pampa.mycloudgallery.core.designsystem.icon.rememberGalleryIconColors
 import dev.pampa.mycloudgallery.core.designsystem.state.phoneTrashText
-import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.feature.library.R
 import kotlin.math.max
@@ -325,7 +325,9 @@ private fun CollectionCard(entry: CollectionEntry, family: CollectionArtFamily, 
   val facePx = collectionFacePx()
   val bucket = collectionCardBucket()
   val spoken = entry.spoken()
-  Box(
+  val wide = kind == CardKind.Wide
+  // La forma comune delle schede di copertina (core-designsystem): il titolo sulla sfumatura e il punto "nuovo" li disegna lei.
+  GalleryCoverCard(
     modifier = Modifier
       .size(cardWidth(kind), cardHeight(kind))
       .fluidPressable(onClick = { onSelect(entry) }, role = Role.Button)
@@ -336,6 +338,11 @@ private fun CollectionCard(entry: CollectionEntry, family: CollectionArtFamily, 
       .selectedRing(selected, CardShape)
       .clip(CardShape)
       .background(Brush.linearGradient(listOf(colors.top, colors.bottom))),
+    title = entry.title.takeIf { entry.showTitle },
+    caption = if (wide) entry.caption else null,
+    titleStyle = if (wide) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
+    titleMaxLines = if (wide) 2 else 1,
+    isNew = entry.trailing != null && entry.badge == 0,
   ) {
     Icon(imageVector = entry.icon, contentDescription = null, tint = colors.glyph, modifier = Modifier.align(Alignment.Center).size(CollectionsDimens.CardGlyph))
     if (covers != null) {
@@ -347,52 +354,7 @@ private fun CollectionCard(entry: CollectionEntry, family: CollectionArtFamily, 
         covers.mediaOf(entry)?.let { media -> CoverImage(covers, media, Modifier.matchParentSize(), bucket) }
       }
     }
-    if (entry.showTitle) {
-      CardLabel(
-        title = entry.title,
-        caption = if (kind == CardKind.Wide) entry.caption else null,
-        wide = kind == CardKind.Wide,
-        modifier = Modifier.align(Alignment.BottomStart),
-      )
-    }
-    if (entry.trailing != null && entry.badge == 0) NewDot(Modifier.align(Alignment.TopEnd))
   }
-}
-
-/** Il nome di una scheda in basso, bianco sopra la sfumatura dello scrim (la coppia di [GalleryOnPhoto]: si legge anche su una foto bianca). */
-@Composable
-private fun CardLabel(title: String, caption: String?, wide: Boolean, modifier: Modifier) {
-  val scrim = GalleryOnPhoto.scrim()
-  Column(
-    modifier = modifier
-      .fillMaxWidth()
-      .background(Brush.verticalGradient(listOf(scrim.copy(alpha = 0f), scrim)))
-      .padding(start = CollectionsDimens.CardTextInset, end = CollectionsDimens.CardTextInset, bottom = CollectionsDimens.CardTextInset, top = CollectionsDimens.CardTextInset * 2),
-  ) {
-    Text(
-      text = title,
-      style = if (wide) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
-      color = GalleryOnPhoto.Content,
-      maxLines = if (wide) 2 else 1,
-      overflow = TextOverflow.Ellipsis,
-    )
-    if (caption != null) {
-      Text(text = caption, style = MaterialTheme.typography.labelMedium, color = GalleryOnPhoto.Content, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-  }
-}
-
-/** Il punto "nuovo" in alto a destra: l'accento con un filo chiaro (TalkBack lo dice con la parola). */
-@Composable
-private fun NewDot(modifier: Modifier) {
-  Box(
-    modifier = modifier
-      .padding(CollectionsDimens.CardTextInset)
-      .size(CollectionsDimens.NewDot)
-      .clip(FluidCapsuleShape)
-      .background(MaterialTheme.colorScheme.primary)
-      .border(CollectionsDimens.NewDotRing, GalleryOnPhoto.Content, FluidCapsuleShape),
-  )
 }
 
 /** La scheda in fondo al carosello che porta a "tutti": la freccia nel colore della famiglia e il nome ("Tutte le persone"), alta come le altre. */

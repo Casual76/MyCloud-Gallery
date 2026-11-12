@@ -65,6 +65,15 @@ interface NasAreas {
     throw UnsupportedOperationException("Chi implementa NasAreas deve dire quali file sono nascosti.")
 
   /**
+   * I4 (fase I): che cosa la Libreria conosce dei [files] e delle [folders] di una pagina di Cartelle NAS (la cartella [folder] di [share], null = la
+   * radice): il media di ogni file che e' una foto o un video conosciuto, e i media piu' recenti sotto ogni sottocartella (la copertina). **Una sola
+   * risposta per pagina**, letta da `:app` fuori dal thread principale, mai i nascosti (ne' i gruppi con un nascosto dentro). Solo da mostrare: un
+   * errore o nessuna risposta lasciano le piastrelle. Di serie nessuna anteprima.
+   */
+  suspend fun previews(share: String, folder: SharePath?, files: Collection<SharePath>, folders: Collection<SharePath>): NasFolderPreviews =
+    NasFolderPreviews.None
+
+  /**
    * NA-10 (E-N15): le cartelle dell'**area privata** che l'utente ha escluso dalla Libreria. E' un'impostazione personale sincronizzata
    * fra i dispositivi dell'account (Q9): le legge la scansione a ogni giro. Escludere non cancella ne' sposta niente sul NAS: le foto
    * della cartella escono dalla Libreria e tornano se la cartella si include di nuovo.

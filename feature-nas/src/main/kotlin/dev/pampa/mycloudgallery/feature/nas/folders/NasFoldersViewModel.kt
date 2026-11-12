@@ -23,6 +23,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.SkipReason
 import dev.pampa.mycloudgallery.core.nasops.contract.StartOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.UserConfirmation
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
+import dev.pampa.mycloudgallery.feature.nas.R
 import dev.pampa.mycloudgallery.feature.nas.confirm.NameCheck
 import dev.pampa.mycloudgallery.feature.nas.confirm.NameDraft
 import dev.pampa.mycloudgallery.feature.nas.confirm.NamePurpose
@@ -30,7 +31,8 @@ import dev.pampa.mycloudgallery.feature.nas.confirm.movesIntoCommon
 import dev.pampa.mycloudgallery.feature.nas.contract.NasArea
 import dev.pampa.mycloudgallery.feature.nas.contract.NasAreaKind
 import dev.pampa.mycloudgallery.feature.nas.contract.NasAreas
-import dev.pampa.mycloudgallery.feature.nas.R
+import dev.pampa.mycloudgallery.feature.nas.contract.NasFolderPreviews
+import dev.pampa.mycloudgallery.feature.nas.contract.NasThumbnails
 import dev.pampa.mycloudgallery.feature.nas.ui.NasTone
 import dev.pampa.mycloudgallery.feature.nas.ui.UiNotice
 import dev.pampa.mycloudgallery.feature.nas.ui.noticeFor
@@ -90,6 +92,11 @@ internal data class FoldersUiState(
    * file si elenca finche' `:app` non ha detto quali sono nascosti.
    */
   val hidden: HiddenFiles = HiddenFiles.Checking,
+  /**
+   * I4 (fase I): che cosa la Libreria conosce dei file e delle sottocartelle dell'elenco (le anteprime). Di partenza nessuna: le righe hanno la
+   * piastrella per tipo finche' la risposta non arriva, poi la miniatura prende il suo posto senza cambiare l'altezza della riga.
+   */
+  val previews: NasFolderPreviews = NasFolderPreviews.None,
 ) {
   /** L'elenco com'e' arrivato (o l'ultimo salvato se il NAS non risponde), con **tutti** i nomi: non si mostra, serve a contare. */
   private val listed: List<NasFolderEntry> get() = entriesOf(listing)
@@ -149,6 +156,8 @@ class NasFoldersViewModel @Inject constructor(
   private val operations: NasOperations,
   private val areas: NasAreas,
   private val clocks: OpClocks,
+  /** I4: le miniature delle anteprime (la cache e la porta della Libreria visibile). */
+  internal val thumbnails: NasThumbnails = NasThumbnails.None,
 ) : ViewModel() {
 
   private val mutable = MutableStateFlow(FoldersUiState())
@@ -156,6 +165,7 @@ class NasFoldersViewModel @Inject constructor(
 
   private var listingJob: Job? = null
   private var hiddenJob: Job? = null
+  private var previewsJob: Job? = null
   private var nameJob: Job? = null
   private var previousActive = 0
 
@@ -228,12 +238,37 @@ class NasFoldersViewModel @Inject constructor(
             current.copy(
               listing = listing,
               hidden = HiddenFiles.Checking,
+              previews = NasFolderPreviews.None,
               selection = if (present == null) current.selection else current.selection.intersect(present),
             )
           }
         }
         checkHidden(where, listing)
+        loadPreviews(where, listing)
       }
+    }
+  }
+
+  /**
+   * I4 (fase I): le anteprime dell'elenco, chieste a `:app` **una volta per elenco** (una lettura del catalogo per pagina, non una per riga). Solo da
+   * mostrare: un errore lascia le piastrelle. L'esito conta solo per l'elenco a cui si riferisce. I file nascosti non si elencano comunque (I8), e `:app`
+   * non li restituisce.
+   */
+  private fun loadPreviews(where: FolderWhere, listing: NasFolderState) {
+    previewsJob?.cancel()
+    val entries = entriesOf(listing)
+    val files = entries.filter { !it.isFolder }.map { it.path }
+    val subfolders = entries.filter { it.isFolder }.map { it.path }
+    if (files.isEmpty() && subfolders.isEmpty()) return
+    previewsJob = viewModelScope.launch {
+      val answer = try {
+        areas.previews(where.share, where.dir, files, subfolders)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (_: Exception) {
+        NasFolderPreviews.None
+      }
+      mutable.update { current -> if (current.where == where && current.listing === listing) current.copy(previews = answer) else current }
     }
   }
 

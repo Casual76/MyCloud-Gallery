@@ -70,8 +70,8 @@
   <!-- CA-1 (Fase 10): le scritture ferme per il manifest firmato (questa versione e' in sola lettura). -->
   <string name="backup_footer_release_read_only">Versione da aggiornare</string>
   <string name="backup_footer_release_read_only_hint">Il backup è fermo: aggiorna dal Pampa Store.</string>
-  <string name="backup_footer_test_only_label">Backup in prova</string>
-  <string name="backup_footer_test_only_detail">Si scrive solo nelle share di prova.</string>
+  <string name="backup_footer_test_only_label">In pausa</string>
+  <string name="backup_footer_test_only_detail">Il backup vero non è ancora acceso</string>
   <string name="backup_footer_lost_before_backup_label">Cancellati prima del backup</string>
   <plurals name="backup_footer_lost_before_backup_label_count">
     <item quantity="one">%1$s cancellato prima del backup</item>

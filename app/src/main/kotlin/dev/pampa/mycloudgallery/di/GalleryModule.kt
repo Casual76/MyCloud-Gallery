@@ -1,7 +1,5 @@
 package dev.pampa.mycloudgallery.di
 
-import dev.pampa.mycloudgallery.core.common.perf.AfterFirstDraw
-import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import android.content.Context
 import dagger.Module
 import dagger.Provides
@@ -9,11 +7,20 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
+import dev.pampa.mycloudgallery.albums.LibraryAlbumRefs
+import dev.pampa.mycloudgallery.backup.BackupDiagnostics
+import dev.pampa.mycloudgallery.backup.BackupInputs
+import dev.pampa.mycloudgallery.backup.NoBackupDiagnostics
+import dev.pampa.mycloudgallery.core.common.diagnostics.DiagItem
+import dev.pampa.mycloudgallery.core.common.diagnostics.DiagSection
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsContributor
+import dev.pampa.mycloudgallery.core.common.perf.AfterFirstDraw
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository
 import dev.pampa.mycloudgallery.core.imaging.contract.PlaceholderCache
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailLoader
+import dev.pampa.mycloudgallery.core.index.sync.IndexDiagnostics
 import dev.pampa.mycloudgallery.core.library.contract.GridLayoutEngine
 import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
 import dev.pampa.mycloudgallery.core.library.contract.LibraryPreferences
@@ -26,13 +33,28 @@ import dev.pampa.mycloudgallery.core.mediastore.android.AndroidRecentlyDeletedSo
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
 import dev.pampa.mycloudgallery.core.mediastore.contract.RecentlyDeletedSource
 import dev.pampa.mycloudgallery.core.model.AccountId
+import dev.pampa.mycloudgallery.core.nasops.contract.NasFolders
+import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
+import dev.pampa.mycloudgallery.core.nasops.contract.NasSpace
+import dev.pampa.mycloudgallery.core.nasops.contract.NasTrash
+import dev.pampa.mycloudgallery.core.nasops.contract.OpClocks
+import dev.pampa.mycloudgallery.core.nasops.noop.NoNasFolders
+import dev.pampa.mycloudgallery.core.nasops.noop.NoNasOperations
+import dev.pampa.mycloudgallery.core.nasops.noop.NoNasSpace
+import dev.pampa.mycloudgallery.core.nasops.noop.NoNasTrash
 import dev.pampa.mycloudgallery.core.places.contract.PlaceNames
 import dev.pampa.mycloudgallery.core.places.dataset.PlacesDataset
 import dev.pampa.mycloudgallery.debugtools.DeveloperTools
+import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCatalog
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionItemsSource
 import dev.pampa.mycloudgallery.feature.library.hidden.HiddenLibrary
 import dev.pampa.mycloudgallery.feature.library.library.LibraryStateSource
 import dev.pampa.mycloudgallery.feature.library.trash.TrashHiddenMask
+import dev.pampa.mycloudgallery.feature.nas.contract.NasAreas
+import dev.pampa.mycloudgallery.feature.nas.contract.NasThumbnails
+import dev.pampa.mycloudgallery.feature.settings.quality.PreviewLevel
+import dev.pampa.mycloudgallery.feature.settings.quality.PreviewQualitySettings
+import dev.pampa.mycloudgallery.feature.settings.quality.PreviewQualityState
 import dev.pampa.mycloudgallery.gallery.AppLibraryStates
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.gallery.GalleryParts
@@ -43,34 +65,14 @@ import dev.pampa.mycloudgallery.graph.GalleryStopper
 import dev.pampa.mycloudgallery.nas.ConvergingPreviewQuality
 import dev.pampa.mycloudgallery.nas.NasLibraryDiagnostics
 import dev.pampa.mycloudgallery.nas.NasOpsDiagnostics
-import dev.pampa.mycloudgallery.core.nasops.contract.NasFolders
-import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
-import dev.pampa.mycloudgallery.core.nasops.contract.NasSpace
-import dev.pampa.mycloudgallery.core.nasops.contract.NasTrash
-import dev.pampa.mycloudgallery.core.nasops.contract.OpClocks
-import dev.pampa.mycloudgallery.core.nasops.noop.NoNasFolders
-import dev.pampa.mycloudgallery.core.nasops.noop.NoNasOperations
-import dev.pampa.mycloudgallery.core.nasops.noop.NoNasSpace
-import dev.pampa.mycloudgallery.core.nasops.noop.NoNasTrash
-import dev.pampa.mycloudgallery.feature.nas.contract.NasAreas
-import dev.pampa.mycloudgallery.backup.BackupDiagnostics
-import dev.pampa.mycloudgallery.backup.BackupInputs
-import dev.pampa.mycloudgallery.backup.NoBackupDiagnostics
 import dev.pampa.mycloudgallery.work.JobSchedulerBackupJobs
 import dev.pampa.mycloudgallery.work.JobSchedulerNasOpsJobs
 import dev.pampa.mycloudgallery.work.NasOpsJobs
 import dev.pampa.mycloudgallery.work.NasWorkScheduling
-import dev.pampa.mycloudgallery.feature.settings.quality.PreviewLevel
-import dev.pampa.mycloudgallery.feature.settings.quality.PreviewQualitySettings
-import dev.pampa.mycloudgallery.feature.settings.quality.PreviewQualityState
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import dev.pampa.mycloudgallery.core.common.diagnostics.DiagItem
-import dev.pampa.mycloudgallery.core.common.diagnostics.DiagSection
-import dev.pampa.mycloudgallery.core.index.sync.IndexDiagnostics
-import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCatalog
 import java.util.Optional
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 
 /**
@@ -240,6 +242,15 @@ object GalleryModule {
   @Provides fun opClocks(gallery: GalleryGraph): OpClocks = gallery.nas?.organizer?.clocks ?: MonotonicOnlyClocks(gallery.parts.monotonicMs)
 
   @Provides fun nasAreas(gallery: GalleryGraph): NasAreas = gallery.nas?.organizer?.areas ?: NoNasAreas
+
+  /**
+   * I4 (fase I): le miniature delle anteprime di Cartelle NAS. La stessa cache delle griglie e la stessa porta della Libreria **visibile** degli Album:
+   * un media che l'istantanea visibile non contiene (Nascosti, aree che l'utente non vede) non ha richiesta, e la riga resta con la sua piastrella.
+   */
+  @Provides fun nasThumbnails(gallery: GalleryGraph): NasThumbnails {
+    val refs = LibraryAlbumRefs { gallery.visibleTimeline.snapshot.value }
+    return NasThumbnails(gallery.thumbnails) { media -> refs.request(media) }
+  }
 
   @Provides
   @IntoSet

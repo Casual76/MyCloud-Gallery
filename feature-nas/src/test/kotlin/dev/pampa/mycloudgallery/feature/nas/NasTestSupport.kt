@@ -75,6 +75,24 @@ class FakeNasAreas(areas: List<NasArea> = defaultAreas()) : NasAreas {
     return files.filterTo(HashSet()) { it.value in hiddenPaths }
   }
 
+  /** I4: le domande sulle anteprime (la cartella, i file e le sottocartelle chiesti), una per elenco. */
+  val previewAsks: MutableList<Triple<dev.pampa.mycloudgallery.core.trust.nas.SharePath?, List<dev.pampa.mycloudgallery.core.trust.nas.SharePath>, List<dev.pampa.mycloudgallery.core.trust.nas.SharePath>>> =
+    ArrayList()
+
+  /** I4: la risposta sulle anteprime; di serie nessuna. */
+  var previewAnswer: dev.pampa.mycloudgallery.feature.nas.contract.NasFolderPreviews = dev.pampa.mycloudgallery.feature.nas.contract.NasFolderPreviews.None
+
+  override suspend fun previews(
+    share: String,
+    folder: dev.pampa.mycloudgallery.core.trust.nas.SharePath?,
+    files: Collection<dev.pampa.mycloudgallery.core.trust.nas.SharePath>,
+    folders: Collection<dev.pampa.mycloudgallery.core.trust.nas.SharePath>,
+  ): dev.pampa.mycloudgallery.feature.nas.contract.NasFolderPreviews {
+    previewAsks += Triple(folder, files.toList(), folders.toList())
+    check(!failing) { "catalogo non raggiungibile" }
+    return previewAnswer
+  }
+
   fun set(areas: List<NasArea>) {
     state.value = areas
   }

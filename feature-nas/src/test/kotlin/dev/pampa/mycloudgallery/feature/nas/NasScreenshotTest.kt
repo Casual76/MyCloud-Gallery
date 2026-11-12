@@ -7,6 +7,13 @@ import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
+import dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket
+import dev.pampa.mycloudgallery.core.imaging.contract.ThumbKey
+import dev.pampa.mycloudgallery.core.imaging.contract.ThumbRequest
+import dev.pampa.mycloudgallery.core.imaging.noop.NoThumbnailLoader
+import dev.pampa.mycloudgallery.core.imaging.testing.FakeThumbnailLoader
+import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolderState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasSpaceState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasTrashState
@@ -19,11 +26,13 @@ import dev.pampa.mycloudgallery.feature.nas.confirm.NameDraft
 import dev.pampa.mycloudgallery.feature.nas.confirm.NamePurpose
 import dev.pampa.mycloudgallery.feature.nas.confirm.NasConfirmSheetContent
 import dev.pampa.mycloudgallery.feature.nas.confirm.NasNameSheetContent
+import dev.pampa.mycloudgallery.feature.nas.contract.NasFolderPreviews
+import dev.pampa.mycloudgallery.feature.nas.contract.NasThumbnails
 import dev.pampa.mycloudgallery.feature.nas.folders.FolderWhere
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersActions
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersMode
-import dev.pampa.mycloudgallery.feature.nas.folders.HiddenFiles
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersUiState
+import dev.pampa.mycloudgallery.feature.nas.folders.HiddenFiles
 import dev.pampa.mycloudgallery.feature.nas.folders.NasFoldersScreen
 import dev.pampa.mycloudgallery.feature.nas.operations.NasOperationsScreen
 import dev.pampa.mycloudgallery.feature.nas.operations.OperationsUi
@@ -34,8 +43,8 @@ import dev.pampa.mycloudgallery.feature.nas.trash.NasTrashScreen
 import dev.pampa.mycloudgallery.feature.nas.trash.TrashActions
 import dev.pampa.mycloudgallery.feature.nas.trash.TrashUi
 import dev.pampa.mycloudgallery.feature.nas.trash.key
-import dev.pampa.mycloudgallery.feature.nas.ui.UiNotice
 import dev.pampa.mycloudgallery.feature.nas.ui.NasTone
+import dev.pampa.mycloudgallery.feature.nas.ui.UiNotice
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
@@ -74,14 +83,40 @@ abstract class NasScreenshotBase(private val dark: Boolean, private val device: 
     confirm: OpPlan? = null,
     name: NameDraft? = null,
     hidden: HiddenFiles = HiddenFiles.Known(emptySet()),
+    previews: NasFolderPreviews = NasFolderPreviews.None,
   ) = FoldersUiState(
     areas = areas, where = where, listing = listing, selecting = selecting, selection = selection, mode = mode,
-    activeOperations = activeOperations, notice = notice, confirm = confirm, name = name, hidden = hidden,
+    activeOperations = activeOperations, notice = notice, confirm = confirm, name = name, hidden = hidden, previews = previews,
+  )
+
+  /** I4: le miniature finte (gradienti deterministici dalla stessa sorgente sintetica della Libreria di prova). */
+  private val previewThumbs = NasThumbnails(FakeThumbnailLoader()) { media ->
+    ThumbRequest(ThumbKey(media, 1L, ThumbBucket.M), MediaRef.Synthetic(media.value.hashCode().toLong(), 4, 3))
+  }
+
+  private fun media(n: Int) = MediaId("00000000-0000-4000-8000-%012d".format(n))
+
+  /** I4: la cartella «Viaggi» come la vede la Libreria: un mosaico per Oslo, una foto per Roma, le foto e il video; il PDF resta piastrella. */
+  private fun tripPreviews() = NasFolderPreviews(
+    files = mapOf(
+      SharePath.parse("Viaggi/Mappa del percorso.png") to media(11),
+      SharePath.parse("Viaggi/DJI_0142.mp4") to media(12),
+      SharePath.parse("Viaggi/Una fotografia con un nome davvero molto lungo che non sta in una riga sola del telefono.jpg") to media(13),
+    ),
+    folders = mapOf(
+      SharePath.parse("Viaggi/Oslo 2026") to listOf(media(1), media(2), media(3), media(4)),
+      SharePath.parse("Viaggi/Roma 2025") to listOf(media(5)),
+    ),
   )
 
   @Composable
-  private fun FoldersPage(state: FoldersUiState, onBack: (() -> Unit)? = {}, hostPadding: PaddingValues = PaddingValues()) {
-    NasFoldersScreen(state = state, actions = FoldersActions(), monotonicMs = { 0L }, onBack = onBack, hostPadding = hostPadding)
+  private fun FoldersPage(
+    state: FoldersUiState,
+    onBack: (() -> Unit)? = {},
+    hostPadding: PaddingValues = PaddingValues(),
+    thumbnails: NasThumbnails = NasThumbnails.None,
+  ) {
+    NasFoldersScreen(state = state, actions = FoldersActions(thumbnails = thumbnails), monotonicMs = { 0L }, onBack = onBack, hostPadding = hostPadding)
   }
 
   private fun trash(
@@ -117,6 +152,19 @@ abstract class NasScreenshotBase(private val dark: Boolean, private val device: 
 
   @Test
   fun cartelleUnaCartella() = shoot("cartelle-cartella") { FoldersPage(folders()) }
+
+  /** I4: la stessa cartella con le anteprime della Libreria (le foto, il video, la copertina delle cartelle); il PDF resta con la piastrella. */
+  @Test
+  fun cartelleConLeAnteprime() = shoot("cartelle-anteprime") { FoldersPage(folders(previews = tripPreviews()), thumbnails = previewThumbs) }
+
+  @Test
+  fun cartelleConLeAnteprimeTestoGrande() =
+    shoot("cartelle-anteprime", fontScale = LARGE_TEXT) { FoldersPage(folders(previews = tripPreviews()), thumbnails = previewThumbs) }
+
+  /** I4: le anteprime arrivate a meta' (la Libreria conosce i file ma le miniature non sono ancora in cache): le piastrelle, alla stessa misura. */
+  @Test
+  fun cartelleConLeAnteprimeNonAncoraInCache() =
+    shoot("cartelle-anteprime-in-arrivo") { FoldersPage(folders(previews = tripPreviews()), thumbnails = NasThumbnails(NoThumbnailLoader, previewThumbs.request)) }
 
   @Test
   fun cartelleUnaCartellaTestoGrande() = shoot("cartelle-cartella", fontScale = LARGE_TEXT) { FoldersPage(folders()) }

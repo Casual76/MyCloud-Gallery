@@ -196,6 +196,20 @@ class CollectionCovers(
   }
 
   /**
+   * Giro 1 (CS-8): le stesse richieste di [window], ma **tenute accanto** alla finestra di chi la possiede ([ThumbnailLoader.keep]): sul tablet, con una
+   * pagina aperta nel pannello accanto (una griglia con la sua finestra), le schede delle Raccolte chiedono le loro foto senza annullare le celle della
+   * griglia. Solo media della Libreria visibile, come [window]; [release] le toglie.
+   */
+  fun keep(view: TimelineView, visible: List<MediaId>, ahead: List<MediaId>, bucket: ThumbBucket) {
+    loader.keep(KEEP_OWNER, (visible + ahead).distinct().mapNotNull { request(view, it, bucket) })
+  }
+
+  /** Toglie le richieste tenute da [keep] (il pannello accanto si e' chiuso, o la scheda non c'e' piu'). */
+  fun release() {
+    loader.keep(KEEP_OWNER, emptyList())
+  }
+
+  /**
    * Prepara le copertine di [entries] per l'indice di adesso e per ogni suo cambiamento: cerca le foto dei luoghi (un passaggio, fuori dal thread
    * principale) e ritaglia i volti a [facePx]. Le miniature NON si chiedono qui (I1): le chiede la finestra delle schede vicine allo schermo
    * ([window], da [CollectionCoverWindow]). Gira finche' la scheda e' composta; una nuova chiamata (elenco cambiato) sostituisce la precedente.
@@ -262,6 +276,9 @@ class CollectionCovers(
   private object Unseen
 
   companion object {
+    /** Il nome con cui le Raccolte tengono le loro richieste accanto alla finestra della griglia ([keep]). */
+    const val KEEP_OWNER: String = "collections"
+
     /**
      * Per ogni luogo di [places], la foto **piu' recente** della vista (la vista va dalla piu' recente): un solo passaggio, che si ferma quando li ha
      * trovati tutti. Senza nascosti, perche' la vista non li contiene.
@@ -364,22 +381,29 @@ internal val LocalCoverViewport = staticCompositionLocalOf<CoverViewport?> { nul
 
 /**
  * Prepara le copertine di [entries] (luoghi e volti) **una volta** per elenco, e di nuovo solo se l'elenco o la Libreria cambiano: non a ogni
- * scorrimento. I1: le miniature si chiedono per le sole schede vicine allo schermo ([viewport]) alla taglia delle schede, in **una** finestra per tutta
- * la scheda, rifatta quando cambia cio' che e' vicino o la Libreria (con la stessa dose dei luoghi: al piu' una volta al secondo mentre il catalogo
- * cresce). [requestThumbs] falso sul tablet con un pannello accanto: li' la finestra e' della griglia, e le schede mostrano cio' che e' gia' in cache.
+ * scorrimento. I1: le miniature si chiedono per le sole schede vicine allo schermo ([viewport]) alla taglia delle schede, rifatte quando cambia cio' che
+ * e' vicino o la Libreria (con la stessa dose dei luoghi: al piu' una volta al secondo mentre il catalogo cresce). Sul telefono, e sul tablet con il
+ * pannello accanto vuoto, sono **la** finestra delle miniature; giro 1 (CS-8): sul tablet con una pagina aperta accanto ([beside]) quella e' una
+ * griglia con la sua finestra, e le schede **tengono** le loro richieste accanto alla sua ([CollectionCovers.keep]) invece di sostituirla.
  */
 @Composable
-internal fun CollectionCoverWindow(covers: CollectionCovers, entries: List<CollectionEntry>, viewport: CoverViewport, requestThumbs: Boolean) {
+internal fun CollectionCoverWindow(covers: CollectionCovers, entries: List<CollectionEntry>, viewport: CoverViewport, beside: Boolean) {
   val facePx = collectionFacePx()
   LaunchedEffect(covers, entries, facePx) {
     if (entries.isNotEmpty()) covers.refresh(entries, facePx)
   }
   val bucket = collectionCardBucket()
-  LaunchedEffect(covers, viewport, requestThumbs, bucket) {
-    if (!requestThumbs) return@LaunchedEffect
+  LaunchedEffect(covers, viewport, beside, bucket) {
     val near = snapshotFlow { viewport.visible().mapNotNull(covers::mediaOf) to viewport.ahead().mapNotNull(covers::mediaOf) }.distinctUntilChanged()
-    combine(PassDose().apply(covers.view), near) { view, wanted -> view to wanted }
-      .collectLatest { (view, wanted) -> covers.window(view, wanted.first, wanted.second, bucket) }
+    try {
+      combine(PassDose().apply(covers.view), near) { view, wanted -> view to wanted }
+        .collectLatest { (view, wanted) ->
+          if (beside) covers.keep(view, wanted.first, wanted.second, bucket) else covers.window(view, wanted.first, wanted.second, bucket)
+        }
+    } finally {
+      // Il pannello si chiude o la scheda se ne va: le richieste tenute non restano accanto alla finestra di nessuno.
+      if (beside) covers.release()
+    }
   }
 }
 

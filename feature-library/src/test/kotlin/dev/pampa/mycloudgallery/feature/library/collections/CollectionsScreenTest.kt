@@ -135,7 +135,7 @@ class CollectionsListTabletTest : ComposeScreenTest() {
   fun duePannelli_SenzaUnaSceltaIlDettaglioDiceDiSceglierne() {
     showList()
 
-    composeRule.onNodeWithText("Scegli una raccolta").assertExists()
+    composeRule.onNodeWithContentDescription("Scegli una raccolta").assertExists()
     composeRule.onNodeWithText("Modificate").assertExists()
   }
 

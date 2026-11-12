@@ -277,7 +277,6 @@ internal fun RecentlyDeletedScreen(
           CollectionEmptyState(
             icon = Icons.Rounded.Delete,
             title = stringResource(R.string.trash_error_title),
-            detail = stringResource(R.string.trash_error_detail),
             tone = GalleryIllustrationTone.Caution,
             actionLabel = stringResource(R.string.trash_retry),
             onAction = onRetry,

@@ -93,5 +93,8 @@ class CollectionsGalleryPartsTest {
     assertThat(e.spoken()).isEqualTo("Toscana, agosto 2025, Viaggio · 640 elementi, Nuovo")
     val ops = CollectionEntry("ops", "Operazioni in corso", "2 in corso", Icons.Rounded.Map, FluidTone.Success, badge = 2)
     assertThat(ops.spoken()).isEqualTo("Operazioni in corso, 2 in corso, 2")
+    // Giro 1 (CS-6): la riga piccola che la frase non contiene si dice lo stesso (il testo scritto sulla scheda non si rilegge).
+    val memory = CollectionEntry("m", "Un anno fa", "18 foto", Icons.Rounded.Map, FluidTone.Primary, caption = "ottobre 2025")
+    assertThat(memory.spoken()).isEqualTo("Un anno fa, 18 foto, ottobre 2025")
   }
 }

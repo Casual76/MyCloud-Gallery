@@ -104,15 +104,13 @@ internal val CollectionKind.emptyTitleRes: Int
     CollectionKind.RECENTLY_DELETED -> R.string.trash_empty_title
   }
 
-/** La frase dello stato vuoto di una raccolta-filtro. */
+/**
+ * Giro 1 (CU-23): il perche' dietro la «i» dello stato vuoto di una raccolta-filtro, solo dove la figura e il titolo non bastano (come si aggiunge un
+ * preferito). Video, screenshot, fotocamera e messaggi si capiscono dal titolo: niente «i».
+ */
 @get:StringRes
-internal val CollectionKind.emptyDetailRes: Int
+internal val CollectionKind.emptyWhyRes: Int?
   get() = when (this) {
     CollectionKind.FAVORITES -> R.string.collection_empty_favorites_detail
-    CollectionKind.VIDEOS -> R.string.collection_empty_videos_detail
-    CollectionKind.SCREENSHOTS -> R.string.collection_empty_screenshots_detail
-    CollectionKind.WHATSAPP -> R.string.collection_empty_messaging_detail
-    CollectionKind.CAMERA -> R.string.collection_empty_camera_detail
-    CollectionKind.HIDDEN -> R.string.hidden_empty_detail
-    CollectionKind.RECENTLY_DELETED -> R.string.trash_empty_detail
+    else -> null
   }

@@ -83,7 +83,7 @@ internal fun CollectionGridScreen(
       CollectionEmptyState(
         icon = kind.icon,
         title = stringResource(kind.emptyTitleRes),
-        detail = stringResource(kind.emptyDetailRes),
+        detail = kind.emptyWhyRes?.let { stringResource(it) },
       )
     },
     modifier = modifier,

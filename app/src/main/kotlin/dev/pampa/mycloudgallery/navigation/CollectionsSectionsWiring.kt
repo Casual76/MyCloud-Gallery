@@ -3,10 +3,10 @@ package dev.pampa.mycloudgallery.navigation
 import android.content.res.Resources
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CleaningServices
-import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Flight
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.FolderDelete
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Sync
 import dev.antigravity.fluidengine.ui.theme.FluidTone
@@ -161,7 +161,11 @@ class AppCollectionsSections(
     entries = listOf(
       CollectionEntry(NasScreen.FOLDERS.route, resources.getString(NasR.string.nas_hub_folders_title), resources.getString(NasR.string.nas_hub_folders_subtitle), Icons.Rounded.Folder, FluidTone.Primary),
       CollectionEntry(NasScreen.SPACE.route, resources.getString(NasR.string.nas_hub_space_title), resources.getString(NasR.string.nas_hub_space_subtitle), Icons.Rounded.Storage, FluidTone.Info),
-      CollectionEntry(NasScreen.TRASH.route, resources.getString(NasR.string.nas_hub_trash_title), resources.getString(NasR.string.nas_hub_trash_subtitle), Icons.Rounded.Delete, FluidTone.Danger),
+      // Giro 1 (CU-22): «Cestino del NAS» con la cartella barrata, cosi' non e' un secondo «Eliminati di recente» uguale a quello del telefono (Utility).
+      CollectionEntry(
+        NasScreen.TRASH.route, resources.getString(R.string.collections_nas_trash), resources.getString(NasR.string.nas_hub_trash_subtitle),
+        Icons.Rounded.FolderDelete, FluidTone.Danger,
+      ),
       CollectionEntry(
         NasScreen.OPERATIONS.route,
         resources.getString(NasR.string.nas_hub_ops_title),

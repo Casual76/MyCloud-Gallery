@@ -24,6 +24,8 @@ import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onRoot
@@ -38,6 +40,7 @@ import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarDefaults
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarSlot
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarSlotVisibility
 import dev.pampa.mycloudgallery.core.designsystem.chrome.LocalGalleryTabBarSlot
+import dev.pampa.mycloudgallery.core.imaging.testing.FakeThumbnailLoader
 import dev.pampa.mycloudgallery.core.imaging.testing.SyntheticPixels
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.model.ContentKey
@@ -53,6 +56,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flowOf
 import org.junit.After
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
@@ -71,7 +75,7 @@ import org.robolectric.annotation.GraphicsMode
  * `gradlew :feature-library:recordRoborazziDebug --tests ...I1RaccoltePhoneShots` (e `...I1RaccolteTabletShots`) scrive in
  * `docs/screenshots/beta-grafica/I1/`, con "dopo" nel nome (i "prima" sono quelli registrati sul codice di partenza).
  */
-abstract class I1RaccolteShotBase(private val dark: Boolean, private val device: String) : ComposeScreenTest() {
+abstract class I1RaccolteShotBase(private val dark: Boolean, protected val device: String) : ComposeScreenTest() {
 
   private val world = FakeCollectionsWorld()
   private val photos = world.visibleIds.toList()
@@ -80,6 +84,17 @@ abstract class I1RaccolteShotBase(private val dark: Boolean, private val device:
   private val faces = (1..5).map { n -> FaceLocator(ContentKey("%064x".format(n)), 0, FaceBox(10 * n, 10, 10 * n + 80, 90)) }
   private val crops = CollectionFaceCrops { face, px -> CollectionFaceCrop(SyntheticPixels.bitmap(face.box.x0.toLong() * 7919L, px, px), setOf(photos[face.box.x0 / 10])) }
   private val covers = CollectionCovers(fakeThumbnailLoader(), world.source.items(LibraryFilter.ALL), crops, Dispatchers.Unconfined)
+
+  /**
+   * Giro 1 (CU-2): le stesse copertine, ma **quasi bianche** (neve, cielo, un muro chiaro, il flash): il caso peggiore per il nome bianco sopra la
+   * scheda. Foto e volti.
+   */
+  private val lightCovers = CollectionCovers(
+    FakeThumbnailLoader { ref, px -> nearWhite(ref.hashCode().toLong(), minOf(px, SyntheticPixels.MAX_SIDE)) },
+    world.source.items(LibraryFilter.ALL),
+    CollectionFaceCrops { face, px -> CollectionFaceCrop(nearWhite(face.box.x0.toLong(), px), setOf(photos[face.box.x0 / 10])) },
+    Dispatchers.Unconfined,
+  )
   private val scope = CoroutineScope(Dispatchers.Unconfined + Job())
 
   @After
@@ -106,7 +121,7 @@ abstract class I1RaccolteShotBase(private val dark: Boolean, private val device:
   }
 
   @Composable
-  private fun Tab(fresh: Boolean, map: CollectionsMapPreview? = null) {
+  private fun Tab(fresh: Boolean, map: CollectionsMapPreview? = null, covers: CollectionCovers = this.covers) {
     val c = remember { controller(fresh) }
     val inputs by c.inputs.collectAsState()
     val state = remember(inputs) { CollectionsLayout.state(inputs.present, emptyList(), inputs.saved, inputs.hidden, inputs.editing, inputs.saveFailed) }
@@ -123,7 +138,7 @@ abstract class I1RaccolteShotBase(private val dark: Boolean, private val device:
             onOpenSettings = {},
             statusHeader = { ProductionNetworkHeader() },
             detail = { kind -> Text(kind.code) },
-            entryDetail = { e -> Text(e.title) },
+            entryDetail = { e -> OpenedPage(e.title) },
           )
         }
         GalleryTabBarSlotVisibility(visible = !slot.taken, modifier = Modifier.align(Alignment.BottomCenter)) {
@@ -176,10 +191,53 @@ abstract class I1RaccolteShotBase(private val dark: Boolean, private val device:
     composeRule.waitForIdle()
   }) { Tab(fresh = false) }
 
+  /** Giro 1 (CU-2): le schede con le copertine quasi bianche, in cima (le persone) e scorse ai ricordi (il titolo su due righe e il mese). */
+  @Test
+  fun copertineChiare() = shoot("copertine-chiare") { Tab(fresh = false, covers = lightCovers) }
+
+  @Test
+  fun copertineChiareRicordi() = shoot("copertine-chiare-ricordi", after = { scrollTo(CollectionSections.MEMORIES) }) { Tab(fresh = false, covers = lightCovers) }
+
+  @Test
+  fun copertineChiareLuoghi() = shoot("copertine-chiare-luoghi", after = { scrollTo(CollectionSections.PLACES) }) { Tab(fresh = false, covers = lightCovers) }
+
+  /**
+   * Giro 1 (CS-8): sul tablet, con una voce aperta nel pannello accanto, le schede a sinistra hanno le loro foto (le chiedono accanto alla finestra
+   * della griglia, `CollectionCovers.keep`; la prova e' `CollectionCoversBesideTest`, qui la scena). Solo tablet: sul telefono la voce apre la pagina.
+   */
+  @Test
+  fun conUnaRaccoltaAperta() {
+    assumeTrue(device == "tablet")
+    shoot("raccolta-aperta", after = {
+      composeRule.onAllNodes(hasContentDescription("Giulia", substring = true) and hasClickAction())[0].performClick()
+      composeRule.waitForIdle()
+    }) { Tab(fresh = false) }
+  }
+
   companion object {
     const val DIR = "../docs/screenshots/beta-grafica/I1"
     const val LARGE_TEXT = 1.3f
     fun looks(): List<Array<Any>> = listOf(arrayOf<Any>(false), arrayOf<Any>(true))
+
+    /** Una foto quasi bianca di lato [px]: tre fondi chiarissimi (freddo, caldo, neutro) e un disco bianco. */
+    fun nearWhite(seed: Long, px: Int): Bitmap {
+      val side = px.coerceIn(1, 256)
+      val bitmap = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+      val canvas = Canvas(bitmap)
+      canvas.drawColor(LIGHT_BACKGROUNDS[Math.floorMod(seed, LIGHT_BACKGROUNDS.size.toLong()).toInt()].toInt())
+      canvas.drawCircle(side * 0.55f, side * 0.4f, side * 0.42f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() })
+      return bitmap
+    }
+
+    private val LIGHT_BACKGROUNDS = longArrayOf(0xFFF3F6FA, 0xFFFAF7F1, 0xFFF4F5F3)
+  }
+}
+
+/** La pagina aperta nel pannello accanto, nella scena del tablet: il titolo della voce, come una pagina vera che si apre. */
+@Composable
+private fun OpenedPage(title: String) {
+  Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow), contentAlignment = Alignment.Center) {
+    Text(text = title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
   }
 }
 

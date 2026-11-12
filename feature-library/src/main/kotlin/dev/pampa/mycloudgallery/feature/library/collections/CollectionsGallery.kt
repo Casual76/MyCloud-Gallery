@@ -57,6 +57,7 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryCoverCard
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTileDefaults
 import dev.pampa.mycloudgallery.core.designsystem.icon.rememberGalleryIconColors
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.phoneTrashText
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.feature.library.R
@@ -216,7 +217,7 @@ private fun SectionBody(
     if (alone) {
       // Niente da mostrare ancora: un invito con l'icona (lo stato della sezione), o il "tutti" se e' l'unica cosa che c'e'.
       val invites = parts.notices.ifEmpty { listOfNotNull(parts.more) }
-      invites.forEach { InviteCard(it, family, selected = it.code == selectedEntry, onSelect = onSelectEntry) }
+      invites.forEach { InviteCard(it, selected = it.code == selectedEntry, onSelect = onSelectEntry) }
     } else if (parts.notices.isNotEmpty()) {
       NoticeChips(parts.notices, family, onSelectEntry)
     }
@@ -310,8 +311,15 @@ private fun Modifier.selectedRing(selected: Boolean, shape: Shape): Modifier =
   if (selected) border(CollectionsDimens.SelectedRing, MaterialTheme.colorScheme.primary, shape) else this
 
 /** Cio' che TalkBack dice di una voce: il titolo, la frase sotto (i numeri e lo stato che lo schermo non scrive) e la parola a destra ("Nuovo"). */
-internal fun CollectionEntry.spoken(): String = listOfNotNull(title, subtitle.takeIf { it.isNotBlank() }, trailing, badge.takeIf { it > 0 }?.let(GalleryNumbers::format))
-  .joinToString(", ")
+internal fun CollectionEntry.spoken(): String = listOfNotNull(
+  title,
+  subtitle.takeIf { it.isNotBlank() },
+  // Giro 1 (CS-6): il testo scritto sulla scheda non si rilegge, quindi la descrizione dice anche la riga piccola (il mese, "Viaggio") se la frase
+  // non la contiene gia'.
+  caption?.takeIf { it.isNotBlank() && !subtitle.contains(it, ignoreCase = true) },
+  trailing,
+  badge.takeIf { it > 0 }?.let(GalleryNumbers::format),
+).joinToString(", ")
 
 /**
  * Una scheda del carosello: la foto (o il volto) a tutta scheda sul colore della famiglia (che si vede finche' la foto non c'e', senza salti), il titolo
@@ -343,6 +351,8 @@ private fun CollectionCard(entry: CollectionEntry, family: CollectionArtFamily, 
     titleStyle = if (wide) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
     titleMaxLines = if (wide) 2 else 1,
     isNew = entry.trailing != null && entry.badge == 0,
+    // Giro 1 (CS-6): la descrizione della scheda dice gia' il titolo, la frase e "Nuovo": il titolo scritto non si rilegge.
+    labelsSpoken = false,
   ) {
     Icon(imageVector = entry.icon, contentDescription = null, tint = colors.glyph, modifier = Modifier.align(Alignment.Center).size(CollectionsDimens.CardGlyph))
     if (covers != null) {
@@ -398,16 +408,18 @@ private fun MoreCard(more: CollectionEntry, kind: CardKind, family: CollectionAr
 }
 
 /**
- * L'invito di una sezione che non ha ancora niente da mostrare (Persone spenta, i ricordi in preparazione, nessun viaggio): una scheda larga nel colore
- * della famiglia con l'icona grande e l'etichetta, che si tocca. Non una frase in una riga.
+ * L'invito di una sezione che non ha ancora niente da mostrare (Persone spenta, i ricordi in preparazione, nessun viaggio). Giro 1 (CU-23): nella forma
+ * unica degli stati vuoti della galleria ([GalleryFigureState]: la figura e il titolo, nessuna frase), come la Libreria vuota; tutto l'invito si
+ * tocca e TalkBack lo legge una volta ([CollectionEntry.spoken]). Sul tablet la scelta e' il filo intorno.
  */
 @Composable
-private fun InviteCard(entry: CollectionEntry, family: CollectionArtFamily, selected: Boolean, onSelect: (CollectionEntry) -> Unit) {
-  val colors = rememberGalleryIconColors(iconFamilyOf(family, entry.tone, entry.icon))
-  Row(
+private fun InviteCard(entry: CollectionEntry, selected: Boolean, onSelect: (CollectionEntry) -> Unit) {
+  GalleryFigureState(
+    icon = entry.icon,
+    title = entry.title,
+    fill = false,
     modifier = Modifier
       .fillMaxWidth()
-      .heightIn(min = CollectionsDimens.InviteHeight)
       .fluidPressable(onClick = { onSelect(entry) }, role = Role.Button)
       .semantics(mergeDescendants = true) {
         contentDescription = entry.spoken()
@@ -415,22 +427,8 @@ private fun InviteCard(entry: CollectionEntry, family: CollectionArtFamily, sele
       }
       .selectedRing(selected, CardShape)
       .clip(CardShape)
-      .background(Brush.linearGradient(listOf(colors.top, colors.bottom)))
-      .padding(horizontal = CollectionsDimens.CardTextInset * 2, vertical = CollectionsDimens.CardTextInset),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(CollectionsDimens.CardTextInset * 2),
-  ) {
-    Icon(imageVector = entry.icon, contentDescription = null, tint = colors.glyph, modifier = Modifier.size(CollectionsDimens.CardGlyph))
-    Text(
-      text = entry.title,
-      style = MaterialTheme.typography.titleLarge,
-      color = colors.glyph,
-      maxLines = 3,
-      overflow = TextOverflow.Ellipsis,
-      modifier = Modifier.weight(1f),
-    )
-    Icon(imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = colors.glyph)
-  }
+      .padding(vertical = CollectionsDimens.CardTextInset),
+  )
 }
 
 /** Gli stati sotto un carosello ("Altri volti (3)", "1.240 senza posizione"): capsule piccole con l'icona della famiglia, una accanto all'altra. */

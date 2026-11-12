@@ -153,7 +153,6 @@ internal fun HiddenScreen(
         CollectionEmptyState(
           icon = Icons.Rounded.Lock,
           title = stringResource(R.string.hidden_empty_title),
-          detail = stringResource(R.string.hidden_empty_detail),
         )
       },
       modifier = modifier,
@@ -224,7 +223,6 @@ internal fun HiddenClosedPage(
           HiddenUiState.Failed -> CollectionEmptyState(
             icon = Icons.Rounded.Lock,
             title = stringResource(R.string.hidden_failed_title),
-            detail = stringResource(R.string.hidden_failed_detail),
             tone = GalleryIllustrationTone.Caution,
             actionLabel = stringResource(R.string.hidden_retry),
             onAction = onRetry,

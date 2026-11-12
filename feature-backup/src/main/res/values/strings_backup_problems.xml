@@ -23,7 +23,7 @@
   <string name="backup_problem_partial_access_detail">Hai dato accesso solo ad alcune foto: le altre non si salvano.</string>
   <string name="backup_problem_cap_reached_title">Tetto dati raggiunto</string>
   <string name="backup_problem_cap_reached_detail">Per questo periodo i dati mobili sono finiti: «Fai ora» chiede conferma con la stima.</string>
-  <string name="backup_problem_frozen_title">Lavori fermi: cambiamenti anomali sul NAS</string>
+  <string name="backup_problem_frozen_title">Lavori fermi: cambiamenti anomali</string>
   <string name="backup_problem_frozen_detail">Finché non controlli, sul NAS non si scrive e non si cancella niente.</string>
   <string name="backup_problem_writes_stopped_title">Scritture sul NAS ferme</string>
   <string name="backup_problem_writes_stopped_detail">Hai fermato le scritture sul NAS: il backup riprende quando le riattivi.</string>
@@ -50,16 +50,16 @@
     <item quantity="other">%1$s file del telefono illeggibili</item>
   </plurals>
   <string name="backup_problem_unreadable_detail">Il file è vuoto o rovinato, o dopo tre tentativi il telefono non lo lascia leggere: non si carica e non conta come «al sicuro». «Riprova» lo rilegge.</string>
-  <string name="backup_problem_common_copy_lost_title">Media spariti dall’area comune</string>
+  <string name="backup_problem_common_copy_lost_title">Foto e video spariti dall’area comune</string>
   <plurals name="backup_problem_common_copy_lost_title_count">
-    <item quantity="one">%1$s media sparito dall’area comune</item>
-    <item quantity="other">%1$s media spariti dall’area comune</item>
+    <item quantity="one">%1$s foto o video sparito dall’area comune</item>
+    <item quantity="other">%1$s foto e video spariti dall’area comune</item>
   </plurals>
   <string name="backup_problem_common_copy_lost_detail">Erano solo nell’area comune e non c’è né una copia privata né una sul telefono. Per 30 giorni li trovi nel cestino del NAS.</string>
   <string name="backup_problem_unexpected_title">Errore inatteso nel backup</string>
   <plurals name="backup_problem_unexpected_title_count">
-    <item quantity="one">%1$s media con un errore inatteso</item>
-    <item quantity="other">%1$s media con un errore inatteso</item>
+    <item quantity="one">%1$s foto o video con un errore inatteso</item>
+    <item quantity="other">%1$s foto e video con un errore inatteso</item>
   </plurals>
   <string name="backup_problem_unexpected_detail">Un errore che l’app non si aspettava ha fermato questo file, non gli altri: non conta come «al sicuro». «Riprova» lo rilegge; se si ripete, apri la Diagnostica.</string>
   <string name="backup_problem_source_changed_title">Versioni in attesa del computer</string>

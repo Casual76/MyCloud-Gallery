@@ -1,6 +1,18 @@
 package dev.pampa.mycloudgallery.feature.settings
 
 import androidx.compose.material.icons.Icons
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsStatusHeader
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
+import androidx.compose.material.icons.rounded.HowToReg
+import androidx.compose.material.icons.rounded.HourglassTop
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.Modifier
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Dns
@@ -22,7 +34,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
-import dev.antigravity.fluidengine.ui.fluid.FluidHero
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
@@ -212,19 +223,32 @@ fun SettingsScreen(
     onBack = onBack,
     ambient = FluidAmbient(tone = family.tone, motif = FluidHeroMotif.Glow, urgent = false),
   ) {
+    // Giro 1 della fase I (CU-5): «La tua famiglia» dice lo stato e basta (quanti dispositivi, chi sei, il segno); la frase solo quando c'e' qualcosa da
+    // capire o da fare, dietro la «i».
     item {
-      FluidHero(
-        tone = family.tone,
-        motif = FluidHeroMotif.Figures,
-        eyebrow = stringResource(R.string.settings_hero_eyebrow),
+      SettingsStatusHeader(
+        icon = family.icon,
+        family = GalleryIconFamily.People,
         value = family.value(),
-        title = family.title(),
-        description = family.description(),
-        icon = Icons.Rounded.Groups,
-        actionLabel = if (state.isAdmin && state.pendingRequests > 0) stringResource(R.string.settings_hero_review) else null,
-        onAction = if (state.isAdmin && state.pendingRequests > 0) links.openDevices else null,
+        label = family.title(),
+        status = family.status,
+        action = if (state.isAdmin && state.pendingRequests > 0) {
+          {
+            FluidButton(
+              text = stringResource(R.string.settings_hero_review),
+              onClick = { links.openDevices() },
+              style = FluidButtonStyle.Filled,
+              size = FluidButtonSize.Large,
+              fillWidth = true,
+              leading = { Icon(Icons.Rounded.HowToReg, contentDescription = null) },
+            )
+          }
+        } else {
+          null
+        },
       )
     }
+    family.description?.let { why -> item { SettingsInfo(label = stringResource(R.string.settings_hero_why), text = why()) } }
 
     // I3 (fase I): pochi gruppi, ognuno con una famiglia di colori: prima cio' che protegge le foto (backup, NAS, rete), poi le foto, la privacy,
     // la famiglia; cio' che serve di rado sta in fondo, in «Avanzate». Ogni riga ha la piastrella espressiva della sua famiglia e lo stato a destra
@@ -261,13 +285,20 @@ fun SettingsScreen(
           onClick = links.openRules,
         )
         FluidListDivider()
-        // "Il NAS non e' un backup": un segno di attenzione sulla piastrella, la spiegazione nella pagina.
+        // "Il NAS non e' un backup" (CS-7): la frase la sente TalkBack sempre; in pagina il segno e «Senza copia» solo finche' la famiglia non ha
+        // deciso (il passo 13 resta da completare), poi niente: un allarme fisso non diceva piu' niente.
+        val noticeTitle = stringResource(R.string.settings_backup_notice)
+        val noticeOpen = OnboardingStep.SECURITY_NOTICE in state.pendingSteps
+        val noticeValue = stringResource(R.string.backup_value)
+        val noticeSpoken = stringResource(R.string.backup_hero_title)
         FluidListRow(
-          title = stringResource(R.string.settings_backup_notice),
+          title = noticeTitle,
           subtitle = NO_SUBTITLE,
-          leading = { RowTile(Icons.Rounded.SdStorage, status = GalleryIconStatus.Attention, family = GalleryIconFamily.Backup) },
+          leading = { RowTile(Icons.Rounded.SdStorage, status = if (noticeOpen) GalleryIconStatus.Attention else null, family = GalleryIconFamily.Backup) },
           leadingTile = false,
+          badge = if (noticeOpen) ({ RowValue(noticeValue) }) else null,
           onClick = links.openBackupNotice,
+          modifier = Modifier.semantics { contentDescription = if (noticeOpen) "$noticeTitle, $noticeValue. $noticeSpoken" else "$noticeTitle. $noticeSpoken" },
         )
       }
     }
@@ -444,12 +475,17 @@ private fun PendingStepRow(step: OnboardingStep, onClick: () -> Unit) {
   )
 }
 
-/** Come si presenta la famiglia in cima alla pagina: il tono dell'apertura e le tre frasi. */
+/**
+ * Come si presenta la famiglia in cima alla pagina: il tono dell'ambiente, il glifo e il segno, il valore, chi sei, e la frase solo per gli stati da
+ * capire (null quando va tutto bene: giro 1 della fase I, CU-5).
+ */
 private class FamilyHero(
   val tone: FluidHeroTone,
   val value: @Composable () -> String,
   val title: @Composable () -> String,
-  val description: @Composable () -> String,
+  val description: (@Composable () -> String)? = null,
+  val status: GalleryIconStatus? = null,
+  val icon: ImageVector = Icons.Rounded.Groups,
 )
 
 private fun familyHero(state: SettingsUiState): FamilyHero = when {
@@ -464,6 +500,7 @@ private fun familyHero(state: SettingsUiState): FamilyHero = when {
     value = { deviceCountText(state.deviceCount) },
     title = { stringResource(R.string.hero_stale_title) },
     description = { stringResource(staleDetail(state.trust.reason)) },
+    status = GalleryIconStatus.Attention,
   )
   // R7: il Keystore non risponde. Mai l'apertura "tutto a posto" (l'ultimo ramo): niente fiducia finche' non torna.
   state.trust is TrustStatus.KeystoreUnavailable -> FamilyHero(
@@ -471,30 +508,35 @@ private fun familyHero(state: SettingsUiState): FamilyHero = when {
     value = { stringResource(R.string.hero_keystore_value) },
     title = { stringResource(R.string.hero_keystore_title) },
     description = { stringResource(R.string.hero_keystore_detail) },
+    status = GalleryIconStatus.Problem,
   )
   state.trust is TrustStatus.Revoked || state.trust is TrustStatus.Retired || state.trust is TrustStatus.Lost -> FamilyHero(
     tone = FluidHeroTone.Alert,
     value = { stringResource(R.string.hero_inactive_value) },
     title = { stringResource(R.string.hero_inactive_title) },
     description = { stringResource(R.string.hero_inactive_detail) },
+    status = GalleryIconStatus.Problem,
   )
   state.trust is TrustStatus.Pending -> FamilyHero(
     tone = FluidHeroTone.Tertiary,
     value = { stringResource(R.string.hero_pending_value) },
     title = { stringResource(R.string.hero_pending_title) },
     description = { stringResource(R.string.hero_pending_detail) },
+    // CU-7: l'attesa e' la clessidra, e solo quella.
+    icon = Icons.Rounded.HourglassTop,
   )
   state.isAdmin && state.pendingRequests > 0 -> FamilyHero(
     tone = FluidHeroTone.TertiaryToPrimary,
     value = { pluralStringResource(R.plurals.hero_requests_value, state.pendingRequests, state.pendingRequests) },
     title = { stringResource(R.string.hero_requests_title) },
     description = { stringResource(R.string.hero_requests_detail) },
+    status = GalleryIconStatus.Attention,
   )
   else -> FamilyHero(
     tone = FluidHeroTone.PrimaryToSecondary,
     value = { deviceCountText(state.deviceCount) },
     title = { stringResource(if (state.isAdmin) R.string.hero_ok_title_admin else R.string.hero_ok_title) },
-    description = { stringResource(if (state.isAdmin) R.string.hero_ok_detail_admin else R.string.hero_ok_detail) },
+    status = GalleryIconStatus.Done,
   )
 }
 

@@ -137,11 +137,11 @@ class BackupLayoutTest : ComposeBackupTallTest() {
   fun laSchedaDiStatoSiLeggeComeUnaFraseSola() {
     show { BackupPageScreen(state = BackupPageUi(statuses[1], BackupSamples.sources, null, false), actions = pageActions, onBack = {}) }
     // I3: la testata dice il problema con un'intestazione sola (TalkBack ci salta con il gesto delle intestazioni); il perche' e' un tasto a parte,
-    // «Perche'», con il suo stato aperto o chiuso.
+    // «Perche'», con il suo stato aperto o chiuso. Giro 1 (CS-5): la «i» della galleria dice a TalkBack anche il perche' («Perché. ...»).
     val merged = composeRule.onAllNodes(hasText("12 copie non integre")).fetchSemanticsNodes()
     assertThat(merged).hasSize(1)
     assertThat(merged.single().config.contains(SemanticsProperties.Heading)).isTrue()
-    val why = composeRule.onAllNodes(SemanticsMatcher("perche'") { it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains("Perché") == true })
+    val why = composeRule.onAllNodes(SemanticsMatcher("perche'") { it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { d -> d.startsWith("Perché") } == true })
       .fetchSemanticsNodes()
     assertThat(why).hasSize(1)
     assertThat(why.single().config.getOrNull(SemanticsProperties.StateDescription)).isEqualTo("Chiuso")
@@ -155,7 +155,7 @@ class BackupLayoutTest : ComposeBackupTallTest() {
     // I3: ogni copertina si legge con nome, stato e il numero che conta, in una frase.
     assertThat(spoken).contains("Fotocamera, Al sicuro. 1.250 al sicuro")
     assertThat(spoken).contains("Screenshot, Da controllare. 3 con problemi")
-    assertThat(spoken).contains("Telegram, Non salvata. 224 media, non si salva")
+    assertThat(spoken).contains("Telegram, Non salvata. 224 foto e video, non si salva")
   }
 }
 

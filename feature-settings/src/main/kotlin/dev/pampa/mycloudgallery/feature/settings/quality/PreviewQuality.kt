@@ -1,6 +1,8 @@
 package dev.pampa.mycloudgallery.feature.settings.quality
 
 import android.text.format.Formatter
+import dev.pampa.mycloudgallery.feature.settings.backup.ItalianCount
+import dev.pampa.mycloudgallery.feature.settings.ui.ChoiceMark
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.HighQuality
@@ -127,7 +129,8 @@ fun PreviewQualityScreen(
             tone = if (level == state.level) FluidTone.Primary else FluidTone.Neutral,
             leading = { RowTile(iconOf(level)) },
             leadingTile = false,
-            badge = { FluidSwitch(checked = level == state.level, onCheckedChange = null) },
+            // CU-16: tre livelli, uno solo: il segno di scelta, non un interruttore.
+            badge = { ChoiceMark(level == state.level) },
             selected = level == state.level,
             onClick = { if (level != state.level) onChoose(level) },
           )
@@ -161,7 +164,7 @@ fun PreviewQualityScreen(
     item { SettingsInfo(label = stringResource(R.string.quality_covers_info), text = stringResource(R.string.quality_covers_detail)) }
     item {
       val counts = state.estimates[state.level]?.items ?: 0
-      FluidSectionFootnote(text = pluralStringResource(R.plurals.quality_items, counts, counts))
+      FluidSectionFootnote(text = pluralStringResource(R.plurals.quality_items, counts, ItalianCount.format(counts)))
     }
   }
 }

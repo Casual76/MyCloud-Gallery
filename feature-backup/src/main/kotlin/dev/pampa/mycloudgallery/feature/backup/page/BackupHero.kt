@@ -1,15 +1,5 @@
 package dev.pampa.mycloudgallery.feature.backup.page
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,10 +11,14 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import dev.pampa.mycloudgallery.core.designsystem.icon.rememberGalleryStatusColors
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTileDefaults
+import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.FolderShared
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PhotoLibrary
@@ -43,10 +37,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -65,8 +55,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
-import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
-import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.pampa.mycloudgallery.core.backup.contract.BackupAction
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
@@ -81,7 +69,6 @@ import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryStatusMark
-import dev.pampa.mycloudgallery.core.designsystem.icon.rememberGalleryStatusColors
 import dev.pampa.mycloudgallery.core.designsystem.state.LocalWritesHeldByRelease
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.feature.backup.BackupDimens
@@ -93,6 +80,12 @@ import dev.pampa.mycloudgallery.feature.backup.ui.BackupText
 import dev.pampa.mycloudgallery.feature.backup.ui.atText
 import dev.pampa.mycloudgallery.feature.backup.ui.etaText
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoButton
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoGlyph
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRing
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRingDefaults
+import dev.pampa.mycloudgallery.core.designsystem.media.galleryRingColor
 
 // LA TESTATA DELLA PAGINA BACKUP (I3, fase I, 11/11). Prima: una scheda con un titolo, una frase lunga e i tasti, e sotto sei righe che ripetevano la
 // stessa frase. L'utente: «se non sapessi leggere, potrei usare l'app?». Ora lo stato si vede **in un colpo d'occhio**:
@@ -104,6 +97,9 @@ import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 //
 // Lo stato «in prova» (recinzione D12) si dice qui, **una volta**: «In pausa · Il backup vero non e' ancora acceso». La recinzione non si tocca: si
 // cambia solo come si mostra. Il movimento: l'anello avanza con una molla di `FluidMotion` (scatta con «Rimuovi animazioni»), letta nel disegno.
+//
+// Giro 1 della fase I (CS-5): l'anello e' quello della galleria (`GalleryProgressRing`, traccia dello stesso colore dell'arco) e la «i» quella di
+// core-designsystem (`GalleryInfoButton`, `GalleryInfoGlyph`, `GalleryInfoDetail`): prima ne erano copie fatte qui.
 
 /** Un tasto della testata: l'etichetta, il glifo e il tocco. Il primo e' pieno (la cosa da fare), gli altri tonali. */
 @Immutable
@@ -114,9 +110,10 @@ internal class HeroAction(val label: String, val icon: ImageVector, val onClick:
 internal class HeroStep(val icon: ImageVector, val family: GalleryIconFamily, val label: String)
 
 /**
- * Cio' che la testata dice: il [mark] di stato, l'[label] corta, al piu' una [line], il perche' lungo dietro la «i» ([detail]), il cerchio che gira
- * al centro dell'anello ([busy]), i passi che mancano ([steps]) e i tasti ([actions]). [calmAction] = il primo tasto e' tonale (lo stato di tutti i
- * giorni non chiede niente: «Fai ora» e' una possibilita', non la cosa da fare).
+ * Cio' che la testata dice: il [mark] di stato, l'[label] corta, al piu' una [line], il perche' lungo dietro la «i» ([detail]), l'arco che gira senza
+ * misura ([busy]), i passi che mancano ([steps]) e i tasti ([actions]). [calmAction] = il primo tasto e' tonale (lo stato di tutti i giorni non chiede
+ * niente: «Fai ora» e' una possibilita', non la cosa da fare). [waiting] = il backup aspetta una condizione (la carica, il Wi-Fi): sull'anello la
+ * clessidra, e solo quella (giro 1, CU-7: la pausa ha le due barre, l'attesa la clessidra).
  */
 @Immutable
 internal class HeroModel(
@@ -128,6 +125,7 @@ internal class HeroModel(
   val steps: List<HeroStep> = emptyList(),
   val actions: List<HeroAction> = emptyList(),
   val calmAction: Boolean = false,
+  val waiting: Boolean = false,
 )
 
 /** Quanto e' al sicuro: [safe] su [total] media delle sorgenti attive. */
@@ -226,14 +224,16 @@ internal fun heroModel(status: BackupStatus, actions: BackupPageActions): HeroMo
     line = stringResource(R.string.backup_hero_waiting_line, BackupText.count(status.items), stringResource(waitRes(status.reason))),
     actions = listOf(HeroAction(stringResource(R.string.backup_do_now), Icons.Rounded.CloudUpload, actions.backupNow)),
     calmAction = true,
+    waiting = true,
   )
   is BackupStatus.Running -> {
     val kind = stringResource(if (status.kind == BackupKind.VIDEOS) R.string.backup_kind_videos else R.string.backup_kind_photos)
-    val files = stringResource(R.string.backup_status_running_files, kind, BackupText.count(status.done), BackupText.count(status.total))
+    // Giro 1 (CU-11): quanto e' fatto lo dice l'anello (sulle sorgenti); la riga dice solo che cosa carica e quanto manca di tempo. Prima c'era una
+    // seconda frazione con un altro totale («Foto: 2.052 di 6.968» sotto «2.052 / 5.314»).
     HeroModel(
       mark = GalleryIconStatus.Running,
       label = stringResource(if (status.trigger == BackupTrigger.FIRST_BACKUP) R.string.backup_hero_running_first else R.string.backup_hero_running),
-      line = listOfNotNull(files, status.etaMillis?.let { etaText(it) }).joinToString(LineSeparator),
+      line = listOfNotNull(kind, status.etaMillis?.let { etaText(it) }).joinToString(LineSeparator),
       actions = listOf(HeroAction(stringResource(R.string.backup_stop), Icons.Rounded.Pause, actions.stop)),
       calmAction = true,
     )
@@ -330,7 +330,7 @@ internal fun BackupHero(model: HeroModel, share: SafeShare, modifier: Modifier =
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(BackupDimens.CardGap),
   ) {
-    SafeRing(share = share, mark = model.mark, busy = model.busy, ringBackground = container)
+    SafeRing(share = share, mark = model.mark, busy = model.busy, waiting = model.waiting, ringBackground = container)
     HeroTexts(label = model.label, line = model.line, detail = model.detail)
     if (model.steps.isNotEmpty()) HeroSteps(model.steps, container)
     if (model.actions.isNotEmpty()) {
@@ -351,94 +351,109 @@ internal fun BackupHero(model: HeroModel, share: SafeShare, modifier: Modifier =
 }
 
 /**
- * L'anello: la traccia, l'arco di quanto e' al sicuro (del colore del segno), al centro il percento grande e i numeri piccoli (o il cerchio che gira, o
- * il glifo del backup quando non c'e' ancora niente da contare), e il segno di stato appoggiato sull'arco in basso a destra. L'arco avanza con una
- * molla; il valore si legge nel disegno, non in composizione.
+ * L'anello: quello della galleria ([GalleryProgressRing], del colore della famiglia del backup) con quanto e' al sicuro; al centro il percento grande e
+ * i numeri piccoli (o il glifo del backup quando non c'e' ancora niente da contare, o mentre l'arco gira senza misura), e il segno di stato appoggiato
+ * sull'arco in basso a destra. L'arco avanza con la molla dell'anello; il valore si legge nel disegno, non in composizione.
  */
 @Composable
-private fun SafeRing(share: SafeShare, mark: GalleryIconStatus, busy: Boolean, ringBackground: androidx.compose.ui.graphics.Color) {
-  val colors = rememberGalleryStatusColors(mark)
-  val track = MaterialTheme.colorScheme.onSurface.copy(alpha = RingTrackAlpha)
-  val reduced = LocalFluidMotionPolicy.current.reducedMotion
-  val progress by animateFloatAsState(
-    targetValue = share.fraction,
-    animationSpec = if (reduced) snap() else FluidMotion.smooth(),
-    label = "backup safe ring",
-  )
-  val description = if (share.total > 0) {
+private fun SafeRing(share: SafeShare, mark: GalleryIconStatus, busy: Boolean, waiting: Boolean, ringBackground: androidx.compose.ui.graphics.Color) {
+  val ring = GalleryProgressRingDefaults.Hero
+  val description = if (share.total > 0 && !busy) {
     stringResource(R.string.backup_hero_ring_description, share.percent, BackupText.count(share.safe), BackupText.count(share.total))
   } else {
     null
   }
+  Box(modifier = Modifier.size(ring), contentAlignment = Alignment.Center) {
+    GalleryProgressRing(
+      // Mentre confronta, l'arco gira senza misura (prima: un cerchio che girava al centro di un anello fermo).
+      progress = if (busy) null else share.fraction,
+      modifier = Modifier
+        .matchParentSize()
+        .semantics { if (description != null) contentDescription = description },
+      color = galleryRingColor(GalleryIconFamily.Backup),
+      strokeWidth = GalleryProgressRingDefaults.stroke(ring),
+      animate = true,
+    ) {
+      Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clearAndSetSemantics {}) {
+        RingCenter(share = share, busy = busy)
+      }
+    }
+    val place = Modifier.align(Alignment.BottomEnd).offset(x = -BackupDimens.HeroMarkInset, y = -BackupDimens.HeroMarkInset)
+    if (waiting) {
+      WaitMark(size = BackupDimens.HeroMark, ring = ringBackground, modifier = place)
+    } else {
+      GalleryStatusMark(
+        status = mark,
+        size = BackupDimens.HeroMark,
+        ring = ringBackground,
+        // L'etichetta sotto l'anello dice gia' lo stato a voce: il segno non lo ripete.
+        contentDescription = null,
+        modifier = place,
+      )
+    }
+  }
+}
+
+/**
+ * CU-7 (giro 1): l'attesa ha la clessidra, e solo quella. Lo stesso disco del segno di stato (forma, anello, misura del glifo) con i colori quieti
+ * della pausa: aspettare la carica non e' un problema. Decorativo: l'etichetta sotto l'anello dice gia' «In attesa».
+ */
+@Composable
+private fun WaitMark(size: Dp, ring: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
+  val colors = rememberGalleryStatusColors(GalleryIconStatus.Paused)
+  val shape = ContinuousCornerShape(size / 2)
   Box(
-    modifier = Modifier
-      .size(BackupDimens.HeroRing)
-      .semantics { if (description != null) contentDescription = description },
+    modifier = modifier
+      .size(size)
+      .clip(shape)
+      .background(colors.top)
+      .border(GalleryIconTileDefaults.MarkRing, ring, shape),
     contentAlignment = Alignment.Center,
   ) {
-    Canvas(modifier = Modifier.matchParentSize()) {
-      val stroke = BackupDimens.HeroRingStroke.toPx()
-      val inset = stroke / 2f
-      val arcSize = Size(size.width - stroke, size.height - stroke)
-      val topLeft = Offset(inset, inset)
-      drawArc(color = track, startAngle = 0f, sweepAngle = FullCircle, useCenter = false, topLeft = topLeft, size = arcSize, style = Stroke(stroke))
-      val fraction = progress
-      if (fraction > 0f) {
-        drawArc(
-          color = colors.top,
-          startAngle = StartAtTop,
-          sweepAngle = FullCircle * fraction,
-          useCenter = false,
-          topLeft = topLeft,
-          size = arcSize,
-          style = Stroke(width = stroke, cap = StrokeCap.Round),
-        )
-      }
-    }
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clearAndSetSemantics {}) {
-      when {
-        busy -> FluidSpinner(size = BackupDimens.HeroCenterGlyph, color = colors.top)
-        share.total > 0 -> {
-          Text(
-            text = stringResource(R.string.backup_hero_percent, share.percent),
-            style = MaterialTheme.typography.headlineMedium.copy(fontFeatureSettings = "tnum"),
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-          )
-          Text(
-            text = stringResource(R.string.backup_hero_ring_count, BackupText.count(share.safe), BackupText.count(share.total)),
-            style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-          )
-        }
-        else -> Icon(
-          imageVector = Icons.Rounded.CloudUpload,
-          contentDescription = null,
-          tint = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.size(BackupDimens.HeroCenterGlyph),
-        )
-      }
-    }
-    GalleryStatusMark(
-      status = mark,
-      size = BackupDimens.HeroMark,
-      ring = ringBackground,
-      // L'etichetta sotto l'anello dice gia' lo stato a voce: il segno non lo ripete.
+    Icon(
+      imageVector = Icons.Rounded.HourglassTop,
       contentDescription = null,
-      modifier = Modifier.align(Alignment.BottomEnd).offset(x = -BackupDimens.HeroMarkInset, y = -BackupDimens.HeroMarkInset),
+      tint = colors.glyph,
+      modifier = Modifier.size(size * GalleryIconTileDefaults.MarkGlyphFraction),
+    )
+  }
+}
+
+/** Il centro dell'anello: il percento e i numeri, o il glifo del backup (niente da contare, o l'arco che gira senza misura). */
+@Composable
+private fun RingCenter(share: SafeShare, busy: Boolean) {
+  when {
+    !busy && share.total > 0 -> {
+      Text(
+        text = stringResource(R.string.backup_hero_percent, share.percent),
+        style = MaterialTheme.typography.headlineMedium.copy(fontFeatureSettings = "tnum"),
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface,
+      )
+      Text(
+        text = stringResource(R.string.backup_hero_ring_count, BackupText.count(share.safe), BackupText.count(share.total)),
+        style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+      )
+    }
+    else -> Icon(
+      imageVector = Icons.Rounded.CloudUpload,
+      contentDescription = null,
+      tint = MaterialTheme.colorScheme.onSurfaceVariant,
+      modifier = Modifier.size(BackupDimens.HeroCenterGlyph),
     )
   }
 }
 
 /**
- * L'etichetta, la riga corta sotto e la «i» quando c'e' un perche': un tocco apre il perche' sotto, nello stesso posto (e lo richiude). Con la riga, si
- * tocca la riga; senza riga, la «i» sta accanto all'etichetta. Un tasto da 48 dp con il suo stato per TalkBack.
+ * L'etichetta, la riga corta sotto e la «i» della galleria quando c'e' un perche': un tocco apre il perche' sotto, nello stesso posto (e lo richiude).
+ * Con la riga, si tocca la riga (con il segno «i» accanto); senza riga, il tasto «i» sta accanto all'etichetta. TalkBack sente il perche' nella
+ * descrizione di chi lo apre, senza tocco (la frase aperta non si rilegge).
  */
 @Composable
 private fun HeroTexts(label: String, line: String?, detail: String?) {
   var open by rememberSaveable(detail) { mutableStateOf(false) }
-  val reduced = LocalFluidMotionPolicy.current.reducedMotion
   val showLabel = stringResource(R.string.backup_hero_detail_show)
   val openState = stringResource(R.string.backup_hero_detail_open)
   val closedState = stringResource(R.string.backup_hero_detail_closed)
@@ -446,7 +461,7 @@ private fun HeroTexts(label: String, line: String?, detail: String?) {
     .fluidPressable(onClick = { open = !open }, role = Role.Button)
     .semantics(mergeDescendants = true) {
       role = Role.Button
-      if (line == null) contentDescription = showLabel
+      if (line != null && detail != null) contentDescription = "$line. $detail"
       stateDescription = if (open) openState else closedState
     }
   Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(BackupDimens.LineGap)) {
@@ -460,12 +475,14 @@ private fun HeroTexts(label: String, line: String?, detail: String?) {
         modifier = Modifier.weight(1f, fill = false).semantics { heading() },
       )
       if (line == null && detail != null) {
-        Box(
-          modifier = Modifier.size(GalleryDimens.MinTouchTarget).then(toggle),
-          contentAlignment = Alignment.Center,
-        ) {
-          Icon(imageVector = Icons.Rounded.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(BackupDimens.InfoGlyph))
-        }
+        GalleryInfoButton(
+          label = "$showLabel. $detail",
+          open = open,
+          onToggle = { open = !open },
+          openState = openState,
+          closedState = closedState,
+          tint = MaterialTheme.colorScheme.primary,
+        )
       }
     }
     if (line != null) {
@@ -483,25 +500,15 @@ private fun HeroTexts(label: String, line: String?, detail: String?) {
           textAlign = TextAlign.Center,
           modifier = Modifier.weight(1f, fill = false),
         )
-        if (detail != null) {
-          Icon(imageVector = Icons.Rounded.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(BackupDimens.InfoGlyph))
-        }
+        if (detail != null) GalleryInfoGlyph(open = open, tint = MaterialTheme.colorScheme.primary)
       }
     }
     if (detail != null) {
-      AnimatedVisibility(
+      GalleryInfoDetail(
+        text = detail,
         visible = open,
-        enter = if (reduced) EnterTransition.None else fadeIn(FluidMotion.fadeIn()) + expandVertically(FluidMotion.intSize()),
-        exit = if (reduced) ExitTransition.None else fadeOut(FluidMotion.fadeOut()) + shrinkVertically(FluidMotion.intSize()),
-      ) {
-        Text(
-          text = detail,
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          textAlign = TextAlign.Center,
-          modifier = Modifier.fillMaxWidth(),
-        )
-      }
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
     }
   }
 }
@@ -519,8 +526,5 @@ private fun HeroSteps(steps: List<HeroStep>, background: androidx.compose.ui.gra
   }
 }
 
-private const val FullCircle = 360f
-private const val StartAtTop = -90f
-private const val RingTrackAlpha = 0.10f
 private const val LineSeparator = " · "
 private const val ParagraphSeparator = "\n"

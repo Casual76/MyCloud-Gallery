@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.google.common.truth.Truth.assertThat
@@ -88,16 +89,22 @@ class FreeSpaceScreenTest : ComposeBackupTallTest() {
     composeRule.onNodeWithText("Dopo, l’unica copia di queste foto e di questi video sarà sul NAS.", substring = true).assertExists()
     // L'avviso sta prima del riepilogo dei numeri.
     val warning = composeRule.onNodeWithText("Il NAS non ha un backup esterno").fetchSemanticsNode().boundsInRoot.top
-    val numbers = composeRule.onNodeWithText("Si possono liberare", substring = true).fetchSemanticsNode().boundsInRoot.top
+    val numbers = composeRule.onNodeWithContentDescription("Si possono liberare", substring = true).fetchSemanticsNode().boundsInRoot.top
     assertThat(warning).isLessThan(numbers)
   }
 
   @Test
   fun ilRiepilogoDiceQuantiEQuantiGb() {
     showState(summary())
-    // 1.240 elementi da 15 MB = 18,6 GB.
-    composeRule.onNodeWithText(gb("Si possono liberare 19 GB")).assertExists()
-    composeRule.onNodeWithText("1.240 foto e video sono già al sicuro sul NAS", substring = true).assertExists()
+    // 1.240 elementi da 15 MB = 18,6 GB. Giro 1 (CU-6): il numero grande al centro dell'anello, quanti sono in una riga, la garanzia in una riga.
+    composeRule.onNodeWithContentDescription(gb("Si possono liberare 19 GB")).assertExists()
+    composeRule.onNodeWithText(gb("19 GB"), useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("1.240 foto e video già al sicuro sul NAS").assertExists()
+    composeRule.onNodeWithText("Prima ricontrollo ogni copia.").assertExists()
+    // Gli ultimi giorni e il cestino stanno dietro la «i».
+    composeRule.onNodeWithText("Gli ultimi 30 giorni restano sul telefono", substring = true).assertDoesNotExist()
+    composeRule.onNodeWithText("Come funziona").performClick()
+    composeRule.waitForIdle()
     composeRule.onNodeWithText("Gli ultimi 30 giorni restano sul telefono", substring = true).assertExists()
   }
 
@@ -130,7 +137,7 @@ class FreeSpaceScreenTest : ComposeBackupTallTest() {
     showState(summary(items = 3, excluded = all))
     val titles = listOf(
       "Non ancora controllati sul NAS", "Con una versione non al sicuro", "In caricamento o con un problema", "Lavori fermi",
-      "Il NAS non risponde", "Fuori dalla cartella di prova", "Degli ultimi giorni", "La copia sul NAS è cambiata", "Non sono più sul telefono",
+      "Il NAS non risponde", "Backup in pausa", "Degli ultimi giorni", "La copia sul NAS è cambiata", "Non sono più sul telefono",
       // P14: i due motivi nuovi del contratto (prima finivano fra "con un problema").
       "Di un altro familiare", "Backup non attivo",
       // Correzioni 5B (LS-12): le righe gia' proposte al telefono.
@@ -138,12 +145,20 @@ class FreeSpaceScreenTest : ComposeBackupTallTest() {
     )
     assertThat(titles).hasSize(FreeSpaceExclusion.entries.size)
     for (title in titles) composeRule.onNodeWithText(title).assertExists()
+    // CU-6 = CS-3: la recinzione dice «in pausa» e «non ancora acceso», mai «di prova».
+    composeRule.onNodeWithText("di prova", substring = true).assertDoesNotExist()
+    composeRule.onNodeWithText("Perché restano").performClick()
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("Il backup vero non è ancora acceso", substring = true).assertExists()
+    composeRule.onNodeWithText("di prova", substring = true).assertDoesNotExist()
   }
 
   @Test
   fun iMediaConLaSolaCopiaComuneSiDiconoAParte() {
     showState(summary(needsGuardian = 40))
-    composeRule.onNodeWithText("nell’area comune: 40", substring = true).assertExists()
+    // Giro 1 (CU-6): una riga con la piastrella e il numero; la frase la sente TalkBack.
+    composeRule.onNodeWithText("Prima una copia privata").assertExists()
+    composeRule.onNodeWithContentDescription("nell’area comune: 40", substring = true).assertExists()
   }
 
   @Test
@@ -153,7 +168,9 @@ class FreeSpaceScreenTest : ComposeBackupTallTest() {
     button("Libera subito…").assertIsEnabled().performClick()
     assertThat(calls.confirm).isEqualTo(1)
     assertThat(calls.confirmNow).isEqualTo(1)
-    composeRule.onNodeWithText("Libera spazio mette i file nel cestino di Android per 30 giorni. Libera subito li toglie per sempre.").assertExists()
+    composeRule.onNodeWithText("Come funziona").performClick()
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("Libera spazio mette i file nel cestino di Android per 30 giorni. Libera subito li toglie per sempre.", substring = true).assertExists()
   }
 
   @Test

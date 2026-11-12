@@ -13,7 +13,6 @@
 
   <!-- Pagina principale -->
   <string name="settings_title">Impostazioni</string>
-  <string name="settings_hero_eyebrow">La tua famiglia</string>
   <string name="settings_hero_review">Rivedi le richieste</string>
   <!-- I3 (fase I): pochi gruppi, ognuno con la sua famiglia di colori; cio' che serve di rado in «Avanzate». -->
   <string name="settings_section_backup">Backup e NAS</string>
@@ -66,9 +65,7 @@
   <string name="hero_requests_title">Qualcuno chiede di entrare</string>
   <string name="hero_requests_detail">Confronta il codice prima di approvare.</string>
   <string name="hero_ok_title">Fai parte della famiglia</string>
-  <string name="hero_ok_detail">Questo telefono legge e scrive sul NAS.</string>
   <string name="hero_ok_title_admin">Sei l’admin della famiglia</string>
-  <string name="hero_ok_detail_admin">Approvi i dispositivi nuovi e segnali quelli persi.</string>
 
   <!-- Quando il registro potrebbe essere vecchio -->
   <string name="stale_not_refreshed">Il NAS non si raggiunge da un po’: l’app lavora con l’ultimo registro che ha accettato.</string>
@@ -164,4 +161,6 @@
     <item quantity="one">%1$d giorno fa</item>
     <item quantity="other">%1$d giorni fa</item>
   </plurals>
+  <!-- Giro 1 della fase I (CU-5): il perche' di uno stato della famiglia, dietro la «i». -->
+  <string name="settings_hero_why">Che cosa vuol dire</string>
 </resources>

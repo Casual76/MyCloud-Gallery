@@ -6,7 +6,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.LocationOff
-import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -26,14 +25,30 @@ import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
-import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
-import dev.pampa.mycloudgallery.feature.settings.ui.RowValue
 import dev.pampa.mycloudgallery.feature.settings.ui.toneMark
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTileDefaults
+import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
+import dev.antigravity.fluidengine.ui.fluid.FluidRadius
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import javax.inject.Inject
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -71,7 +86,8 @@ fun SharingScreen(removeLocation: Boolean, onBack: () -> Unit, onToggle: (Boolea
       FluidListGroup {
         FluidListRow(
           title = switchTitle,
-          subtitle = switchDetail,
+          // Giro 1 della fase I (CU-5): la frase la sente TalkBack; in pagina la dice la figura qui sotto.
+          subtitle = "",
           tone = if (removeLocation) FluidTone.Success else FluidTone.Neutral,
           leading = { RowTile(Icons.Rounded.LocationOff) },
           leadingTile = false,
@@ -87,20 +103,49 @@ fun SharingScreen(removeLocation: Boolean, onBack: () -> Unit, onToggle: (Boolea
             contentDescription = "$switchTitle. $switchDetail"
           },
         )
-        FluidListDivider()
-        FluidListRow(
-          title = stringResource(if (removeLocation) R.string.sharing_state_on else R.string.sharing_state_off),
-          subtitle = stringResource(if (removeLocation) R.string.sharing_state_on_detail else R.string.sharing_state_off_detail),
-          tone = if (removeLocation) FluidTone.Success else FluidTone.Warning,
-          leading = { RowTile(if (removeLocation) Icons.Rounded.Verified else Icons.Rounded.IosShare) },
-          leadingTile = false,
-          disclosure = false,
-          titleMaxLines = 3,
-        )
       }
     }
+    item { LocationFigure(on = removeLocation) }
+    // La garanzia resta in pagina, in una riga; i formati (sigle) dietro la «i» (CU-20).
     item { FluidSectionFootnote(text = stringResource(R.string.sharing_footnote_check)) }
-    item { FluidSectionFootnote(text = stringResource(R.string.sharing_footnote_formats)) }
+    item { SettingsInfo(label = stringResource(R.string.sharing_formats_info), text = stringResource(R.string.sharing_footnote_formats)) }
+  }
+}
+
+/**
+ * Che cosa ricevono le altre app (giro 1 della fase I, CU-5: prima una seconda riga «Acceso» con la frase): la foto sul telefono con il suo luogo,
+ * la freccia, e la copia che parte, con il luogo cancellato quando l'interruttore e' acceso. Per TalkBack una frase sola.
+ */
+@Composable
+private fun LocationFigure(on: Boolean) {
+  val spoken = stringResource(if (on) R.string.sharing_state_on_detail else R.string.sharing_state_off_detail)
+  val container = MaterialTheme.colorScheme.surfaceContainerLow
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .clip(ContinuousCornerShape(FluidRadius.Group))
+      .background(container)
+      .padding(SettingsDimens.CardPadding)
+      .semantics(mergeDescendants = true) { contentDescription = spoken },
+    horizontalArrangement = Arrangement.SpaceEvenly,
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    FigureEnd(icon = Icons.Rounded.LocationOn, label = stringResource(R.string.sharing_figure_here), status = null, ring = container)
+    Icon(imageVector = Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    FigureEnd(
+      icon = if (on) Icons.Rounded.LocationOff else Icons.Rounded.LocationOn,
+      label = stringResource(R.string.sharing_figure_out),
+      status = if (on) GalleryIconStatus.Done else null,
+      ring = container,
+    )
+  }
+}
+
+@Composable
+private fun FigureEnd(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, status: GalleryIconStatus?, ring: androidx.compose.ui.graphics.Color) {
+  Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(SettingsDimens.PillGap)) {
+    GalleryIconTile(icon = icon, family = GalleryIconFamily.Places, size = GalleryIconTileDefaults.Medium, status = status, ring = ring)
+    Text(text = label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
   }
 }
 

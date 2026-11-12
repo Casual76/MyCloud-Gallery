@@ -3,7 +3,6 @@
   <!-- Sicurezza: blocco dell'app, e avviso sul backup esterno. -->
 
   <string name="security_title">Sicurezza</string>
-  <string name="security_eyebrow">Blocco dell’app</string>
   <string name="security_value_on">Attivo</string>
   <string name="security_value_off">Spento</string>
   <string name="security_hero_on_title">L’app si chiude da sola</string>
@@ -48,7 +47,6 @@
 
   <!-- Avviso sul backup esterno -->
   <string name="backup_title">Copia esterna del NAS</string>
-  <string name="backup_eyebrow">Attenzione</string>
   <string name="backup_value">Senza copia</string>
   <string name="backup_hero_title">Il NAS non è un backup</string>
   <string name="backup_hero_detail">Foto e video della famiglia stanno in un posto solo: se si cancellano o si cifrano, spariscono ovunque.</string>
@@ -74,4 +72,6 @@
   <string name="backup_footnote_info">Chi mette le spunte</string>
   <string name="backup_review">Rivedi la checklist</string>
   <string name="backup_close">Chiudi</string>
+  <!-- Giro 1 della fase I (CU-5): il come del blocco dietro la «i». -->
+  <string name="security_how">Come funziona</string>
 </resources>

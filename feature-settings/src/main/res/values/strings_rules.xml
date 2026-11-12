@@ -16,9 +16,9 @@
   <string name="rules_condition_heavy_home">i lavori pesanti sul Wi-Fi di casa</string>
 
   <string name="rules_section_mobile">Dati mobili</string>
-  <string name="rules_cap_preset">Come il preset</string>
+  <string name="rules_cap_preset">Come %1$s</string>
   <string name="rules_cap_none">Nessun tetto</string>
-  <string name="rules_cap_preset_chip">Come il preset · %1$s</string>
+  <string name="rules_cap_preset_chip">Come %1$s · %2$s</string>
   <string name="rules_cap_info">Quando finisce il tetto</string>
   <string name="rules_cap_footnote">Il tetto vale anche con l’app aperta. Raggiunto il tetto, i dati mobili si fermano fino al mese dopo; il Wi-Fi non ha limiti.</string>
 

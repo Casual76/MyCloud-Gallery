@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.feature.settings.widget
 
 import androidx.compose.material.icons.Icons
+import dev.pampa.mycloudgallery.feature.settings.ui.ChoiceMark
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Collections
 import androidx.compose.material.icons.rounded.Schedule
@@ -22,7 +23,6 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -119,7 +119,7 @@ fun WidgetSettingsScreen(
   }
 }
 
-/** Una scelta: la riga con l'interruttore a sinistra del suo stato; per TalkBack e' una scelta, con il suo nome e se e' quella attiva. */
+/** Una scelta: la riga con il segno di scelta a destra (il tondo, la spunta: CU-16); per TalkBack e' una scelta, con il suo nome e se e' quella attiva. */
 @Composable
 private fun ChoiceRow(title: String, detail: String?, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onSelect: () -> Unit) {
   FluidListRow(
@@ -131,7 +131,7 @@ private fun ChoiceRow(title: String, detail: String?, icon: androidx.compose.ui.
     leadingTile = false,
     disclosure = false,
     titleMaxLines = 3,
-    badge = { FluidSwitch(checked = selected, onCheckedChange = null) },
+    badge = { ChoiceMark(selected) },
     selected = selected,
     onClick = onSelect,
     modifier = Modifier.semantics(mergeDescendants = true) {

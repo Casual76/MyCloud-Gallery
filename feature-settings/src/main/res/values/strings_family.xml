@@ -6,7 +6,6 @@
   <string name="family_title">Famiglia</string>
   <string name="family_none_title">Nessuna famiglia</string>
   <string name="family_none_detail">Serve un dispositivo approvato.</string>
-  <string name="family_hero_eyebrow">Famiglia</string>
   <plurals name="family_hero_value">
     <item quantity="one">%1$d dispositivo</item>
     <item quantity="other">%1$d dispositivi</item>
@@ -61,9 +60,9 @@
   <string name="invite_error_name">Scrivi un nome breve, senza spazi ai bordi.</string>
   <string name="invite_error_share">Il nome della cartella non è valido.</string>
   <string name="invite_section_preset">Come lavora</string>
-  <string name="invite_section_preset_detail">Il preset di partenza del familiare: potrà cambiarlo.</string>
+  <string name="invite_section_preset_detail">Come parte il familiare: potrà cambiarlo.</string>
   <string name="invite_preset_default">Come la famiglia</string>
-  <string name="invite_preset_default_detail">Il preset scelto quando hai creato la famiglia</string>
+  <string name="invite_preset_default_detail">Quello scelto quando hai creato la famiglia</string>
   <string name="invite_create">Crea il QR d’invito</string>
   <string name="invite_form_footnote">Il QR vale 24 ore e non contiene nessuna password.</string>
   <string name="invite_failed_title">Invito non creato</string>
@@ -292,4 +291,7 @@
   <string name="invite_manual_common">Area comune</string>
   <string name="invite_manual_family_id">Identificativo della famiglia</string>
   <string name="invite_manual_fingerprint">Impronta della famiglia</string>
+  <!-- Giro 1 della fase I (CG-4): l'avvertimento sulle chiavi resta in pagina; le descrizioni stabili dietro la «i». -->
+  <string name="family_sole_admin_title">Un solo admin</string>
+  <string name="family_protect_info">Che cosa sono</string>
 </resources>

@@ -57,7 +57,7 @@
 
   <string name="backup_first_by_source">Da caricare, per sorgente</string>
   <plurals name="backup_first_source_items">
-    <item quantity="one">%1$s media</item>
-    <item quantity="other">%1$s media</item>
+    <item quantity="one">%1$s foto o video</item>
+    <item quantity="other">%1$s foto e video</item>
   </plurals>
 </resources>

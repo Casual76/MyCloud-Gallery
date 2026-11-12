@@ -50,12 +50,6 @@ internal object BackupDimens {
 
   // --- I3 (fase I): la testata con l'anello, le copertine delle sorgenti --------------------------------------------------------
 
-  /** Il lato dell'anello della testata: quanto e' al sicuro sul totale. */
-  val HeroRing: Dp = 136.dp
-
-  /** Lo spessore dell'anello della testata. */
-  val HeroRingStroke: Dp = 10.dp
-
   /** Il segno di stato appoggiato sull'anello. */
   val HeroMark: Dp = 30.dp
 
@@ -67,9 +61,6 @@ internal object BackupDimens {
 
   /** Lo spazio interno della testata. */
   val HeroPadding: Dp = 20.dp
-
-  /** Il glifo della riga con il perche' (la «i»). */
-  val InfoGlyph: Dp = 18.dp
 
   /** La piastrella di un passo che manca (da preparare). */
   val StepTile: Dp = 28.dp
@@ -106,4 +97,15 @@ internal object BackupDimens {
 
   /** Un valore a destra di una riga (il nome della cartella sul NAS) non va oltre: il titolo resta leggibile. */
   val ValueMaxWidth: Dp = 150.dp
+
+  // --- Giro 1 della fase I: il riepilogo di Libera spazio (CU-6) ------------------------------------------------------------------
+
+  /** Il lato di un'anteprima di cio' che si toglie (cinque e il «+N» stanno in una riga del telefono). */
+  val FreePreview: Dp = 52.dp
+
+  /** Lo spazio fra due anteprime. */
+  val FreePreviewGap: Dp = 6.dp
+
+  /** Il glifo davanti alla garanzia (lo scudo). */
+  val GuaranteeGlyph: Dp = 18.dp
 }

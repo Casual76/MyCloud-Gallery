@@ -19,6 +19,13 @@ internal object PeopleDimens {
   /** I1: il lato del ritaglio chiesto per una scheda (il volto riempie l'altezza): sul telefono arriva al tetto [CropMaxPx], come le schede delle Raccolte. */
   val CardCrop: Dp = 144.dp
 
+  /**
+   * Giro 1 (CU-2): sotto questa altezza una scheda con il volto ha la sfumatura corta ([personFadeHeight]). Il ritaglio e' un quadrato con il volto
+   * nel 67% centrale: su una scheda alta 133 dp (la griglia a tre colonne del telefono da 360 dp) la sfumatura di serie (28 dp sopra le righe)
+   * coprirebbe la bocca, quella corta (14 dp) la lascia libera.
+   */
+  val CompactCardBelow: Dp = 140.dp
+
   /** Giro 1 (CU-23): lo spazio sopra e sotto uno stato vuoto (la figura, il titolo, il tasto). */
   val StatePadding: Dp = 24.dp
 

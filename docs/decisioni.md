@@ -18802,8 +18802,11 @@ di I4 (`f329e9c3`: stato vuoto, «i», anello), la scheda di copertina corretta 
   la sfumatura corretta di I4 (28 dp di dissolvenza sopra le righe, scrim pieno dietro il titolo, 4,5:1 su una foto bianca) vale anche per le Persone.
   Il volto, la scelta in selezione e il filo restano di `PersonTile`; la scheda comune non e' stata toccata. Sulle schede alte i conti con il ritaglio
   vero (quadrato, volto = 67% centrale): nelle Raccolte (116 x 156 dp) occhi, naso e bocca restano fuori dallo scrim, il mento ci entra; nella griglia
-  di «Tutte le persone» (circa 100 x 133 dp) la bocca cade nella sfumatura. **Chiesto a I4 un `fadeHeight` compatto** (12-16 dp) per i titoli di una
-  riga sulle schede piccole: quando arriva lo passa `PersonTile`.
+  di «Tutte le persone» (circa 100 x 133 dp) la bocca cadeva nella sfumatura. I4 ha aggiunto `fadeHeight` (`eb04179e`): la griglia sceglie la
+  sfumatura **dalla misura** (`personCardHeight` dalla larghezza della colonna e dalle colonne, `personFadeHeight`: sotto 140 dp
+  `FadeHeightCompact` = 14 dp, altrimenti quella di serie; test `PersonCardFadeTest`). Sul telefono da 360 dp la bocca resta visibile all'inizio
+  della sfumatura corta e solo il mento va sotto lo scrim pieno (scena con volti disegnati nelle proporzioni del ritaglio:
+  `persone-elenco-volti-ritaglio-*`); sul tablet e a testo grande le schede sono piu' alte e tengono la sfumatura di serie.
 - **CS-6: una sola lettura per scheda.** `labelsSpoken` falso e' ora il valore di serie di `GalleryCoverCard` (I4): le schede delle Raccolte, di
   «Tutte le persone» e di «Tutti i ricordi» non lo passano piu'. Ognuna ha la sua descrizione; quella delle Raccolte (`CollectionEntry.spoken`) dice
   anche la riga piccola (il mese, «Viaggio») quando la frase non la contiene, perche' il testo scritto non si rilegge (test).

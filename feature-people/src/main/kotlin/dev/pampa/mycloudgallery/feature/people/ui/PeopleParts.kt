@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoButton
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryCoverCardDefaults
 
 // Le PARTI COMUNI delle schermate delle persone (Fase 8, P9): l'avatar rotondo (il volto ritagliato al momento, mai salvato), la tessera di una
 // persona, la nota. Solo componenti dell'engine e del design system (G2); nessun colore, raggio o dimensione di testo scritti a mano
@@ -134,6 +135,7 @@ internal fun PersonTile(
   onClick: () -> Unit,
   onLongClick: (() -> Unit)?,
   modifier: Modifier = Modifier,
+  fadeHeight: Dp = GalleryCoverCardDefaults.FadeHeight,
 ) {
   val resources = LocalContext.current.resources
   val scheme = MaterialTheme.colorScheme
@@ -170,6 +172,7 @@ internal fun PersonTile(
       .background(scheme.surfaceContainerHigh),
     title = card.name,
     titleMaxLines = 1,
+    fadeHeight = fadeHeight,
   ) {
     FaceImage(card.cover, crops, PeopleDimens.CardCrop)
     if (selection != TileSelection.NONE) {
@@ -179,6 +182,24 @@ internal fun PersonTile(
 }
 
 /** Una nota piccola in fondo a un gruppo o a una pagina: nel secondario, con l'aria di una riga. */
+/**
+ * Giro 1 (CU-2): l'altezza di una scheda di persona in una griglia di [columns] colonne larga [contentWidth] con [gap] fra le schede (la scheda e'
+ * 3:4); [Dp.Unspecified] se la larghezza non e' ancora misurata.
+ */
+internal fun personCardHeight(contentWidth: Dp, columns: Int, gap: Dp): Dp {
+  if (contentWidth == Dp.Unspecified || columns < 1) return Dp.Unspecified
+  val width = (contentWidth - gap * (columns - 1)) / columns
+  return width / PeopleDimens.CardAspect
+}
+
+/**
+ * Giro 1 (CU-2): la sfumatura sopra il nome di una scheda alta [height]. Dalla misura, non dalla pagina: sotto [PeopleDimens.CompactCardBelow] quella
+ * corta ([GalleryCoverCardDefaults.FadeHeightCompact]), perche' la bocca del volto resti fuori; altrimenti quella di serie. Lo scrim dietro il nome e'
+ * pieno in entrambi i casi (il contrasto non cambia).
+ */
+internal fun personFadeHeight(height: Dp): Dp =
+  if (height != Dp.Unspecified && height < PeopleDimens.CompactCardBelow) GalleryCoverCardDefaults.FadeHeightCompact else GalleryCoverCardDefaults.FadeHeight
+
 /**
  * Giro 1 (CU-23): uno stato vuoto (o di fine) delle pagine delle persone nella forma unica della galleria ([GalleryFigureState]): la figura, il titolo,
  * al piu' [action]. Il perche' ([why]), dove spiega una regola (le foto nascoste, i tre volti, che cosa fa nascondere), sta dietro la «i»

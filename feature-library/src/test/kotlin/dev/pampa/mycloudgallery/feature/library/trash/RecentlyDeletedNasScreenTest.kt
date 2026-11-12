@@ -102,10 +102,11 @@ class RecentlyDeletedNasScreenTest : ComposeScreenTest() {
     // Le voci del NAS dicono i giorni rimasti, la cartella e chi l'ha eliminata.
     composeRule.onNodeWithContentDescription("Cena da Marco.jpg", substring = true).assertExists()
     composeRule.onNodeWithContentDescription("Restano 2 giorni", substring = true).assertExists()
-    composeRule.onNodeWithText("Eliminato da Tablet di casa", substring = true).assertExists()
+    composeRule.onNodeWithContentDescription("Eliminato da Tablet di casa", substring = true).assertExists()
     // Quella senza record valido lo dice e non finge un nome.
     composeRule.onNodeWithContentDescription("Senza nome", substring = true).assertExists()
-    composeRule.onNodeWithText("Senza record", substring = true).assertExists()
+    // CU-3 (fase I): niente «Senza record» su ogni riga; il segno del problema e una riga della sezione con il perche' dietro la «i».
+    composeRule.onNodeWithContentDescription("Da controllare dal PC", substring = true).assertExists()
     // La voce piu' lontana dalla scadenza e' in fondo: la lista scorre fin li'.
     scrollTo("IMG_20261012_184501.jpg")
     composeRule.onNodeWithContentDescription("IMG_20261012_184501.jpg", substring = true).assertExists()
@@ -135,8 +136,8 @@ class RecentlyDeletedNasScreenTest : ComposeScreenTest() {
     tapRow("Cena da Marco.jpg")
     composeRule.waitForIdle()
     composeRule.onAllNodesWithContentDescription("Elimina subito").assertCountEquals(0)
-    composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Elimina subito: solo le tue"))
-    composeRule.onNodeWithText("Elimina subito: solo le tue").assertExists()
+    composeRule.onNode(hasScrollAction()).performScrollToNode(hasContentDescription("Elimina subito: solo le tue", substring = true))
+    composeRule.onNodeWithContentDescription("Elimina subito: solo le tue", substring = true).assertExists()
   }
 
   @Test
@@ -234,11 +235,11 @@ class RecentlyDeletedNasScreenTest : ComposeScreenTest() {
 
     nas.show(NasTrashFeed.Offline(sampleNasRows().filter { it.deletableNow }))
     composeRule.waitForIdle()
-    composeRule.onNodeWithText("Il NAS non risponde").assertExists()
+    composeRule.onNodeWithContentDescription("Il NAS non risponde", substring = true).assertExists()
 
     nas.show(NasTrashFeed.Ready(sampleNasRows(), writable = false))
     composeRule.waitForIdle()
-    composeRule.onNodeWithText("Sola lettura").assertExists()
+    composeRule.onNodeWithContentDescription("Sola lettura", substring = true).assertExists()
   }
 
   @Test

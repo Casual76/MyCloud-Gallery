@@ -227,6 +227,17 @@ internal object HiddenSurfaces {
       sources = listOf("$FEATURE_NAS/folders/HiddenFiles.kt", "$FEATURE_NAS/folders/NasFoldersScreen.kt", "$FEATURE_NAS/folders/NasFoldersViewModel.kt"),
       probe = HiddenProbes.nasFolders, live = true, alsoProvedBy = listOf("NasHiddenFilesTest", "NasHiddenRowScreenTest"),
     ),
+    // --- Fase I (I4, CG-2): le anteprime di Cartelle NAS, miniature dei file e copertine delle cartelle, dal catalogo e dalla Libreria visibile ------
+    SurfaceEntry(
+      id = "nas-folder-previews", title = "Cartelle NAS: le anteprime dei file e le copertine delle cartelle, senza i nascosti (I4, CG-2)",
+      row = SpecRow.NAS_FOLDERS, owner = "I4", backing = Backing.PRODUCTION,
+      sources = listOf(
+        "$FEATURE_NAS/folders/NasPreviewArt.kt", "$FEATURE_NAS/contract/NasPreviews.kt",
+        "app/src/main/kotlin/dev/pampa/mycloudgallery/nas/CatalogNasPreviews.kt", "app/src/main/kotlin/dev/pampa/mycloudgallery/nas/NasLibraryThumbnails.kt",
+      ),
+      probe = HiddenProbes.nasFolderPreviews, live = true,
+      alsoProvedBy = listOf("CatalogNasPreviewsTest", "NasPreviewGateTest", "NasLibraryThumbnailsTest", "NasFolderPreviewsTest"),
+    ),
     // --- Revisione di Fase 7, pacchetto C (R4, NA-1): Spazio NAS elenca per nome i file piu' grandi, che sono quasi sempre i video; i nascosti non ci sono ------
     SurfaceEntry(
       id = "nas-space", title = "Cartelle NAS · Spazio: i file piu' grandi, per nome e cartella, senza i nascosti (R4, NA-1)", row = SpecRow.NAS_SPACE,

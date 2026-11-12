@@ -5,7 +5,6 @@
   <!-- Le due parti -->
   <string name="trash_phone_section">Dal telefono</string>
   <string name="trash_nas_section">Dal NAS</string>
-  <string name="trash_nas_section_detail">Restano qui 30 giorni, anche quelli degli altri tuoi dispositivi.</string>
   <string name="trash_nas_empty">Niente di eliminato dal NAS.</string>
   <string name="trash_nas_loading">Leggo il cestino del NAS</string>
 
@@ -25,7 +24,8 @@
   <string name="trash_nas_from_root">Dalla radice dell\'area · %1$s</string>
   <string name="trash_nas_by">Eliminato da %1$s</string>
   <string name="trash_nas_by_me">Eliminato da questo dispositivo</string>
-  <string name="trash_nas_invalid_pill">Senza record</string>
+  <string name="trash_nas_invalid_title">Da controllare dal PC</string>
+  <string name="trash_nas_today_short">Oggi</string>
   <string name="trash_nas_invalid_detail">Non posso verificare nome e posto d\'origine di questa voce, quindi non la ripristino da sola. Decidi tu cosa farne dal PC.</string>
   <string name="trash_nas_folder_word">cartella</string>
   <string name="trash_nas_folder_files">%1$s · %2$s</string>

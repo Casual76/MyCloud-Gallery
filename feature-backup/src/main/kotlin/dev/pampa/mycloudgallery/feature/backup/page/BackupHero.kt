@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +50,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
+import dev.antigravity.fluidengine.ui.fluid.FluidMotionPolicy
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.pampa.mycloudgallery.core.backup.contract.BackupAction
@@ -197,11 +200,16 @@ internal fun heroModel(status: BackupStatus, actions: BackupPageActions): HeroMo
       HeroModel(
         mark = GalleryIconStatus.Attention,
         label = stringResource(R.string.backup_hero_ready),
-        line = stringResource(
-          R.string.backup_hero_pair,
-          pluralStringResource(R.plurals.backup_source_media, items, BackupText.count(items)),
-          BackupText.size(summary.linked.bytes + summary.toUpload.bytes),
-        ),
+        // Fase I (punto 4): mai «0 foto e video · 0 B»: senza numeri la riga non c'e' (il riepilogo li porta appena ci sono).
+        line = if (items <= 0) {
+          null
+        } else {
+          stringResource(
+            R.string.backup_hero_pair,
+            pluralStringResource(R.plurals.backup_source_media, items, BackupText.count(items)),
+            BackupText.size(summary.linked.bytes + summary.toUpload.bytes),
+          )
+        },
         actions = listOf(HeroAction(stringResource(R.string.backup_status_first_see), Icons.Rounded.Checklist, actions.openSheet)),
       )
     }
@@ -311,7 +319,7 @@ internal fun waitRes(reason: WaitReason): Int = when (reason) {
  * nel contenuto su una superficie piena (come un gruppo di righe), non e' vetro.
  */
 @Composable
-internal fun BackupHero(model: HeroModel, share: SafeShare, modifier: Modifier = Modifier) {
+internal fun BackupHero(model: HeroModel, share: SafeShare, modifier: Modifier = Modifier, still: Boolean = false) {
   val container = MaterialTheme.colorScheme.surfaceContainerLow
   // Fase 10 P8 (D23 (6)): uno stato che cambia da solo si annuncia una volta (regione viva educata); quello di tutti i giorni non e' una notizia.
   if (model.mark != GalleryIconStatus.Done) GalleryLiveAnnouncement(model.label)
@@ -324,7 +332,7 @@ internal fun BackupHero(model: HeroModel, share: SafeShare, modifier: Modifier =
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(BackupDimens.CardGap),
   ) {
-    SafeRing(share = share, mark = model.mark, busy = model.busy, ringBackground = container)
+    SafeRing(share = share, mark = model.mark, busy = model.busy, ringBackground = container, still = still)
     HeroTexts(label = model.label, line = model.line, detail = model.detail)
     if (model.steps.isNotEmpty()) HeroSteps(model.steps, container)
     if (model.actions.isNotEmpty()) {
@@ -350,7 +358,7 @@ internal fun BackupHero(model: HeroModel, share: SafeShare, modifier: Modifier =
  * sull'arco in basso a destra. L'arco avanza con la molla dell'anello; il valore si legge nel disegno, non in composizione.
  */
 @Composable
-private fun SafeRing(share: SafeShare, mark: GalleryIconStatus, busy: Boolean, ringBackground: androidx.compose.ui.graphics.Color) {
+private fun SafeRing(share: SafeShare, mark: GalleryIconStatus, busy: Boolean, ringBackground: androidx.compose.ui.graphics.Color, still: Boolean) {
   val ring = GalleryProgressRingDefaults.Hero
   val description = if (share.total > 0 && !busy) {
     stringResource(R.string.backup_hero_ring_description, share.percent, BackupText.count(share.safe), BackupText.count(share.total))
@@ -358,18 +366,23 @@ private fun SafeRing(share: SafeShare, mark: GalleryIconStatus, busy: Boolean, r
     null
   }
   Box(modifier = Modifier.size(ring), contentAlignment = Alignment.Center) {
-    GalleryProgressRing(
-      // Mentre confronta, l'arco gira senza misura (prima: un cerchio che girava al centro di un anello fermo).
-      progress = if (busy) null else share.fraction,
-      modifier = Modifier
-        .matchParentSize()
-        .semantics { if (description != null) contentDescription = description },
-      color = galleryRingColor(GalleryIconFamily.Backup),
-      strokeWidth = GalleryProgressRingDefaults.stroke(ring),
-      animate = true,
-    ) {
-      Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clearAndSetSemantics {}) {
-        RingCenter(share = share, busy = busy)
+    // Fase I (12/11, punto 3): con un foglio aperto sopra la pagina l'arco senza misura **non gira**. Il velo e il vetro del foglio sfocano la
+    // pagina: un arco che gira dietro li faceva ridisegnare a ogni fotogramma (RenderThread al 50-60% a foglio fermo, il telefono che si scalda
+    // e mette in pausa proprio la ricerca che il foglio aspetta). Fermo come con «riduci animazioni»: l'arco resta disegnato, non si muove.
+    CompositionLocalProvider(LocalFluidMotionPolicy provides if (still) StillMotion else LocalFluidMotionPolicy.current) {
+      GalleryProgressRing(
+        // Mentre confronta, l'arco gira senza misura (prima: un cerchio che girava al centro di un anello fermo).
+        progress = if (busy) null else share.fraction,
+        modifier = Modifier
+          .matchParentSize()
+          .semantics { if (description != null) contentDescription = description },
+        color = galleryRingColor(GalleryIconFamily.Backup),
+        strokeWidth = GalleryProgressRingDefaults.stroke(ring),
+        animate = true,
+      ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clearAndSetSemantics {}) {
+          RingCenter(share = share, busy = busy)
+        }
       }
     }
     val place = Modifier.align(Alignment.BottomEnd).offset(x = -BackupDimens.HeroMarkInset, y = -BackupDimens.HeroMarkInset)
@@ -383,6 +396,9 @@ private fun SafeRing(share: SafeShare, mark: GalleryIconStatus, busy: Boolean, r
     )
   }
 }
+
+/** Il movimento fermo della testata dietro un foglio (punto 3): come «riduci animazioni», solo per l'anello. */
+private val StillMotion = FluidMotionPolicy(durationScale = 0f)
 
 /** Il centro dell'anello: il percento e i numeri, o il glifo del backup (niente da contare, o l'arco che gira senza misura). */
 @Composable

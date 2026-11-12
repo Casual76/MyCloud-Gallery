@@ -367,5 +367,11 @@ data class BackupSummary(
       estimate = null,
       warnings = emptySet(),
     )
+
+    /**
+     * Fase I (12/11): il riepilogo **non ancora calcolato** (il NAS o il catalogo non sono ancora pronti, appena aperta l'app): niente numeri e le
+     * scelte spente, come mentre si cerca sul NAS. Prima era [EMPTY], "assestato", e la pagina diceva «Pronto per partire · 0 foto e video · 0 B».
+     */
+    val COUNTING: BackupSummary = EMPTY.copy(existing = ExistingCopiesState(privateAreaScanned = false, similarPending = 0))
   }
 }

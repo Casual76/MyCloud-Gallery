@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSetupStep
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
+import dev.pampa.mycloudgallery.core.backup.contract.BackupSummary
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.backup.contract.SourceStatus
 import dev.pampa.mycloudgallery.core.backup.contract.StopBy
@@ -391,6 +392,18 @@ class BackupPageScreenTest : ComposeBackupTest() {
     assertThat(actions.opened).isEmpty()
     assertThat(ui.value.sheetOpen).isTrue()
     button("Inizia ora").assertExists()
+  }
+
+  /** Fase I (punto 4): mai «0 foto e video · 0 B»; il riepilogo non ancora calcolato dice che cerca. */
+  @Test
+  fun ilPrimoBackupSenzaNumeriNonDiceZero() {
+    start(BackupStatus.FirstBackupReady(BackupSummary.EMPTY))
+    composeRule.onNodeWithText("Pronto per partire").assertExists()
+    composeRule.onAllNodes(hasText("0 foto e video", substring = true)).assertCountEquals(0)
+    set(BackupStatus.FirstBackupReady(BackupSummary.COUNTING))
+    composeRule.onNodeWithText("Preparo il primo backup").assertExists()
+    composeRule.onNodeWithText("Cerco cosa c’è già sul NAS").assertExists()
+    composeRule.onAllNodes(hasText("0 foto e video", substring = true)).assertCountEquals(0)
   }
 
   @Test

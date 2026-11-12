@@ -1,6 +1,8 @@
 package dev.pampa.mycloudgallery.feature.backup.first
 
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -11,8 +13,12 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -20,9 +26,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidRowValue
-import dev.antigravity.fluidengine.ui.fluid.FluidIndeterminateBar
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
-import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -35,7 +40,10 @@ import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.icon.glyph
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRingDefaults
 import dev.pampa.mycloudgallery.core.designsystem.media.galleryRingColor
+import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryMotion
+import kotlinx.coroutines.delay
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
@@ -189,22 +197,55 @@ internal fun searchText(existing: ExistingCopiesState): String {
 }
 
 /**
- * La barra della ricerca: con il totale si allunga con la molla fino alla parte guardata, senza il totale un tratto la percorre. Nel suo layer, cosi'
- * il disegno che si muove non ridisegna il resto del foglio.
+ * La barra della ricerca, **a poco prezzo** (punto 3: il foglio e' di vetro e sta sopra una pagina sfocata): con il totale si allunga con la molla fino
+ * alla parte guardata; a ogni numero nuovo (ogni 10 s circa) un tratto la percorre una volta. Senza ancora un numero il tratto passa ogni
+ * [SearchIdleMillis]. Fra un passaggio e l'altro **nessun fotogramma**: niente ciclo infinito. Tutto nel disegno e nel suo layer, cosi' non ridisegna il resto
+ * del foglio. Con «riduci animazioni» la barra e' ferma alla sua misura.
  */
 @Composable
 private fun SearchBar(existing: ExistingCopiesState) {
+  val reduced = LocalFluidMotionPolicy.current.reducedMotion
   val color = galleryRingColor(GalleryIconFamily.Backup)
+  val track = color.copy(alpha = GalleryProgressRingDefaults.TrackAlpha)
   val seen = existing.scanSeen ?: 0
   val total = existing.scanTotal ?: 0
-  val modifier = Modifier.width(BackupDimens.SearchBarWidth).graphicsLayer()
-  if (seen > 0 && total > 0) {
-    val fraction by animateFloatAsState(targetValue = (seen.toFloat() / total).coerceIn(0f, 1f), animationSpec = FluidMotion.smooth(), label = "ricerca")
-    FluidProgressBar(progress = { fraction }, modifier = modifier, color = color)
-  } else {
-    FluidIndeterminateBar(modifier = modifier, color = color)
+  val target = if (seen > 0 && total > 0) (seen.toFloat() / total).coerceIn(0f, 1f) else 0f
+  val fill = remember { Animatable(0f) }
+  val sweep = remember { Animatable(SweepRest) }
+  LaunchedEffect(target, reduced) { if (reduced) fill.snapTo(target) else fill.animateTo(target, FluidMotion.smooth()) }
+  LaunchedEffect(seen, reduced) {
+    if (reduced) return@LaunchedEffect
+    do {
+      sweep.snapTo(0f)
+      sweep.animateTo(1f, GalleryMotion.sweepSpec())
+      sweep.snapTo(SweepRest)
+      if (seen <= 0) delay(SearchIdleMillis)
+    } while (seen <= 0)
+  }
+  Canvas(modifier = Modifier.width(BackupDimens.SearchBarWidth).height(BackupDimens.SearchBarHeight).graphicsLayer()) {
+    val radius = CornerRadius(size.height / 2f, size.height / 2f)
+    drawRoundRect(color = track, cornerRadius = radius)
+    val filled = size.width * fill.value
+    if (filled > 0f) drawRoundRect(color = color, size = Size(filled.coerceAtLeast(size.height), size.height), cornerRadius = radius)
+    val at = sweep.value
+    if (at in 0f..1f) {
+      val segment = size.width * SearchSegment
+      val x = (size.width + segment) * at - segment
+      val start = x.coerceAtLeast(0f)
+      val end = (x + segment).coerceAtMost(size.width)
+      if (end > start) drawRoundRect(color = color, topLeft = Offset(start, 0f), size = Size(end - start, size.height), cornerRadius = radius)
+    }
   }
 }
+
+/** Il tratto a riposo: fuori dalla pista, non si disegna. */
+private const val SweepRest = -1f
+
+/** Quanto della pista e' il tratto che la percorre. */
+private const val SearchSegment = 0.35f
+
+/** Senza ancora un numero, ogni quanto il tratto ripassa (un passaggio dura `GalleryMotion.ShimmerMillis`). */
+private const val SearchIdleMillis = 2_600L
 
 /**
  * Fase I: le foto che aspettano ancora il confronto con le copie simili. Una riga piccola che **non ferma niente**: dice quante, che il confronto

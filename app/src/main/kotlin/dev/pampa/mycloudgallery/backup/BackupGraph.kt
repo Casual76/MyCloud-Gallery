@@ -1194,7 +1194,9 @@ class BackupGraph(
    * simili), e al massimo una volta al minuto mentre i numeri sono ancora provvisori.
    */
   suspend fun summary(): BackupSummary = summaryLock.withLock {
-    val p = parts ?: return@withLock BackupSummary.EMPTY
+    // Fase I (punto 4): senza le parti (il NAS non ancora pronto) il riepilogo non c'e' ancora: «cerco» (con il motivo, se una regola ferma la ricerca),
+    // mai uno zero "assestato".
+    val p = parts ?: return@withLock BackupSummary.COUNTING.let { it.copy(existing = live(it.existing)) }
     val sources = settings.sources.value
     // BK-8: la chiave comprende cio' che il backup ha fatto (media al sicuro e in coda, una query di conteggi): un riepilogo "assestato" non
     // resta piu' quello di una settimana fa, con i numeri e la stima dell'intero primo backup. Il calcolo pieno costa (due query per

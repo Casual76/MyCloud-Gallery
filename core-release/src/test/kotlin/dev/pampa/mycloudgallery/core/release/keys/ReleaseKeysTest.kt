@@ -110,9 +110,11 @@ class ReleaseKeysTest {
   fun i5_laRegolaTrovaSegnapostoKtEChiaviUguali() {
     val real = freshSpki()
     val other = freshSpki()
+    // Il segnaposto si deriva qui dalla sua frase: dal 12/11/2026 `ReleaseKeys.K1` e' una chiave vera e non puo' piu' fare da esempio.
+    val segnaposto = placeholder("MyCloud Gallery, chiave di pubblicazione del manifest K1, segnaposto senza chiave privata")
     assertThat(problemiDelleChiaviVere(real, other)).isEmpty()
-    assertThat(problemiDelleChiaviVere(ReleaseKeys.K1.spki, other)).containsExactly("K1 e' ancora un segnaposto")
-    assertThat(problemiDelleChiaviVere(real, ReleaseKeys.K1.spki)).containsExactly("K2 e' ancora un segnaposto")
+    assertThat(problemiDelleChiaviVere(segnaposto, other)).containsExactly("K1 e' ancora un segnaposto")
+    assertThat(problemiDelleChiaviVere(real, segnaposto)).containsExactly("K2 e' ancora un segnaposto")
     assertThat(problemiDelleChiaviVere(ReleaseTestKeys.KT.spki, other)).containsExactly("K1 e' la chiave di prova KT")
     assertThat(problemiDelleChiaviVere(real, real.copyOf())).containsExactly("K1 e K2 sono la stessa chiave")
   }

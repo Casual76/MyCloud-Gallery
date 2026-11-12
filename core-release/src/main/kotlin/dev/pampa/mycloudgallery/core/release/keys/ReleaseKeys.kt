@@ -12,26 +12,27 @@ import java.util.Base64
 // repository: le genera l'admin sul PC con `ManifestTool keys` (PKCS#12 con frase segreta in `%USERPROFILE%\.mycloudgallery\release\`, piu'
 // la copia offline e il foglio di K2).
 //
-// **Oggi sono SEGNAPOSTO** ([PROVISIONAL]): due punti della curva derivati da una frase con SHA-256 ("nothing up my sleeve", la derivazione
-// e' in `ReleaseKeysTest`), di cui **nessuno conosce la chiave privata**. Un'app con i segnaposto non accetta nessun manifest vero (nessun
-// effetto, come un manifest assente): e' sicuro, ma non c'e' il kill switch. L'utente genera K1 e K2 (`docs/decisioni.md`, "Fase 10 P1",
-// "Cosa deve fare l'utente"), incolla qui le due righe che lo strumento stampa, mette [PROVISIONAL] a false e aggiorna le impronte nel
-// documento; `release.ps1` (P12) deve rifiutare una release con [PROVISIONAL] vero.
+// **Dal 12/11/2026 sono le chiavi VERE** ([PROVISIONAL] = false): le ha generate l'admin con `ManifestTool keys` quel giorno (le private nel
+// PKCS#12 con frase segreta sul suo PC, il foglio di K2 offline); le due pubbliche qui sotto vengono dai certificati del suo file
+// (`keytool -list -rfc`), le impronte sono anche in `docs/sicurezza.md` §5.6. Fino ad allora erano SEGNAPOSTO: due punti della curva derivati
+// da una frase con SHA-256 ("nothing up my sleeve", la derivazione e' in `ReleaseKeysTest`), di cui nessuno conosce la chiave privata; un'app
+// con i segnaposto non accetta nessun manifest vero (sicuro, ma senza kill switch). `release.ps1` (P12) rifiuta una release con
+// [PROVISIONAL] vero, e `ReleaseKeysTest` (I5) pretende che con [PROVISIONAL] falso K1 e K2 non siano i segnaposto, ne' KT, ne' uguali.
 //
 // Unico posto, insieme a `testing/`, dove si costruisce una [PinnedKey] (Phase10ArchitectureTest, regola 3). KT, la chiave di prova, NON e'
 // qui: sta in `testing/ReleaseTestKeys` e la fida solo la build debug (`ReleaseTrust.forChannel`).
 
 object ReleaseKeys {
-  /** Vero finche' K1 e K2 sono i segnaposto senza chiave privata: nessun manifest vero puo' essere accettato. */
-  const val PROVISIONAL: Boolean = true
+  /** Vero finche' K1 e K2 sono i segnaposto senza chiave privata: nessun manifest vero puo' essere accettato. Falso dal 12/11/2026. */
+  const val PROVISIONAL: Boolean = false
 
   private const val K1_SPKI: String =
-    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE3C6IsoK2I9EaCqWIr154e623IYYdPRaozngdcy6cKOfShgu2jvmOU00bP4Y1HR8MweUEScHMesFqPsHUVQu/2g=="
-  private const val K1_FINGERPRINT: String = "c1d4f6308984503d52d8d0929d4aebb3e430356ff85e47de60f3e3bf42b68fdf"
+    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJklojAKlq6F9AfGFJ6clxemlMANd/1co8rnSn725/vGZopH4LntbKnt/pI8oZPSpk14lTLBlVpJ4IYPjDBjOFg=="
+  private const val K1_FINGERPRINT: String = "7cb8e8d6e2f28d17463bcc78e3a94d8ff70063b5a9f5329a227bf35aae62029b"
 
   private const val K2_SPKI: String =
-    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE3oDPdI6m0tH21sWKTjiTnfhj2M9LWzNCCEilLOJB2z6cZcDr0XWFyOXi7l9AGefAPNkNaj14b5H5rfwCkZqZnA=="
-  private const val K2_FINGERPRINT: String = "375ec283667d649173a9f731370939b58f3faa274c2d9cac2a9c9d413b64587d"
+    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9M0huGjvAtK7bcYfAbWxwm5pL/EIMI2JiHhSa63arcJkj1CuFbUlf8LIrLqyZb0xjD+pb3Cut7u12jFiGXa76A=="
+  private const val K2_FINGERPRINT: String = "710442254f06d82dba7d9bbdcb7aac87ae82005fc24c176677bd0955dfa2a3d0"
 
   /** La chiave attiva: firma ogni manifest finche' e' buona. */
   val K1: PinnedKey = pinned(ReleaseKeyIds.K1, K1_SPKI, K1_FINGERPRINT)

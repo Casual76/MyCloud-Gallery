@@ -115,10 +115,14 @@ object FacesModule {
   @Singleton
   fun collectionFaceCrops(faces: FacesGraph): CollectionFaceCrops = AppCollectionFaceCrops(faces)
 
-  /** I2 (fase I): i volti delle persone nelle anteprime dei suggerimenti della ricerca, con lo stesso cancello delle Raccolte. */
+  /**
+   * I2 (fase I): i volti delle persone nelle anteprime dei suggerimenti della ricerca. CG-1 (giro 1): dalla stessa porta delle Raccolte, con le sue
+   * revoche.
+   */
   @Provides
   @Singleton
-  fun searchFaces(faces: FacesGraph): dev.pampa.mycloudgallery.feature.search.contract.SearchFaces = dev.pampa.mycloudgallery.search.AppSearchFaces(faces)
+  fun searchFaces(faces: FacesGraph, crops: CollectionFaceCrops): dev.pampa.mycloudgallery.feature.search.contract.SearchFaces =
+    dev.pampa.mycloudgallery.search.AppSearchFaces.of(faces, crops)
 
   @Provides
   @Singleton

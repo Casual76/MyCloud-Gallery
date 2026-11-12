@@ -139,12 +139,21 @@ internal class ScaffoldScenes(
   // Con la Libreria vuota (scena `libreria-vuota`) non c'e' nessun media da mostrare: il suggerimento resta senza anteprima.
   private fun photo(index: Int): SuggestionArt? = if (shown.size == 0) null else SuggestionArt.Photo(shown.idAt(index % shown.size))
 
-  /** I2: un volto sintetico (pixel finti, nessun volto vero) con la sua foto d'origine nella Libreria. */
-  private fun face(seed: Long, origin: Int): SuggestionArt? = if (shown.size == 0) null else SuggestionArt.Face(
-    PersonId("00000000-0000-4000-8000-0000000000%02d".format(seed)),
-    dev.pampa.mycloudgallery.core.imaging.testing.SyntheticPixels.bitmap(seed, 96, 96).asImageBitmap(),
-    setOf(shown.idAt(origin % shown.size)),
-  )
+  private fun personId(seed: Long) = PersonId("00000000-0000-4000-8000-0000000000%02d".format(seed))
+
+  /** I2: il volto di una persona: nella voce solo chi e' (CG-1); il ritaglio sta nei volti della sorgente ([faces]). */
+  private fun face(seed: Long): SuggestionArt? = if (shown.size == 0) null else SuggestionArt.Face(personId(seed))
+
+  /** I2: volti sintetici (pixel finti, nessun volto vero), ciascuno con la sua foto d'origine nella Libreria. */
+  private fun faces(vararg seeds: Pair<Long, Int>): dev.pampa.mycloudgallery.feature.search.SuggestionFaces? = if (shown.size == 0) {
+    null
+  } else {
+    dev.pampa.mycloudgallery.feature.search.SuggestionFaces.fixed(
+      seeds.associate { (seed, origin) ->
+        personId(seed) to (dev.pampa.mycloudgallery.core.imaging.testing.SyntheticPixels.bitmap(seed, 96, 96).asImageBitmap() to setOf(shown.idAt(origin % shown.size)))
+      },
+    )
+  }
 
   private fun person(seed: Long, name: String) = Suggestion.PersonSuggestion(
     PersonOption(listOf(PersonId("00000000-0000-4000-8000-0000000000%02d".format(seed))), PeopleMode.ANY, name),
@@ -166,11 +175,12 @@ internal class ScaffoldScenes(
   /** I2: la stessa barra all'apertura successiva: la terna e' girata (una persona con il suo volto e un tipo che c'e' davvero). */
   val searchIdleRotated: SearchSource = FixedSearchSource(
     items = listOf(
-      SuggestionItem(person(7, "Anna"), face(7, 5)),
+      SuggestionItem(person(7, "Anna"), face(7)),
       SuggestionItem(Suggestion.Type(SearchMediaType.VIDEO, "Video"), photo(2)),
       SuggestionItem(Suggestion.Recent(HistoryEntry(1, "mare ad agosto", listOf("Agosto"))), photo(3)),
     ),
     library = shown,
+    faces = faces(7L to 5),
   )
 
   /** I2: un esempio solo (la libreria di chi ha appena cominciato): una capsula con il suo tondo, non un titolo. */

@@ -1,7 +1,6 @@
 package dev.pampa.mycloudgallery.feature.search
 
 import androidx.compose.runtime.Immutable
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -52,8 +51,9 @@ import kotlinx.coroutines.withContext
 //  - **Rotazione**: a ogni apertura una terna diversa, senza ripetere quella di prima finche' ce ne sono altre ([ExampleRotation]). In testa la ricerca
 //    recente piu' nuova, se c'e' (poi due esempi): le recenti restano a portata (anche mentre si scrive e quando non si trova niente).
 //  - **Nascosti mai** (D29): le foto vengono dall'istantanea della Libreria (che non li contiene), passano dal filtro finale ([SearchData.hidden]) e i
-//    risultati delle prove sono quelli del motore (che li esclude). La riga le disegna solo se sono ancora nell'istantanea di adesso; un volto solo se una
-//    delle sue foto lo e' ([SuggestionArt.Face.origins]).
+//    risultati delle prove sono quelli del motore (che li esclude). La riga le disegna solo se sono ancora nell'istantanea di adesso.
+//  - **I volti** (CG-1, giro 1): con il contratto delle Raccolte, in un posto solo ([SuggestionFaces]): gli esempi tengono la persona, mai il ritaglio; a
+//    ogni revoca si buttano tutti i volti e anche le persone degli esempi, che si rifanno con il cancello di adesso ([onRevocation]).
 
 /** L'anteprima di un suggerimento (I2): una foto della Libreria visibile o un volto. Senza, la riga disegna il segno del suo tipo. */
 @Immutable
@@ -61,8 +61,15 @@ sealed interface SuggestionArt {
   /** La foto [media]: si disegna solo se e' nell'istantanea di adesso (un media nascosto o eliminato non c'e'). */
   data class Photo(val media: MediaId) : SuggestionArt
 
-  /** Il volto di [person], con le foto da cui il cancello l'ha preso: si disegna solo se almeno una e' ancora nella Libreria visibile. */
-  class Face(val person: PersonId, val image: ImageBitmap, val origins: Set<MediaId>) : SuggestionArt {
+  /**
+   * Il volto di [person] (CG-1): **solo chi e'**, mai il ritaglio. Il ritaglio sta in [SuggestionFaces], con il segno delle revoche e le foto d'origine:
+   * si disegna solo se il cancello l'ha dato con il segno di adesso e se almeno una foto d'origine e' nella Libreria visibile. Senza, la foto [fallback]
+   * (il primo risultato, con le regole delle foto), o il segno della persona.
+   */
+  class Face(val person: PersonId, val fallback: MediaId? = null) : SuggestionArt {
+    override fun equals(other: Any?): Boolean = other is Face && other.person == person && other.fallback == fallback
+    override fun hashCode(): Int = person.hashCode() * 31 + (fallback?.hashCode() ?: 0)
+
     /** Mai l'id (D37). */
     override fun toString(): String = "SuggestionArt.Face"
   }
@@ -308,8 +315,17 @@ class SearchExamples(
   }
   private val probing = HashSet<String>()
 
-  /** I volti gia' ritagliati, per persona; via tutti a ogni revoca. */
-  private val faceCache = HashMap<PersonId, SuggestionArt.Face?>()
+  /**
+   * CG-1: i volti delle anteprime, in un posto solo e con il segno delle revoche ([SuggestionFaces]). La barra li legge da qui; niente altro tiene un
+   * ritaglio.
+   */
+  val faceImages: SuggestionFaces = SuggestionFaces()
+
+  /** A chi e' gia' stato chiesto il volto e con quale segno: non si richiede a ogni tasto, si richiede dopo una revoca o a un'apertura. */
+  private val asked = HashMap<PersonId, Any?>()
+
+  /** I suggerimenti a riposo (da [start]): servono a rifare le persone dopo una revoca. */
+  private var idleSource: (suspend () -> IdleSuggestions)? = null
 
   private val mutableUpdates = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
@@ -323,6 +339,9 @@ class SearchExamples(
   fun start(idle: suspend () -> IdleSuggestions) {
     if (started) return
     started = true
+    idleSource = idle
+    // CG-1: le revoche dei volti si seguono anche senza Libreria (le recenti con una persona hanno il volto).
+    faces?.let { port -> scope.launch { port.revocations.collect { token -> onRevocation(token) } } }
     val source = data ?: return
     scope.launch {
       source.snapshot.filterNotNull().first()
@@ -346,20 +365,37 @@ class SearchExamples(
         }
       }
     }
-    faces?.let { port ->
-      scope.launch {
-        var first = true
-        port.revocations.collect {
-          if (first) {
-            first = false
-          } else {
-            faceCache.clear()
-            mutableUpdates.tryEmit(Unit)
-          }
-        }
-      }
+  }
+
+  /**
+   * CG-1: un segno nuovo delle revoche (il primo, quando si comincia, e ognuno dopo: cancellazione locale, Persone spenta o rimontata, ritagli svuotati).
+   * Nello stesso giro, prima di ogni attesa: via **tutti** i volti ([SuggestionFaces.revoke]) e le domande fatte; con una revoca vera via anche le persone
+   * dagli esempi (la terna di adesso e quella della prossima apertura), perche' i loro nomi potrebbero non valere piu' (Persone spenta). Poi la barra
+   * rilegge e le persone si rifanno dalle sorgenti di adesso, con il cancello di adesso: un volto torna solo se il cancello lo ripermette.
+   */
+  private fun onRevocation(token: Any?) {
+    val first = !hadToken
+    hadToken = true
+    faceImages.revoke(token)
+    asked.clear()
+    if (first) return
+    if (pool.any { it.kind == ExampleKind.PERSON }) pool = pool.filter { it.kind != ExampleKind.PERSON }
+    peopleCounts = emptyMap()
+    peopleOf = null
+    mutableUpdates.tryEmit(Unit)
+    val idle = idleSource ?: return
+    val current = digest ?: return
+    scope.launch {
+      val now = safeIdle(idle)
+      // Il riassunto e' cambiato nel frattempo: le persone le rifa' gia' il suo giro.
+      if (digest !== current) return@launch
+      probePeople(now.people, current)
+      rebuild(now)
     }
   }
+
+  /** Vero dopo il primo segno delle revoche. */
+  private var hadToken = false
 
   private suspend fun safeIdle(idle: suspend () -> IdleSuggestions): IdleSuggestions = try {
     idle()
@@ -438,8 +474,7 @@ class SearchExamples(
     }
     for (option in idle.people) {
       val (count, first) = peopleCounts[option.ids.first()] ?: continue
-      val art = face(option.ids.first()) ?: first?.let { SuggestionArt.Photo(it) }
-      candidates += Example(SuggestionItem(Suggestion.PersonSuggestion(option), art), count, ExampleKind.PERSON)
+      candidates += Example(SuggestionItem(Suggestion.PersonSuggestion(option), personArt(option.ids.first(), first)), count, ExampleKind.PERSON)
     }
     for (place in idle.places) {
       val tally = current.place(place.ids) ?: continue
@@ -469,7 +504,10 @@ class SearchExamples(
     if (pool.isEmpty()) return withArt(SearchStates.idleTop(idle))
     val skip = tail.mapTo(HashSet()) { SearchText.normalize(it.label) }
     val chosen = if (advance) rotation.next(pool, size - tail.size, skip) else rotation.current(pool, size - tail.size, skip)
-    return chosen.map { it.item } + withArt(tail)
+    val items = chosen.map { it.item } + withArt(tail)
+    // Una nuova apertura: il cancello riconferma i volti della terna (una foto d'origine tornata visibile lo ripermette, una sparita lo toglie).
+    if (advance) items.forEach { item -> (item.art as? SuggestionArt.Face)?.let { authorize(it.person, recheck = true) } }
+    return items
   }
 
   /** Gli esempi per quando la ricerca non trova niente e non c'e' nessuna ricerca recente: gli stessi della barra, senza farli girare. */
@@ -478,26 +516,24 @@ class SearchExamples(
   /** Le anteprime di [suggestions] (i completamenti mentre si scrive, le recenti): solo cio' che e' gia' pronto, piu' i volti. */
   suspend fun withArt(suggestions: List<Suggestion>): List<SuggestionItem> = suggestions.map { SuggestionItem(it, artOf(it)) }
 
-  private suspend fun artOf(suggestion: Suggestion): SuggestionArt? {
+  private fun artOf(suggestion: Suggestion): SuggestionArt? {
     val current = digest
     return when (suggestion) {
       is Suggestion.PlaceSuggestion -> current?.place(suggestion.option.ids)?.newest?.let { SuggestionArt.Photo(it) }
       is Suggestion.Type -> current?.type(suggestion.type)?.newest?.let { SuggestionArt.Photo(it) }
-      is Suggestion.PersonSuggestion -> face(suggestion.option.ids.first())
-        ?: peopleCounts[suggestion.option.ids.first()]?.second?.let { SuggestionArt.Photo(it) }
+      is Suggestion.PersonSuggestion -> personArt(suggestion.option.ids.first(), peopleCounts[suggestion.option.ids.first()]?.second)
       is Suggestion.Recent -> recentArt(suggestion.entry)
       is Suggestion.Term -> termArt(suggestion.label, current)
     }
   }
 
   /** Una ricerca recente: il volto della sua persona, o la foto del suo primo risultato (di questa sessione, o di una prova fatta adesso in sottofondo). */
-  private suspend fun recentArt(entry: HistoryEntry): SuggestionArt? {
-    entry.persons.firstOrNull()?.let { person -> face(person)?.let { return it } }
+  private fun recentArt(entry: HistoryEntry): SuggestionArt? {
     val key = SearchText.normalize(entry.text)
-    firsts[key]?.let { return SuggestionArt.Photo(it.second) }
-    termArt(entry.text, digest)?.let { return it }
-    probeLater(entry.text)
-    return null
+    val photo = firsts[key]?.second ?: (termArt(entry.text, digest) as? SuggestionArt.Photo)?.media
+    if (photo == null) probeLater(entry.text)
+    val person = entry.persons.firstOrNull()
+    return if (person != null) personArt(person, photo) else photo?.let { SuggestionArt.Photo(it) }
   }
 
   /** Una parola: una cosa provata, o un mese («Agosto», «Agosto 2024»). Le feste restano col segno del calendario. */
@@ -531,20 +567,36 @@ class SearchExamples(
     firsts[SearchText.normalize(text)] = results.confident.size to first
   }
 
-  /** Il volto di [person] dal cancello dei volti, una volta per persona (finche' una revoca non li butta). */
-  private suspend fun face(person: PersonId): SuggestionArt.Face? {
-    val port = faces ?: return null
-    if (faceCache.containsKey(person)) return faceCache[person]
-    val got = try {
-      withContext(compute) { port.face(person, facePx) }
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      null
+  /**
+   * L'anteprima di una persona: senza la porta dei volti la foto [fallback]; con la porta la persona (il ritaglio lo tiene [faceImages]) e intanto si chiede
+   * il volto al cancello, se non e' gia' stato chiesto con il segno di adesso.
+   */
+  private fun personArt(person: PersonId, fallback: MediaId?): SuggestionArt? {
+    if (faces == null) return fallback?.let { SuggestionArt.Photo(it) }
+    authorize(person)
+    return SuggestionArt.Face(person, fallback)
+  }
+
+  /**
+   * CG-1: il volto di [person] dal cancello dei volti, fuori dal thread principale. Il segno delle revoche si prende **prima** della domanda: se cambia
+   * mentre il ritaglio e' in volo, la risposta non entra ([SuggestionFaces.admit]). Un rifiuto toglie il volto. Una volta per persona e per segno, o di
+   * nuovo con [recheck] (un'apertura).
+   */
+  private fun authorize(person: PersonId, recheck: Boolean = false) {
+    val port = faces ?: return
+    val token = faceImages.currentToken
+    if (!recheck && asked.containsKey(person) && asked[person] == token) return
+    asked[person] = token
+    scope.launch {
+      val got = try {
+        withContext(compute) { port.face(person, facePx)?.let { face -> face.bitmap.asImageBitmap() to face.origins } }
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        null
+      }
+      if (got == null || got.second.isEmpty()) faceImages.refuse(person, token) else faceImages.admit(person, got.first, got.second, token)
     }
-    val art = got?.takeIf { it.origins.isNotEmpty() }?.let { SuggestionArt.Face(person, it.bitmap.asImageBitmap(), it.origins) }
-    faceCache[person] = art
-    return art
   }
 
   companion object {

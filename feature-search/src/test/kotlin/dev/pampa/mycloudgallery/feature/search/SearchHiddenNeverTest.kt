@@ -148,7 +148,7 @@ class SearchHiddenNeverTest {
     fun collect() = c.strip.value.forEach { item ->
       when (val art = item.art) {
         is SuggestionArt.Photo -> seen += art.media
-        is SuggestionArt.Face -> seen += art.origins
+        is SuggestionArt.Face -> art.fallback?.let { seen += it }
         null -> Unit
       }
     }

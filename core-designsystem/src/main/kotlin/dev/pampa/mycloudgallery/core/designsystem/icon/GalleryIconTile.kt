@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PriorityHigh
 import androidx.compose.material.icons.rounded.Remove
@@ -110,8 +111,11 @@ enum class GalleryIconStatus {
   /** In corso: le frecce che girano su blu. */
   Running,
 
-  /** In pausa, ripartira': le due barre su grigio. */
+  /** In pausa, ripartira' quando la si riprende (o tolta la recinzione): le due barre su grigio. */
   Paused,
+
+  /** In attesa, riparte da sola (la coda, il NAS che torna, le condizioni giuste): la clessidra su grigio. Mai le due barre per l'attesa (CU-33). */
+  Waiting,
 
   /** Fermo, spento: il trattino su grafite. */
   Stopped,
@@ -328,6 +332,7 @@ fun GalleryIconStatus.glyph(): ImageVector = when (this) {
   GalleryIconStatus.Done -> Icons.Rounded.Check
   GalleryIconStatus.Running -> Icons.Rounded.Sync
   GalleryIconStatus.Paused -> Icons.Rounded.Pause
+  GalleryIconStatus.Waiting -> Icons.Rounded.HourglassTop
   GalleryIconStatus.Stopped -> Icons.Rounded.Remove
   GalleryIconStatus.Attention -> Icons.Rounded.PriorityHigh
   GalleryIconStatus.Problem -> Icons.Rounded.Close
@@ -340,6 +345,7 @@ fun GalleryIconStatus.label(): String = stringResource(
     GalleryIconStatus.Done -> R.string.icon_status_done
     GalleryIconStatus.Running -> R.string.icon_status_running
     GalleryIconStatus.Paused -> R.string.icon_status_paused
+    GalleryIconStatus.Waiting -> R.string.icon_status_waiting
     GalleryIconStatus.Stopped -> R.string.icon_status_stopped
     GalleryIconStatus.Attention -> R.string.icon_status_attention
     GalleryIconStatus.Problem -> R.string.icon_status_problem
@@ -399,7 +405,7 @@ object GalleryIconPalette {
   fun status(status: GalleryIconStatus, scheme: ColorScheme, dark: Boolean): GalleryIconColors = when (status) {
     GalleryIconStatus.Done -> tile(preset(GREEN).resolve(dark))
     GalleryIconStatus.Running -> tile(preset(BLUE).resolve(dark))
-    GalleryIconStatus.Paused -> colors(GalleryIconFamily.System, scheme, dark)
+    GalleryIconStatus.Paused, GalleryIconStatus.Waiting -> colors(GalleryIconFamily.System, scheme, dark)
     GalleryIconStatus.Stopped -> colors(GalleryIconFamily.Security, scheme, dark)
     GalleryIconStatus.Attention -> tile(preset(ORANGE).resolve(dark))
     GalleryIconStatus.Problem -> colors(GalleryIconFamily.Danger, scheme, dark)

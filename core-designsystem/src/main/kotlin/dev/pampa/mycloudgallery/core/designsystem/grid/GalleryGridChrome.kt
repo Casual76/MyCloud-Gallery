@@ -18,10 +18,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
@@ -117,19 +119,7 @@ fun GalleryGridNotice(
     // I4 (fase I, «l'app parla troppo»): senza frase l'avviso e' una striscia, il segno, due parole e il tasto sulla stessa riga, anche a testo
     // grande (CS-13: impilate, due strisce coprivano quasi meta' dello schermo): il titolo va al piu' su due righe accanto al tasto.
     if (message.isBlank()) {
-      Text(
-        text = title,
-        style = MaterialTheme.typography.titleSmall,
-        color = scheme.onSurface,
-        maxLines = StripTitleLines,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.weight(1f).align(Alignment.CenterVertically),
-      )
-      if (actionLabel != null && onAction != null) {
-        Box(modifier = Modifier.defaultMinSize(minHeight = GalleryDimens.MinTouchTarget).align(Alignment.CenterVertically), contentAlignment = Alignment.Center) {
-          FluidButton(text = actionLabel, onClick = onAction, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Medium)
-        }
-      }
+      StripBody(title = title, actionLabel = actionLabel, onAction = onAction, modifier = Modifier.weight(1f))
       return@Row
     }
     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NoticeTextGap)) {
@@ -150,6 +140,51 @@ fun GalleryGridNotice(
     }
   }
 }
+
+/**
+ * Il corpo di una striscia (CU-26, CS-16): il titolo accanto al tasto quando ci sta con almeno [StripTitleMin] (al piu' due righe); altrimenti il
+ * titolo intero sopra e il tasto sotto. Il titolo non si taglia mai a «12 …»: dice quante foto e che cosa aspettano.
+ */
+@Composable
+private fun StripBody(title: String, actionLabel: String?, onAction: (() -> Unit)?, modifier: Modifier) {
+  val scheme = MaterialTheme.colorScheme
+  SubcomposeLayout(modifier = modifier) { constraints ->
+    val width = constraints.maxWidth
+    val button = if (actionLabel != null && onAction != null) {
+      subcompose("tasto") {
+        Box(modifier = Modifier.defaultMinSize(minHeight = GalleryDimens.MinTouchTarget), contentAlignment = Alignment.Center) {
+          FluidButton(text = actionLabel, onClick = onAction, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Medium)
+        }
+      }.first().measure(Constraints(maxWidth = width))
+    } else {
+      null
+    }
+    val gap = NoticeGap.roundToPx()
+    val room = if (button == null) width else width - button.width - gap
+    if (button == null || room >= StripTitleMin.roundToPx()) {
+      val text = subcompose("titolo") {
+        Text(text = title, style = MaterialTheme.typography.titleSmall, color = scheme.onSurface, maxLines = StripTitleLines, overflow = TextOverflow.Ellipsis)
+      }.first().measure(Constraints(maxWidth = room.coerceAtLeast(0)))
+      val height = maxOf(text.height, button?.height ?: 0)
+      layout(width, height) {
+        text.place(0, (height - text.height) / 2)
+        button?.place(width - button.width, (height - button.height) / 2)
+      }
+    } else {
+      val text = subcompose("titolo-intero") {
+        Text(text = title, style = MaterialTheme.typography.titleSmall, color = scheme.onSurface)
+      }.first().measure(Constraints(maxWidth = width))
+      val below = text.height + NoticeActionGap.roundToPx()
+      layout(width, below + button.height) {
+        text.place(0, 0)
+        button.place(0, below)
+      }
+    }
+  }
+}
+
+/** Sotto questa larghezza il titolo di una striscia non sta accanto al tasto: il tasto va sotto. */
+private val StripTitleMin: Dp = 96.dp
 
 /**
  * Il tasto **"Oggi"** (§2.4, "torna a oggi"): una capsula di vetro che compare quando si e' lontani dai piu' recenti e

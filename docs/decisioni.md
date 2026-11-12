@@ -18936,6 +18936,28 @@ Rilievi da `review-fase-I/giro1/` (CG, CU, CS) e regole comuni del TRIAGE.
   cestinato e' gia' uscito: servirebbe una lettura nuova del catalogo che ridia chiave e riferimento di una versione anche fuori dalla Libreria
   (proposta, da decidere). Per ora la piastrella del tipo. «3 media spariti» e «Lavori fermi ... sul NAS» della pagina Backup sono di I3.
 
+#### I4, giro di correzione 2 della review della fase I (12/11)
+
+Rilievi da `review-fase-I/giro2/` (CU, CS, CG).
+- **Componenti** (`85cef033`, primo commit): `GalleryInfoRow` (la riga che apre la «i», CS-21), `GalleryFigureState(why)` (il perche' dietro la «i»
+  sotto il titolo, proposta di I1) e centrata anche con `fill = false` (CU-27), `GalleryIconStatus.Waiting` (la clessidra: attesa = clessidra, pausa =
+  due barre, CU-33), la striscia sopra la griglia che manda il tasto sotto quando il titolo avrebbe meno di 96 dp (CU-26, CS-16).
+- **Nei miei moduli**: stati vuoti di Album, NAS, Diagnostica con `why`; le pagine che bloccano di `:app` nella forma comune con la frase aperta (CS-17);
+  il cestino del NAS con la riga comune; gli anelli del pop-up nel colore del backup e la «i» in una tinta (CU-30); clessidra per coda e attese
+  (pop-up, piede, operazioni NAS); in coda solo il peso sotto il titolo (CU-35); «Cestino del NAS» apre sulla sezione del NAS (CU-31); Batteria e VPN
+  con le piastrelle della famiglia, un segno per riga e i percorsi dietro la «i» (CU-34, CS-20); stringhe orfane tolte (CS-19); scene e PNG di
+  `NasTrashScreen` tolti (CU-32): la pagina e' codice dormiente (nessuna rotta, registro dei Nascosti), da togliere quando si toccano i suoi test.
+- **CU-3, miniature vere nel cestino del NAS: non fatto, per privacy e senza migrazione non si puo'.** Che cosa manca:
+  1. il diario del cestino (`nas_trash_entry`) tiene il percorso d'origine, non il media ne' la versione ne' lo stato «nascosto» al momento del
+     cestino; il legame percorso -> media passa dalla posizione nel catalogo, che dopo il cestino diventa `absent` e scade (`LocationRules`,
+     `MediaCatalog` 357) prima dei 30 giorni del cestino; le voci degli altri dispositivi hanno solo il nome. Dopo la scadenza non si sa piu' con
+     certezza di quale media fosse il file;
+  2. la miniatura in cache ha la chiave `versionKey` che si calcola solo dentro l'istantanea della Libreria visibile (`ColumnarTimelineSnapshot`:
+     hash di contenuto, proporzioni, modifica e ThumbHash), da cui il file cestinato e' gia' uscito; fuori servirebbe ricopiare quell'hash o una
+     chiave nuova, e senza cache l'unica strada e' rileggere il file dal cestino del NAS (escluso da CG).
+  Servirebbe salvare nel diario del cestino il media, la versione e lo stato dei Nascosti al momento del gesto: una migrazione. Per la beta resta
+  la piastrella del tipo con il segno e i giorni.
+
 ### I3, Backup e Impostazioni che si capiscono guardandoli (fase I, 11 novembre 2026)
 
 Ramo `fix/i3-backup-impostazioni` da `f7d91f7f`. Il metro dell'utente: «se non sapessi leggere o sentire, potrei usare l'app?». Prima e dopo, con le

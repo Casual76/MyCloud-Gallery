@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.settings.rules
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
 import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,7 +27,6 @@ import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.feature.settings.ui.ChoiceCard
 import dev.pampa.mycloudgallery.feature.settings.ui.Condition
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import androidx.compose.material.icons.rounded.AllInclusive
 import androidx.compose.material.icons.rounded.Balance
 import androidx.compose.material.icons.rounded.BatterySaver
@@ -92,12 +92,12 @@ internal fun RulesScreen(state: RulesUiState?, actions: RulesActions) {
     item { PresetGrid(selected = state.preset, onPreset = actions.onPreset) }
     item {
       val info = PresetCatalog.info(state.preset)
-      SettingsInfo(label = stringResource(R.string.rules_preset_info, info.title), text = info.summary + "\n" + stringResource(R.string.rules_footnote))
+      GalleryInfoRow(label = stringResource(R.string.rules_preset_info, info.title), detail = info.summary + "\n" + stringResource(R.string.rules_footnote), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding))
     }
 
     item { GallerySectionHeader(title = stringResource(R.string.rules_section_mobile)) }
     item { CapChips(state = state, onCap = actions.onCap) }
-    item { SettingsInfo(label = stringResource(R.string.rules_cap_info), text = stringResource(R.string.rules_cap_footnote)) }
+    item { GalleryInfoRow(label = stringResource(R.string.rules_cap_info), detail = stringResource(R.string.rules_cap_footnote), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
 
     item { GallerySectionHeader(title = stringResource(R.string.rules_section_roaming)) }
     item {
@@ -110,7 +110,7 @@ internal fun RulesScreen(state: RulesUiState?, actions: RulesActions) {
         )
       }
     }
-    item { SettingsInfo(label = stringResource(R.string.rules_roaming_info), text = stringResource(R.string.rules_roaming_detail)) }
+    item { GalleryInfoRow(label = stringResource(R.string.rules_roaming_info), detail = stringResource(R.string.rules_roaming_detail), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
 
     // FAB-4: l'interruttore previsto da docs/regole-attivita.md (§6, punto 7), legato a `pauseOnPowerSaver`: prima non compariva in nessuna schermata.
     item { GallerySectionHeader(title = stringResource(R.string.rules_section_power_saver)) }
@@ -125,10 +125,7 @@ internal fun RulesScreen(state: RulesUiState?, actions: RulesActions) {
       }
     }
     item {
-      SettingsInfo(
-        label = stringResource(R.string.rules_power_saver_info),
-        text = stringResource(R.string.rules_power_saver_detail),
-      )
+      GalleryInfoRow(label = stringResource(R.string.rules_power_saver_info), detail = stringResource(R.string.rules_power_saver_detail), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding))
     }
   }
 }

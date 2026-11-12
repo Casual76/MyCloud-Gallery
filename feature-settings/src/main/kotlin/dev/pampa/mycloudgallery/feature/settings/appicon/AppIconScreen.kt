@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.settings.appicon
 
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,6 +33,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -75,8 +77,15 @@ fun AppIconScreen(choice: AppIconChoice, art: AppIconArt?, onBack: () -> Unit, o
             .selectableGroup(),
           horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
+          // Giro 2 (CS-22): tre terzi uguali, cosi' col testo grande «Automatica» non tocca «Chiara».
           AppIconChoice.entries.forEach { option ->
-            AppIconOption(option = option, selected = option == choice, art = art, onClick = { if (option != choice) onChoose(option) })
+            AppIconOption(
+              option = option,
+              selected = option == choice,
+              art = art,
+              onClick = { if (option != choice) onChoose(option) },
+              modifier = Modifier.weight(1f),
+            )
           }
         }
       }
@@ -87,12 +96,12 @@ fun AppIconScreen(choice: AppIconChoice, art: AppIconArt?, onBack: () -> Unit, o
 
 /** Una scelta: l'anteprima grande, l'anello e la spunta se e' quella di adesso, il nome sotto. Per TalkBack una scelta con nome e stato. */
 @Composable
-private fun AppIconOption(option: AppIconChoice, selected: Boolean, art: AppIconArt, onClick: () -> Unit) {
+private fun AppIconOption(option: AppIconChoice, selected: Boolean, art: AppIconArt, onClick: () -> Unit, modifier: Modifier = Modifier) {
   val label = stringResource(appIconLabel(option))
   val selectedState = stringResource(R.string.selected)
   val ringShape = ContinuousCornerShape(SettingsDimens.AppIconRadius + SettingsDimens.AppIconRingGap + SettingsDimens.AppIconRing)
   Column(
-    modifier = Modifier
+    modifier = modifier
       .fluidPressable(onClick = onClick, role = Role.RadioButton)
       .semantics(mergeDescendants = true) {
         role = Role.RadioButton
@@ -123,10 +132,12 @@ private fun AppIconOption(option: AppIconChoice, selected: Boolean, art: AppIcon
     }
     Text(
       text = label,
-      style = MaterialTheme.typography.titleSmall,
+      // Giro 2 (CS-22): col testo grande l'etichetta scende di un gradino, cosi' «Automatica» resta dentro il suo terzo con un po' d'aria.
+      style = if (LocalDensity.current.fontScale >= LargeLabelScale) MaterialTheme.typography.labelMedium else MaterialTheme.typography.titleSmall,
       color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
+      textAlign = TextAlign.Center,
     )
   }
 }
@@ -204,3 +215,6 @@ internal fun appIconLabel(choice: AppIconChoice): Int = when (choice) {
 
 /** Un'icona adattiva e' di 108 dp e se ne vedono i 72 centrali: l'anteprima ingrandisce il primo piano di 108/72. */
 private const val ADAPTIVE_LAYER_SCALE: Float = 108f / 72f
+
+/** Da questa scala del testo l'etichetta della scelta usa il corpo piu' piccolo. */
+private const val LargeLabelScale = 1.2f

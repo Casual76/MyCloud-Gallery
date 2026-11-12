@@ -11,11 +11,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import dev.pampa.mycloudgallery.core.designsystem.icon.rememberGalleryStatusColors
-import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTileDefaults
-import androidx.compose.ui.unit.Dp
-import androidx.compose.foundation.border
-import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.FolderShared
@@ -112,8 +107,8 @@ internal class HeroStep(val icon: ImageVector, val family: GalleryIconFamily, va
 /**
  * Cio' che la testata dice: il [mark] di stato, l'[label] corta, al piu' una [line], il perche' lungo dietro la «i» ([detail]), l'arco che gira senza
  * misura ([busy]), i passi che mancano ([steps]) e i tasti ([actions]). [calmAction] = il primo tasto e' tonale (lo stato di tutti i giorni non chiede
- * niente: «Fai ora» e' una possibilita', non la cosa da fare). [waiting] = il backup aspetta una condizione (la carica, il Wi-Fi): sull'anello la
- * clessidra, e solo quella (giro 1, CU-7: la pausa ha le due barre, l'attesa la clessidra).
+ * niente: «Fai ora» e' una possibilita', non la cosa da fare). L'attesa (la carica, il Wi-Fi) ha il segno [GalleryIconStatus.Waiting], la
+ * clessidra del componente comune (giro 2; nel giro 1 era un disco fatto qui): la pausa ha le due barre.
  */
 @Immutable
 internal class HeroModel(
@@ -125,7 +120,6 @@ internal class HeroModel(
   val steps: List<HeroStep> = emptyList(),
   val actions: List<HeroAction> = emptyList(),
   val calmAction: Boolean = false,
-  val waiting: Boolean = false,
 )
 
 /** Quanto e' al sicuro: [safe] su [total] media delle sorgenti attive. */
@@ -219,12 +213,11 @@ internal fun heroModel(status: BackupStatus, actions: BackupPageActions): HeroMo
     calmAction = true,
   )
   is BackupStatus.Waiting -> HeroModel(
-    mark = GalleryIconStatus.Paused,
+    mark = GalleryIconStatus.Waiting,
     label = stringResource(R.string.backup_hero_waiting),
     line = stringResource(R.string.backup_hero_waiting_line, BackupText.count(status.items), stringResource(waitRes(status.reason))),
     actions = listOf(HeroAction(stringResource(R.string.backup_do_now), Icons.Rounded.CloudUpload, actions.backupNow)),
     calmAction = true,
-    waiting = true,
   )
   is BackupStatus.Running -> {
     val kind = stringResource(if (status.kind == BackupKind.VIDEOS) R.string.backup_kind_videos else R.string.backup_kind_photos)
@@ -330,7 +323,7 @@ internal fun BackupHero(model: HeroModel, share: SafeShare, modifier: Modifier =
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(BackupDimens.CardGap),
   ) {
-    SafeRing(share = share, mark = model.mark, busy = model.busy, waiting = model.waiting, ringBackground = container)
+    SafeRing(share = share, mark = model.mark, busy = model.busy, ringBackground = container)
     HeroTexts(label = model.label, line = model.line, detail = model.detail)
     if (model.steps.isNotEmpty()) HeroSteps(model.steps, container)
     if (model.actions.isNotEmpty()) {
@@ -356,7 +349,7 @@ internal fun BackupHero(model: HeroModel, share: SafeShare, modifier: Modifier =
  * sull'arco in basso a destra. L'arco avanza con la molla dell'anello; il valore si legge nel disegno, non in composizione.
  */
 @Composable
-private fun SafeRing(share: SafeShare, mark: GalleryIconStatus, busy: Boolean, waiting: Boolean, ringBackground: androidx.compose.ui.graphics.Color) {
+private fun SafeRing(share: SafeShare, mark: GalleryIconStatus, busy: Boolean, ringBackground: androidx.compose.ui.graphics.Color) {
   val ring = GalleryProgressRingDefaults.Hero
   val description = if (share.total > 0 && !busy) {
     stringResource(R.string.backup_hero_ring_description, share.percent, BackupText.count(share.safe), BackupText.count(share.total))
@@ -379,42 +372,13 @@ private fun SafeRing(share: SafeShare, mark: GalleryIconStatus, busy: Boolean, w
       }
     }
     val place = Modifier.align(Alignment.BottomEnd).offset(x = -BackupDimens.HeroMarkInset, y = -BackupDimens.HeroMarkInset)
-    if (waiting) {
-      WaitMark(size = BackupDimens.HeroMark, ring = ringBackground, modifier = place)
-    } else {
-      GalleryStatusMark(
-        status = mark,
-        size = BackupDimens.HeroMark,
-        ring = ringBackground,
-        // L'etichetta sotto l'anello dice gia' lo stato a voce: il segno non lo ripete.
-        contentDescription = null,
-        modifier = place,
-      )
-    }
-  }
-}
-
-/**
- * CU-7 (giro 1): l'attesa ha la clessidra, e solo quella. Lo stesso disco del segno di stato (forma, anello, misura del glifo) con i colori quieti
- * della pausa: aspettare la carica non e' un problema. Decorativo: l'etichetta sotto l'anello dice gia' «In attesa».
- */
-@Composable
-private fun WaitMark(size: Dp, ring: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
-  val colors = rememberGalleryStatusColors(GalleryIconStatus.Paused)
-  val shape = ContinuousCornerShape(size / 2)
-  Box(
-    modifier = modifier
-      .size(size)
-      .clip(shape)
-      .background(colors.top)
-      .border(GalleryIconTileDefaults.MarkRing, ring, shape),
-    contentAlignment = Alignment.Center,
-  ) {
-    Icon(
-      imageVector = Icons.Rounded.HourglassTop,
+    GalleryStatusMark(
+      status = mark,
+      size = BackupDimens.HeroMark,
+      ring = ringBackground,
+      // L'etichetta sotto l'anello dice gia' lo stato a voce: il segno non lo ripete.
       contentDescription = null,
-      tint = colors.glyph,
-      modifier = Modifier.size(size * GalleryIconTileDefaults.MarkGlyphFraction),
+      modifier = place,
     )
   }
 }
@@ -480,8 +444,7 @@ private fun HeroTexts(label: String, line: String?, detail: String?) {
           open = open,
           onToggle = { open = !open },
           openState = openState,
-          closedState = closedState,
-          tint = MaterialTheme.colorScheme.primary,
+          closedState = closedState,
         )
       }
     }
@@ -500,7 +463,7 @@ private fun HeroTexts(label: String, line: String?, detail: String?) {
           textAlign = TextAlign.Center,
           modifier = Modifier.weight(1f, fill = false),
         )
-        if (detail != null) GalleryInfoGlyph(open = open, tint = MaterialTheme.colorScheme.primary)
+        if (detail != null) GalleryInfoGlyph(open = open)
       }
     }
     if (detail != null) {

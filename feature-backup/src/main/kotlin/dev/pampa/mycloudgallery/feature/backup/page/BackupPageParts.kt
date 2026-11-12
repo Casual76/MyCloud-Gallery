@@ -163,6 +163,8 @@ private fun SourceCard(source: SourceStatus, halt: SourcesHalt?, cell: Dp, showM
       text = name,
       style = MaterialTheme.typography.labelLarge,
       color = MaterialTheme.colorScheme.onSurface,
+      // Giro 2 (CS-18): due righe riservate al nome in ogni copertina, cosi' barre e numeri della stessa riga stanno alla stessa altezza.
+      minLines = NameLines,
       maxLines = NameLines,
       overflow = TextOverflow.Ellipsis,
       modifier = Modifier.clearAndSetSemantics {},

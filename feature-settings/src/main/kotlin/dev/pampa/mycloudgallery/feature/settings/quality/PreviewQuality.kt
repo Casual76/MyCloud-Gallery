@@ -1,5 +1,10 @@
 package dev.pampa.mycloudgallery.feature.settings.quality
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import androidx.compose.ui.Modifier
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import android.text.format.Formatter
 import dev.pampa.mycloudgallery.feature.settings.backup.ItalianCount
 import dev.pampa.mycloudgallery.feature.settings.ui.ChoiceMark
@@ -29,7 +34,6 @@ import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import java.util.Optional
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -131,13 +135,15 @@ fun PreviewQualityScreen(
             leadingTile = false,
             // CU-16: tre livelli, uno solo: il segno di scelta, non un interruttore.
             badge = { ChoiceMark(level == state.level) },
+            // Giro 2 (CS-22): una scelta non apre niente: senza la freccia, come nel Widget.
+            disclosure = false,
             selected = level == state.level,
             onClick = { if (level != state.level) onChoose(level) },
           )
         }
       }
     }
-    item { SettingsInfo(label = stringResource(R.string.quality_level_info, stringResource(titleOf(state.level))), text = stringResource(detailOf(state.level))) }
+    item { GalleryInfoRow(label = stringResource(R.string.quality_level_info, stringResource(titleOf(state.level))), detail = stringResource(detailOf(state.level)), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
     item {
       FluidSectionFootnote(
         text = if (state.converging) {
@@ -157,11 +163,12 @@ fun PreviewQualityScreen(
           leading = { RowTile(Icons.Rounded.Album) },
           leadingTile = false,
           badge = { FluidSwitch(checked = state.showAlbumCovers, onCheckedChange = null) },
+          disclosure = false,
           onClick = { onShowCovers(!state.showAlbumCovers) },
         )
       }
     }
-    item { SettingsInfo(label = stringResource(R.string.quality_covers_info), text = stringResource(R.string.quality_covers_detail)) }
+    item { GalleryInfoRow(label = stringResource(R.string.quality_covers_info), detail = stringResource(R.string.quality_covers_detail), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
     item {
       val counts = state.estimates[state.level]?.items ?: 0
       FluidSectionFootnote(text = pluralStringResource(R.plurals.quality_items, counts, ItalianCount.format(counts)))

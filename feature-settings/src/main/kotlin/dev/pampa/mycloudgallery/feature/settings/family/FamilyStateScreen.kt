@@ -1,5 +1,10 @@
 package dev.pampa.mycloudgallery.feature.settings.family
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import androidx.compose.foundation.layout.padding
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
+import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,7 +28,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.family.contract.FamilyStateQr
 import dev.pampa.mycloudgallery.core.family.contract.QrPayloadCodec
@@ -131,9 +135,13 @@ internal fun FamilyStateScreen(state: FamilyStateUi, onBack: () -> Unit) {
     when (state) {
       FamilyStateUi.Loading -> item { FluidLoadingBlock() }
       FamilyStateUi.Unavailable -> item {
-        FluidEmptyState(
+        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i» del componente.
+        GalleryFigureState(
+          icon = Icons.Rounded.CloudOff,
           title = stringResource(R.string.state_unavailable_title),
-          detail = stringResource(R.string.state_unavailable_detail),
+          tone = GalleryIllustrationTone.Caution,
+          fill = false,
+          why = stringResource(R.string.state_unavailable_detail),
         )
       }
       is FamilyStateUi.Ready -> {

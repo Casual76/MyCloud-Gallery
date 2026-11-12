@@ -1,10 +1,12 @@
 package dev.pampa.mycloudgallery.feature.settings
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsStatusHeader
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import androidx.compose.material.icons.rounded.HowToReg
-import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
@@ -248,7 +250,7 @@ fun SettingsScreen(
         },
       )
     }
-    family.description?.let { why -> item { SettingsInfo(label = stringResource(R.string.settings_hero_why), text = why()) } }
+    family.description?.let { why -> item { GalleryInfoRow(label = stringResource(R.string.settings_hero_why), detail = why(), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) } }
 
     // I3 (fase I): pochi gruppi, ognuno con una famiglia di colori: prima cio' che protegge le foto (backup, NAS, rete), poi le foto, la privacy,
     // la famiglia; cio' che serve di rado sta in fondo, in «Avanzate». Ogni riga ha la piastrella espressiva della sua famiglia e lo stato a destra
@@ -522,14 +524,22 @@ private fun familyHero(state: SettingsUiState): FamilyHero = when {
     value = { stringResource(R.string.hero_pending_value) },
     title = { stringResource(R.string.hero_pending_title) },
     description = { stringResource(R.string.hero_pending_detail) },
-    // CU-7: l'attesa e' la clessidra, e solo quella.
-    icon = Icons.Rounded.HourglassTop,
+    // CU-7: l'attesa e' la clessidra, e solo quella (giro 2: il segno comune dell'attesa sulla piastrella della famiglia).
+    status = GalleryIconStatus.Waiting,
   )
   state.isAdmin && state.pendingRequests > 0 -> FamilyHero(
     tone = FluidHeroTone.TertiaryToPrimary,
     value = { pluralStringResource(R.plurals.hero_requests_value, state.pendingRequests, state.pendingRequests) },
     title = { stringResource(R.string.hero_requests_title) },
     description = { stringResource(R.string.hero_requests_detail) },
+    status = GalleryIconStatus.Attention,
+  )
+  // Giro 2 (CU-29): l'unico admin e' un rischio vero, e la pagina Famiglia lo dice con «attenzione»: qui lo stesso segno, il perche' dietro la «i».
+  state.soleAdmin -> FamilyHero(
+    tone = FluidHeroTone.PrimaryToSecondary,
+    value = { deviceCountText(state.deviceCount) },
+    title = { stringResource(R.string.hero_ok_title_admin) },
+    description = { pluralStringResource(R.plurals.family_hero_detail_admin, 1, 1) },
     status = GalleryIconStatus.Attention,
   )
   else -> FamilyHero(

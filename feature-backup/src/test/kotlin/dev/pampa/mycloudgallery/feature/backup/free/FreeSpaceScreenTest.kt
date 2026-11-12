@@ -103,7 +103,7 @@ class FreeSpaceScreenTest : ComposeBackupTallTest() {
     composeRule.onNodeWithText("Prima ricontrollo ogni copia.").assertExists()
     // Gli ultimi giorni e il cestino stanno dietro la «i».
     composeRule.onNodeWithText("Gli ultimi 30 giorni restano sul telefono", substring = true).assertDoesNotExist()
-    composeRule.onNodeWithText("Come funziona").performClick()
+    composeRule.onNodeWithContentDescription("Come funziona", substring = true).performClick()
     composeRule.waitForIdle()
     composeRule.onNodeWithText("Gli ultimi 30 giorni restano sul telefono", substring = true).assertExists()
   }
@@ -147,7 +147,7 @@ class FreeSpaceScreenTest : ComposeBackupTallTest() {
     for (title in titles) composeRule.onNodeWithText(title).assertExists()
     // CU-6 = CS-3: la recinzione dice «in pausa» e «non ancora acceso», mai «di prova».
     composeRule.onNodeWithText("di prova", substring = true).assertDoesNotExist()
-    composeRule.onNodeWithText("Perché restano").performClick()
+    composeRule.onNodeWithContentDescription("Perché restano", substring = true).performClick()
     composeRule.waitForIdle()
     composeRule.onNodeWithText("Il backup vero non è ancora acceso", substring = true).assertExists()
     composeRule.onNodeWithText("di prova", substring = true).assertDoesNotExist()
@@ -168,7 +168,7 @@ class FreeSpaceScreenTest : ComposeBackupTallTest() {
     button("Libera subito…").assertIsEnabled().performClick()
     assertThat(calls.confirm).isEqualTo(1)
     assertThat(calls.confirmNow).isEqualTo(1)
-    composeRule.onNodeWithText("Come funziona").performClick()
+    composeRule.onNodeWithContentDescription("Come funziona", substring = true).performClick()
     composeRule.waitForIdle()
     composeRule.onNodeWithText("Libera spazio mette i file nel cestino di Android per 30 giorni. Libera subito li toglie per sempre.", substring = true).assertExists()
   }

@@ -1,9 +1,10 @@
 package dev.pampa.mycloudgallery.feature.backup.free
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.runtime.CompositionLocalProvider
 import dev.pampa.mycloudgallery.feature.backup.ui.LocalBackupCovers
-import dev.pampa.mycloudgallery.feature.backup.ui.BackupInfoToggle
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.rounded.DeleteForever
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
@@ -282,7 +283,7 @@ private fun LazyListScope.summary(state: FreeSpaceUi.Summary, actions: FreeSpace
       if (plan.filter.excludeRecentDays > 0) stringResource(R.string.backup_free_recent_note, plan.filter.excludeRecentDays) else null,
       stringResource(phoneTrashText(R.string.backup_free_trash_note, R.string.backup_free_trash_note_gallery)),
     ).joinToString("\n")
-    BackupInfoToggle(label = stringResource(R.string.backup_free_how_info), text = how)
+    GalleryInfoRow(label = stringResource(R.string.backup_free_how_info), detail = how, modifier = Modifier.padding(horizontal = BackupDimens.BlockGap))
   }
   if (plan.excluded.isNotEmpty()) {
     // Nell'ordine del contratto, non in quello di una mappa: la pagina non cambia da una volta all'altra.
@@ -301,7 +302,7 @@ private fun LazyListScope.summary(state: FreeSpaceUi.Summary, actions: FreeSpace
         val (title, detail) = exclusionText(reason)
         stringResource(title) + ": " + stringResource(detail)
       }.joinToString("\n")
-      BackupInfoToggle(label = stringResource(R.string.backup_free_excluded_info), text = why)
+      GalleryInfoRow(label = stringResource(R.string.backup_free_excluded_info), detail = why, modifier = Modifier.padding(horizontal = BackupDimens.BlockGap))
     }
   }
 }

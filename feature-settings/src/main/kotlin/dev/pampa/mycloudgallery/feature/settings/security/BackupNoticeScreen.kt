@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.settings.security
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -42,7 +43,6 @@ import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.runtime.Composable
@@ -133,10 +133,7 @@ internal fun BackupNoticeScreen(onBack: () -> Unit, onReviewChecklist: (() -> Un
     }
     item { RaidFigure() }
     item {
-      SettingsInfo(
-        label = stringResource(R.string.backup_raid_title),
-        text = stringResource(R.string.backup_hero_detail) + " " + stringResource(R.string.backup_raid_message),
-      )
+      GalleryInfoRow(label = stringResource(R.string.backup_raid_title), detail = stringResource(R.string.backup_hero_detail) + " " + stringResource(R.string.backup_raid_message), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding))
     }
 
     item { GallerySectionHeader(title = stringResource(R.string.backup_section_checklist)) }
@@ -148,7 +145,7 @@ internal fun BackupNoticeScreen(onBack: () -> Unit, onReviewChecklist: (() -> Un
         }
       }
     }
-    item { SettingsInfo(label = stringResource(R.string.backup_footnote_info), text = stringResource(R.string.backup_footnote)) }
+    item { GalleryInfoRow(label = stringResource(R.string.backup_footnote_info), detail = stringResource(R.string.backup_footnote), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
     onReviewChecklist?.let { review ->
       item {
         FluidButton(

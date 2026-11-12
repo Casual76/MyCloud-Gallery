@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.backup
 
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
@@ -11,6 +12,7 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupCoverPorts
 import dev.pampa.mycloudgallery.feature.backup.contract.SourceNewestMedia
 import dev.pampa.mycloudgallery.feature.backup.free.FreePreviewCount
+import dev.pampa.mycloudgallery.feature.backup.free.freePreviewFit
 import dev.pampa.mycloudgallery.feature.backup.free.freePreviewRequests
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupCovers
 import dev.pampa.mycloudgallery.feature.backup.ui.coverWindow
@@ -91,6 +93,22 @@ class BackupCoversTest {
     assertThat(keys).containsExactly(plan[1], plan[3], plan[4], plan[5]).inOrder()
     assertThat(keys).hasSize(FreePreviewCount)
     assertThat(freePreviewRequests(listOf(plan[0], plan[2])) { covers.request(hidden, it) }).isEmpty()
+  }
+
+  /**
+   * Giro 2 (CU-28 = CS-18): il «+N» non si taglia mai. Con il riquadro largo come un'anteprima ne stanno quattro (288 dp: la testata sul telefono);
+   * con «+1.236» piu' largo ne stanno tre; senza «+N» quante ne servono.
+   */
+  @Test
+  fun ilPiuNNonSiTagliaMai() {
+    val thumb = 52.dp
+    val gap = 6.dp
+    assertThat(freePreviewFit(4, 288.dp, thumb, gap) { 52.dp }).isEqualTo(4)
+    assertThat(freePreviewFit(4, 288.dp, thumb, gap) { 60.dp }).isEqualTo(3)
+    assertThat(freePreviewFit(4, 288.dp, thumb, gap) { 0.dp }).isEqualTo(4)
+    // Il riquadro si allarga con il numero: con piu' anteprime il numero scende, e si sceglie la prima combinazione che entra.
+    assertThat(freePreviewFit(4, 230.dp, thumb, gap) { n -> if (n >= 3) 70.dp else 60.dp }).isEqualTo(2)
+    assertThat(freePreviewFit(4, 10.dp, thumb, gap) { 52.dp }).isEqualTo(1)
   }
 
   /** CG-3: la finestra delle copertine e' quella sullo schermo, con poche sorgenti prima e dopo; senza niente sullo schermo, le prime. */

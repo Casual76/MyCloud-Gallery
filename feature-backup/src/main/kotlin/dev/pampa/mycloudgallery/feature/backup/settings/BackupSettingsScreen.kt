@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.backup.settings
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,7 +62,6 @@ import dev.pampa.mycloudgallery.feature.backup.BackupDimens
 import dev.pampa.mycloudgallery.feature.backup.R
 import dev.pampa.mycloudgallery.feature.backup.page.SourceCover
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupCoverWindow
-import dev.pampa.mycloudgallery.feature.backup.ui.BackupInfoToggle
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupLabel
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupNote
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupPage
@@ -175,7 +175,7 @@ private fun LazyListScope.sourcesSection(state: SettingsUi, actions: SettingsAct
     if (problem != null) {
       BackupNote(stringResource(problem))
     } else {
-      BackupInfoToggle(label = stringResource(R.string.backup_settings_sources_info), text = stringResource(R.string.backup_settings_sources_note))
+      GalleryInfoRow(label = stringResource(R.string.backup_settings_sources_info), detail = stringResource(R.string.backup_settings_sources_note), modifier = Modifier.padding(horizontal = BackupDimens.BlockGap))
     }
   }
 }
@@ -246,7 +246,7 @@ private fun LazyListScope.folderSection(state: SettingsUi, actions: SettingsActi
     }
   }
   item(key = "folder-note") {
-    BackupInfoToggle(label = stringResource(R.string.backup_settings_folder_info), text = stringResource(R.string.backup_settings_folder_note))
+    GalleryInfoRow(label = stringResource(R.string.backup_settings_folder_info), detail = stringResource(R.string.backup_settings_folder_note), modifier = Modifier.padding(horizontal = BackupDimens.BlockGap))
   }
 }
 
@@ -331,7 +331,7 @@ private fun LazyListScope.rulesSection(state: SettingsUi, actions: SettingsActio
     }
   }
   item(key = "rules-note") {
-    BackupInfoToggle(label = stringResource(R.string.backup_settings_rules_info), text = stringResource(R.string.backup_settings_rules_note))
+    GalleryInfoRow(label = stringResource(R.string.backup_settings_rules_info), detail = stringResource(R.string.backup_settings_rules_note), modifier = Modifier.padding(horizontal = BackupDimens.BlockGap))
   }
 }
 

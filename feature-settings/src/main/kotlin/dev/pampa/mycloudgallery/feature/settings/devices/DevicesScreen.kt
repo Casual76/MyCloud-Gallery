@@ -1,5 +1,12 @@
 package dev.pampa.mycloudgallery.feature.settings.devices
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import androidx.compose.ui.Modifier
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.NotificationImportant
@@ -7,7 +14,6 @@ import androidx.compose.runtime.Composable
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.feature.settings.ui.DescribedRow
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsStatusHeader
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.res.pluralStringResource
@@ -19,7 +25,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -75,9 +80,13 @@ internal fun DevicesScreen(
   ) {
     if (state.trust is TrustStatus.NotConfigured) {
       item {
-        FluidEmptyState(
+        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i» del componente.
+        GalleryFigureState(
+          icon = Icons.Rounded.Devices,
           title = stringResource(R.string.devices_empty_title),
-          detail = stringResource(R.string.devices_empty_detail),
+          tone = GalleryIllustrationTone.Brand,
+          fill = false,
+          why = stringResource(R.string.devices_empty_detail),
         )
       }
       return@FluidScreen
@@ -145,7 +154,7 @@ internal fun DevicesScreen(
           }
         }
       }
-      item { SettingsInfo(label = stringResource(R.string.devices_requests_info), text = stringResource(R.string.devices_section_requests_detail)) }
+      item { GalleryInfoRow(label = stringResource(R.string.devices_requests_info), detail = stringResource(R.string.devices_section_requests_detail), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
     }
 
     state.thisDevice?.let { device ->
@@ -195,10 +204,7 @@ internal fun DevicesScreen(
     }
 
     item {
-      SettingsInfo(
-        label = stringResource(R.string.devices_info),
-        text = stringResource(R.string.devices_section_inactive_detail) + " " + stringResource(R.string.devices_footnote),
-      )
+      GalleryInfoRow(label = stringResource(R.string.devices_info), detail = stringResource(R.string.devices_section_inactive_detail) + " " + stringResource(R.string.devices_footnote), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding))
     }
   }
 }

@@ -1,5 +1,9 @@
 package dev.pampa.mycloudgallery.feature.settings.widget
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import dev.pampa.mycloudgallery.feature.settings.ui.ChoiceMark
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -30,7 +34,6 @@ import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import dev.pampa.mycloudgallery.feature.settings.ui.RowValue
 import javax.inject.Inject
 import kotlinx.coroutines.flow.StateFlow
@@ -88,7 +91,7 @@ fun WidgetSettingsScreen(
         }
       }
     }
-    item { SettingsInfo(label = stringResource(R.string.widget_content_info), text = stringResource(R.string.widget_content_footnote)) }
+    item { GalleryInfoRow(label = stringResource(R.string.widget_content_info), detail = stringResource(R.string.widget_content_footnote), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
 
     item { GallerySectionHeader(title = stringResource(R.string.widget_section_period)) }
     item {
@@ -109,13 +112,10 @@ fun WidgetSettingsScreen(
 
     // I3 (fase I): cio' che il widget non fa e come si aggiunge, dietro la «i» (prima quattro paragrafi in pagina).
     item {
-      SettingsInfo(
-        label = stringResource(R.string.widget_section_privacy),
-        text = stringResource(R.string.widget_privacy_hidden) + " " + stringResource(R.string.widget_privacy_lock) + " " +
-          stringResource(R.string.widget_privacy_home),
-      )
+      GalleryInfoRow(label = stringResource(R.string.widget_section_privacy), detail = stringResource(R.string.widget_privacy_hidden) + " " + stringResource(R.string.widget_privacy_lock) + " " +
+          stringResource(R.string.widget_privacy_home), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding))
     }
-    item { SettingsInfo(label = stringResource(R.string.widget_section_add), text = stringResource(R.string.widget_add_how)) }
+    item { GalleryInfoRow(label = stringResource(R.string.widget_section_add), detail = stringResource(R.string.widget_add_how), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
   }
 }
 

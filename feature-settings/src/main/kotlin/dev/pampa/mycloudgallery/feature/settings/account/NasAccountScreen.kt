@@ -1,5 +1,12 @@
 package dev.pampa.mycloudgallery.feature.settings.account
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import androidx.compose.ui.Modifier
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.CloudOff
@@ -21,7 +28,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidRowValue
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -52,7 +58,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
-import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsStatusHeader
 
 /** L'account come lo mostra la pagina: utente e indirizzo (mai la password, che non esce dal Keystore). */
@@ -154,16 +159,20 @@ internal fun NasAccountScreen(state: NasAccountUiState, links: NasAccountLinks) 
   ) {
     if (!state.available || account == null) {
       item {
-        FluidEmptyState(
+        // Giro 2 della fase I (CS-17): la forma unica dello stato vuoto (figura e titolo); la frase dietro la «i» del componente.
+        GalleryFigureState(
+          icon = Icons.Rounded.CloudOff,
           title = stringResource(if (!state.available) R.string.account_unavailable_title else R.string.account_none_title),
-          detail = stringResource(if (!state.available) R.string.account_unavailable_detail else R.string.account_none_detail),
+          tone = GalleryIllustrationTone.Caution,
+          fill = false,
+          why = stringResource(if (!state.available) R.string.account_unavailable_detail else R.string.account_none_detail),
         )
       }
       return@FluidScreen
     }
 
     item { AccountHeader(state = state, onPassword = links.openPassword) }
-    accountWhy(state)?.let { why -> item { SettingsInfo(label = stringResource(R.string.account_why), text = stringResource(why)) } }
+    accountWhy(state)?.let { why -> item { GalleryInfoRow(label = stringResource(R.string.account_why), detail = stringResource(why), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) } }
 
     item { GallerySectionHeader(title = stringResource(R.string.account_section_account)) }
     item {
@@ -201,11 +210,8 @@ internal fun NasAccountScreen(state: NasAccountUiState, links: NasAccountLinks) 
       }
     }
     item {
-      SettingsInfo(
-        label = stringResource(R.string.account_change_info),
-        text = stringResource(R.string.account_change_password_detail) + ". " + stringResource(R.string.account_change_address_detail) + ". " +
-          stringResource(R.string.account_footnote),
-      )
+      GalleryInfoRow(label = stringResource(R.string.account_change_info), detail = stringResource(R.string.account_change_password_detail) + ". " + stringResource(R.string.account_change_address_detail) + ". " +
+          stringResource(R.string.account_footnote), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding))
     }
 
     (state.connection as? NasConnState.Ready)?.let { ready ->
@@ -230,7 +236,7 @@ internal fun NasAccountScreen(state: NasAccountUiState, links: NasAccountLinks) 
         }
       }
       // CU-20: la sigla del protocollo non sta in pagina; chi la cerca la trova dietro la «i».
-      item { SettingsInfo(label = stringResource(R.string.account_link_info), text = stringResource(ready.info.dialect.infoRes())) }
+      item { GalleryInfoRow(label = stringResource(R.string.account_link_info), detail = stringResource(ready.info.dialect.infoRes()), modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) }
     }
   }
 }

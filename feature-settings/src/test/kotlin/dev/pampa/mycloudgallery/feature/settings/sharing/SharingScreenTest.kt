@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.feature.settings.sharing
 
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -142,10 +144,11 @@ class SharingScreenTest : SharingComposeBase() {
   fun ilControlloEIlPerCheDeiFormatiCiSono_L41() {
     page(on = false)
     // Giro 1 della fase I (CU-20): i formati stanno dietro la «i»; la garanzia resta in pagina.
-    rule.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasText(string(R.string.sharing_formats_info), substring = true))
+    // Giro 2 (CS-21): la riga della «i» e' quella comune (GalleryInfoRow): un tasto con l'etichetta e il perche' nella descrizione.
+    rule.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasContentDescription(string(R.string.sharing_formats_info), substring = true))
     assertThat(has(string(R.string.sharing_footnote_check))).isTrue()
     assertThat(has(string(R.string.sharing_footnote_formats))).isFalse()
-    rule.onNodeWithText(string(R.string.sharing_formats_info)).performClick()
+    rule.onNodeWithContentDescription(string(R.string.sharing_formats_info), substring = true).performClick()
     rule.waitForIdle()
     assertThat(has(string(R.string.sharing_footnote_formats))).isTrue()
     val formats = string(R.string.sharing_footnote_formats)

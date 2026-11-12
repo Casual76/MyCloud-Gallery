@@ -8,7 +8,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -18,8 +17,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,9 +39,6 @@ import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTileDefaults
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoGlyph
-import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.feature.settings.R
 
 // LE PIASTRELLE DELLE RIGHE DELLE IMPOSTAZIONI (I3, fase I, 11/11). L'utente: «le icone sono troppo poco espressive»; «roba come le impostazioni diventa
@@ -52,7 +46,7 @@ import dev.pampa.mycloudgallery.feature.settings.R
 // distinguevano solo leggendo. Ora ogni riga ha la piastrella espressiva di core-designsystem (`GalleryIconTile`): il glifo bianco sul colore della
 // sua **famiglia**, scelta dal glifo, cosi' la stessa cosa ha lo stesso colore in ogni pagina (la chiave e' sempre della sicurezza, il NAS sempre
 // del backup, il Wi-Fi sempre della rete). Va nello slot `leading` di `FluidListRow` con `leadingTile = false`. Qui anche i due pezzi che tolgono i
-// paragrafi dalle pagine: la spiegazione dietro un tocco ([SettingsInfo]) e la scheda di una scelta con le sue condizioni in glifi ([ChoiceCard]).
+// paragrafi dalle pagine: la spiegazione dietro un tocco (dal giro 2 la riga comune `GalleryInfoRow`) e la scheda di una scelta con le sue condizioni in glifi ([ChoiceCard]).
 
 /** La piastrella di una riga: il glifo [icon] sul colore della sua famiglia ([SettingsFamilies.of]), con un segno di stato facoltativo. */
 @Composable
@@ -82,36 +76,6 @@ internal fun RowValue(text: String) {
     overflow = TextOverflow.Ellipsis,
     modifier = Modifier.widthIn(max = SettingsDimens.ValueMaxWidth),
   )
-}
-
-/**
- * Una spiegazione dietro un tocco, con la «i» unica della galleria (`GalleryInfoGlyph` e `GalleryInfoDetail`, giro 1 della fase I): in pagina il segno
- * con un'etichetta corta ([label]); il tocco apre la frase sotto, nello stesso posto e senza animazione di misura, e la richiude. Per TalkBack e' un
- * tasto con il suo stato, e il perche' lo sente gia' nella descrizione (senza toccare).
- */
-@Composable
-internal fun SettingsInfo(label: String, text: String, modifier: Modifier = Modifier) {
-  var open by rememberSaveable(text) { mutableStateOf(false) }
-  val openState = stringResource(R.string.info_open)
-  val closedState = stringResource(R.string.info_closed)
-  Column(modifier = modifier.fillMaxWidth().padding(horizontal = SettingsDimens.CardPadding)) {
-    Row(
-      modifier = Modifier
-        .defaultMinSize(minHeight = GalleryDimens.MinTouchTarget)
-        .fluidPressable(onClick = { open = !open }, role = Role.Button)
-        .semantics(mergeDescendants = true) {
-          role = Role.Button
-          contentDescription = label + ". " + text
-          stateDescription = if (open) openState else closedState
-        },
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(SettingsDimens.TightGap),
-    ) {
-      GalleryInfoGlyph(open = open, tint = MaterialTheme.colorScheme.primary)
-      Text(text = label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-    }
-    GalleryInfoDetail(text = text, visible = open, color = MaterialTheme.colorScheme.onSurfaceVariant)
-  }
 }
 
 /**

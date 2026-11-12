@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -17,14 +16,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
@@ -33,18 +29,9 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
-import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryLiveAnnouncement
 import dev.pampa.mycloudgallery.feature.backup.BackupDimens
-import dev.pampa.mycloudgallery.feature.backup.R
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoGlyph
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
-import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.res.stringResource
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.mutableStateOf
 
 // I pezzi delle pagine del backup che non sono chrome: la scheda di stato (un tono, un glifo, un titolo, una frase, un avanzamento e dei
 // tasti), l'intestazione di un gruppo, la nota. Tutti dai ruoli dello schema (nessun colore a mano) e dai toni del piede, le cui coppie
@@ -153,32 +140,3 @@ internal fun BackupNote(text: String, modifier: Modifier = Modifier) {
   )
 }
 
-/**
- * I3 (fase I): una spiegazione dietro un tocco. In pagina c'e' solo la «i» con un'etichetta corta ([label]); il tocco apre la frase sotto, nello stesso
- * posto, e la richiude. Giro 1 (CS-5): la «i» e la frase sono quelle di core-designsystem ([GalleryInfoGlyph], [GalleryInfoDetail]), come nelle
- * Impostazioni e nel pop-up; la riga e' un tasto da 48 dp con il suo stato, e TalkBack sente la frase nella sua descrizione, senza tocco.
- */
-@Composable
-internal fun BackupInfoToggle(label: String, text: String, modifier: Modifier = Modifier) {
-  var open by rememberSaveable(text) { mutableStateOf(false) }
-  val openState = stringResource(R.string.backup_hero_detail_open)
-  val closedState = stringResource(R.string.backup_hero_detail_closed)
-  Column(modifier = modifier.padding(horizontal = BackupDimens.BlockGap), verticalArrangement = Arrangement.spacedBy(BackupDimens.LineGap)) {
-    Row(
-      modifier = Modifier
-        .defaultMinSize(minHeight = GalleryDimens.MinTouchTarget)
-        .fluidPressable(onClick = { open = !open }, role = Role.Button)
-        .semantics(mergeDescendants = true) {
-          role = Role.Button
-          contentDescription = "$label. $text"
-          stateDescription = if (open) openState else closedState
-        },
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(BackupDimens.LineGap),
-    ) {
-      GalleryInfoGlyph(open = open, tint = MaterialTheme.colorScheme.primary)
-      Text(text = label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-    }
-    GalleryInfoDetail(text = text, visible = open, color = MaterialTheme.colorScheme.onSurfaceVariant)
-  }
-}

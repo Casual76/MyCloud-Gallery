@@ -378,7 +378,8 @@ private fun LibraryTopChrome(
   SideEffect { todayShown.value = farFromToday }
   val nas = state.nas.collectAsState()
   val backup = state.backup.collectAsState()
-  val cloudState by remember(network) { derivedStateOf { libraryCloud(network, nas.value, backup.value)?.state } }
+  val analysis = state.analysis.collectAsState()
+  val cloudState by remember(network) { derivedStateOf { libraryCloud(network, nas.value, backup.value, analysis.value)?.state } }
   val lastSync = rememberLastSync(nas, backup)
   val cloud = cloudState
   GridTopChrome(
@@ -406,6 +407,7 @@ private fun LibraryTopChrome(
           network = network,
           nas = nas,
           backup = backup,
+          analysis = analysis,
           lastSync = lastSync,
           commands = state.commands,
           actions = cloudActions,

@@ -559,6 +559,8 @@ private fun MainDestination(
     onNasStatusClick = { nav.navigate(DiagnosticsGraphRoute) },
     // Fase 5A (D16): la capsula del backup nel piede della Libreria porta alla pagina Backup.
     onBackupStatusClick = { nav.openBackupPage() },
+    // Pacchetto X: la riga dell'analisi nella nuvola porta alla pagina dove si vede scorrere.
+    onAnalysisStatusClick = { nav.navigate(AnalysisPageRoute) },
     libraryState = state,
     libraryViewer = libraryViewer,
     collections = { slot ->

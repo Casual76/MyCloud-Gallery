@@ -44,4 +44,23 @@
   <string name="library_cloud_action_wireguard">Apri WireGuard</string>
   <string name="library_cloud_action_password">Inserisci la password</string>
   <string name="library_cloud_action_backup">Apri Backup</string>
+
+  <!-- Pacchetto X: l'analisi delle foto come riga nel pannello (lo stesso stato ridotto della testata di "Ricerca e modelli"). -->
+  <string name="library_cloud_action_analysis">Apri Analisi</string>
+  <string name="library_cloud_analysis_running">Analisi in corso</string>
+  <string name="library_cloud_analysis_queued">Foto da analizzare</string>
+  <string name="library_cloud_analysis_problem">Analisi: un problema</string>
+  <string name="library_cloud_analysis_remaining">Restano %1$s foto</string>
+  <string name="library_cloud_analysis_eta">circa %1$d min</string>
+  <string name="library_cloud_analysis_wait_window">In pausa · fuori dalla fascia</string>
+  <string name="library_cloud_analysis_wait_charging">In pausa · serve la carica</string>
+  <string name="library_cloud_analysis_wait_battery">In pausa · batteria scarica</string>
+  <string name="library_cloud_analysis_wait_power_saver">In pausa · risparmio energetico</string>
+  <string name="library_cloud_analysis_wait_thermal">In pausa · telefono caldo</string>
+  <string name="library_cloud_analysis_wait_wifi">In pausa · in attesa del Wi-Fi</string>
+  <string name="library_cloud_analysis_wait_home_wifi">In pausa · in attesa del Wi-Fi di casa</string>
+  <string name="library_cloud_analysis_wait_nas">In pausa · il NAS non risponde</string>
+  <string name="library_cloud_analysis_wait_data_cap">In pausa · tetto dati raggiunto</string>
+  <string name="library_cloud_analysis_wait_preparation">In pausa · foto in preparazione</string>
+  <string name="library_cloud_analysis_wait_other">Analisi in pausa</string>
 </resources>

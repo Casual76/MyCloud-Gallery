@@ -12,9 +12,12 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -23,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
@@ -56,8 +60,10 @@ internal fun previewRequests(entry: NasFolderEntry, previews: NasFolderPreviews,
 @Composable
 internal fun NasPreviewWindow(listState: LazyListState, entries: List<NasFolderEntry>, previews: NasFolderPreviews, thumbnails: NasThumbnails) {
   val loader = thumbnails.loader ?: return
+  // CG-2: con la Libreria visibile cambia anche la finestra (un nascosto non si chiede piu').
+  val visible by thumbnails.visible.collectAsState()
   if (previews == NasFolderPreviews.None) return
-  LaunchedEffect(listState, entries, previews, thumbnails) {
+  LaunchedEffect(listState, entries, previews, thumbnails, visible) {
     val chunks = entries.chunked(NasDimens.RowsPerGroup)
     snapshotFlow { listState.layoutInfo.visibleItemsInfo.mapNotNull { info -> (info.key as? String)?.let(::groupIndex) } }
       .distinctUntilChanged()
@@ -82,13 +88,25 @@ private fun groupIndex(key: String): Int? = if (key.startsWith(GroupKeyPrefix)) 
 @Composable
 internal fun NasEntryArt(entry: NasFolderEntry, icon: ImageVector, family: GalleryIconFamily, previews: NasFolderPreviews, thumbnails: NasThumbnails) {
   val side = NasDimens.EntryArt
-  val requests = remember(entry.path, entry.isFolder, previews, thumbnails) { previewRequests(entry, previews, thumbnails) }
+  // CG-2: le richieste si rifanno a ogni Libreria visibile nuova (una ricerca per id sulla vista gia' pronta, al piu' quattro per riga): una foto nascosta
+  // un attimo fa non ha piu' richiesta e non si disegna, anche se la sua miniatura e' ancora nella cache e la rilettura delle copertine non e' ancora girata.
+  val visible by thumbnails.visible.collectAsState()
+  val requests = remember(entry.path, entry.isFolder, previews, thumbnails, visible) { previewRequests(entry, previews, thumbnails) }
   val loader = thumbnails.loader
   Box(modifier = Modifier.size(side)) {
-    GalleryIconTile(icon = icon, family = family, size = side)
-    if (loader != null && requests.isNotEmpty()) {
+    if (loader == null || requests.isEmpty()) {
+      GalleryIconTile(icon = icon, family = family, size = side)
+    } else {
       val images = requests.map { loader.image(it.key, it.ref) }
-      Box(modifier = Modifier.matchParentSize().clip(galleryIconTileShape(side))) {
+      // CU-9: la piastrella fa da fondo solo finche' non c'e' niente; con almeno una foto il fondo e' la superficie (niente bordo ne' croce blu).
+      val anyShown = images.any { it.value != null }
+      if (!anyShown) GalleryIconTile(icon = icon, family = family, size = side)
+      Box(
+        modifier = Modifier
+          .matchParentSize()
+          .clip(galleryIconTileShape(side))
+          .then(if (anyShown) Modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest) else Modifier),
+      ) {
         if (entry.isFolder && images.size >= NasFolderPreviews.FOLDER_COVER_COUNT) Mosaic(images) else Cover(images.first(), Modifier.fillMaxSize())
       }
       if (entry.isFolder) FolderMark(Modifier.align(Alignment.BottomEnd))
@@ -100,7 +118,7 @@ internal fun NasEntryArt(entry: NasFolderEntry, icon: ImageVector, family: Galle
 @Composable
 private fun Cover(image: State<ImageBitmap?>, modifier: Modifier) {
   val bitmap = image.value ?: return
-  Image(bitmap = bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = modifier)
+  Image(bitmap = bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = modifier.testTag(NasPreviewImageTag))
 }
 
 /** La copertina di una cartella: le sue quattro foto piu' recenti, due per due. */
@@ -110,7 +128,16 @@ private fun Mosaic(images: List<State<ImageBitmap?>>) {
     for (row in 0 until 2) {
       Row(modifier = Modifier.weight(1f)) {
         for (col in 0 until 2) {
-          Box(modifier = Modifier.weight(1f).fillMaxSize().padding(NasDimens.MosaicGap)) {
+          // CU-9: il filo solo fra le celle (mai sul bordo della piastrella).
+          val gap = NasDimens.MosaicGap
+          Box(
+            modifier = Modifier.weight(1f).fillMaxSize().padding(
+              start = gap * col,
+              end = gap * (1 - col),
+              top = gap * row,
+              bottom = gap * (1 - row),
+            ),
+          ) {
             Cover(images[row * 2 + col], Modifier.fillMaxSize())
           }
         }
@@ -131,6 +158,9 @@ private fun FolderMark(modifier: Modifier) {
     Icon(imageVector = Icons.Rounded.Folder, contentDescription = null, tint = GalleryOnPhoto.Content, modifier = Modifier.size(NasDimens.FolderMarkGlyph))
   }
 }
+
+/** L'etichetta di test di una miniatura disegnata in una riga (o in una cella del mosaico). */
+internal const val NasPreviewImageTag: String = "nas-anteprima"
 
 /** Il prefisso delle chiavi dei gruppi di righe di `groupedRows` nell'elenco di una cartella. */
 private const val GroupKeyPrefix = "entries-"

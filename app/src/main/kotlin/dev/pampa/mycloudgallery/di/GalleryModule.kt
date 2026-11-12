@@ -7,7 +7,6 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
-import dev.pampa.mycloudgallery.albums.LibraryAlbumRefs
 import dev.pampa.mycloudgallery.backup.BackupDiagnostics
 import dev.pampa.mycloudgallery.backup.BackupInputs
 import dev.pampa.mycloudgallery.backup.NoBackupDiagnostics
@@ -65,6 +64,7 @@ import dev.pampa.mycloudgallery.graph.GalleryStopper
 import dev.pampa.mycloudgallery.nas.ConvergingPreviewQuality
 import dev.pampa.mycloudgallery.nas.NasLibraryDiagnostics
 import dev.pampa.mycloudgallery.nas.NasOpsDiagnostics
+import dev.pampa.mycloudgallery.nas.nasLibraryThumbnails
 import dev.pampa.mycloudgallery.work.JobSchedulerBackupJobs
 import dev.pampa.mycloudgallery.work.JobSchedulerNasOpsJobs
 import dev.pampa.mycloudgallery.work.NasOpsJobs
@@ -247,10 +247,7 @@ object GalleryModule {
    * I4 (fase I): le miniature delle anteprime di Cartelle NAS. La stessa cache delle griglie e la stessa porta della Libreria **visibile** degli Album:
    * un media che l'istantanea visibile non contiene (Nascosti, aree che l'utente non vede) non ha richiesta, e la riga resta con la sua piastrella.
    */
-  @Provides fun nasThumbnails(gallery: GalleryGraph): NasThumbnails {
-    val refs = LibraryAlbumRefs { gallery.visibleTimeline.snapshot.value }
-    return NasThumbnails(gallery.thumbnails) { media -> refs.request(media) }
-  }
+  @Provides fun nasThumbnails(gallery: GalleryGraph): NasThumbnails = nasLibraryThumbnails(gallery.thumbnails, gallery.visibleTimeline.snapshot)
 
   @Provides
   @IntoSet

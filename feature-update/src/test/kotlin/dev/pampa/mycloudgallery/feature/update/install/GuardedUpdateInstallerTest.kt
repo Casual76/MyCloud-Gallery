@@ -39,6 +39,11 @@ class GuardedUpdateInstallerTest {
     dir.deleteRecursively()
   }
 
+  private companion object {
+    /** Il gettone dell'activity nelle prove del cancello. */
+    val ACTIVITY = Any()
+  }
+
   private fun update(sha256: String = sha, size: Long = 10L) = AvailableAppUpdate(
     version = "1.1.0",
     changelog = "",
@@ -57,6 +62,8 @@ class GuardedUpdateInstallerTest {
       AppUpdateInstallState.AwaitingUserAction("Conferma l'installazione sul dispositivo."),
       AppUpdateInstallState.Installed(""),
     ),
+    /** Che cosa vede l'engine nel momento in cui il file gli arriva (giro 3: il cancello era ancora aperto?). */
+    private val atInstall: () -> Unit = {},
   ) : ApkTransfer {
     var downloads = 0
     val installed = mutableListOf<Triple<File, String, String>>()
@@ -72,6 +79,7 @@ class GuardedUpdateInstallerTest {
 
     override fun installFile(file: File, expectedVersionName: String, sha256: String): Flow<AppUpdateInstallState> {
       installed += Triple(file, expectedVersionName, sha256)
+      atInstall()
       return flowOf(*engineSteps.toTypedArray())
     }
   }
@@ -102,7 +110,7 @@ class GuardedUpdateInstallerTest {
     permission: FakePermission = FakePermission(),
     inFront: () -> Boolean = { true },
     actualSha: () -> String = { sha },
-  ) = GuardedUpdateInstaller(transfer, facts, permission, inFront = inFront, checksum = { actualSha() }, io = Dispatchers.Unconfined)
+  ) = GuardedUpdateInstaller(transfer, facts, permission, inFront = inFront, checksum = { actualSha() }, io = Dispatchers.Unconfined, main = Dispatchers.Unconfined)
 
   /** Il primo tempo: dall'offerta al file verificato. */
   private fun prepare(
@@ -255,6 +263,7 @@ class GuardedUpdateInstallerTest {
         sha
       },
       io = io,
+      main = Dispatchers.Unconfined,
     )
     return try {
       runBlocking {
@@ -273,8 +282,8 @@ class GuardedUpdateInstallerTest {
   fun lAppVaDietroMentreIlFileSiVerifica_nienteAdAndroid_resta_Pronta() {
     // Davanti all'inizio della verifica, dietro alla fine: zero passaggi a installFile, il file resta «Pronta» (e c'e' ancora).
     val transfer = FakeTransfer()
-    val gate = ForegroundGate().apply { open() }
-    val steps = commitWhileVerifying(transfer, gate) { gate.close() }
+    val gate = ForegroundGate().apply { open(ACTIVITY) }
+    val steps = commitWhileVerifying(transfer, gate) { gate.close(ACTIVITY) }
     assertThat(transfer.installed).isEmpty()
     assertThat(steps.last()).isEqualTo(InstallStep.Ready(readyFile()))
     assertThat(steps).doesNotContain(InstallStep.Installing)
@@ -286,9 +295,52 @@ class GuardedUpdateInstallerTest {
     // Il rovescio: dietro all'inizio, davanti alla fine. Conta lo stato DOPO le verifiche, una volta sola.
     val transfer = FakeTransfer()
     val gate = ForegroundGate()
-    val steps = commitWhileVerifying(transfer, gate) { gate.open() }
+    val steps = commitWhileVerifying(transfer, gate) { gate.open(ACTIVITY) }
     assertThat(transfer.installed).hasSize(1)
     assertThat(steps).contains(InstallStep.Installing)
+  }
+
+  @Test
+  fun laPausaSubitoDopoLaLetturaDelCancello_arrivaDopoLIngressoNellaPorta_maiInMezzo() {
+    // Giro 3, US3-1: ON_PAUSE arriva proprio al confine, subito dopo la lettura del cancello. E' un compito del thread del ciclo di vita (qui un
+    // «main» finto): se la lettura e l'ingresso in installFile sono un passo solo su quel thread, la pausa passa DOPO l'ingresso; se la lettura
+    // fosse altrove (su IO), la pausa passerebbe in mezzo e il file arriverebbe all'engine con l'app gia' dietro.
+    val mainPool = Executors.newSingleThreadExecutor()
+    val mainThread = mainPool.submit<Thread> { Thread.currentThread() }.get()
+    val main = mainPool.asCoroutineDispatcher()
+    val gate = ForegroundGate().apply { open(ACTIVITY) }
+    val paused = CountDownLatch(1)
+    val frontAtInstall = mutableListOf<Boolean>()
+    val transfer = FakeTransfer(atInstall = { frontAtInstall += gate.inFront() })
+    val guarded = GuardedUpdateInstaller(
+      transfer = transfer,
+      facts = FakeFacts(me, good),
+      permission = FakePermission(),
+      inFront = {
+        val open = gate.inFront()
+        // ON_PAUSE subito dopo questa lettura, come un compito del main.
+        mainPool.execute {
+          gate.close(ACTIVITY)
+          paused.countDown()
+        }
+        // Fuori dal main la pausa puo' passare subito: la si lascia passare prima di andare avanti.
+        if (Thread.currentThread() !== mainThread) check(paused.await(5, TimeUnit.SECONDS))
+        open
+      },
+      checksum = { sha },
+      io = Dispatchers.Default,
+      main = main,
+    )
+    try {
+      runBlocking { guarded.commit(update(), readyFile()).toList() }
+      assertThat(paused.await(5, TimeUnit.SECONDS)).isTrue()
+    } finally {
+      main.close()
+    }
+    // Il file e' arrivato all'engine una volta, con il cancello ancora aperto; la pausa e' venuta dopo.
+    assertThat(transfer.installed).hasSize(1)
+    assertThat(frontAtInstall).containsExactly(true)
+    assertThat(gate.inFront()).isFalse()
   }
 
   @Test

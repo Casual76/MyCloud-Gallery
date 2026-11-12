@@ -59,7 +59,7 @@
   <string name="update_problem_signature">Il file non è originale</string>
   <!-- Nessun «telefono»: l'app gira anche sui tablet. Dove serve il nome, «dispositivo», come il resto dell'app (giro 2, UU2-10). -->
   <string name="update_problem_space">Manca spazio</string>
-  <string name="update_problem_blocked">Android l\'ha bloccata</string>
+  <string name="update_problem_blocked">Android ha bloccato l\'installazione</string>
   <string name="update_problem_incompatible">Non funziona su questo dispositivo</string>
   <string name="update_problem_install">Android non l\'ha installata</string>
 

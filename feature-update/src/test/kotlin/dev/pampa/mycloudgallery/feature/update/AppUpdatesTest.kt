@@ -318,8 +318,9 @@ class AppUpdatesTest {
   }
 
   @Test
-  fun chiudiSullAvvisoDiUnGuasto_loChiudeDavvero() = world {
-    // Giro 2, UU2-2: «Chiudi» sull'avviso e' later(): la scheda se ne va (non torna «Nuova versione» con «Aggiorna»), rimandata come «Dopo».
+  fun chiudiSullAvvisoDiUnGuasto_loChiudeDavvero_senzaContareComeDopo() = world {
+    // Giro 2, UU2-2: «Chiudi» sull'avviso chiude la scheda (non torna «Nuova versione» con «Aggiorna»). Giro 3, UU3-6: e' dismiss() + hidePrompt(),
+    // non «Dopo»: nessuno dei tre «Dopo» consumato, l'avviso torna al prossimo avvio.
     checker.answer = Result.success(offer("1.1.0"))
     val updates = updates()
     updates.checkIfDue(); scope.advanceUntilIdle()
@@ -327,10 +328,14 @@ class AppUpdatesTest {
     updates.install(); scope.advanceUntilIdle()
     assertThat(updates.prompt.value).isTrue()
     assertThat(updates.state.value.install).isEqualTo(InstallStep.Failed(UpdateProblem.OTHER_SIGNATURE))
-    updates.later(); scope.advanceUntilIdle()
+    updates.dismiss()
+    updates.hidePrompt()
+    scope.advanceUntilIdle()
     assertThat(updates.prompt.value).isFalse()
     assertThat(updates.state.value.install).isNull()
-    assertThat(store.savedReminder.declines).isEqualTo(1)
+    assertThat(store.savedReminder.declines).isEqualTo(0)
+    assertThat(store.savedReminder.snoozedUntil).isNull()
+    assertThat(updates().also { scope.advanceUntilIdle() }.prompt.value).isTrue()
   }
 
   @Test
@@ -534,6 +539,7 @@ class AppUpdatesTest {
         "a".repeat(64)
       },
       io = StandardTestDispatcher(scope.testScheduler),
+      main = StandardTestDispatcher(scope.testScheduler),
     )
     checker.answer = Result.success(offer("1.1.0"))
     app = updates(using = guarded)
@@ -610,6 +616,80 @@ class AppUpdatesTest {
     scope.advanceTimeBy(2 * UpdateRules.OUTCOME_WAIT_MILLIS); scope.runCurrent()
     assertThat(updates.state.value.install).isEqualTo(InstallStep.Ready(installer.file, interrupted = true))
     installer.commitTail?.close()
+  }
+
+  @Test
+  fun conLAppSempreDavanti_ilTempoCorreLoStesso_maiStoInstallandoSenzaUscita() = world {
+    // Giro 3, UU3-1: la finestra di Android non si apre, o Android installa senza finestra, o l'app resta RESUMED (schermo diviso, DeX): l'app non va
+    // mai dietro. Il tempo parte gia' al passaggio: dopo l'attesa «Pronta» con «Installa».
+    val updates = found()
+    installer.commitTail = Channel(Channel.UNLIMITED)
+    updates.onResumed(); scope.runCurrent()
+    updates.install(); scope.runCurrent()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.AwaitingUser)
+    scope.advanceTimeBy(UpdateRules.OUTCOME_WAIT_MILLIS - 1); scope.runCurrent()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.AwaitingUser)
+    scope.advanceTimeBy(1); scope.runCurrent()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.Ready(installer.file))
+  }
+
+  @Test
+  fun conLaFinestraDiAndroidAperta_ilTempoNonCorre() = world {
+    // Giro 3, UU3-1, il rovescio: la finestra di conferma si apre e l'utente legge; l'app e' in pausa. L'esito «in attesa dell'utente» arriva con
+    // l'app gia' dietro: il tempo non parte (non si torna «Pronta» mentre la finestra e' aperta).
+    val updates = found()
+    installer.commitSteps = listOf(InstallStep.Installing)
+    installer.commitTail = Channel(Channel.UNLIMITED)
+    updates.onResumed(); scope.runCurrent()
+    updates.install(); scope.runCurrent()
+    updates.onPaused(); scope.runCurrent()
+    installer.commitTail?.trySend(InstallStep.AwaitingUser)
+    scope.runCurrent()
+    scope.advanceTimeBy(10 * UpdateRules.OUTCOME_WAIT_MILLIS); scope.runCurrent()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.AwaitingUser)
+    installer.commitTail?.close()
+  }
+
+  @Test
+  fun dueFinestre_ilCancelloSaChiEDavanti_eLAttesaNonSiFermaPerLAltra() = world {
+    // Giro 3, US3-2: A e B davanti (due finestre, o la vecchia activity che esce dopo che la nuova e' entrata). La pausa di A, e il suo dispose
+    // tardivo, non chiudono il cancello di B ne' fermano l'attesa dell'esito.
+    val updates = found()
+    val a = Any()
+    val b = Any()
+    updates.onResumed(a); updates.onResumed(b); scope.runCurrent()
+    updates.onPaused(a); scope.runCurrent()
+    assertThat(gate.inFront()).isTrue()
+    installer.commitTail = Channel(Channel.UNLIMITED)
+    updates.install(); scope.runCurrent()
+    assertThat(installer.commits).hasSize(1)
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.AwaitingUser)
+    // Il dispose tardivo del vecchio proprietario: idempotente.
+    updates.onPaused(a); scope.runCurrent()
+    assertThat(gate.inFront()).isTrue()
+    scope.advanceTimeBy(UpdateRules.OUTCOME_WAIT_MILLIS); scope.runCurrent()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.Ready(installer.file))
+    // Esce anche B: nessuno davanti.
+    updates.onPaused(b)
+    assertThat(gate.inFront()).isFalse()
+  }
+
+  @Test
+  fun dueRitorniRavvicinatiDalPermesso_unSoloSecondoTempo() = world {
+    // Giro 3, US3-3: il file e' pronto, il permesso era stato tolto e ora c'e'. Due ON_RESUME ravvicinati (due finestre, o un ritorno doppio): il
+    // secondo arriva mentre il primo secondo tempo e' partito ma non ha ancora salvato il tentativo (il salvataggio sospende). Un solo commit.
+    val updates = found()
+    installer.commitSteps = listOf(InstallStep.NeedsPermission)
+    updates.install(); scope.advanceUntilIdle()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.NeedsPermission)
+    assertThat(installer.commits).hasSize(1)
+    permission.granted = true
+    installer.commitSteps = listOf(InstallStep.Installing, InstallStep.AwaitingUser)
+    updates.onResumed(Any()); updates.onResumed(Any())
+    scope.runCurrent()
+    assertThat(installer.commits).hasSize(2)
+    assertThat(installer.prepares).hasSize(1)
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.AwaitingUser)
   }
 
   @Test

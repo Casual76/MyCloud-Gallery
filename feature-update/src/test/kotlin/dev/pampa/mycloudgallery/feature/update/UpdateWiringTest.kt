@@ -59,7 +59,8 @@ class UpdateWiringTest {
     val module = File("../app/src/main/kotlin/dev/pampa/mycloudgallery/di/UpdateModule.kt").readText()
     assertWithMessage("l'importanza del processo nel modulo dell'aggiornamento").that(module).doesNotContain("getMyMemoryState")
     val effect = File("src/main/kotlin/dev/pampa/mycloudgallery/feature/update/ui/UpdatePrompt.kt").readText()
-    assertWithMessage("ON_PAUSE chiude il cancello").that(effect).contains("onPauseOrDispose { viewModel.onPaused() }")
+    assertWithMessage("ON_PAUSE fa uscire dal cancello il proprietario di questa activity").that(effect).contains("onPauseOrDispose { viewModel.onPaused(owner) }")
+    assertWithMessage("ON_RESUME fa entrare lo stesso proprietario").that(effect).contains("viewModel.onResumed(owner)")
     val root = File("../app/src/main/kotlin/dev/pampa/mycloudgallery/AppRoot.kt").readText()
     assertWithMessage("l'effetto alla radice dell'activity").that(root).contains("UpdateLifecycleEffect(updatesViewModel)")
   }

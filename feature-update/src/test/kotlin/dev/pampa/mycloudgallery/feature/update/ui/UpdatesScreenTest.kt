@@ -274,11 +274,24 @@ class UpdatesScreenTest {
   }
 
   @Test
-  fun lAvvisoDiUnGuasto_ChiudiLoChiudeDavvero() {
-    // Giro 2, UU2-2: «Chiudi» sull'avviso chiude la scheda (come «Dopo»), non la riporta a «Nuova versione».
+  fun lAvvisoDiUnGuasto_ChiudiLoChiudeDavvero_senzaContareComeDopo() {
+    // Giro 2, UU2-2: «Chiudi» sull'avviso chiude la scheda, non la riporta a «Nuova versione». Giro 3, UU3-6: chiude il guasto e nasconde la scheda,
+    // senza «Dopo» (nessuno dei tre «Dopo» consumato).
     prompt(UpdateSamples.signature)
     rule.onNodeWithText(string(R.string.update_close)).performClick()
-    assertThat(called).containsExactly("later")
+    assertThat(called).containsExactly("close", "hide").inOrder()
+  }
+
+  @Test
+  fun lAvvisoPronta_DopoEInstalla_senzaLaXAccantoAdAnnulla() {
+    // Giro 3, UU3-4: la «×» (nasconde) e «Annulla» (butta il file da 110 MB) vicini si confondevano. Sull'avviso: «Dopo» e «Installa»; «Annulla» sta
+    // nella pagina.
+    prompt(UpdateSamples.ready)
+    assertThat(rule.onAllNodesWithText(string(R.string.update_cancel)).fetchSemanticsNodes()).isEmpty()
+    assertThat(rule.onAllNodes(hasContentDescription(string(R.string.update_hide))).fetchSemanticsNodes()).isEmpty()
+    rule.onNodeWithText(string(R.string.update_later)).performClick()
+    rule.onNodeWithText(string(R.string.update_install)).performClick()
+    assertThat(called).containsExactly("later", "install").inOrder()
   }
 
   @Test
@@ -321,8 +334,8 @@ class UpdatesScreenTest {
     show { Column { for (state in states) UpdatePromptCard(state = state, actions = actions) } }
     val min = with(rule.density) { 48.dp.toPx() } - 0.5f
     val heights = rule.onAllNodes(hasClickAction()).fetchSemanticsNodes().map { it.size.height }
-    // Dopo, Aggiorna; Annulla e la «×»; Annulla, Installa e la «×».
-    assertThat(heights).hasSize(7)
+    // Dopo, Aggiorna; Annulla e la «×»; Dopo e Installa (giro 3: niente «×» con il file pronto).
+    assertThat(heights).hasSize(6)
     for (height in heights) assertThat(height.toFloat()).isAtLeast(min)
   }
 

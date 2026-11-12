@@ -31,9 +31,10 @@ class UpdatesViewModel @Inject constructor(private val updates: AppUpdates) : Vi
   val prompt: StateFlow<Boolean> = updates.prompt
   val actions: UpdateActions = UpdateActions.of(updates)
 
-  fun onResumed() = updates.onResumed()
+  /** [owner]: il gettone dell'activity che e' davanti (giro 3, US3-2). */
+  fun onResumed(owner: Any) = updates.onResumed(owner)
 
-  fun onPaused() = updates.onPaused()
+  fun onPaused(owner: Any) = updates.onPaused(owner)
 
   /** La pagina aperta: un controllo se l'ultimo ha piu' di 24 ore (UU-4). */
   fun refreshIfDue() {

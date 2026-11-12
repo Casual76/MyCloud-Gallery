@@ -189,7 +189,7 @@ class UpdateRulesTest {
 
   @Test
   fun alTerzoDopo_trentaGiorniDiSilenzio_poiIlContoRiparte_maiPerSempre() {
-    // Giro 2 (decisione dell'orchestratore, al posto di «mai piu'»): tre avvisi al piu' in circa 39 giorni, e la voce in cima alle Impostazioni resta.
+    // Giro 2 (decisione dell'orchestratore, al posto di «mai piu'»): al piu' tre avvisi ogni 36 giorni (0, 3, 6, poi 36), e la voce in cima alle Impostazioni resta.
     val start = 1_000_000_000_000L
     val snooze = UpdateRules.SNOOZE_MILLIS
     val quiet = UpdateRules.QUIET_MILLIS

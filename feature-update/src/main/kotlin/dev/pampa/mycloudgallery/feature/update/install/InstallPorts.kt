@@ -53,19 +53,25 @@ fun interface FileChecksum {
  * Il cancello del passaggio ad Android (giro 2, US2-1 e UU2-1): aperto solo mentre l'activity dell'app e' RESUMED. Lo aprono e lo chiudono gli eventi
  * del ciclo di vita dell'activity (`UpdateLifecycleEffect` alla radice: ON_RESUME apre, ON_PAUSE e l'uscita dalla composizione chiudono), non
  * l'importanza del processo: un servizio in primo piano, il backup, non lo apre. [GuardedUpdateInstaller.commit] lo guarda una volta sola, dopo le
- * verifiche e subito prima di `installFile`.
+ * verifiche e subito prima di `installFile`, sul main.
+ *
+ * Giro 3 (US3-2): il cancello sa CHI e' davanti. Ogni proprietario (un gettone per composizione, cioe' per activity) entra con ON_RESUME ed esce con
+ * ON_PAUSE o con l'uscita dalla composizione; l'uscita e' idempotente. Aperto = almeno un proprietario RESUMED: con due finestre, la pausa (o il dispose
+ * tardivo) di una non chiude il cancello dell'altra. Niente Boolean condiviso ne' contatore.
  */
 class ForegroundGate {
-  @Volatile private var resumed = false
+  private val owners = HashSet<Any>()
 
-  fun inFront(): Boolean = resumed
+  fun inFront(): Boolean = synchronized(owners) { owners.isNotEmpty() }
 
-  fun open() {
-    resumed = true
+  fun open(owner: Any) {
+    synchronized(owners) { owners.add(owner) }
   }
 
-  fun close() {
-    resumed = false
+  /** Toglie [owner] (piu' volte non fa danni). Vero se non resta nessun proprietario davanti. */
+  fun close(owner: Any): Boolean = synchronized(owners) {
+    owners.remove(owner)
+    owners.isEmpty()
   }
 }
 

@@ -196,8 +196,9 @@ object UpdateRules {
 
   /**
    * L'avviso all'apertura (giro 1, UU-4 e US-3; giro 2): c'e' una versione da offrire e il rimando e' passato. Il rimando e' uno per tutte le versioni:
-   * chi pubblica due nomi a giorni alterni non fa tornare l'avviso ogni giorno (al piu' tre avvisi in circa 39 giorni). Un rimando che scade oltre la
-   * sua durata da adesso ([SNOOZE_MILLIS], o [QUIET_MILLIS] dopo il terzo «Dopo») vuol dire che l'orologio e' tornato indietro: vale come scaduto.
+   * chi pubblica due nomi a giorni alterni non fa tornare l'avviso ogni giorno (rispondendo subito «Dopo»: avvisi ai giorni 0, 3 e 6, poi il 36; al piu'
+   * tre avvisi ogni 36 giorni). Un rimando che scade oltre la sua durata da adesso ([SNOOZE_MILLIS], o [QUIET_MILLIS] dopo il terzo «Dopo») vuol dire
+   * che l'orologio e' tornato indietro: vale come scaduto.
    */
   fun shouldPrompt(hasOffer: Boolean, now: Long, snoozedUntil: Long?, declines: Int): Boolean =
     hasOffer && snoozeOver(now, snoozedUntil, windowOf(declines))

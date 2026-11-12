@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -54,8 +55,9 @@ import dev.pampa.mycloudgallery.feature.update.install.InstallStep
 // L'AVVISO (pacchetto U, 12/11/2026; giro 1 delle critiche, UU-5). Discreto e non bloccante: una scheda appoggiata SOPRA la barra delle schede della
 // galleria (la mette li' `:app`, nello scaffold: mai sopra la pillola, mai sopra il visore o le altre pagine), con la figura, due parole e i tasti.
 // Compare quando c'e' una versione da offrire e il promemoria lo permette, quando un tentativo aspetta il permesso, e una volta dopo un aggiornamento
-// riuscito («Aggiornata»). «Dopo» la rimanda di tre giorni (al terzo di fila, trenta); «Chiudi» su un guasto la chiude allo stesso modo (giro 2,
-// UU2-2); mentre lavora c'e' la «×» che la nasconde e basta (lo scaricamento continua).
+// riuscito («Aggiornata»). «Dopo» la rimanda di tre giorni (al terzo di fila, trenta); «Chiudi» su un guasto la chiude senza contare come «Dopo»
+// (giro 3, UU3-6: torna al prossimo avvio); mentre lavora c'e' la «×» che la nasconde e basta (lo scaricamento continua). Con il file pronto «Dopo»
+// e «Installa», senza la «×» (giro 3, UU3-4: «Annulla», che butta il file, sta nella pagina).
 
 /**
  * Il ciclo di vita dell'activity per l'aggiornamento, alla radice (`:app`): ON_RESUME apre il cancello del passaggio ad Android e riprende (dopo la
@@ -64,9 +66,12 @@ import dev.pampa.mycloudgallery.feature.update.install.InstallStep
  */
 @Composable
 fun UpdateLifecycleEffect(viewModel: UpdatesViewModel) {
-  LifecycleResumeEffect(viewModel) {
-    viewModel.onResumed()
-    onPauseOrDispose { viewModel.onPaused() }
+  // Un gettone per questa composizione, cioe' per questa activity (giro 3, US3-2): il cancello sa chi e' davanti, e la pausa di una finestra non
+  // chiude quello di un'altra. Nessun riferimento all'activity.
+  val owner = remember { Any() }
+  LifecycleResumeEffect(viewModel, owner) {
+    viewModel.onResumed(owner)
+    onPauseOrDispose { viewModel.onPaused(owner) }
   }
 }
 
@@ -182,15 +187,18 @@ private fun HideButton(onClick: () -> Unit) {
   }
 }
 
-/** Mentre lavora (o con il file pronto) l'avviso si nasconde con la «×», non con «Dopo»: «Dopo» vorrebbe dire rimandare. */
+/**
+ * Mentre lavora l'avviso si nasconde con la «×», non con «Dopo»: «Dopo» vorrebbe dire rimandare. Con il file pronto no (giro 3, UU3-4): «Dopo» la
+ * nasconde, e una «×» accanto ad «Annulla» si confonderebbe con chi butta il file.
+ */
 internal fun hidesOnly(model: UpdatePanelModel): Boolean = when (model.figure) {
-  UpdateFigure.DOWNLOADING, UpdateFigure.WORKING, UpdateFigure.AWAITING, UpdateFigure.READY, UpdateFigure.INSTALLED -> true
+  UpdateFigure.DOWNLOADING, UpdateFigure.WORKING, UpdateFigure.AWAITING, UpdateFigure.INSTALLED -> true
   else -> false
 }
 
 /**
- * Un tasto dell'avviso: «Dopo» (rimanda), «Chiudi» su un guasto (chiude l'avviso come «Dopo»: giro 2, UU2-2), «Ok» e «Novità» (dopo l'aggiornamento),
- * o un'azione del modello.
+ * Un tasto dell'avviso: «Dopo» (rimanda), «Chiudi» su un guasto (chiude l'avviso: giro 2, UU2-2; senza contare come «Dopo»: giro 3, UU3-6), «Ok» e
+ * «Novità» (dopo l'aggiornamento), o un'azione del modello.
  */
 internal class PromptButton private constructor(
   val label: Int,
@@ -198,10 +206,16 @@ internal class PromptButton private constructor(
   val filled: Boolean,
   private val kind: Kind,
 ) {
-  private enum class Kind { LATER, OK, NOTES, ACTION }
+  private enum class Kind { LATER, OK, NOTES, CLOSE, ACTION }
 
   fun onClick(actions: UpdateActions, onOpenNotes: (() -> Unit)?): () -> Unit = when (kind) {
     Kind.LATER, Kind.OK -> actions.later
+    Kind.CLOSE -> {
+      {
+        actions.close()
+        actions.hide()
+      }
+    }
     Kind.NOTES -> {
       {
         actions.later()
@@ -213,7 +227,7 @@ internal class PromptButton private constructor(
 
   companion object {
     val LATER = PromptButton(R.string.update_later, null, filled = false, kind = Kind.LATER)
-    val CLOSE = PromptButton(R.string.update_close, UpdateAction.CLOSE, filled = false, kind = Kind.LATER)
+    val CLOSE = PromptButton(R.string.update_close, UpdateAction.CLOSE, filled = false, kind = Kind.CLOSE)
     val OK = PromptButton(R.string.update_ok, null, filled = false, kind = Kind.OK)
     val NOTES = PromptButton(R.string.update_whats_new, null, filled = true, kind = Kind.NOTES)
 
@@ -227,12 +241,13 @@ internal fun updatedButtons(withNotes: Boolean): List<PromptButton> =
 
 /**
  * I tasti dell'avviso, da sinistra, mai piu' di due: il leggero, poi il pieno. Con una versione nuova o il permesso «Dopo» e il tasto che risolve;
- * sulla domanda dei dati mobili «Annulla» e «Scarica lo stesso»; mentre scarica solo «Annulla» (la «×» nasconde); con il file pronto «Annulla» e
- * «Installa»; con un guasto «Chiudi» (che chiude davvero l'avviso, UU2-2) e, se ha senso, «Riprova».
+ * sulla domanda dei dati mobili «Annulla» e «Scarica lo stesso»; mentre scarica solo «Annulla» (la «×» nasconde); con il file pronto «Dopo» e
+ * «Installa» (UU3-4); con un guasto «Chiudi» (che chiude davvero l'avviso, UU2-2) e, se ha senso, «Riprova».
  */
 internal fun promptButtons(model: UpdatePanelModel): List<PromptButton> = when (model.figure) {
-  UpdateFigure.METERED, UpdateFigure.READY ->
+  UpdateFigure.METERED ->
     listOfNotNull(model.secondary?.let { PromptButton.of(it, filled = false) }, model.primary?.let { PromptButton.of(it, filled = true) })
+  UpdateFigure.READY -> listOfNotNull(PromptButton.LATER, model.primary?.let { PromptButton.of(it, filled = true) })
   UpdateFigure.FAILED -> listOfNotNull(PromptButton.CLOSE, model.primary?.let { PromptButton.of(it, filled = true) })
   UpdateFigure.DOWNLOADING, UpdateFigure.WORKING -> listOfNotNull(model.secondary?.let { PromptButton.of(it, filled = false) })
   UpdateFigure.FOUND, UpdateFigure.PERMISSION -> listOfNotNull(PromptButton.LATER, model.primary?.let { PromptButton.of(it, filled = true) })

@@ -63,7 +63,10 @@ import kotlinx.coroutines.withContext
 //    una volta sola, dopo le verifiche e subito prima di `installFile`, su tutte le strade; altrimenti «Pronta» con «Installa» (UU-1, giro 2 US2-1);
 //  - passato il cancello e' «Sto installando». Se l'app torna davanti senza un esito (il «si'» nella finestra di Android, oppure una finestra chiusa
 //    senza scelta o mai aperta) resta «Sto installando» per [UpdateRules.OUTCOME_WAIT_MILLIS] di app davanti; un esito che arriva vince; senza
-//    esito si torna a «Pronta», e «Installa» riprova senza riscaricare (il file si ricontrolla). Giro 2, UU2-1.
+//    esito si torna a «Pronta», e «Installa» riprova senza riscaricare (il file si ricontrolla). Giro 2, UU2-1. Giro 3 (UU3-1): il tempo corre anche se
+//    l'app non va mai dietro (la finestra non si apre, Android installa senza finestra, schermo diviso); con la finestra di Android sopra l'app e' in
+//    pausa e il tempo e' fermo;
+//  - un tentativo alla volta (giro 3, US3-3): «Installa» e il ritorno dal permesso passano dalla stessa ammissione ([launchCommit]).
 //
 // LA VERSIONE CORRENTE e' il `versionName` INTERO (con il suffisso beta): una `1.1.0-beta.02` vede la stabile `1.1.0` (update.md, trappole).
 
@@ -305,18 +308,32 @@ class AppUpdates(
    */
   fun install(acceptMetered: Boolean = false) {
     val update = state.value.found ?: return
-    if (state.value.installing || job?.isActive == true) return
+    if (busy()) return
     val ready = readyFile?.takeIf { it.isFile && readyVersion == update.version }
     if (ready != null) {
       val consent = acceptMetered || attempt?.meteredConsent == true
       attempt = Attempt(update.version, AttemptStage.INSTALLING, consent, now(), installedVersion)
-      job = scope.launch { commit(update, ready) }
+      launchCommit(update, ready)
       return
     }
     startAttempt(update, consent = acceptMetered)
   }
 
+  /** Un tentativo lavora gia' (lo stato dice che lavora, o il suo lavoro e' partito): un secondo non entra. Tutto sul main. */
+  private fun busy(): Boolean = state.value.installing || job?.isActive == true
+
+  /**
+   * L'ammissione del secondo tempo, l'unica (giro 3, US3-3): «Installa» e il ritorno dal permesso passano di qui. Lo stato attivo si mette SUBITO,
+   * prima del salvataggio del tentativo (che sospende): un secondo ON_RESUME ravvicinato, o un secondo tocco, trova il tentativo gia' in corso.
+   */
+  private fun launchCommit(update: AvailableAppUpdate, file: File) {
+    if (busy()) return
+    mutable.update { it.copy(install = InstallStep.Verifying) }
+    job = scope.launch { commit(update, file) }
+  }
+
   private fun startAttempt(update: AvailableAppUpdate, consent: Boolean) {
+    if (busy()) return
     if (!consent && metered()) {
       mutable.update { it.copy(askMetered = true, install = null) }
       return
@@ -365,9 +382,14 @@ class AppUpdates(
           InstallStep.Installed -> forgetReady()
           else -> Unit
         }
-        // Un esito (annullata, un guasto, installata, il permesso tolto) vince sull'attesa.
-        if (!step.isActive()) stopWaiting()
         mutable.update { it.copy(install = step) }
+        when {
+          // Il file e' di Android e l'app e' davanti: il tempo corre anche se l'app non va mai dietro (giro 3, UU3-1). Se la finestra di Android
+          // si apre, l'app va in pausa e il tempo si ferma; al ritorno riparte da capo ([awaitOutcome]).
+          step == InstallStep.Installing || step == InstallStep.AwaitingUser -> if (gate.inFront()) startWaiting()
+          // Un esito (annullata, un guasto, installata, il permesso tolto) vince sull'attesa.
+          !step.isActive() -> stopWaiting()
+        }
       }
   }
 
@@ -406,11 +428,12 @@ class AppUpdates(
   }
 
   /**
-   * L'activity e' RESUMED: il cancello si apre. Con il permesso da dare: se ora c'e', il tentativo riprende (il tocco l'ha gia' dato), riguardando la
-   * rete (US-2). Con il file gia' passato ad Android: «Sto installando» e l'attesa dell'esito ([awaitOutcome]).
+   * L'activity di [owner] e' RESUMED: il cancello si apre. Con il permesso da dare: se ora c'e', il tentativo riprende (il tocco l'ha gia' dato),
+   * riguardando la rete (US-2). Con il file gia' passato ad Android: «Sto installando» e l'attesa dell'esito ([awaitOutcome]). [owner]: un gettone per
+   * activity (giro 3, US3-2); di serie quello unico, per chi ha una finestra sola.
    */
-  fun onResumed() {
-    gate.open()
+  fun onResumed(owner: Any = SoleOwner) {
+    gate.open(owner)
     scope.launch {
       loaded.await()
       when (state.value.install) {
@@ -421,19 +444,21 @@ class AppUpdates(
     }
   }
 
-  /** L'activity non e' piu' RESUMED (Home, schermo spento, la finestra di Android sopra): il cancello si chiude e l'attesa si ferma. */
-  fun onPaused() {
-    gate.close()
-    stopWaiting()
+  /**
+   * L'activity di [owner] non e' piu' RESUMED (Home, schermo spento, la finestra di Android sopra) o se ne va: esce dal cancello (piu' volte non fa
+   * danni). Il cancello si chiude e l'attesa si ferma solo quando non resta nessuna activity davanti (giro 3, US3-2).
+   */
+  fun onPaused(owner: Any = SoleOwner) {
+    if (gate.close(owner)) stopWaiting()
   }
 
   private fun resumeAfterPermission() {
-    if (!permission.granted()) return
+    if (!permission.granted() || busy()) return
     val update = state.value.found ?: return
     val current = attempt?.takeIf { it.version == update.version } ?: return
     val ready = readyFile?.takeIf { it.isFile && readyVersion == update.version }
     if (ready != null) {
-      job = scope.launch { commit(update, ready) }
+      launchCommit(update, ready)
       return
     }
     startAttempt(update, consent = current.meteredConsent)
@@ -447,6 +472,11 @@ class AppUpdates(
   private fun awaitOutcome() {
     if (!gate.inFront()) return
     mutable.update { if (it.install == InstallStep.AwaitingUser) it.copy(install = InstallStep.Installing) else it }
+    startWaiting()
+  }
+
+  /** Il tempo dell'attesa, da capo: [UpdateRules.OUTCOME_WAIT_MILLIS] con l'app davanti, poi «Pronta» se non e' arrivato un esito. */
+  private fun startWaiting() {
     outcomeWait?.cancel()
     outcomeWait = scope.launch {
       delay(UpdateRules.OUTCOME_WAIT_MILLIS)
@@ -470,8 +500,8 @@ class AppUpdates(
   }
 
   /**
-   * «Dopo» sull'avviso (e «Chiudi» su un guasto, giro 2 UU2-2): lo chiude e lo rimanda di tre giorni; al terzo di fila, trenta (`UpdateRules.declined`).
-   * Un permesso che si aspettava o un guasto si lasciano: il tentativo finisce. Con «Aggiornata» e' solo «Ok».
+   * «Dopo» sull'avviso: lo chiude e lo rimanda di tre giorni; al terzo di fila, trenta (`UpdateRules.declined`). Un permesso che si aspettava o un
+   * guasto si lasciano: il tentativo finisce. Con «Aggiornata» e' solo «Ok». («Chiudi» su un guasto non passa di qui: giro 3, UU3-6.)
    */
   fun later() {
     promptOpen.value = false
@@ -530,6 +560,9 @@ class AppUpdates(
     readyFile = null
     readyVersion = null
   }
+
+  /** Il proprietario di chi ha una finestra sola (le prove, chi non distingue): il cancello lo tratta come ogni altro. */
+  private object SoleOwner
 
   companion object {
     /**

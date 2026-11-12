@@ -351,8 +351,7 @@ private fun CollectionCard(entry: CollectionEntry, family: CollectionArtFamily, 
     titleStyle = if (wide) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
     titleMaxLines = if (wide) 2 else 1,
     isNew = entry.trailing != null && entry.badge == 0,
-    // Giro 1 (CS-6): la descrizione della scheda dice gia' il titolo, la frase e "Nuovo": il titolo scritto non si rilegge.
-    labelsSpoken = false,
+    // Giro 1 (CS-6): i testi scritti non si rileggono (il valore di serie della scheda comune); la descrizione dice titolo, frase, riga piccola e "Nuovo".
   ) {
     Icon(imageVector = entry.icon, contentDescription = null, tint = colors.glyph, modifier = Modifier.align(Alignment.Center).size(CollectionsDimens.CardGlyph))
     if (covers != null) {

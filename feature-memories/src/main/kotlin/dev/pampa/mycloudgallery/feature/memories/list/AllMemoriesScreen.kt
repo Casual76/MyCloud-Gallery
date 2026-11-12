@@ -165,8 +165,7 @@ private fun MemoryCardTile(
     title = title,
     caption = caption,
     isNew = card.isNew,
-    // Giro 1 (CS-6): la descrizione della scheda dice gia' "Nuovo", il titolo e le foto: il titolo e il mese scritti non si rileggono.
-    labelsSpoken = false,
+    // Giro 1 (CS-6): il titolo e il mese scritti non si rileggono (il valore di serie della scheda comune); la descrizione dice gia' tutto.
   ) {
     if (snapshot != null) MemoryCover(thumbnails, snapshot, card.cover, Modifier.matchParentSize(), ThumbBucket.L)
   }

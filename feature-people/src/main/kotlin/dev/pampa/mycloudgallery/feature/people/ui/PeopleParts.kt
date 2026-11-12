@@ -151,7 +151,8 @@ internal fun PersonTile(
   }
   val shape = ContinuousCornerShape(FluidRadius.Card)
   // Giro 1 (CU-2, CU-21, CS-5): la scheda comune delle copertine (core-designsystem), cosi' il nome sopra il volto ha la stessa sfumatura, provata
-  // su una copertina bianca, di Ricordi, Viaggi e Luoghi. La descrizione della scheda dice gia' il nome e le foto: il nome scritto non si rilegge.
+  // su una copertina bianca, di Ricordi, Viaggi e Luoghi. La descrizione della scheda dice il nome e le foto: il nome scritto non si rilegge (il
+  // valore di serie della scheda comune).
   GalleryCoverCard(
     modifier = modifier
       .aspectRatio(PeopleDimens.CardAspect)
@@ -169,7 +170,6 @@ internal fun PersonTile(
       .background(scheme.surfaceContainerHigh),
     title = card.name,
     titleMaxLines = 1,
-    labelsSpoken = false,
   ) {
     FaceImage(card.cover, crops, PeopleDimens.CardCrop)
     if (selection != TileSelection.NONE) {

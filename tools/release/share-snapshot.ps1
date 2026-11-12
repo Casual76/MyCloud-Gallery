@@ -451,8 +451,12 @@ function Invoke-Confronta {
   foreach ($e in $diff.Removed) { Add-Total $totals $e.Area "tolti" $e.Size }
 
   # Le versioni automatiche del backup e gli scambi (vedi le regole in cima): si riconoscono e si contano a parte.
+  # PU-4 (critico del passo unico, giro 2): sono CANDIDATE, non prove. La fotografia conosce solo nome, dimensione e data: uno specchio con
+  # la dimensione giusta non dimostra che dentro ci sia proprio l'originale di prima. Si contano e si elencano a parte, ma il confronto resta
+  # "da fermare" (codice 3) finche' qualcuno non le ha guardate una per una.
   $versions = 0
   $swaps = 0
+  $candidates = New-Object System.Collections.Generic.List[string]
   $explained = New-Object System.Collections.Generic.HashSet[string]
   $soloAreas = @($aree | Where-Object { $_.soloAggiunte } | ForEach-Object { $_.id })
   $addedVersions = New-Object System.Collections.Generic.List[object]
@@ -469,6 +473,7 @@ function Invoke-Confronta {
     if (-not $hit) { continue }
     [void]$addedVersions.Remove($hit)
     [void]$explained.Add($c.Key)
+    $candidates.Add(("{0}:{1}  <-  {0}:{2} ({3} byte)" -f $c.Role, $c.Path, $hit.Path, $hit.Size))
     $back = $null
     foreach ($r in $removedVersions) { if ($r.Size -eq $c.Size -and (Test-VersionOf $pattern $r $c.Role)) { $back = $r; break } }
     if ($back) { [void]$removedVersions.Remove($back); [void]$explained.Add($back.Key); $swaps++ } else { $versions++ }
@@ -505,6 +510,7 @@ function Invoke-Confronta {
   Write-Host "Confronto prima e dopo, per area" -ForegroundColor Cyan
   Write-Host ("  prima: {0} file   dopo: {1} file   spostati (sorgenti degli album): {2}" -f $before.Map.Count, $after.Map.Count, $moved)
   Write-Host ("  versioni automatiche del backup (file cambiato + il suo originale in Versioni/): {0}   scambi: {1}" -f $versions, $swaps)
+  foreach ($line in ($candidates | Select-Object -First $Massimo)) { Write-Host ("    candidata: " + $line) }
   foreach ($a in $aree) {
     $t = $totals[$a.id]
     if ($t) {
@@ -517,6 +523,9 @@ function Invoke-Confronta {
     $problems.Add("file fuori dalle cartelle attese di ogni area: aggiunti $($outside.aggiunti.Count), cambiati $($outside.cambiati.Count), tolti $($outside.tolti.Count)")
   }
   if ($nonAdditive.Count -gt 0) { $problems.Add("file cambiati o tolti dentro un'area che aggiunge soltanto (il backup): $($nonAdditive.Count)") }
+  if ($versions + $swaps -gt 0) {
+    $problems.Add("versioni candidate da verificare una per una (stesso specchio e stessa dimensione, ma la fotografia non conosce il contenuto): $($versions + $swaps)")
+  }
   foreach ($n in $sourceNotes) { $problems.Add($n) }
   foreach ($role in @("privata", "comune")) {
     $u1 = if ($before.Summary) { [int]$before.Summary.$role.nonLeggibili } else { 0 }
@@ -531,7 +540,7 @@ function Invoke-Confronta {
 
   if ($Report) {
     $out = [ordered]@{
-      prima = $before.Header.creata; dopo = $after.Header.creata; spostati = $moved; versioni = $versions; scambi = $swaps; problemi = @($problems)
+      prima = $before.Header.creata; dopo = $after.Header.creata; spostati = $moved; versioni = $versions; scambi = $swaps; versioniCandidate = @($candidates); problemi = @($problems)
       perArea = @($aree | ForEach-Object { $t = $totals[$_.id]; [ordered]@{ id = $_.id; aggiunti = $(if ($t) { $t.aggiunti[0] } else { 0 }); cambiati = $(if ($t) { $t.cambiati[0] } else { 0 }); tolti = $(if ($t) { $t.tolti[0] } else { 0 }) } })
       fuori = [ordered]@{
         aggiunti = @($outside.aggiunti | ForEach-Object { $_.Role + ":" + $_.Path }); cambiati = @($outside.cambiati | ForEach-Object { $_.Role + ":" + $_.Path })

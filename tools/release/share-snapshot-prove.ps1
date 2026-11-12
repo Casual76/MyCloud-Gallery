@@ -226,15 +226,17 @@ $ver = Invoke-Scenario "versione-archivio" {
   Move-File $p "Foto/IMG_002.jpg" "Versioni/Foto/IMG_002 (originale).jpg"
   Put-File $p "Foto/IMG_002.jpg" 230 -age 60
 }
-Assert-That "versione di un file dell'archivio (fuori dalle aree): codice 0, contata come versione" ($ver.Code -eq 0 -and $ver.Text -match "Versioni/\): 1\s+scambi: 0") $ver.Text
+# PU-4: una versione riconosciuta e' una CANDIDATA (la fotografia conosce nome e dimensione, non il contenuto): contata ed elencata a parte, fuori
+# dall'elenco delle anomalie, ma il confronto resta codice 3 con il solo problema "versioni candidate".
+Assert-That "versione di un file dell'archivio (fuori dalle aree): contata come versione candidata, codice 3" ($ver.Code -eq 3 -and $ver.Text -match "Versioni/\): 1\s+scambi: 0" -and $ver.Text -match "candidata: privata:Foto/IMG_002\.jpg") $ver.Text
 $verJson = Get-Content -LiteralPath (Join-Path $work "versione-archivio.json") -Raw | ConvertFrom-Json
-Assert-That "versione: il resoconto JSON la conta e non la mette fra i file fuori" ($verJson.versioni -eq 1 -and @($verJson.fuori.cambiati).Count -eq 0 -and @($verJson.problemi).Count -eq 0)
+Assert-That "versione: il resoconto JSON la conta, la elenca fra le candidate e non fra i file fuori; l'unico problema sono le candidate" ($verJson.versioni -eq 1 -and @($verJson.versioniCandidate).Count -eq 1 -and @($verJson.fuori.cambiati).Count -eq 0 -and @($verJson.problemi).Count -eq 1 -and @($verJson.problemi)[0] -match "versioni candidate")
 $verBk = Invoke-Pair "versione-backup" { param($p, $c) Put-File $p "Backup/Pixel/2026/10/IMG_1.jpg" 100 } {
   param($p, $c)
   Move-File $p "Backup/Pixel/2026/10/IMG_1.jpg" "Versioni/Backup/Pixel/2026/10/IMG_1 (versione del 2026-11-12 10.00).jpg"
   Put-File $p "Backup/Pixel/2026/10/IMG_1.jpg" 160 -age 60
 }
-Assert-That "versione di una copia del backup (dentro un'area che aggiunge soltanto): codice 0" ($verBk.Code -eq 0 -and $verBk.Text -match "Versioni/\): 1") $verBk.Text
+Assert-That "versione di una copia del backup (dentro un'area che aggiunge soltanto): candidata, codice 3, non fra i cambiati dove si puo' solo aggiungere" ($verBk.Code -eq 3 -and $verBk.Text -match "Versioni/\): 1" -and $verBk.Text -match "versioni candidate" -and $verBk.Text -notmatch "aggiunge soltanto \(il backup\): ") $verBk.Text
 $swap = Invoke-Pair "scambio" {
   param($p, $c)
   Put-File $p "Foto/IMG_5.jpg" 300
@@ -244,7 +246,7 @@ $swap = Invoke-Pair "scambio" {
   Move-File $p "Foto/IMG_5.jpg" "Versioni/Foto/IMG_5 (versione del 2026-11-12 10.00).jpg"
   Move-File $p "Versioni/Foto/IMG_5 (originale).jpg" "Foto/IMG_5.jpg"
 }
-Assert-That "scambio (Ripristina originale, riallineamento): codice 0, contato come scambio" ($swap.Code -eq 0 -and $swap.Text -match "scambi: 1") $swap.Text
+Assert-That "scambio (Ripristina originale, riallineamento): contato come scambio candidato, codice 3" ($swap.Code -eq 3 -and $swap.Text -match "scambi: 1" -and $swap.Text -match "versioni candidate") $swap.Text
 $wrongSize = Invoke-Scenario "versione-dimensione-diversa" {
   param($p, $c)
   Remove-Item -LiteralPath (Join-Path $p "Foto\IMG_002.jpg")

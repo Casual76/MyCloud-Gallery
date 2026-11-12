@@ -19385,4 +19385,54 @@ correggere `publisher.py` (fatto dall'orchestratore nel repository dello store).
 - Non fatto: il tasto «Novita'» sull'«Aggiornata» (la pagina delle novita' non e' una rotta: e' un interruttore dentro «Informazioni»); la notifica
   a `MY_PACKAGE_REPLACED`.
 
-**Prove.** Vedi il resoconto del giro e `docs/aggiornamenti-in-app.md`, «Prove e mutazioni». Mutazioni: 45 mutazioni del codice dell'app (M01-M46, senza M23 che e' diventata M46) e 16 degli strumenti di rilascio: tutte cadono.
+**Prove.** Vedi il resoconto del giro e `docs/aggiornamenti-in-app.md`, «Prove e mutazioni». Mutazioni: 45 mutazioni del codice dell'app (M01-M46, senza M23 che e' diventata M46) e 16 degli strumenti di rilascio. (Correzione del giro 2, US2-5: «tutte cadono» non era vero cosi'. Il registro di quel giro dava M31, M39, M40 e M41 «non eseguite» perche' il suo generatore non leggeva i nomi con i due punti, anche se i log le davano cadute; T11 cadeva solo togliendo insieme i due confronti dell'elenco. Nel giro 2 sono tutte rieseguite e contate, sotto.)
+
+### Pacchetto U, giro 2 delle critiche (12 novembre 2026)
+
+**Le critiche.** Sicurezza (Sol, 7/10, «no»): US2-1 bloccante, il file poteva passare ad Android con l'app gia' dietro (il controllo era prima di
+verifiche lunghe, guardava l'importanza del processo e mancava su «Installa» e sul ritorno dal permesso); US2-2 e US2-3 due falsi verdi della verifica
+dell'elenco; US2-4 `\d` di PowerShell; US2-5 il registro delle mutazioni. Interfaccia (Opus, 7/10, «si' con correzioni piccole»): UU2-1 dopo il
+«si'» nella finestra di Android l'app tornava «Pronta» con «Installa» mentre Android installava; UU2-2 «Chiudi» non chiudeva; UU2-3 «Pronta» con la
+spunta di «Aggiornata»; UU2-4 la scheda copriva le foto piu' recenti; UU2-5 «Tornare a Stabile» sempre li' e come un comando; parole (UU2-10). Decisione
+dell'orchestratore: una sola macchina a stati per il passaggio ad Android; nessun adattatore proprio dell'installazione (il tratto dentro l'engine e'
+un limite dichiarato); «Dopo» al terzo tace trenta giorni e poi riparte; UU-4, UU-9 e «Novita'» restano aperti per la prima beta.
+
+**Il passaggio ad Android (US2-1, UU2-1; `docs/sicurezza.md` C490 e L616).**
+- Un solo cancello, in `GuardedUpdateInstaller.commit`, **dopo** le verifiche e subito prima di `installFile`, su tutte le strade (fine dello
+  scaricamento, «Installa», ritorno dal permesso). Il cancello e' `ForegroundGate`, aperto solo mentre l'activity e' RESUMED: lo muovono gli eventi del
+  ciclo di vita (`UpdateLifecycleEffect` alla radice: ON_RESUME apre, ON_PAUSE e l'uscita dalla composizione chiudono). Tolto `appInFront`
+  (`ActivityManager.getMyMemoryState`, l'importanza del processo). App dietro alla fine delle verifiche: «Pronta», zero passaggi.
+- Passato il cancello: «Sto installando». Al ritorno davanti senza esito resta «Sto installando» per 15 s di app davanti (`OUTCOME_WAIT_MILLIS`, il
+  tempo si ferma con l'app dietro); un esito che arriva vince (il flusso dell'engine resta vivo: «annullata» ora si vede, con la riga di Play
+  Protect); senza esito «Pronta» con «Installa» (nessun riscaricamento, file ricontrollato).
+- Il tratto dentro l'engine (copia, commit, `startActivity` della conferma) non e' dell'app: L616, con i riferimenti. La sessione lasciata dopo
+  l'attesa resta in sospeso nell'engine e in Android ma **non blocca** un nuovo «Installa» (ogni `installFile` crea una sessione nuova con il suo id);
+  la via d'uscita piu' piccola, se servisse, e' `abandonSession` delle proprie sessioni in `EngineApkTransfer`: non fatta.
+
+**Interfaccia.**
+- UU2-2: «Chiudi» sull'avviso di un guasto e' «Dopo» (chiude la scheda, rimanda di tre giorni). UU2-3: «Pronta» ha il segno «tocca qui»
+  (`Attention`, come «Nuova versione»); la spunta verde resta solo per «App aggiornata» e «Aggiornata».
+- UU2-4: mentre l'avviso c'e', il fondo della Libreria cresce della sua altezza misurata (`NoticeLift` in `MainScaffold`); chi e' in fondo e non ha
+  trascinato la griglia resta in fondo (la griglia si riancora da sola quando cambia lo spazio; uno scorrimento in piu' era superfluo, M71, tolto).
+  Solo la Libreria: Album e Raccolte si aprono in cima.
+- UU2-5: «Se torno a Stabile» (la «i») solo con Beta scelto. UU2-7: nella pagina «versione fermata», senza una versione nuova, la clessidra con «La
+  versione nuova arriva presto» e «Controlla adesso» pieno. UU2-8: in sola lettura «Aggiorna» chiude anche l'avviso in alto. UU2-9: «Sto
+  controllando» con l'anello alla misura dell'icona (la testata non salta); il tasto pieno al piu' largo 520 dp. UU2-10: «L'app si chiude: poi
+  riaprila», «Accendi l'interruttore e torna qui», «Se Android la blocca, scegli «Installa comunque»» (e l'avviso tiene quattro righe), «Il file non e'
+  originale», «Manca spazio», «Android l'ha bloccata», «Non funziona su questo dispositivo» (la parola generica dell'app, niente «telefono» sul
+  tablet), «Riprova» dopo «Non riesco a controllare adesso», tolto «Riprova domani». UU2-11: «Aggiornata» su una riga, con «Ok» al posto della «×».
+- «Dopo» (decisione dell'orchestratore, al posto di UU2-12): tre giorni; al terzo «Dopo» di fila trenta giorni di silenzio, poi il conto riparte; mai
+  spento per sempre; un «Dopo» dentro il silenzio non lo accorcia (`UpdateRules.declined`).
+- Non fatti: UU2-6 (ricordare la versione di un guasto permanente e trattarla da «non ancora pronta»): serve uno stato salvato in piu' con le sue
+  regole (quando dimenticarlo: un'altra versione, un altro canale, un aggiornamento), con prove sue; il caso e' raro (publisher e verifica
+  dell'elenco controllano firma e sha256 prima di pubblicare) e ora «Chiudi» rimanda come «Dopo», quindi l'avviso non ripropone subito la stessa
+  versione. UU-4, UU-9, «Novita'»: aperti per la prima beta (decisione dell'orchestratore).
+
+**Strumenti.** US2-2: `verifica-elenco.ps1` riconfronta l'elenco su disco anche quando non c'e' niente da scrivere (prima tornava verde su un elenco
+cambiato nel frattempo); i due confronti non sono una transazione (C489). US2-3: `app.repository` obbligatorio, con owner e nome uguali a quelli
+dell'app, letto come lo legge l'engine (`repoOwner`/`owner`, `repoName`/`name`); assente, null, vuoto o una stringa: non verde. US2-4: `[0-9]` e
+`\A`/`\z` nella forma delle versioni e nel versionCode di `release/versions.txt` (`\d` di .NET accetta qualunque cifra Unicode, `$` un a capo
+finale); `[0-9]` anche in `app/build.gradle`, per leggerle uguali.
+
+**Prove.** Vedi il resoconto del giro. Mutazioni, tutte rieseguite in questo giro sul codice nuovo e contate dagli esiti dei log
+(`docs/aggiornamenti-in-app-mutazioni.md`): 69 del codice dell'app (68 cadono; M55 no, perche' l'esito ferma l'attesa in due modi: tolti insieme cade, M72), piu' M71 eseguita due volte e non caduta (uno scorrimento superfluo: la griglia si riancora da sola; tolto); 22 degli strumenti di rilascio (21 cadono; T11b no: il secondo confronto dell'elenco copre una finestra che una prova senza un secondo processo non raggiunge).

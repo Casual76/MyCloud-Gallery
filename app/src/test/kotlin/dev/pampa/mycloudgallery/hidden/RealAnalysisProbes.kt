@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.hidden
 import dev.pampa.mycloudgallery.ai.AppAnalysisLive
 import dev.pampa.mycloudgallery.ai.ContentFact
 import dev.pampa.mycloudgallery.ai.ContentFacts
+import dev.pampa.mycloudgallery.ai.settled
 import dev.pampa.mycloudgallery.core.ai.contract.AiLive
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogHiddenMask
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogVisibleMedia
@@ -44,7 +45,7 @@ internal object RealAnalysisProbes {
         facts = facts,
         scope = scope,
       )
-      val flow = withTimeout(30_000) { page.live.first { it.recent.size == everyKey.size - 1 } }
+      val flow = page.live.settled(everyKey.size - 1)
       val thumbs = listOfNotNull(flow.current) + flow.recent + flow.next
       val shown = thumbs.filterIsInstance<AnalysisThumb.Shown>().mapTo(LinkedHashSet()) { it.id }
       Probed(shown = shown, expected = w.liveLibraryCells, within = w.liveShowable)

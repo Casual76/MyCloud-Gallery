@@ -99,8 +99,15 @@ sealed interface KeepAliveResult {
 sealed interface UnitOutcome {
   data class Completed(val prepared: Int, val failed: Int) : UnitOutcome
 
-  /** Interrotta (tempo della tappa finito, regole, NAS irraggiungibile): [code] stabile, mai un messaggio. */
-  data class Interrupted(val code: String) : UnitOutcome
+  /**
+   * Interrotta (tempo della tappa finito, regole, NAS irraggiungibile): [code] stabile, mai un messaggio. [STALLED] (XS2-2): l'unita' e' stata
+   * tentata ma **non ha dato lavoro** (ogni media in attesa: anteprima non pronta); chi sceglie le unita' la mette in fondo per un po'.
+   */
+  data class Interrupted(val code: String) : UnitOutcome {
+    companion object {
+      const val STALLED: String = "STALLED"
+    }
+  }
 }
 
 /**

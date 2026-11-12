@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.ai.compute
 
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.ai.contract.AiScope
+import dev.pampa.mycloudgallery.core.index.contract.UnitOutcome
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.data.AiClass
@@ -74,6 +75,54 @@ class UrgentRequestsTest {
     // La lista e' limitata a due (1 e 2) come sempre; il chiesto (5) si aggiunge e passa per primo. Il 3 e il 4 restano per un altro giro.
     assertThat(numbersOf(phone.images.order, "oltre")).containsExactly(5, 1, 2).inOrder()
     assertThat(phone.urgentKeys).isEmpty()
+  }
+
+  /**
+   * XS2-4: una richiesta **sopraggiunta** durante il giro per un candidato **fuori dalla lista** limitata entra al confine del lotto dopo, senza rifare quelli gia'
+   * lavorati. Mutazione: non rileggere i candidati al cambio delle richieste.
+   */
+  @Test
+  fun unaRichiestaOltreIlLimiteArrivataDuranteIlLottoEntraAlConfineDopo() = runTest {
+    val f = TestFamily()
+    val phone = f.anna()
+    phone.restart(AiComputeConfig(batch = 1, reducedBatch = 1, localBatchLimit = 2))
+    val keys = (1..5).map { i ->
+      val key = f.nas.newKey()
+      phone.phoneMedia[key] = MediaKind.PHOTO to "dopo $i"
+      key
+    }
+    // La richiesta per il quinto (fuori dai primi due della lista) arriva durante il primo lotto, non prima del giro.
+    phone.images.onImage = { n -> if (n == 1) phone.urgentKeys += keys[4] }
+
+    phone.engine.run(AiScope.PhoneOnly, forever)
+
+    // Il primo lotto (il 1) era gia' passato; al confine il 5 entra davanti al 2 (che era in lista, non ancora lavorato); niente si rifa'. Il resto della coda
+    // (3 e 4) segue nel giro dopo: qui conta l'inizio e che nessun media si ripeta.
+    val order = numbersOf(phone.images.order, "dopo")
+    assertThat(order.take(3)).containsExactly(1, 5, 2).inOrder()
+    assertThat(order).containsNoDuplicates()
+    assertThat(phone.embedded).isEqualTo(order.size)
+    assertThat(phone.urgentKeys).isEmpty()
+  }
+
+  /**
+   * XS2-2: un'unita' in cui ogni media e' rimasto in attesa (l'anteprima non c'e') lo dice al selettore (`STALLED`), un'unita' che ha dato lavoro no. Mutazione:
+   * chiudere sempre con `Completed`.
+   */
+  @Test
+  fun unUnitaSenzaLavoroLoDiceAlSelettore() = runTest {
+    val f = TestFamily()
+    val waiting = f.nas.add(common, month = "2024-03", concepts = "senza", preview = false)
+    f.nas.add(common, month = "2024-02", concepts = "con")
+    val phone = f.anna()
+    phone.urgentKeys += waiting
+
+    phone.engine.run(AiScope.Share(common), forever)
+
+    val byMonth = phone.units.finishes.associate { (key, outcome) -> key.month to outcome }
+    assertThat(byMonth["2024-03"]).isEqualTo(UnitOutcome.Interrupted(UnitOutcome.Interrupted.STALLED))
+    assertThat(byMonth["2024-02"]).isInstanceOf(UnitOutcome.Completed::class.java)
+    assertThat((byMonth["2024-02"] as UnitOutcome.Completed).prepared).isEqualTo(1)
   }
 
   /** XS-4 (fra ambiti): l'ambito che contiene un media chiesto si serve per primo; senza richieste l'ordine e' quello di sempre. */

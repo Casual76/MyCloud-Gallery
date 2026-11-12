@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.index.ai
 
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.index.contract.UnitClaim
+import dev.pampa.mycloudgallery.core.index.contract.UnitOutcome
 import dev.pampa.mycloudgallery.core.index.contract.WorkPass
 import dev.pampa.mycloudgallery.core.index.p3.TestFile
 import dev.pampa.mycloudgallery.core.index.testing.FakeUnitPriority
@@ -15,14 +16,15 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 /**
- * XS-2 (Pacchetto XF): **il lavoro ordinario non si ferma per delle urgenze che non si possono servire.** Con le unita' vere
- * (`LeasedWorkUnits`, prenotazioni firmate sul NAS finto, `AiWorkSource` e `AiPublishedClasses` come in produzione) 48 media chiesti
- * dall'utente in 48 mesi distinti riempivano da soli la finestra dei 48 mesi guardati a ogni chiamata: i mesi ordinari, anche con le
- * anteprime pronte, non venivano mai esaminati e una tappa nuova ricominciava dalla stessa situazione. Ora al piu' [PRIORITY] mesi con media
- * prioritari passano davanti e il resto della finestra e' sempre dei mesi ordinari.
+ * XS-2 e XS2-2 (Pacchetto XF): **il lavoro ordinario non si ferma per delle urgenze che non si possono servire.** Con le unita' vere
+ * (`LeasedWorkUnits`, prenotazioni firmate sul NAS finto, `AiWorkSource` e `AiPublishedClasses` come in produzione):
+ * - primo giro: 48 media chiesti in 48 mesi distinti riempivano da soli la finestra dei 48 mesi guardati a ogni chiamata (quota sul prefisso, `quota`);
+ * - **secondo giro** (XS2-2): la quota sul prefisso non basta, perche' gli altri mesi di richieste rientravano nella lista ordinaria. Ora i mesi delle richieste e
+ *   i mesi ordinari sono **due classi** servite **a turno** (`alternate`): l'ordinario ha servizio vero a ogni tappa, anche se e' il mese piu' **vecchio** e anche con 64
+ *   richieste in 64 mesi recenti non servibili; i mesi di richieste che hanno finito senza dare lavoro (`STALLED`) passano in fondo e si avanza oltre di loro fra le tappe.
  *
- * La mutazione che la prova ha ucciso: togliere il tetto dei mesi prioritari (`take(maxPriorityMonthsPerCall)`) fa cadere
- * `quarantottoMesiUrgentiNonEseguibiliNonFermanoIlMeseOrdinario`.
+ * Mutazioni (nel resoconto): togliere il tetto del prefisso (`quarantottoMesi...`), togliere dall'ordinario i mesi delle richieste (`conSessantaquattro...`),
+ * togliere l'alternanza (`conSessantaquattro...`, `urgenzeRinnovate...`), togliere il rinvio dei mesi senza lavoro (`...`rotazione`).
  */
 class PriorityMonthsTest {
 
@@ -30,28 +32,51 @@ class PriorityMonthsTest {
 
   private val share = "test-comune"
 
-  private class World(val ai: AiWorld, val urgent: List<TestFile>, val ordinary: List<TestFile>, val catalog: MapAiWorkCatalog)
+  private class World(
+    val ai: AiWorld,
+    val urgent: List<TestFile>,
+    val ordinary: List<TestFile>,
+    val urgentMonths: List<String>,
+    val ordinaryMonths: List<String>,
+    val catalog: MapAiWorkCatalog,
+  )
 
-  /** [urgentMonths] mesi vecchi con un media ciascuno (le richieste dell'utente) e un mese recente ordinario con [ordinaryFiles] media. */
-  private fun world(urgentMonths: Int, ordinaryFiles: Int = 3): World {
+  /**
+   * [urgentMonths] mesi con un media chiesto ciascuno (le richieste dell'utente), vecchi o [recentRequests] recenti, e [ordinaryMonths] mesi ordinari con
+   * [ordinaryFiles] media: di serie un solo mese recente, o (`oldestOrdinary`) mesi molto **vecchi**, piu' vecchi di tutte le richieste.
+   */
+  private fun world(
+    urgentMonths: Int,
+    ordinaryFiles: Int = 3,
+    recentRequests: Boolean = false,
+    ordinaryMonths: List<String> = listOf("2026-09"),
+  ): World {
     val ai = AiWorld(tmp.newFolder())
-    val urgent = (1..urgentMonths).map { ai.file(share, "vecchi/IMG_u$it.jpg") }
-    val ordinary = (1..ordinaryFiles).map { ai.file(share, "recenti/IMG_o$it.jpg") }
+    val urgent = (1..urgentMonths).map { ai.file(share, "richieste/IMG_u$it.jpg") }
+    val ordinary = ordinaryMonths.flatMapIndexed { m, month -> (1..ordinaryFiles).map { ai.file(share, "ordinari/$month/IMG_o${m}_$it.jpg") } }
     val months = LinkedHashMap<String, List<TestFile>>()
-    urgent.forEachIndexed { i, f -> months["%04d-%02d".format(2015 + i / 12, i % 12 + 1)] = listOf(f) }
-    months["2026-09"] = ordinary
-    return World(ai, urgent, ordinary, MapAiWorkCatalog(months))
+    val requestMonths = urgent.indices.map { i ->
+      val year = (if (recentRequests) 2031 else 2015) + i / 12
+      "%04d-%02d".format(year, i % 12 + 1)
+    }
+    urgent.forEachIndexed { i, f -> months[requestMonths[i]] = listOf(f) }
+    ordinaryMonths.forEachIndexed { m, month -> months[month] = ordinary.subList(m * ordinaryFiles, (m + 1) * ordinaryFiles) }
+    return World(ai, urgent, ordinary, requestMonths, ordinaryMonths, MapAiWorkCatalog(months))
   }
 
-  private fun units(w: World, quota: Int?): LeasedWorkUnits {
+  /** `alternate`: le due classi a turno (il calcolo AI di produzione); [quota] tetto dei mesi di richieste davanti; senza, il comportamento di sempre. */
+  private fun units(w: World, alternate: Boolean, quota: Int? = null, clock: () -> Long = System::nanoTime): LeasedWorkUnits {
     val device = w.ai.device("Telefono")
     val remote = device.remote()
     val published = AiPublishedClasses(device.shareSync(remote), device.aiStore) { 1 }
     val leases = TrustWorkLeases({ w.ai.world.nas.share(it) }, device.base.signer, w.ai.clock, { w.ai.world.trust.state }, Dispatchers.Unconfined)
-    return if (quota == null) {
-      LeasedWorkUnits(device.identity, AiWorkSource(w.catalog) { setOf(AiClass.VEC) }, published, leases, device.rules())
-    } else {
-      LeasedWorkUnits(device.identity, AiWorkSource(w.catalog) { setOf(AiClass.VEC) }, published, leases, device.rules(), maxPriorityMonthsPerCall = quota)
+    val source = AiWorkSource(w.catalog) { setOf(AiClass.VEC) }
+    return when {
+      !alternate && quota == null -> LeasedWorkUnits(device.identity, source, published, leases, device.rules())
+      else -> LeasedWorkUnits(
+        device.identity, source, published, leases, device.rules(),
+        maxPriorityMonthsPerCall = quota ?: 48, alternatePriority = alternate, clock = clock,
+      )
     }
   }
 
@@ -60,62 +85,122 @@ class PriorityMonthsTest {
     val out = ArrayList<UnitClaim>()
     while (true) {
       out += units.next(share, WorkPass.AI, priority) ?: break
-      if (out.size > 200) error("troppe unita': la tappa non finisce")
+      if (out.size > 300) error("troppe unita': la tappa non finisce")
     }
     return out
   }
 
   private fun priorityOf(files: List<TestFile>) = FakeUnitPriority().also { it.visible.value = files.map { f -> f.contentKey.short }.toSet() }
 
+  // ---- Primo giro (XS-2): la quota sul prefisso --------------------------------------------------------------------------------
+
   @Test
   fun quarantottoMesiUrgentiNonEseguibiliNonFermanoIlMeseOrdinario() = runTest {
-    val w = world(urgentMonths = LeasedWorkUnits_MONTHS)
-    val claims = claimAll(units(w, quota = PRIORITY), priorityOf(w.urgent))
+    val w = world(urgentMonths = MONTHS)
+    val claims = claimAll(units(w, alternate = true, quota = PRIORITY), priorityOf(w.urgent))
 
-    // Le richieste vengono prima (al massimo PRIORITY mesi), ma il mese ordinario eseguibile avanza comunque.
+    // Le richieste vengono prima, ma il mese ordinario eseguibile avanza comunque: a turno, subito dopo la prima richiesta.
     val ordinaryAt = claims.indexOfFirst { it.key.month == "2026-09" }
     assertThat(ordinaryAt).isAtLeast(0)
-    assertThat(ordinaryAt).isAtMost(PRIORITY)
+    assertThat(ordinaryAt).isAtMost(1)
     assertThat(claims[ordinaryAt].items.map { it.contentKey }).containsExactlyElementsIn(w.ordinary.map { it.contentKey })
-    // E le prime unita' sono davvero quelle delle richieste (la precedenza resta).
-    assertThat(claims.take(PRIORITY).all { claim -> claim.items.any { it.contentKey in w.urgent.map { f -> f.contentKey } } }).isTrue()
+    // E la prima unita' e' quella di una richiesta (la precedenza resta).
+    assertThat(claims.first().items.any { it.contentKey in w.urgent.map { f -> f.contentKey } }).isTrue()
   }
 
   @Test
   fun senzaIlTettoLeUrgenzeRiempionoLaFinestraEIlMeseOrdinarioNonArrivaMai() = runTest {
-    // Il difetto di prima, riprodotto con il valore "nessun tetto" (come le unita' della preparazione): serve a mostrare che la prova di sopra misura qualcosa.
-    val w = world(urgentMonths = LeasedWorkUnits_MONTHS)
-    val claims = claimAll(units(w, quota = null), priorityOf(w.urgent))
+    // Il difetto di prima, riprodotto con il comportamento di sempre (la preparazione): serve a mostrare che le prove di sopra misurano qualcosa.
+    val w = world(urgentMonths = MONTHS)
+    val claims = claimAll(units(w, alternate = false), priorityOf(w.urgent))
     assertThat(claims.none { it.key.month == "2026-09" }).isTrue()
-    assertThat(claims).hasSize(LeasedWorkUnits_MONTHS)
+    assertThat(claims).hasSize(MONTHS)
+  }
+
+  // ---- Secondo giro (XS2-2) ------------------------------------------------------------------------------------------------------
+
+  /** Il difetto del critico: 64 richieste in 64 mesi **recenti**, non servibili, e un mese ordinario **piu' vecchio** con le anteprime pronte. */
+  @Test
+  fun conSessantaquattroRichiesteRecentiIlMeseOrdinarioPiuVecchioAvanza() = runTest {
+    val w = world(urgentMonths = 64, recentRequests = true, ordinaryMonths = listOf("2010-05"))
+    val claims = claimAll(units(w, alternate = true, quota = PRIORITY), priorityOf(w.urgent))
+    val ordinaryAt = claims.indexOfFirst { it.key.month == "2010-05" }
+    assertThat(ordinaryAt).isAtLeast(0)
+    assertThat(ordinaryAt).isAtMost(1)
+    assertThat(claims[ordinaryAt].items.map { it.contentKey }).containsExactlyElementsIn(w.ordinary.map { it.contentKey })
+  }
+
+  /**
+   * Urgenze **rinnovate** a ogni tappa (le richieste non scadono) e **budget finito** (due unita' a tappa): a ogni tappa un mese ordinario avanza, anche il piu'
+   * vecchio, e i mesi di richieste visitati sono sempre diversi (si avanza oltre quelli gia' tentati senza lavoro, fra le tappe).
+   */
+  @Test
+  fun urgenzeRinnovateEBudgetFinitoOgniTappaServeUnMeseOrdinarioEFaAvanzareLeRichieste() = runTest {
+    val ordinaryMonths = (1..6).map { "2010-%02d".format(it) }
+    val w = world(urgentMonths = 64, recentRequests = true, ordinaryFiles = 1, ordinaryMonths = ordinaryMonths)
+    val units = units(w, alternate = true, quota = PRIORITY)
+    val servedOrdinary = ArrayList<String>()
+    val visitedRequests = ArrayList<String>()
+    repeat(ordinaryMonths.size) {
+      // La tappa: le richieste sono le stesse (rinnovate) e il budget basta per due unita'.
+      val priority = priorityOf(w.urgent)
+      repeat(2) {
+        val claim = units.next(share, WorkPass.AI, priority) ?: return@repeat
+        if (claim.key.month in ordinaryMonths) {
+          servedOrdinary += claim.key.month
+          claim.items.forEach { w.catalog.settled.getOrPut(it.contentKey) { HashSet() } += AiClass.VEC }
+          units.finish(claim, UnitOutcome.Completed(claim.items.size, 0))
+        } else {
+          visitedRequests += claim.key.month
+          units.finish(claim, UnitOutcome.Interrupted(UnitOutcome.Interrupted.STALLED))
+        }
+      }
+    }
+    // Ogni tappa ha servito un mese ordinario (tutti e sei, compreso il piu' vecchio) e ha provato una richiesta nuova.
+    assertThat(servedOrdinary).containsExactlyElementsIn(ordinaryMonths)
+    assertThat(visitedRequests).hasSize(ordinaryMonths.size)
+    assertThat(visitedRequests.toSet()).hasSize(ordinaryMonths.size)
+  }
+
+  /** I mesi di richieste senza lavoro passano in fondo e tornano alla fine del rinvio (30 minuti); senza richieste l'ordine e' quello di sempre. */
+  @Test
+  fun iMesiDiRichiesteSenzaLavoroPassanoInFondoETornanoDopoIlRinvio() = runTest {
+    val w = world(urgentMonths = 3, recentRequests = true, ordinaryMonths = emptyList())
+    var now = 0L
+    val units = units(w, alternate = true, quota = PRIORITY, clock = { now })
+    val priority = priorityOf(w.urgent)
+    val order = ArrayList<String>()
+    repeat(3) {
+      val claim = units.next(share, WorkPass.AI, priority)!!
+      order += claim.key.month
+      units.finish(claim, UnitOutcome.Interrupted(UnitOutcome.Interrupted.STALLED))
+    }
+    // I tre mesi (dal piu' recente) a turno: nessuno si ripete finche' ci sono gli altri.
+    assertThat(order.toSet()).hasSize(3)
+    assertThat(order).isEqualTo(w.urgentMonths.sortedDescending())
+    // Finito il rinvio tornano nell'ordine di sempre.
+    now += 31L * 60 * 1_000_000_000
+    assertThat(units.next(share, WorkPass.AI, priority)!!.key.month).isEqualTo(w.urgentMonths.max())
   }
 
   @Test
-  fun conPiuDiQuarantottoRichiesteIlMeseOrdinarioAvanzaALoStesso() = runTest {
-    // Il registro tiene 64 richieste: anche con 64 mesi urgenti il mese ordinario recente entra in ogni tappa.
-    val w = world(urgentMonths = 64)
-    val claims = claimAll(units(w, quota = PRIORITY), priorityOf(w.urgent))
-    assertThat(claims.any { it.key.month == "2026-09" }).isTrue()
-  }
-
-  @Test
-  fun senzaRichiesteIlTettoNonCambiaNiente() = runTest {
-    // Il comportamento senza richieste dell'utente e' identico a prima: stessa sequenza di unita' con o senza il tetto.
+  fun senzaRichiesteIlTettoELAlternanzaNonCambianoNiente() = runTest {
+    // Il comportamento senza richieste dell'utente e' identico a prima: stessa sequenza di unita' con o senza alternanza e tetto.
     val w = world(urgentMonths = 20)
     val none = FakeUnitPriority()
-    val withQuota = claimAll(units(w, quota = PRIORITY), none).map { it.key }
+    val withClasses = claimAll(units(w, alternate = true, quota = PRIORITY), none).map { it.key }
     val w2 = world(urgentMonths = 20)
-    val without = claimAll(units(w2, quota = null), FakeUnitPriority()).map { it.key }
-    assertThat(withQuota).isNotEmpty()
-    assertThat(withQuota).isEqualTo(without)
+    val without = claimAll(units(w2, alternate = false), FakeUnitPriority()).map { it.key }
+    assertThat(withClasses).isNotEmpty()
+    assertThat(withClasses).isEqualTo(without)
     // Le unita' si prendono dal mese piu' recente, come sempre.
-    assertThat(withQuota.first().month).isEqualTo("2026-09")
+    assertThat(withClasses.first().month).isEqualTo("2026-09")
   }
 
   private companion object {
     const val PRIORITY = 16
 
     /** La finestra dei mesi guardati a ogni chiamata di `LeasedWorkUnits` (48). */
-    const val LeasedWorkUnits_MONTHS = 48
+    const val MONTHS = 48
   }
 }

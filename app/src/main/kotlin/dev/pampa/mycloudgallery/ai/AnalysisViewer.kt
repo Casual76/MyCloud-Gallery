@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -57,18 +58,24 @@ class AppViewerAnalysis(
   private val scope: CoroutineScope,
 ) : ViewerAnalysis {
 
-  /** Cio' che costa leggere (catalogo, indice): si rilegge quando e' cambiato qualcosa che lo riguarda, non a ogni media che il motore finisce. */
-  private class Resolved(val current: ContentKey?, val ready: Boolean, val unsupported: Boolean)
+  private val resolver = ViewerAnalysisResolver(
+    currentKey = { id -> ownKeys(id)?.first() },
+    isDone = ::done,
+    isUnsupported = ::unsupported,
+  )
 
   override fun observe(id: MediaId): Flow<MediaAnalysis> = flow {
-    var resolved: Resolved? = null
+    var resolved: ViewerResolved? = null
     // I segnali che cambiano cio' che si legge dal catalogo e dall'indice, e quelli dell'ambiente (regole): rileggono tutto.
     val heavy = combine(ai.indexer, ai.status, ai.urgent.state, ai.urgent.waits, indexVersion) { _, _, _, _, _ -> true }
     val environment = (ai.parts.decisionTriggers ?: emptyFlow()).map { true }
+    // XS2-5: la **versione** del media. Il catalogo dice quando un media cambia (una modifica salvata, una nuova versione): senza questo segnale il visore
+    // teneva la lettura della versione di prima finche' non cambiava altro.
+    val versions = (catalog()?.changes?.filter { id in it.ids } ?: emptyFlow()).map { true }
     // Il media che il motore sta calcolando cambia a ogni media: basta il confronto con la chiave gia' letta, senza rileggere niente.
     val cheap = ai.live.map { it.current }.distinctUntilChanged().map { false }
-    merge(heavy, environment, cheap).collect { reload ->
-      val now = if (reload || resolved == null) resolve(id).also { resolved = it } else resolved!!
+    merge(heavy, environment, versions, cheap).collect { reload ->
+      val now = if (reload || resolved == null) resolver.resolve(id).also { resolved = it } else resolved!!
       emit(evaluate(now))
     }
   }.distinctUntilChanged()
@@ -87,12 +94,6 @@ class AppViewerAnalysis(
     return cat.mediaContentKeysOf(listOf(id)).firstOrNull { it.mediaId == id }?.own?.takeIf { it.isNotEmpty() }
   }
 
-  /** XS-6: lo stato si legge per la **chiave corrente** (la prima); le versioni vecchie non decidono per il comando. */
-  private suspend fun resolve(id: MediaId): Resolved {
-    val current = ownKeys(id)?.first() ?: return Resolved(null, ready = false, unsupported = false)
-    return Resolved(current, ready = done(current), unsupported = unsupported(id, current))
-  }
-
   /** XS-5: "gia' analizzata" = lo stesso criterio del calcolo; un guasto dell'indice (non aperto) vale "non ancora". */
   private suspend fun done(key: ContentKey): Boolean = try {
     ai.isDone(key)
@@ -102,7 +103,7 @@ class AppViewerAnalysis(
     false
   }
 
-  private suspend fun evaluate(r: Resolved): MediaAnalysis {
+  private suspend fun evaluate(r: ViewerResolved): MediaAnalysis {
     val kind = ViewerAnalysisRules.kindOf(
       ViewerAnalysisRules.Facts(
         current = r.current,
@@ -114,8 +115,10 @@ class AppViewerAnalysis(
         asked = ai.urgent.state.value,
       ),
     )
-    if (kind != MediaAnalysisKind.FIRST) return MediaAnalysis(kind)
-    return MediaAnalysis(kind, holdOf(r.current!!))
+    // XS2-5: ogni stato porta la versione (la chiave corrente) per cui e' stato letto.
+    val version = r.current?.short
+    if (kind != MediaAnalysisKind.FIRST) return MediaAnalysis(kind, version = version)
+    return MediaAnalysis(kind, holdOf(r.current!!), version)
   }
 
   /** "Non supportato" per il vettore: dai propri byte, o da un'anteprima di una delle sue share (R5, come la copertura). */
@@ -133,6 +136,36 @@ class AppViewerAnalysis(
   private suspend fun holdOf(key: ContentKey): MediaAnalysisHold? {
     val decision = ai.decisionFor(WorkRequest.UserInitiated(BackgroundActivity.AI_COMPUTE, confirmed = false, writesToNas = true))
     return ViewerAnalysisRules.holdOf(ai.urgent.waitOf(key), decision, ai.status.value)
+  }
+}
+
+/** Cio' che costa leggere (catalogo, indice) per una versione del media: la chiave corrente e cio' che l'indice dice di lei. */
+internal class ViewerResolved(val current: ContentKey?, val ready: Boolean, val unsupported: Boolean)
+
+/**
+ * XS2-5: la lettura dello stato di un media **legata alla sua versione**. Si legge la chiave corrente, poi cio' che costa (l'indice, i segni di "non
+ * supportato"), e infine si **rilegge la chiave corrente**: se la versione e' cambiata mentre si leggeva, il risultato e' di una versione di prima e **si
+ * rifiuta** (si rifa' per la versione nuova, al piu' [MAX_TRIES] volte; se non si stabilizza vale "non si sa"). Cosi' una vecchia lettura "pronta" in ritardo non
+ * togliera' mai il comando alla versione nuova. Provata con barriere in `ViewerAnalysisResolverTest`.
+ */
+internal class ViewerAnalysisResolver(
+  /** La chiave della versione corrente del media (null = il catalogo non la sa). */
+  private val currentKey: suspend (MediaId) -> ContentKey?,
+  private val isDone: suspend (ContentKey) -> Boolean,
+  private val isUnsupported: suspend (MediaId, ContentKey) -> Boolean,
+) {
+  suspend fun resolve(id: MediaId): ViewerResolved {
+    repeat(MAX_TRIES) {
+      val key = currentKey(id) ?: return ViewerResolved(null, ready = false, unsupported = false)
+      val ready = isDone(key)
+      val unsupported = isUnsupported(id, key)
+      if (currentKey(id) == key) return ViewerResolved(key, ready, unsupported)
+    }
+    return ViewerResolved(null, ready = false, unsupported = false)
+  }
+
+  private companion object {
+    const val MAX_TRIES = 3
   }
 }
 
@@ -171,10 +204,15 @@ internal object ViewerAnalysisRules {
    * sull'ultimo stato del motore, e solo per i suoi motivi specifici: "regole" generico non dice niente.
    */
   fun holdOf(wait: UrgentWait?, decision: RuleDecision?, status: AiStatus): MediaAnalysisHold? {
-    when (wait) {
-      UrgentWait.PREVIEW -> return MediaAnalysisHold.PREPARATION
-      UrgentWait.OTHER_DEVICE -> return MediaAnalysisHold.RULES
-      UrgentWait.RETRY, null -> Unit
+    // Il verdetto di adesso che ferma la richiesta (caldo, rete, conferma...) vince sull'attesa **vecchia** vista nell'ultima tappa (anteprime non pronte,
+    // unita' di un altro dispositivo): quelle sono "l'ultimo tentativo" e valgono solo se le regole lasciano partire la richiesta adesso.
+    val blocked = decision != null && decision !is RuleDecision.Run
+    if (!blocked) {
+      when (wait) {
+        UrgentWait.PREVIEW -> return MediaAnalysisHold.PREPARATION
+        UrgentWait.OTHER_DEVICE -> return MediaAnalysisHold.RULES
+        UrgentWait.RETRY, null -> Unit
+      }
     }
     if (decision != null) {
       return when (decision) {

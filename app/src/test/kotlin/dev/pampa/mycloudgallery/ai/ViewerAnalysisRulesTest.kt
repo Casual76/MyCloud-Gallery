@@ -109,6 +109,18 @@ class ViewerAnalysisRulesTest {
     assertThat(ViewerAnalysisRules.holdOf(UrgentWait.RETRY, run, AiStatus.Idle(null))).isNull()
   }
 
+  /**
+   * XS2: l'attesa **vecchia** vista dall'ultima tappa (anteprime non pronte, unita' di un altro dispositivo) non copre il verdetto **di adesso** che ferma la
+   * richiesta: se le regole la bloccano (caldo, conferma) si dice quello; l'attesa vale solo se le regole la lasciano partire. Mutazione: l'attesa vince sempre.
+   */
+  @Test
+  fun unVerdettoCheFermaLaRichiestaVinceSuUnaAttesaVecchia() {
+    val hot = RuleDecision.Wait(WaitReason.Thermal(ThermalStatus.SEVERE))
+    assertThat(ViewerAnalysisRules.holdOf(UrgentWait.PREVIEW, hot, AiStatus.Idle(null))).isEqualTo(MediaAnalysisHold.HOT)
+    val mobile = RuleDecision.NeedsConfirmation(setOf(ConfirmationKind.MOBILE_DATA), estimate = null)
+    assertThat(ViewerAnalysisRules.holdOf(UrgentWait.OTHER_DEVICE, mobile, AiStatus.Idle(null))).isEqualTo(MediaAnalysisHold.WIFI)
+  }
+
   @Test
   fun soloIlBufferLocaleELaRetePersaDiconoNas() {
     val local = RuleDecision.Run(RunScope.LOCAL_BUFFER_ONLY, network = NetworkClass.OFFLINE)

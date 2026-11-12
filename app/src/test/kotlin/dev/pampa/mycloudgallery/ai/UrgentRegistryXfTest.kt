@@ -191,6 +191,29 @@ class UrgentRegistryXfTest {
     assertThat(urgent.urgent()).containsExactly(key(1))
   }
 
+  /**
+   * Una richiesta **rinnovata mentre la pulizia aspetta le verifiche** (stessa chiave, altro numero d'ordine) non si tocca: la pulizia toglie solo gli esemplari
+   * che ha esaminato. Mutazione: `removeIf` per chiave senza il numero d'ordine.
+   */
+  @Test
+  fun unaRichiestaRinnovataDuranteLaPuliziaNonVieneTolta() = runBlocking<Unit> {
+    val urgent = registry()
+    urgent.add(key(1), media(1))
+    urgent.add(key(2), media(2))
+    val sweep = AiUrgentSweep(
+      urgent,
+      isDone = { k, m ->
+        // Mentre si verifica key(1) l'utente tocca di nuovo "Analizza adesso" su di lei: la verifica dice "fatto" per l'esemplare di prima.
+        if (k == key(1)) urgent.add(k, m)
+        k == key(1)
+      },
+      servable = { _, _ -> true },
+    )
+    sweep.sweep(checkServable = false)
+    // L'esemplare esaminato era quello vecchio: il rinnovo resta (e in testa).
+    assertThat(urgent.urgent()).containsExactly(key(1), key(2)).inOrder()
+  }
+
   // ---- XS-5: l'unico criterio di "fatto" ---------------------------------------------------------------------------------
 
   private fun check(

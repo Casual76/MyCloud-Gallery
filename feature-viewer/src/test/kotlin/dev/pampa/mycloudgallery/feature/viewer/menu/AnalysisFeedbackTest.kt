@@ -21,6 +21,7 @@ import org.junit.Test
  * Mutazioni eseguite: `observedFor` che ignora l'id (cade `ilValoreDiUnAltroMediaNonValePerQuelloAperto` e `ilRitornoPrimaDellaNuovaEmissione...`);
  * `AnalysisFeedback.moved` che non azzera (cade `unaRichiestaNonConclusaNonRestaRicordataFraLeFoto` e il riscontro tardivo).
  */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class AnalysisFeedbackTest {
 
   private fun id(n: Long) = MediaId(UUID(0L, n).toString())
@@ -176,5 +177,50 @@ class AnalysisFeedbackTest {
     // E una richiesta per B non da' un riscontro per A.
     feedback.asked(b)
     assertThat(feedback.completed(a, MediaAnalysisKind.READY)).isFalse()
+  }
+
+  // ---- XS2-5: la versione del media -------------------------------------------------------------------------------------------------------
+
+  /**
+   * Una richiesta fatta per una versione non da' riscontro per un'altra: la READY di un'altra versione (la vecchia, arrivata in ritardo, o la nuova dopo una
+   * modifica) non diventa un tocco, e la richiesta finisce. Mutazione: ignorare la versione in `completed`.
+   */
+  @Test
+  fun unaRichiestaPerUnaVersioneNonDaRiscontroPerUnAltra() {
+    val feedback = AnalysisFeedback()
+    val b = id(2)
+    feedback.moved(b)
+    feedback.asked(b, version = 2L) // il visore vedeva la versione 2 al momento del tocco
+    assertThat(feedback.completed(b, MediaAnalysisKind.READY, version = 1L)).isFalse()
+    // La richiesta e' finita senza riscontro: nemmeno la READY della versione giusta, dopo, da' un tocco.
+    assertThat(feedback.completed(b, MediaAnalysisKind.READY, version = 2L)).isFalse()
+  }
+
+  @Test
+  fun lAnalisiPerLaStessaVersioneDaRiscontro() {
+    val feedback = AnalysisFeedback()
+    val b = id(2)
+    feedback.asked(b, version = 7L)
+    assertThat(feedback.completed(b, MediaAnalysisKind.QUEUED, version = 7L)).isFalse()
+    assertThat(feedback.completed(b, MediaAnalysisKind.READY, version = 7L)).isTrue()
+  }
+
+  /** Al cambio di versione dello stesso media il binding si azzera ("non si sa") prima del nuovo stato: niente stato della versione di prima. */
+  @Test
+  fun alCambioDiVersioneIlBindingSiAzzera() = runTest {
+    val service = Gated()
+    val b = id(2)
+    val seen = ArrayList<AnalysisObserved>()
+    val job = launch(UnconfinedTestDispatcher(testScheduler)) { service.observeBound(b).collect { seen += it } }
+    service.emit(b, MediaAnalysis(MediaAnalysisKind.READY, version = 1L))
+    service.emit(b, MediaAnalysis(MediaAnalysisKind.QUEUED, version = 2L))
+
+    assertThat(seen.map { it.state.kind to it.state.version }).containsExactly(
+      MediaAnalysisKind.UNKNOWN to null, // l'inizio
+      MediaAnalysisKind.READY to 1L,
+      MediaAnalysisKind.UNKNOWN to null, // la versione e' cambiata: azzerato
+      MediaAnalysisKind.QUEUED to 2L,
+    ).inOrder()
+    job.cancel()
   }
 }

@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiLive
 import dev.pampa.mycloudgallery.core.database.entity.MediaPersonalEntity
 import dev.pampa.mycloudgallery.core.library.testing.FakeTimelineRepository
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogHiddenMask
+import dev.pampa.mycloudgallery.core.library.contract.VisibleMedia
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogVisibleMedia
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.model.ContentKey
@@ -63,6 +64,8 @@ class AnalysisVisibilityIntegrationTest {
     val target: MediaId,
     val others: List<MediaId>,
     val scope: CoroutineScope,
+    val engine: MutableStateFlow<AiLive>,
+    val keyOf: Map<MediaId, ContentKey>,
   ) {
     /** Tutte le anteprime del nastro. */
     fun thumbs(flow: AnalysisFlow): List<AnalysisThumb> = listOfNotNull(flow.current) + flow.recent + flow.next
@@ -72,7 +75,12 @@ class AnalysisVisibilityIntegrationTest {
     suspend fun next(predicate: (AnalysisFlow) -> Boolean): AnalysisFlow = withTimeout(20_000) { page.live.first(predicate) }
   }
 
-  private suspend fun rig(spec: WorldSpec, scope: CoroutineScope): Rig {
+  private suspend fun rig(
+    spec: WorldSpec,
+    scope: CoroutineScope,
+    stopTimeoutMillis: Long = AppAnalysisLive.STOP_AFTER_MILLIS,
+    wrapVisible: (VisibleMedia) -> VisibleMedia = { it },
+  ): Rig {
     val world = HiddenWorldBuilder.build(context, spec)
     val cells = world.catalog.mediaContentKeysOf(world.ids)
     val keyOf: Map<MediaId, ContentKey> = cells.associate { it.mediaId to it.own.first() }
@@ -86,7 +94,7 @@ class AnalysisVisibilityIntegrationTest {
     val access = MutableStateFlow(MediaAccess.FULL)
     val selection = MutableStateFlow<Set<MediaId>?>(null)
     val visibleTimeline = PartialAccessTimeline(base, selection, access, scope)
-    val visible = CatalogVisibleMedia(world.db, visibleTimeline.snapshot)
+    val visible = wrapVisible(CatalogVisibleMedia(world.db, visibleTimeline.snapshot))
     val mask = CatalogHiddenMask(world.db)
     val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
 
@@ -95,8 +103,9 @@ class AnalysisVisibilityIntegrationTest {
     val others = cellIds.drop(1).take(3)
     val shownKeys = (listOf(target) + others).map { keyOf.getValue(it) }
     val engine = AiLive(current = shownKeys.first(), recent = shownKeys.drop(1), next = emptyList())
-    val page = AppAnalysisLive(MutableStateFlow(engine), visible, mask, keys, facts, scope, changes)
-    return Rig(world, base, access, selection, changes, page, target, others, scope)
+    val engineFlow = MutableStateFlow(engine)
+    val page = AppAnalysisLive(engineFlow, visible, mask, keys, facts, scope, changes, stopTimeoutMillis)
+    return Rig(world, base, access, selection, changes, page, target, others, scope, engineFlow, keyOf)
   }
 
   @Test
@@ -154,7 +163,7 @@ class AnalysisVisibilityIntegrationTest {
         MutableStateFlow(AiLive(every.first(), every.drop(1), emptyList())),
         CatalogVisibleMedia(world.db, MutableStateFlow(world.snapshot)), CatalogHiddenMask(world.db), keys, facts, scope,
       )
-      val flow = withTimeout(30_000) { page.live.first { it.recent.size == every.size - 1 } }
+      val flow = page.live.settled(every.size - 1)
       val shown = (listOfNotNull(flow.current) + flow.recent).filterIsInstance<AnalysisThumb.Shown>().mapTo(HashSet()) { it.id }
       // L'istantanea ha ancora i nascosti di un attimo fa (e i loro gruppi): il filtro finale chiede al catalogo e li toglie.
       assertThat(world.liveMustNeverShow).isNotEmpty()
@@ -185,5 +194,146 @@ class AnalysisVisibilityIntegrationTest {
       scope.cancel()
       rig.world.close()
     }
+  }
+
+  // ---- XS2-1, parte 1: niente replay oltre la superficie osservata, niente emissioni intermedie con una Shown non piu' autorizzata -----------------
+
+  /**
+   * Pagina aperta con accesso pieno, uscita oltre lo stop del flusso, **revoca/nascondi a flusso fermo**, rientro: il **primo** valore che chi rientra riceve
+   * non contiene il media (e nemmeno il successivo). Mutazione: lasciare il replay dell'ultimo valore dopo lo stop (`replayExpirationMillis` di serie).
+   */
+  @Test
+  fun dopoLoStopDelFlussoLaRevocaELNascondiNonRiconsegnanoIlValoreVecchio() = runBlocking<Unit> {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    val rig = rig(WorldSpec.nothingHidden(), scope, stopTimeoutMillis = 50)
+    try {
+      // Pagina aperta, accesso pieno: il media e' sul nastro.
+      val open = scope.launch { rig.page.live.collect {} }
+      rig.next { f -> rig.target in rig.shown(f) }
+      open.cancel()
+      // Uscita oltre lo stop del flusso (50 ms in questa prova, 5 s in produzione).
+      kotlinx.coroutines.delay(500)
+
+      // A flusso fermo: revoca (per il media: accesso parziale con altre foto) e, per un altro media, "Nascondi" scritto nel catalogo.
+      rig.selection.value = setOf(rig.others.first())
+      rig.access.value = MediaAccess.PARTIAL
+      val hiddenToo = rig.others.last()
+      rig.world.db.personalDao().upsert(MediaPersonalEntity(hiddenToo.value, favorite = false, hidden = true, updatedAt = 9_000_000_000_000L))
+
+      // Il valore che resta **a flusso fermo** (quello che un nuovo osservatore leggerebbe per primo, prima di qualunque calcolo) e' gia' neutro: nessun replay del
+      // vecchio. Si legge `value` senza osservare: con il rientro in linea (`Unconfined`) il flusso riparte e sovrascrive la cache prima che `first()` la legga,
+      // e la prova non vedrebbe il replay. Mutazione: `replayExpirationMillis` di serie (la cache resta).
+      assertThat(rig.shown(rig.page.live.value)).isEmpty()
+
+      // Rientro: il PRIMO valore non ha anteprime.
+      val first = rig.page.live.first()
+      assertThat(rig.shown(first)).isEmpty()
+      // Con l'accesso che torna pieno, il "Nascondi" fatto a flusso fermo vale ancora: il calcolo di adesso non lo mostra.
+      rig.access.value = MediaAccess.FULL
+      rig.selection.value = null
+      val again = scope.launch { rig.page.live.collect {} }
+      val settled = rig.next { f -> rig.target in rig.shown(f) }
+      assertThat(rig.shown(settled)).doesNotContain(hiddenToo)
+      again.cancel()
+    } finally {
+      scope.cancel()
+      rig.world.close()
+    }
+  }
+
+  /**
+   * La prova che **vieta le emissioni intermedie**, non solo quella che aspetta il risultato finale: una risoluzione partita con l'accesso pieno e ferma nel
+   * filtro finale, una revoca, poi la risoluzione che si sblocca: dopo la revoca **nessun** valore emesso ha una `Shown`. Mutazione: risolvere in sequenza senza
+   * annullare (`transform` al posto di `transformLatest`): la risoluzione in corso non si annulla e consegna la sua `Shown` dopo la revoca.
+   *
+   * Il nastro gira su un **thread vero** (`Dispatchers.Default`) e chi osserva e' `Unconfined` in un altro scope: cosi' ogni emissione e' vista nel momento in cui
+   * esce. Tutto su `Unconfined` in questa prova non basterebbe: l'emissione vecchia e quella neutra di dopo escono una dentro l'altra e lo `StateFlow` ne conserva
+   * una sola, e la prova non vedrebbe il difetto.
+   */
+  @Test
+  fun dopoLaRevocaNessunaEmissioneIntermediaHaUnaShown() = runBlocking<Unit> {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val watcher = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    val entered = kotlinx.coroutines.CompletableDeferred<Unit>()
+    val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+    val rig = rig(WorldSpec.nothingHidden(), scope) { real ->
+      object : VisibleMedia by real {
+        override suspend fun visible(ids: Collection<MediaId>): Set<MediaId> {
+          // Il filtro finale risponde **con l'accesso pieno** (risultato calcolato prima della revoca) e poi la risoluzione resta ferma: se si sbloccasse dopo la
+          // revoca consegnerebbe una `Shown` che nessuno piu' autorizza. (Se il blocco stesse prima della lettura, il filtro leggerebbe la vista di adesso e
+          // risponderebbe vuoto da solo: la prova non vedrebbe niente.)
+          val answer = real.visible(ids)
+          entered.complete(Unit)
+          gate.await()
+          return answer
+        }
+      }
+    }
+    try {
+      val log = java.util.concurrent.CopyOnWriteArrayList<Any>()
+      val collector = watcher.launch { rig.page.live.collect { log += it } }
+      // La prima risoluzione (accesso pieno) e' ferma dentro il filtro finale.
+      withTimeout(20_000) { entered.await() }
+      log += REVOKED
+      rig.access.value = MediaAccess.NONE
+      // La revoca si vede **subito**, anche con una risoluzione ferma: esce lo stato neutro prima che la risoluzione di prima si sblocchi.
+      withTimeout(5_000) {
+        while (log.dropWhile { it !== REVOKED }.drop(1).none { it is AnalysisFlow }) kotlinx.coroutines.delay(10)
+      }
+      // Si sblocca la risoluzione di prima: la sua Shown non e' piu' autorizzata e non deve uscire.
+      gate.complete(Unit)
+      kotlinx.coroutines.delay(500)
+      val after = log.dropWhile { it !== REVOKED }.drop(1).filterIsInstance<AnalysisFlow>()
+      assertThat(after).isNotEmpty()
+      assertThat(after.filter { rig.shown(it).isNotEmpty() }).isEmpty()
+      // E lo stato neutro di dopo e' della generazione nuova.
+      val before = log.takeWhile { it !== REVOKED }.filterIsInstance<AnalysisFlow>().maxOfOrNull { it.visibilityGeneration } ?: 0L
+      assertThat(after.last().visibilityGeneration).isGreaterThan(before)
+      collector.cancel()
+    } finally {
+      watcher.cancel()
+      scope.cancel()
+      rig.world.close()
+    }
+  }
+
+  /** La generazione sale a ogni cambio di visibilita' e subito dopo c'e' uno stato **tutto neutro**; il solo avanzare del motore non la alza e non lampeggia. */
+  @Test
+  fun laGenerazioneSaleAlCambioDiVisibilitaESubitoNeutraNonConIlMotore() = runBlocking<Unit> {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    val rig = rig(WorldSpec.nothingHidden(), scope)
+    try {
+      val log = java.util.concurrent.CopyOnWriteArrayList<Any>()
+      val collector = scope.launch { rig.page.live.collect { log += it } }
+      val start = rig.next { f -> rig.target in rig.shown(f) }
+
+      // Il motore avanza (un media finito): stessa generazione e nessun fotogramma neutro in mezzo.
+      log += ENGINE
+      val ahead = AiLive(current = rig.keyOf.getValue(rig.others.first()), recent = listOf(rig.keyOf.getValue(rig.target)), next = emptyList())
+      rig.engine.value = ahead
+      val advanced = rig.next { f -> rig.shown(f).isNotEmpty() && f.recent.size == 1 }
+      assertThat(advanced.visibilityGeneration).isEqualTo(start.visibilityGeneration)
+      val between = log.dropWhile { it !== ENGINE }.drop(1).filterIsInstance<AnalysisFlow>().filter { it.recent.size == 1 }
+      assertThat(between.filter { rig.shown(it).isEmpty() }).isEmpty()
+
+      // Un "Nascondi" appena fatto: la generazione sale e il primo stato dopo e' tutto neutro.
+      log += CHANGED
+      rig.changes.emit(Unit)
+      val afterChange = rig.next { f -> f.visibilityGeneration > advanced.visibilityGeneration }
+      assertThat(afterChange.visibilityGeneration).isGreaterThan(advanced.visibilityGeneration)
+      val firstAfter = log.dropWhile { it !== CHANGED }.drop(1).filterIsInstance<AnalysisFlow>().first()
+      assertThat(firstAfter.visibilityGeneration).isGreaterThan(advanced.visibilityGeneration)
+      assertThat(rig.shown(firstAfter)).isEmpty()
+      collector.cancel()
+    } finally {
+      scope.cancel()
+      rig.world.close()
+    }
+  }
+
+  private companion object {
+    val REVOKED = Any()
+    val ENGINE = Any()
+    val CHANGED = Any()
   }
 }

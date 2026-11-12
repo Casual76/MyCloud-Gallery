@@ -23,7 +23,14 @@ internal fun observedFor(current: MediaId, observed: AnalysisObserved?): MediaAn
  */
 internal fun ViewerAnalysis.observeBound(id: MediaId): Flow<AnalysisObserved> = flow {
   emit(AnalysisObserved(id, MediaAnalysis.UNKNOWN))
-  observe(id).collect { emit(AnalysisObserved(id, it)) }
+  var lastVersion: Long? = null
+  observe(id).collect { state ->
+    // XS2-5: al cambio di **versione** dello stesso media il binding si azzera ("non si sa") prima del nuovo stato: niente stato della versione di prima.
+    val version = state.version
+    if (lastVersion != null && version != null && version != lastVersion) emit(AnalysisObserved(id, MediaAnalysis.UNKNOWN))
+    if (version != null) lastVersion = version
+    emit(AnalysisObserved(id, state))
+  }
 }
 
 /**
@@ -33,10 +40,12 @@ internal fun ViewerAnalysis.observeBound(id: MediaId): Flow<AnalysisObserved> = 
  */
 internal class AnalysisFeedback {
   private var askedFor: MediaId? = null
+  private var askedVersion: Long? = null
 
-  /** L'utente ha chiesto l'analisi di [id] (da questa visita). */
-  fun asked(id: MediaId) {
+  /** L'utente ha chiesto l'analisi di [id] (da questa visita), per la versione [version] che il visore vedeva (null = non nota). */
+  fun asked(id: MediaId, version: Long? = null) {
     askedFor = id
+    askedVersion = version
   }
 
   /** Il visore e' arrivato su [now]: la richiesta fatta su un'altra foto finisce con la visita a quella foto. */
@@ -45,8 +54,15 @@ internal class AnalysisFeedback {
   }
 
   /** Lo stato osservato di [id] e' [kind]: vero **una volta sola** se e' la fine dell'analisi chiesta in questa visita. */
-  fun completed(id: MediaId, kind: MediaAnalysisKind): Boolean {
-    if (askedFor != id || kind != MediaAnalysisKind.READY) return false
+  fun completed(id: MediaId, kind: MediaAnalysisKind, version: Long? = null): Boolean {
+    if (askedFor != id) return false
+    // XS2-5: una richiesta fatta per una versione non da' riscontro per un'altra: se la versione e' cambiata la richiesta e' finita senza riscontro.
+    val asked = askedVersion
+    if (asked != null && version != null && version != asked) {
+      askedFor = null
+      return false
+    }
+    if (kind != MediaAnalysisKind.READY) return false
     askedFor = null
     return true
   }

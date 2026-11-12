@@ -68,6 +68,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -160,6 +166,22 @@ internal object AnalysisRequests {
   fun pausedAfter(outcome: StageOutcome, request: WorkRequest?): WorkRequest? = if (outcome is StageOutcome.Finished) null else request
 }
 
+/**
+ * X-R1: uno stato che conta chi lo **guarda**: ogni `collect` aggiunge un osservatore finche' dura. Serve a legare al "qualcuno guarda" gli ascoltatori
+ * che altrimenti resterebbero accesi per tutta la vita del grafo.
+ */
+@OptIn(kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi::class)
+private class WatchedStateFlow<T>(private val inner: StateFlow<T>, private val watchers: MutableStateFlow<Int>) : StateFlow<T> by inner {
+  override suspend fun collect(collector: kotlinx.coroutines.flow.FlowCollector<T>): Nothing {
+    watchers.update { it + 1 }
+    try {
+      inner.collect(collector)
+    } finally {
+      watchers.update { it - 1 }
+    }
+  }
+}
+
 /** I modelli di questo dispositivo (P3): il gestore e i file verificati, con `refresh()` da chiamare all'avvio. */
 class AiModels(val manager: ModelManager, val files: ModelFiles, val refresh: suspend () -> Unit)
 
@@ -171,6 +193,7 @@ class AiModels(val manager: ModelManager, val files: ModelFiles, val refresh: su
  * - Il calcolo gira **solo** dentro `AiComputeWorker` (tappe da 8 minuti, `StagedRun`): [runStage].
  * - [stop] **per primo** all'azzeramento, insieme a `SearchGraph.stop` (§1.4): niente parte piu', i motori si rilasciano.
  */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class AiGraph(
   context: Context,
   scope: CoroutineScope,
@@ -350,6 +373,13 @@ class AiGraph(
   /** Il verdetto delle regole per il calcolo, rivalutato quando lo stato o il ruolo cambiano (mai a ogni fotogramma). */
   private val decisionFlow = MutableStateFlow<RuleDecision?>(null)
 
+  /**
+   * X-R1: quanti stanno **guardando** lo stato dell'analisi ([analysis]). Gli eventi dell'ambiente (caldo, rete, carica: ascoltatori di sistema)
+   * si ascoltano solo mentre qualcuno guarda, non per tutta la vita del grafo: prima partivano alla costruzione, anche in un processo nato per
+   * un lavoro e in ogni prova che monta il grafo, e un ascoltatore di sistema che non si registra lasciava un'eccezione in uno scope senza gestore.
+   */
+  private val watchers = MutableStateFlow(0)
+
   /** XS-7: l'ultimo verdetto delle regole per la richiesta che decide il motivo della pausa (per le prove). */
   internal val decision: StateFlow<RuleDecision?> get() = decisionFlow
 
@@ -357,11 +387,14 @@ class AiGraph(
    * Pacchetto X: l'**unico** stato ridotto dell'analisi per testata, nuvola e pagina "Analisi delle foto" (`AnalysisStatusReducers`).
    * Si aggiorna dagli eventi del motore; il lavoro che resta si rilegge a ogni tappa finita, come la pagina (IX-3).
    */
-  val analysis: StateFlow<LibraryAnalysisStatus> = combine(indexer, statusFlow, remaining.state, search.engine.coverage, decisionFlow) { on, status, left, coverage, decision ->
-    AnalysisStatusReducers.reduce(AnalysisStatusReducers.Facts(on, status, left, coverage, decision))
-  }.stateIn(
-    graphScope, SharingStarted.Eagerly,
-    AnalysisStatusReducers.reduce(AnalysisStatusReducers.Facts(indexer.value, statusFlow.value, null, search.engine.coverage.value, null)),
+  val analysis: StateFlow<LibraryAnalysisStatus> = WatchedStateFlow(
+    combine(indexer, statusFlow, remaining.state, search.engine.coverage, decisionFlow) { on, status, left, coverage, decision ->
+      AnalysisStatusReducers.reduce(AnalysisStatusReducers.Facts(on, status, left, coverage, decision))
+    }.stateIn(
+      graphScope, SharingStarted.Eagerly,
+      AnalysisStatusReducers.reduce(AnalysisStatusReducers.Facts(indexer.value, statusFlow.value, null, search.engine.coverage.value, null)),
+    ),
+    watchers,
   )
 
   init {
@@ -373,11 +406,21 @@ class AiGraph(
       indexer.collect { refreshAnalysisFacts() }
     }
     // XS-7: il motivo di una pausa si aggiorna quando cambiano ambiente o impostazioni (caldo, rete, carica, fascia): una rivalutazione del
-    // verdetto per evento (con un attimo di calma per le raffiche), mai il database e mai a ogni fotogramma.
+    // verdetto per evento (con un attimo di calma per le raffiche), mai il database e mai a ogni fotogramma. X-R1: solo **mentre qualcuno guarda**
+    // lo stato; appena si comincia a guardare, una rivalutazione subito (lo stato puo' essere vecchio di ore), poi gli eventi.
     parts.decisionTriggers?.let { triggers ->
       graphScope.launch {
-        triggers.collectLatest {
-          delay(DECISION_CALM_MILLIS)
+        watchers.map { it > 0 }.distinctUntilChanged().flatMapLatest { watched ->
+          if (!watched) {
+            emptyFlow()
+          } else {
+            flow {
+              emit(true)
+              emitAll(triggers.map { false })
+            }
+          }
+        }.collectLatest { immediate ->
+          if (!immediate) delay(DECISION_CALM_MILLIS)
           refreshDecision()
         }
       }
@@ -493,12 +536,12 @@ class AiGraph(
     )
     val created = AiComputeEngine(computeParts, recipe)
     engine = rt to created
-    remaining.observed(created.live.value.recent)
+    remaining.observed(created.live.value.finished)
     graphScope.launch {
       created.live.collect {
         liveFlow.value = it
         // XS-7: un media finito in piu' = un media in meno da fare (senza ricontare il database).
-        remaining.onFinished(it.recent)
+        remaining.onFinished(it.finished)
       }
     }
     graphScope.launch {

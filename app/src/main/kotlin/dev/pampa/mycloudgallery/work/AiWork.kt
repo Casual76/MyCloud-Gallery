@@ -33,6 +33,7 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelId
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
 import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
 import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
+import dev.pampa.mycloudgallery.core.rules.ConfirmationKind
 import dev.pampa.mycloudgallery.core.rules.RuleDecision
 import dev.pampa.mycloudgallery.core.rules.RunScope
 import dev.pampa.mycloudgallery.core.rules.WaitReason
@@ -193,8 +194,13 @@ object AiWorkScheduling {
 /**
  * XS-3: che cosa fa **dopo** di se' una tappa di "Analizza adesso" (richiesta dell'utente non confermata, solo per i media chiesti). Funzione pura
  * (provata in `AskedStageTest` senza WorkManager): una tappa finita per tempo si riaccoda; un'attesa delle regole riprogramma come ogni lavoro; una
- * conferma richiesta (dati mobili, roaming, tetto) **non apre nessun foglio**: riparte da sola sul Wi-Fi; una tappa finita non lascia niente, salvo
- * una richiesta arrivata dopo l'ultima lettura (un giro in piu', per i soli chiesti).
+ * conferma richiesta **non apre nessun foglio** (mai una conferma implicita):
+ * - per i **dati mobili o il roaming** (anche con il tetto mobile raggiunto) riparte da sola sulla rete non a consumo ([AskedFollowUp.OnUnmetered]);
+ * - per il **tetto superato su una rete gia' buona** (XS2-3: il Wi-Fi non cambia niente) NON si riaccoda senza ritardo: ritenta con un ritardo che cresce
+ *   da 30 minuti a un'ora ([AskedFollowUp.AfterCap], [RuleWaits.overCap]), cosi' vede il reset del ciclo o un'impostazione cambiata in un'ora al piu';
+ * - **la catena finisce se non restano richieste valide** ([hasRequests] falso: scadute da 24 ore, finite, cancellate), qualunque sia l'esito, anche quando
+ *   il cancello delle regole ha fermato la tappa prima di partire;
+ * - una tappa finita non lascia niente, salvo una richiesta arrivata dopo l'ultima lettura (un giro in piu', per i soli chiesti).
  */
 sealed interface AskedFollowUp {
   data object Done : AskedFollowUp
@@ -204,15 +210,31 @@ sealed interface AskedFollowUp {
   data class AfterWait(val reason: WaitReason) : AskedFollowUp
 
   data object OnUnmetered : AskedFollowUp
+
+  /** Tetto superato su una rete gia' buona: ritenta fra [delay] (sempre sulla rete non a consumo), con il numero di tentativo [attempt] negli input. */
+  data class AfterCap(val delay: Duration, val attempt: Int) : AskedFollowUp
 }
 
-fun askedFollowUp(outcome: StageOutcome?, askedSinceStart: Boolean): AskedFollowUp = when (outcome) {
-  is StageOutcome.Yielded -> AskedFollowUp.Again
-  is StageOutcome.Waiting -> AskedFollowUp.AfterWait(outcome.reason)
-  is StageOutcome.Stopped -> AskedFollowUp.AfterWait(outcome.reason)
-  is StageOutcome.NeedsConfirmation -> AskedFollowUp.OnUnmetered
-  is StageOutcome.Finished -> if (askedSinceStart) AskedFollowUp.Again else AskedFollowUp.Done
-  null -> AskedFollowUp.Done
+/**
+ * XS2-3: una catena di "Analizza adesso" ([only]) **senza richieste valide** finisce subito, prima del cancello iniziale delle regole e di ogni attesa: la
+ * scadenza a 24 ore (e il "fatto" o il "cancellato") vale anche per i seguiti gia' in coda. Un lavoro che non e' di "Analizza adesso" non finisce mai qui.
+ */
+internal fun askedChainEnded(only: Boolean, hasRequests: Boolean): Boolean = only && !hasRequests
+
+fun askedFollowUp(outcome: StageOutcome?, askedSinceStart: Boolean, hasRequests: Boolean = true, attempt: Int = 0): AskedFollowUp {
+  if (!hasRequests) return AskedFollowUp.Done
+  return when (outcome) {
+    is StageOutcome.Yielded -> AskedFollowUp.Again
+    is StageOutcome.Waiting -> AskedFollowUp.AfterWait(outcome.reason)
+    is StageOutcome.Stopped -> AskedFollowUp.AfterWait(outcome.reason)
+    is StageOutcome.NeedsConfirmation -> {
+      val kinds = outcome.decision.kinds
+      val capOnly = ConfirmationKind.OVER_CAP in kinds && ConfirmationKind.MOBILE_DATA !in kinds && ConfirmationKind.ROAMING !in kinds
+      if (capOnly) RuleWaits.overCap(attempt).let { AskedFollowUp.AfterCap(it.delay, it.attempt) } else AskedFollowUp.OnUnmetered
+    }
+    is StageOutcome.Finished -> if (askedSinceStart) AskedFollowUp.Again else AskedFollowUp.Done
+    null -> AskedFollowUp.Done
+  }
 }
 
 /** Nessun punto di ripresa proprio: la ripresa vera e' `AiResults.saved` (ogni media si salva subito, D22). */
@@ -310,9 +332,12 @@ class AiComputeWorker @AssistedInject constructor(
 
   override suspend fun doWork(): Result {
     if (!gallery.backgroundWorkAllowed) return Result.success()
-    gallery.awaitReady(COLD_START_WAIT)
     // XS-3: "Analizza adesso" e' una richiesta dell'utente, non confermata e solo per i media chiesti.
     val only = inputData.getBoolean(AiWorkScheduling.KEY_ONLY_ASKED, false)
+    // XS2-3: una catena di "Analizza adesso" senza richieste valide (scadute da 24 ore, finite, cancellate) finisce **subito**, prima del cancello iniziale
+    // delle regole e prima di aspettare la famiglia: la scadenza vale anche per i seguiti gia' in coda.
+    if (askedChainEnded(only, hasRequests = stack.ai.urgent.urgent().isNotEmpty())) return Result.success()
+    gallery.awaitReady(COLD_START_WAIT)
     val user = inputData.getBoolean(AiWorkScheduling.KEY_USER, false) || only
     // FAB-5: quante attese di fila senza un vincolo esatto ha gia' fatto questa catena: il ritardo della prossima cresce.
     val attempt = inputData.getInt(RuleWaits.KEY_ATTEMPT, 0)
@@ -333,11 +358,16 @@ class AiComputeWorker @AssistedInject constructor(
     outcome?.let { graph.events.stage(DiagJob.AI_COMPUTE, it) }
     // IX-1: la tappa dopo si accoda a questo lavoro (nome della sua catena, APPEND_OR_REPLACE), e un'attesa delle regole riprogramma.
     if (only) {
-      when (val next = askedFollowUp(outcome, stack.ai.urgent.askedSince(startedAt))) {
+      val hasRequests = stack.ai.urgent.urgent().isNotEmpty()
+      when (val next = askedFollowUp(outcome, stack.ai.urgent.askedSince(startedAt), hasRequests, attempt)) {
         AskedFollowUp.Again -> AiWorkScheduling.continueCompute(applicationContext, user, onlyAsked = true)
         is AskedFollowUp.AfterWait -> AiWorkScheduling.afterWait(applicationContext, user, next.reason, attempt, onlyAsked = true)
         AskedFollowUp.OnUnmetered ->
           AiWorkScheduling.continueCompute(applicationContext, user, constraints = LanConstraints.unmetered(), onlyAsked = true)
+        is AskedFollowUp.AfterCap ->
+          AiWorkScheduling.continueCompute(
+            applicationContext, user, delayMs = next.delay.inWholeMilliseconds, constraints = LanConstraints.unmetered(), attempt = next.attempt, onlyAsked = true,
+          )
         AskedFollowUp.Done -> Unit
       }
     } else {

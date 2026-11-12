@@ -12,6 +12,8 @@ import dev.pampa.mycloudgallery.core.rules.run.StageOutcome
 import dev.pampa.mycloudgallery.core.rules.run.StageStats
 import kotlin.time.Duration
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -96,6 +98,9 @@ class AnalysisPauseIntegrationTest {
     rig.triggersOverride = triggers
     val device = rig.founder()
     val ai = device.stack.ai
+    // X-R1: gli eventi dell'ambiente si ascoltano solo mentre qualcuno guarda lo stato dell'analisi (come fa la nuvola o la pagina).
+    val watcherScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Unconfined)
+    val watcher = watcherScope.launch { ai.analysis.collect {} }
 
     // Una richiesta dell'utente e' ferma per le regole (stato generico "regole"): il motivo e' quello del verdetto di adesso.
     ai.noteStage(confirmation(), user)
@@ -106,5 +111,43 @@ class AnalysisPauseIntegrationTest {
     triggers.emit(Unit)
     val updated = withTimeout(10_000) { ai.decision.first { it is RuleDecision.Wait && it.reason is WaitReason.BatteryLow } }
     assertThat(updated).isInstanceOf(RuleDecision.Wait::class.java)
+    watcher.cancel()
+    watcherScope.cancel()
+  }
+
+  /**
+   * X-R1: gli eventi dell'ambiente (ascoltatori di sistema: caldo, rete, carica) si ascoltano **solo mentre qualcuno guarda** lo stato dell'analisi, non
+   * alla costruzione del grafo. Prima partivano subito: sotto Robolectric `addThermalStatusListener` non si registra e l'eccezione restava in uno scope
+   * senza gestore, pagata dalla prima prova con `runTest` che girava dopo (`EntryHardeningTest`). Mutazione: ascoltare alla costruzione.
+   */
+  @Test
+  fun gliEventiDellAmbienteSiAscoltanoSoloMentreQualcunoGuarda() = runBlocking<Unit> {
+    val subscribed = java.util.concurrent.atomic.AtomicInteger()
+    val active = java.util.concurrent.atomic.AtomicInteger()
+    rig.decideOverride = { RuleDecision.Wait(WaitReason.PowerSaver) }
+    rig.triggersOverride = kotlinx.coroutines.flow.flow {
+      subscribed.incrementAndGet()
+      active.incrementAndGet()
+      try {
+        kotlinx.coroutines.awaitCancellation()
+      } finally {
+        active.decrementAndGet()
+      }
+    }
+    val device = rig.founder()
+    val ai = device.stack.ai
+
+    // Nessuno guarda: nessun ascoltatore, anche dopo un po'.
+    kotlinx.coroutines.delay(500)
+    assertThat(subscribed.get()).isEqualTo(0)
+
+    // Qualcuno guarda (la nuvola, la pagina): si ascolta; smette di guardare: si smette.
+    val watcherScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Unconfined)
+    val watcher = watcherScope.launch { ai.analysis.collect {} }
+    withTimeout(10_000) { while (active.get() < 1) kotlinx.coroutines.delay(20) }
+    assertThat(subscribed.get()).isEqualTo(1)
+    watcher.cancel()
+    withTimeout(10_000) { while (active.get() > 0) kotlinx.coroutines.delay(20) }
+    watcherScope.cancel()
   }
 }

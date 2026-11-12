@@ -34,7 +34,15 @@ class AiUrgentFile(
   /** L'ora del telefono: serve solo a far scadere le richieste (un orologio sbagliato le fa durare di piu' o di meno, niente di piu'). */
   private val now: () -> Long = System::currentTimeMillis,
 ) : AiUrgentKeys {
-  private class Entry(val key: ContentKey, var askedAt: Long, val media: MediaId? = null, var attempts: Int = 0, var wait: UrgentWait? = null)
+  private class Entry(val key: ContentKey, var askedAt: Long, val media: MediaId? = null, var attempts: Int = 0, var wait: UrgentWait? = null, val serial: Long = 0L)
+
+  /**
+   * Una richiesta come la vede la pulizia (riserva del giro 2): con il numero d'ordine ([token]) dell'**esemplare** letto, cosi' una richiesta rinnovata mentre la
+   * pulizia aspettava (la stessa chiave, magari per un altro media) non si confonde con quella esaminata e non viene tolta per sbaglio ([removeIf]).
+   */
+  class Request(val key: ContentKey, val token: Long, val media: MediaId?)
+
+  private var serialCounter = 0L
 
   private val lock = Any()
 
@@ -69,7 +77,7 @@ class AiUrgentFile(
   fun add(key: ContentKey, media: MediaId? = null) {
     synchronized(lock) {
       entries.remove(key)
-      entries[key] = Entry(key, now(), media)
+      entries[key] = Entry(key, now(), media, serial = ++serialCounter)
       expireLocked()
       trimLocked()
       saveLocked()
@@ -80,6 +88,27 @@ class AiUrgentFile(
   override fun urgent(): Set<ContentKey> = synchronized(lock) {
     if (expireLocked()) saveLocked()
     entries.keys.toList().asReversed().toCollection(LinkedHashSet())
+  }
+
+  /** Le richieste di adesso con il loro numero d'ordine (l'ultima chiesta per prima). */
+  fun requests(): List<Request> = synchronized(lock) {
+    if (expireLocked()) saveLocked()
+    entries.values.toList().asReversed().map { Request(it.key, it.serial, it.media) }
+  }
+
+  /** Toglie le richieste **esattamente** di quegli esemplari: se nel frattempo una e' stata rinnovata (altro numero d'ordine) resta. */
+  fun removeIf(gone: Collection<Request>) {
+    if (gone.isEmpty()) return
+    synchronized(lock) {
+      var changed = false
+      for (request in gone) {
+        if (entries[request.key]?.serial == request.token) {
+          entries.remove(request.key)
+          changed = true
+        }
+      }
+      if (changed) saveLocked()
+    }
   }
 
   override fun done(key: ContentKey) {
@@ -173,7 +202,7 @@ class AiUrgentFile(
         }
         runCatching { ContentKey(hex) }.getOrNull()?.let { key ->
           entries.remove(key)
-          entries[key] = Entry(key, at, media)
+          entries[key] = Entry(key, at, media, serial = ++serialCounter)
         }
       }
       trimLocked()

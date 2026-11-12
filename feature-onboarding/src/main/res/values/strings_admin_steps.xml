@@ -96,7 +96,7 @@
   <string name="areas_state_read_only">Sola lettura: non basta</string>
   <string name="areas_state_denied">Accesso negato</string>
   <!-- La recinzione delle prove (D33, solo nella build di debug): la share la esclude l'app, non il NAS. -->
-  <string name="areas_state_fenced">Esclusa per l’account di prova</string>
+  <string name="areas_state_fenced">In pausa</string>
   <string name="areas_state_missing">Non esiste sul NAS</string>
   <string name="areas_state_unreachable">Non riesco a controllarla</string>
   <string name="areas_taken_private">Già scelta come area privata</string>

@@ -162,10 +162,10 @@ class LibraryTabTest {
       timeline = state.timeline, preferences = state.preferences, phone = state.phone, commands = commands,
     )
     show(withCommands)
-    composeRule.onNodeWithText("Solo le foto scelte").assertExists()
+    composeRule.onNodeWithText("Solo le foto selezionate").assertExists()
     composeRule.onNodeWithText("3 foto in attesa").assertExists()
     composeRule.onNodeWithText("Consenti tutto").performClick()
-    composeRule.onNodeWithText("Consenti").performClick()
+    composeRule.onNodeWithText("Consenti posizione").performClick()
     assertThat(commands.calls).containsExactly("access", "location").inOrder()
   }
 

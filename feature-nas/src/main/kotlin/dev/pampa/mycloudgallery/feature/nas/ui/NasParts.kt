@@ -13,28 +13,23 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ErrorOutline
-import androidx.compose.ui.layout.layout
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.unit.Dp
-import dev.antigravity.fluidengine.ui.theme.FluidGroupOpenEdge
-import dev.antigravity.fluidengine.ui.theme.FluidGroupSegment
-import dev.antigravity.fluidengine.ui.theme.FluidListDivider
-import dev.antigravity.fluidengine.ui.theme.FluidListGroup
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,13 +37,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.Dp
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
@@ -57,9 +57,15 @@ import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
+import dev.antigravity.fluidengine.ui.theme.FluidGroupOpenEdge
+import dev.antigravity.fluidengine.ui.theme.FluidGroupSegment
+import dev.antigravity.fluidengine.ui.theme.FluidListDivider
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidLoading
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoButton
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryLegibility
-import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustration
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
@@ -151,8 +157,8 @@ internal fun NasNotice(
 }
 
 /**
- * Uno stato vuoto o d'attesa: l'illustrazione del design system, un titolo, una frase e, se serve, un'azione. Nessun posto muto:
- * una pagina senza niente da mostrare dice perche' e cosa si puo' fare (piano, 2.1).
+ * Uno stato vuoto o d'attesa nella forma comune (fase I, CU-23: [GalleryFigureState]): la figura, il titolo, il perche' dietro la «i» (TalkBack lo
+ * legge dal tasto, senza tocco) e, se serve, l'azione. Niente paragrafi sotto il titolo.
  */
 @Composable
 internal fun NasEmptyState(
@@ -164,25 +170,13 @@ internal fun NasEmptyState(
   actionLabel: String? = null,
   onAction: (() -> Unit)? = null,
 ) {
-  Column(
-    modifier = modifier
-      .fillMaxWidth()
-      .padding(NasDimens.StatePadding),
-    horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(NasDimens.StateGap),
-  ) {
-    GalleryIllustration(icon = icon, tone = tone)
-    Text(
-      text = title,
-      modifier = Modifier.widthIn(max = NasDimens.StateTextMaxWidth),
-      style = MaterialTheme.typography.headlineSmall,
-      color = MaterialTheme.colorScheme.onSurface,
-      textAlign = TextAlign.Center,
-    )
-    Text(
+  var open by rememberSaveable(title) { mutableStateOf(false) }
+  GalleryFigureState(icon = icon, title = title, modifier = modifier.fillMaxWidth().padding(NasDimens.StatePadding), tone = tone, fill = false) {
+    GalleryInfoButton(label = detail, open = open, onToggle = { open = !open })
+    GalleryInfoDetail(
       text = detail,
+      visible = open,
       modifier = Modifier.widthIn(max = NasDimens.StateTextMaxWidth),
-      style = MaterialTheme.typography.bodyLarge,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       textAlign = TextAlign.Center,
     )

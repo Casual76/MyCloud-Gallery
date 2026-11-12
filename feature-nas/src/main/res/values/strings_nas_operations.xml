@@ -97,7 +97,7 @@
   </plurals>
   <plurals name="nas_ops_detail_locked">
     <item quantity="one">%1$s file è aperto su un altro dispositivo: riprovo da solo, con attese sempre più lunghe, fino a 24 ore.</item>
-    <item quantity="other">%1$s file sono aperti su un altro dispositivo: riprovo da soli, con attese sempre più lunghe, fino a 24 ore.</item>
+    <item quantity="other">%1$s file sono aperti su un altro dispositivo: riprovo da solo, con attese sempre più lunghe, fino a 24 ore.</item>
   </plurals>
   <string name="nas_ops_detail_cancelled">Annullata dopo %1$s di %2$s: il resto non è stato fatto. Quello che era già fatto resta fatto.</string>
   <string name="nas_ops_detail_failed">%1$s</string>

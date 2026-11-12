@@ -126,13 +126,13 @@
   <!-- I4: gli stati senza griglia sono una figura, un titolo e il tasto (niente paragrafi). -->
   <string name="library_permission_title">Serve l’accesso alle foto</string>
   <string name="library_empty_title">Ancora nessuna foto</string>
-  <string name="library_partial_title">Solo le foto scelte</string>
+  <string name="library_partial_title">Solo le foto selezionate</string>
   <string name="library_partial_action">Consenti tutto</string>
   <plurals name="library_pending_title">
     <item quantity="one">%1$s foto in attesa</item>
     <item quantity="other">%1$s foto in attesa</item>
   </plurals>
-  <string name="library_pending_action">Consenti</string>
+  <string name="library_pending_action">Consenti posizione</string>
   <string name="library_first_read_title">Sto leggendo la Libreria</string>
   <string name="library_first_read_progress">%1$s di %2$s</string>
   <plurals name="library_first_read_progress_unknown">

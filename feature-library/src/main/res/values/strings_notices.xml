@@ -27,7 +27,7 @@
   <string name="notice_delete_nas_only_message">Non c’è niente da eliminare dal telefono. Per toglierli dal NAS aprili uno per uno, o usa Cartelle NAS.</string>
   <string name="notice_dismiss">OK</string>
   <string name="notice_similar_too_many_title">Per cercare i simili scegline al massimo %1$s</string>
-  <string name="notice_similar_too_many_message">Il risultato somiglia alla media delle foto scelte: con troppe foto diverse non somiglierebbe a nessuna. Toglierne qualcuna e riprova.</string>
+  <string name="notice_similar_too_many_message">Il risultato somiglia alla media delle foto selezionate: con troppe foto diverse non somiglierebbe a nessuna. Toglierne qualcuna e riprova.</string>
   <string name="notice_similar_not_analyzed_title">Foto non ancora analizzate</string>
-  <string name="notice_similar_not_analyzed_message">Per cercare i simili l’app deve prima analizzare le foto scelte. Lo fa da sola: riprova fra un po’.</string>
+  <string name="notice_similar_not_analyzed_message">Per cercare i simili l’app deve prima analizzare le foto selezionate. Lo fa da sola: riprova fra un po’.</string>
 </resources>

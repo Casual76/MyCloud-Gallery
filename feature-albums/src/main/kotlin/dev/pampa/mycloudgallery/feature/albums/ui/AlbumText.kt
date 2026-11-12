@@ -4,8 +4,13 @@ import android.content.Context
 import android.content.res.Resources
 import android.text.format.Formatter
 import androidx.annotation.StringRes
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.GroupAdd
+import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.graphics.vector.ImageVector
 import dev.pampa.mycloudgallery.core.albums.contract.ShareExclusion
 import dev.pampa.mycloudgallery.core.albums.contract.SharePlan
 import dev.pampa.mycloudgallery.core.albums.contract.SharePlanKind
@@ -78,6 +83,13 @@ internal object AlbumText {
     TitleProblem.EMPTY -> R.string.albums_title_empty
     TitleProblem.TOO_LONG -> R.string.albums_title_too_long
     TitleProblem.FORBIDDEN_CHARS -> R.string.albums_title_forbidden
+  }
+
+  /** Il segno di un livello di condivisione: tutti fanno tutto (il gruppo), gli altri aggiungono (il gruppo con il +), gli altri guardano (l'occhio). */
+  fun levelIcon(level: ShareLevel): ImageVector = when (level) {
+    ShareLevel.ALL -> Icons.Rounded.Groups
+    ShareLevel.ADD -> Icons.Rounded.GroupAdd
+    ShareLevel.VIEW -> Icons.Rounded.Visibility
   }
 
   @StringRes

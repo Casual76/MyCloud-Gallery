@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PhotoAlbum
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -38,6 +40,7 @@ import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.instant.InstantBlock
 import dev.pampa.mycloudgallery.core.designsystem.instant.InstantShape
 import dev.pampa.mycloudgallery.core.designsystem.instant.instantSkeleton
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.library.contract.DragOrigin
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.core.model.AlbumId
@@ -295,6 +298,7 @@ private fun LazyListScope.header(ui: AlbumPageUi, strips: List<Strip>, handlers:
               onClick = if (strip.action == StripAction.NONE) null else ({ handlers.onStrip(strip.action) }),
               family = stripFamily(strip.id),
               status = stripStatus(strip),
+              progress = strip.progress,
             )
           }
         }
@@ -317,17 +321,18 @@ private fun LazyListScope.emptyAlbum(album: Album, ui: AlbumPageUi, handlers: Al
   item(key = "empty") {
     Block {
       val canAdd = AlbumAction.ADD_MEDIA in ui.actions
-      val (title, detail) = when {
-        album is Album.Smart -> R.string.album_empty_smart_title to R.string.album_empty_smart_detail
-        album is Album.Shared && !canAdd -> R.string.album_empty_shared_title to R.string.album_empty_view_only
-        album is Album.Shared -> R.string.album_empty_shared_title to R.string.album_empty_shared_detail
-        else -> R.string.album_empty_title to R.string.album_empty_detail
+      val title = when {
+        album is Album.Smart -> R.string.album_empty_smart_title
+        album is Album.Shared -> R.string.album_empty_shared_title
+        else -> R.string.album_empty_title
       }
-      FluidEmptyState(title = stringResource(title), detail = stringResource(detail))
-      if (album is Album.Smart && AlbumAction.EDIT_RULES in ui.actions) {
-        FluidButton(text = stringResource(R.string.album_action_edit_rules), onClick = { handlers.onAction(AlbumAction.EDIT_RULES) }, style = FluidButtonStyle.Tinted, fillWidth = true)
+      // CU-23 (fase I): la forma comune dello stato vuoto (figura, titolo, i tasti); i tasti dicono che cosa si puo' fare, senza la frase.
+      GalleryFigureState(icon = Icons.Rounded.PhotoAlbum, title = stringResource(title), fill = false) {
+        if (album is Album.Smart && AlbumAction.EDIT_RULES in ui.actions) {
+          FluidButton(text = stringResource(R.string.album_action_edit_rules), onClick = { handlers.onAction(AlbumAction.EDIT_RULES) }, style = FluidButtonStyle.Tinted)
+        }
+        if (canAdd) FluidButton(text = stringResource(R.string.album_action_add), onClick = { handlers.onAction(AlbumAction.ADD_MEDIA) })
       }
-      if (canAdd) FluidButton(text = stringResource(R.string.album_action_add), onClick = { handlers.onAction(AlbumAction.ADD_MEDIA) }, fillWidth = true)
     }
   }
 }

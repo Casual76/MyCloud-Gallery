@@ -43,10 +43,11 @@ internal class AreasRecintoTest : OnboardingComposeBase() {
     show { AreasScreen(Samples.chrome(OnboardingStep.AREAS), AreasUi(loading = false, candidates = candidates), AreasForm(), AreasActions()) }
 
     // La share esclusa compare in tutti e due i gruppi (area comune e area privata), sempre come esclusa.
-    assertThat(composeRule.onAllNodesWithText("Esclusa per l’account di prova").fetchSemanticsNodes()).isNotEmpty()
+    // Fase I (CS-3): la recinzione si chiama «In pausa» ovunque, mai «di prova».
+    assertThat(composeRule.onAllNodesWithText("In pausa").fetchSemanticsNodes()).isNotEmpty()
     // "Accesso negato" resta solo per la share che il NAS rifiuta davvero (`test2`, di un altro account).
     val denied = composeRule.onAllNodesWithText("Accesso negato").fetchSemanticsNodes().size
-    val fenced = composeRule.onAllNodesWithText("Esclusa per l’account di prova").fetchSemanticsNodes().size
+    val fenced = composeRule.onAllNodesWithText("In pausa").fetchSemanticsNodes().size
     assertThat(denied).isEqualTo(fenced)
   }
 }

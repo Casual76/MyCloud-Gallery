@@ -6,7 +6,7 @@
   <string name="diagnostics_section_search">Ricerca</string>
   <string name="diagnostics_hint_search">Modelli della ricerca, analisi delle foto, testo letto e indice di ricerca su questo dispositivo: stato, avanzamento e problemi da risolvere.</string>
   <string name="diag_search_state_title">Stato della ricerca</string>
-  <string name="diag_search_state_guide">I modelli presenti e verificati, quanti media sono analizzati e quanti aspettano, se la lettura del testo è attiva su questo dispositivo. Le ricerche non escono mai dal telefono.</string>
+  <string name="diag_search_state_guide">I modelli presenti e verificati, quante foto e video sono analizzati e quanti aspettano, se la lettura del testo è attiva su questo dispositivo. Le ricerche non escono mai dal telefono.</string>
 
   <!-- P11: i codici del §2.6. -->
   <string name="diag_ai_model_missing_title">Modello della ricerca assente</string>

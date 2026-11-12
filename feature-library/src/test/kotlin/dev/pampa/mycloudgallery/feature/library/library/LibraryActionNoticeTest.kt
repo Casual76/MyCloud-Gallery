@@ -457,7 +457,7 @@ class LibraryActionNoticeTest {
     composeRule.onNodeWithText("Sto leggendo la Libreria").assertExists()
     composeRule.onAllNodesWithText("Ancora nessuna foto").assertCountEquals(0)
     // L'avviso dell'accesso parziale c'e' lo stesso.
-    composeRule.onNodeWithText("Solo le foto scelte").assertExists()
+    composeRule.onNodeWithText("Solo le foto selezionate").assertExists()
   }
 
   @Test
@@ -565,7 +565,7 @@ class LibraryActionNoticeTest {
     composeRule.waitForIdle()
 
     composeRule.onNodeWithText("Foto non ancora analizzate").assertExists()
-    composeRule.onNodeWithText("Per cercare i simili l’app deve prima analizzare le foto scelte.", substring = true).assertExists()
+    composeRule.onNodeWithText("Per cercare i simili l’app deve prima analizzare le foto selezionate.", substring = true).assertExists()
     assertThat(state.grid.selecting).isTrue()
     assertThat(state.grid.selection.selected.value.size).isEqualTo(2)
   }

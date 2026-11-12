@@ -8,7 +8,7 @@
   <string name="diag_backup_nas_unreachable_title">Backup: il NAS non risponde</string>
   <string name="diag_backup_nas_unreachable_guide">Il backup riprende da solo quando il NAS torna raggiungibile. «Riprova» dalla pagina Backup lo rimette in coda subito; il test di connessione dice dove si ferma.</string>
   <string name="diag_backup_nas_full_title">Backup: il NAS è pieno</string>
-  <string name="diag_backup_nas_full_guide">Il NAS non ha più posto per i media nuovi. Libera spazio dalla pagina «Spazio NAS» (o svuota il cestino del NAS): il backup riprende appena c\'è posto.</string>
+  <string name="diag_backup_nas_full_guide">Il NAS non ha più posto per foto e video nuovi. Libera spazio dalla pagina «Spazio NAS» (o svuota il cestino del NAS): il backup riprende appena c\'è posto.</string>
   <string name="diag_backup_quota_title">Backup: spazio del tuo account esaurito</string>
   <string name="diag_backup_quota_guide">L\'amministratore del NAS ha dato al tuo account uno spazio limitato e l\'hai finito: chiedigli di aumentarlo. Il backup riprende da solo.</string>
   <string name="diag_backup_auth_title">Backup: serve la password del NAS</string>
@@ -45,7 +45,7 @@
   <string name="diag_backup_source_changed_title">Backup: versioni in attesa del PC</string>
   <string name="diag_backup_source_changed_guide">Il file sul NAS è stato cambiato da un computer mentre una versione nuova aspettava di andare al suo posto. Non sposto niente: la versione nuova resta da parte finché la verifica del NAS non registra il file del computer, poi il backup riparte da solo. Non serve fare niente; se il numero non scende dopo una verifica del NAS, esporta la Diagnostica.</string>
   <string name="diag_backup_unexpected_guide">Un errore che l\'app non si aspettava ha fermato un file (o un giro intero): quel file non conta come al sicuro e gli altri vanno avanti. «Riprova» dalla pagina Backup lo rilegge; se si ripete, esporta la Diagnostica per capire dove.</string>
-  <string name="diag_backup_common_copy_lost_title">Backup: media spariti dall\'area comune</string>
+  <string name="diag_backup_common_copy_lost_title">Backup: foto e video spariti dall\'area comune</string>
   <string name="diag_backup_common_copy_lost_guide">La loro unica copia stava nell\'area comune e qualcuno l\'ha tolta prima che l\'app ne facesse una privata. Recuperale dal cestino del NAS (restano 30 giorni).</string>
   <string name="diag_backup_phone_storage_low_title">Backup: memoria del telefono quasi piena</string>
   <string name="diag_backup_phone_storage_low_guide">Il telefono ha poco spazio e il backup ne usa un po\' per lavorare. Libera spazio (le foto già al sicuro si possono togliere dal telefono con calma).</string>
@@ -56,8 +56,8 @@
   <string name="diag_backup_profile_inactive_title">Backup: profilo non attivo</string>
   <string name="diag_backup_profile_inactive_guide">Questo profilo del telefono non è quello in uso: il backup riprende quando ci torni.</string>
   <string name="diag_backup_last_round_title">Ultimo giro del backup</string>
-  <string name="diag_backup_last_round_guide">Quanti media ha salvato, collegato a copie già sul NAS, trovato spariti dal telefono o non riuscito a salvare, e perché si è fermato. Solo numeri.</string>
+  <string name="diag_backup_last_round_guide">Quante foto e video ha salvato, collegato a copie già sul NAS, trovato spariti dal telefono o non riuscito a salvare, e perché si è fermato. Solo numeri.</string>
   <string name="diag_backup_similar_copies_title">Copie simili</string>
   <string name="diag_backup_similar_copies_guide">Quante foto e video aspettano il confronto con le copie già sul NAS (la stessa foto ricompressa da un\'app): si uniscono in una cella, senza togliere niente a nessuno.</string>
-  <string name="diagnostics_hint_backup">Backup dei media del telefono sul NAS: coda, caricamenti, verifiche, copie non integre e problemi da risolvere.</string>
+  <string name="diagnostics_hint_backup">Backup di foto e video del telefono sul NAS: coda, caricamenti, verifiche, copie non integre e problemi da risolvere.</string>
 </resources>

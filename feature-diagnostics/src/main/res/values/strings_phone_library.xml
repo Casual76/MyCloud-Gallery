@@ -2,7 +2,7 @@
 <resources>
   <!-- Sezione «Libreria del telefono» (Fase 3). -->
   <string name="diagnostics_section_phone_library">Libreria del telefono</string>
-  <string name="diagnostics_hint_phone_library">Accesso ai media, lettura del telefono, elementi ignorati e foto in attesa.</string>
+  <string name="diagnostics_hint_phone_library">Accesso alle foto, lettura del telefono, elementi ignorati e foto in attesa.</string>
   <string name="diag_phone_library_state_title">Stato della libreria del telefono</string>
 
   <!-- Le voci del catalogo (titolo e «cosa fare»). Il testo che si vede nella schermata lo scrive chi contribuisce
@@ -15,7 +15,7 @@
 
   <!-- Posizione dei media (E-P21) -->
   <string name="diag_phone_media_location_title">Posizione delle foto non consentita</string>
-  <string name="diag_phone_media_location_guide">Le foto nuove restano in attesa finché non consenti la posizione dei media: senza, Android ne toglie il GPS e le copie non sarebbero uguali agli originali. I video e le foto già lette vanno avanti. Apri i permessi dell\'app e consenti la posizione.</string>
+  <string name="diag_phone_media_location_guide">Le foto nuove restano in attesa finché non consenti la posizione delle foto: senza, Android ne toglie il GPS e le copie non sarebbero uguali agli originali. I video e le foto già lette vanno avanti. Apri i permessi dell\'app e consenti la posizione.</string>
 
   <!-- Lettura del telefono (E-P4, E-P8, E-P12, E-P22) -->
   <string name="diag_phone_sync_title">Lettura del telefono</string>

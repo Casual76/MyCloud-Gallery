@@ -75,6 +75,7 @@
   <string name="trash_hidden_note">Gli elementi con il lucchetto sono nascosti: restano nascosti anche dopo il ripristino.</string>
   <string name="trash_explainer_title">Il cestino di Android</string>
   <string name="trash_explainer_title_gallery">Eliminati da qui e da Galleria</string>
+  <string name="trash_explainer_short">Restano 30 giorni</string>
   <string name="trash_explainer">Qui ci sono gli elementi che hai eliminato da MyCloud Gallery: il telefono li tiene 30 giorni, poi li cancella da solo. Non è il cestino della Galleria di Samsung: quello ha un contenuto suo e si apre dalla Galleria.</string>
   <string name="trash_explainer_gallery">Quello che elimini da MyCloud Gallery compare qui e anche nel Cestino di Galleria: lo ripristini da qui, con una conferma del telefono. Quello che elimini da Galleria invece l’app non lo vede: lo ripristini da Galleria → Cestino entro 30 giorni e, tornato al suo posto, l’app lo riconosce senza ricaricarlo.</string>
   <string name="trash_empty_title">Niente eliminato di recente</string>

@@ -174,9 +174,10 @@ class RecentlyDeletedScreenTest : ComposeScreenTest() {
   fun dicheNonEIlCestinoDiSamsungGallery() {
     showTrash(controller())
 
-    composeRule.onNodeWithText("Il cestino di Android").assertExists()
-    composeRule.onNodeWithText("Non è il cestino della Galleria di Samsung", substring = true).assertExists()
-    composeRule.onNodeWithText("30 giorni", substring = true).assertExists()
+    // CU-4 (fase I): a schermo una riga sola («Restano 30 giorni» con la «i»); quale cestino e' lo dice la frase dietro il tocco (e TalkBack).
+    composeRule.onNodeWithText("Restano 30 giorni", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithContentDescription("Il cestino di Android", substring = true).assertExists()
+    composeRule.onNodeWithContentDescription("Non è il cestino della Galleria di Samsung", substring = true).assertExists()
   }
 
   // --- D-B2: su Samsung il banner non nega cio' che la pagina fa -------------------------------------------------
@@ -186,13 +187,13 @@ class RecentlyDeletedScreenTest : ComposeScreenTest() {
     showTrashOn(PhoneTrash.GALLERY, controller())
 
     // La pagina elenca quello che l'app ha eliminato e lo ripristina con il dialogo di sistema: il banner non dice il contrario.
-    composeRule.onNodeWithText("Eliminati da qui e da Galleria").assertExists()
-    composeRule.onNodeWithText("lo ripristini da qui, con una conferma del telefono", substring = true).assertExists()
+    composeRule.onNodeWithContentDescription("Eliminati da qui e da Galleria", substring = true).assertExists()
+    composeRule.onNodeWithContentDescription("lo ripristini da qui, con una conferma del telefono", substring = true).assertExists()
     composeRule.onAllNodesWithText("l’app non lo vede e non lo può ripristinare", substring = true).assertCountEquals(0)
     composeRule.onAllNodesWithText("non qui", substring = true).assertCountEquals(0)
     // Il vero limite: quello che si elimina da Galleria l'app non lo vede, e si ripristina da Galleria → Cestino.
-    composeRule.onNodeWithText("Quello che elimini da Galleria invece l’app non lo vede", substring = true).assertExists()
-    composeRule.onNodeWithText("Galleria → Cestino", substring = true).assertExists()
+    composeRule.onNodeWithContentDescription("Quello che elimini da Galleria invece l’app non lo vede", substring = true).assertExists()
+    composeRule.onNodeWithContentDescription("Galleria → Cestino", substring = true).assertExists()
     // E le celle ci sono, con il pulsante di ripristino: il banner e la pagina dicono la stessa cosa.
     composeRule.onNodeWithContentDescription("Foto eliminata, restano 29 giorni").performClick()
     composeRule.waitForIdle()
@@ -236,7 +237,7 @@ class RecentlyDeletedScreenTest : ComposeScreenTest() {
     // Il terzo (27 giorni) c'e', nascosto: si legge nella descrizione, ha il segno, e la nota lo spiega.
     composeRule.onNodeWithContentDescription("Foto eliminata, restano 27 giorni, nascosta").assertExists()
     composeRule.onAllNodesWithText("Nascosto").assertCountEquals(1)
-    composeRule.onNodeWithText("restano nascosti anche dopo il ripristino", substring = true).assertExists()
+    composeRule.onNodeWithContentDescription("restano nascosti anche dopo il ripristino", substring = true).assertExists()
     // Gli altri non hanno il segno.
     composeRule.onNodeWithContentDescription("Foto eliminata, restano 29 giorni").assertExists()
     assertThat(loader.seen).contains(RecentlyDeletedController.trashEntryId(hidden.ref))
@@ -318,7 +319,7 @@ class RecentlyDeletedScreenTest : ComposeScreenTest() {
 
     composeRule.onNodeWithText("Niente eliminato di recente").assertExists()
     // La frase che lo distingue da Samsung c'e' anche da vuoto: e' proprio allora che serve.
-    composeRule.onNodeWithText("Non è il cestino della Galleria di Samsung", substring = true).assertExists()
+    composeRule.onNodeWithContentDescription("Non è il cestino della Galleria di Samsung", substring = true).assertExists()
   }
 
   @Test

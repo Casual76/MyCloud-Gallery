@@ -75,3 +75,14 @@ Diagnostica «Backup in pausa» con la frase di I3; resta «Indice condiviso in 
 - «Viaggi»: «Crea album» sotto la scheda e la ✕ sulla copertina. La scheda e' ora la stessa dei ricordi (`GalleryCoverCard`): la sfumatura non ha
   piu' il suo angolo arrotondato in cima (prima si vedeva un gradino a meta' scheda).
 - Pop-up della nuvola: con la pausa come unica cosa da dire, il titolo ha la «i»; con un problema piu' grave la pausa torna una capsula fra le voci.
+
+## Giro di correzione 1 (12/11)
+| Pagina | Prima | Dopo |
+|---|---|---|
+| Pop-up della nuvola, recinzioni accese (lo stato di oggi) | «In pausa (i)» e sotto «Indice condiviso in prova» con la frase sulle «share di prova» | «In pausa» con le due barre e la «i», una volta; sotto il tasto, lo spazio e l'ultima sincronizzazione (`pop-up-recinzioni-accese-*`) |
+| Cartelle del NAS, mosaico | bordo blu e croce bianca della piastrella sotto le foto | fondo della superficie e filo grigio solo fra le celle |
+| Operazioni del NAS | frasi di due-tre righe sulle schede in attesa, vuoto con paragrafo e titolo ripetuto | «12 / 40» con la «i»: la frase al tocco sulla testata; vuoto con figura e titolo |
+| Pagina di un album | «Condivisione in corso: 7 di 18», lucchetto sui permessi | anello con il percento e «Condivisione · 7 / 18», segno del livello (gruppo, gruppo con il +, occhio) |
+| Eliminati di recente | paragrafo di 37-55 parole in cima; righe del NAS con icone grigie, «Da Viaggi / Oslo 2026 · 4,8 MB», «Restano 29 giorni», capsule «Scade presto», «Senza record» | «Restano 30 giorni» con la «i»; piastrella del tipo con il segno, nome su una riga, peso, giorni come numero |
+| Onboarding, Permessi | «Da concedere» su ogni riga, scheda della modalita' ridotta con quattro righe | il segno sulla piastrella e la freccia; la scheda con il titolo e la «i» |
+| Schede di copertina (Raccolte, Ricordi, Viaggi, Persone) | nome nella parte chiara della sfumatura (2-2,6:1 su foto chiara) | scrim pieno dietro il nome (5,7:1 su una foto bianca) |

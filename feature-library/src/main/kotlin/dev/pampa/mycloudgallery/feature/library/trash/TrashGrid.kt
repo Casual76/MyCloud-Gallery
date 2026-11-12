@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,8 +32,6 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
-import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
-import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryWall
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryMediaCell
 import dev.pampa.mycloudgallery.core.designsystem.state.phoneTrashText
@@ -59,14 +58,18 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  */
 @Composable
 internal fun Explainer(hiddenNote: Boolean) {
-  FluidInlineMessage(
-    message = stringResource(phoneTrashText(R.string.trash_explainer, R.string.trash_explainer_gallery)) +
-      if (hiddenNote) " " + stringResource(R.string.trash_hidden_note) else "",
-    title = stringResource(phoneTrashText(R.string.trash_explainer_title, R.string.trash_explainer_title_gallery)),
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = GalleryDimens.Gutter, vertical = CollectionsDimens.ExplainerGap),
-    tone = FluidTone.Neutral,
+  // CU-4 (fase I): una riga sola, il segno del tempo e «Restano 30 giorni»; il resto (quale cestino e' questo, la Galleria) dietro la «i».
+  val title = stringResource(phoneTrashText(R.string.trash_explainer_title, R.string.trash_explainer_title_gallery))
+  val detail = listOfNotNull(
+    title + ".",
+    stringResource(phoneTrashText(R.string.trash_explainer, R.string.trash_explainer_gallery)),
+    if (hiddenNote) stringResource(R.string.trash_hidden_note) else null,
+  ).joinToString(" ")
+  TrashInfoLine(
+    glyph = Icons.Rounded.Schedule,
+    label = stringResource(R.string.trash_explainer_short),
+    detail = detail,
+    modifier = Modifier.fillMaxWidth().padding(horizontal = GalleryDimens.Gutter, vertical = CollectionsDimens.ExplainerGap),
   )
 }
 

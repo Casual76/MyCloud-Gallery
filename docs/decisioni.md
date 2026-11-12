@@ -18898,6 +18898,33 @@ Il metro dell'utente: «se non sapessi leggere o sentire, potrei usare l'app?».
   righe non saltano; una foto nascosta non compare mai, nemmeno nella copertina della sua cartella; (7, seguito) nuvola con il backup in pausa:
   «In pausa» una volta, il tocco sulla «i» apre il perche'.
 
+#### I4, giro di correzione 1 della review della fase I (12/11)
+
+Rilievi da `review-fase-I/giro1/` (CG, CU, CS) e regole comuni del TRIAGE.
+- **Componenti comuni** (`core-designsystem`): `GalleryProgressRing` esteso (progress null = arco che gira, `animate` con la molla letta nel disegno,
+  centro, `GalleryProgressRingDefaults` con Row/Card/Hero e `stroke(size)` = lato/12, `galleryRingColor`, `GalleryRingPercent`): un solo anello, quello
+  del pop-up; la «i» (`GalleryInfoGlyph`, `GalleryInfoButton`, `GalleryInfoDetail`: la frase si apre sotto, mai un foglio, niente animazione di misura);
+  lo stato vuoto `GalleryFigureState` (figura, titolo, al piu' un tasto). Usati da pop-up, operazioni NAS, album, Viaggi, NAS, Libreria.
+- **CG-2**: `NasThumbnails.visible` (la Libreria visibile che cambia); le righe rifanno le richieste a ogni istantanea (una ricerca per id, al piu'
+  quattro per riga) e smettono subito di disegnare cio' che non e' piu' visibile, anche nel mosaico; il ViewModel rilegge le copertine con
+  `NasPreviewDose` (subito il primo cambio, poi al piu' uno al secondo, sempre l'ultimo). Prove: `NasPreviewGateTest` (cade sul codice senza il
+  cancello: 3 rosse su 4), `NasFolderPreviewsTest` (venti cambi in due secondi), `NasLibraryThumbnailsTest` (CS-11, porta vera sul catalogo vero),
+  registro dei Nascosti `nas-folder-previews` con la sonda sul catalogo dei mondi di prova.
+- **CU-2, CS-6**: `GalleryCoverCard` con lo scrim pieno dietro il nome (la sfumatura sale sopra, 28 dp; `fadeHeight` e `FadeHeightCompact` = 14 dp per le
+  schede piccole, chiesto da I1), `labelsSpoken` falso di serie; `GalleryCoverCardContrastTest` sui pixel di una copertina bianca (>= 4,5:1).
+- **CU-1, CS-3, CS-4**: con le recinzioni accese la pausa e' una sola («In pausa», due barre), anche per l'indice del NAS solo sul telefono; nessuna
+  seconda riga, mai «in prova» ne' «share» (Libreria, Diagnostica, onboarding). Scena `pop-up-recinzioni-accese`.
+- **CU-9**: il mosaico ha il fondo della superficie e il filo solo fra le celle. **CU-13**: frasi delle operazioni dietro la «i» della testata, vuoto
+  senza titolo ripetuto. **CU-15**: anello nella striscia della condivisione di un album, permessi con il segno del livello. **CU-23**: stati vuoti
+  nella forma comune (NAS, Viaggi, album). **CU-3, CU-4, CS-9**: Eliminati di recente con una riga «Restano 30 giorni» e la «i»; voci del NAS con la
+  piastrella del tipo, il segno, i giorni come numero, origine e autore a TalkBack, «Senza record» tolto dalle righe. **CU-18**: Permessi con il segno al
+  posto di «Da concedere»; le schede che spiegano dell'onboarding dietro la «i» (`NoticeCard(bodyBehindInfo)`), gli avvertimenti aperti.
+- **Parole e segni**: «foto selezionate» (CU-14), «Lavori fermi: cambiamenti anomali», «Consenti posizione» (CS-7), strisce con la piastrella
+  della famiglia e su una riga anche a 1,3x (CU-8, CS-13), «media» tolto dalla Diagnostica (CS-15), `trips_dismiss` e le frasi orfane tolte (CS-10).
+- **Non fatto**: le miniature nel cestino del NAS. Chiave e riferimento di una miniatura vengono solo dall'istantanea visibile, da cui un file
+  cestinato e' gia' uscito: servirebbe una lettura nuova del catalogo che ridia chiave e riferimento di una versione anche fuori dalla Libreria
+  (proposta, da decidere). Per ora la piastrella del tipo. «3 media spariti» e «Lavori fermi ... sul NAS» della pagina Backup sono di I3.
+
 ### I3, Backup e Impostazioni che si capiscono guardandoli (fase I, 11 novembre 2026)
 
 Ramo `fix/i3-backup-impostazioni` da `f7d91f7f`. Il metro dell'utente: «se non sapessi leggere o sentire, potrei usare l'app?». Prima e dopo, con le

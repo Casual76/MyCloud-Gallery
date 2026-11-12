@@ -1,5 +1,8 @@
 package dev.pampa.mycloudgallery.hidden
 
+import dev.pampa.mycloudgallery.feature.nas.contract.NasFolderPreviews
+import dev.pampa.mycloudgallery.core.trust.nas.SharePath
+import dev.pampa.mycloudgallery.nas.CatalogNasPreviews
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import dev.pampa.mycloudgallery.core.library.index.FilteredTimelineView
@@ -175,6 +178,36 @@ internal object HiddenProbes {
     val hiddenKeys = CatalogHidden.hiddenLocationKeys(w.db, keyOf.values)
     val listed = keyOf.filter { it.value !in hiddenKeys }.keys.mapTo(LinkedHashSet()) { w.ids[it] }
     Probed(shown = listed, expected = w.idsOf(w.nas.keys.filter { it in w.oracle.liveShowable }))
+  }
+
+  /**
+   * Cartelle NAS, le anteprime (I4 e CG-2 della fase I): per ogni cartella del mondo che contiene file, la lettura vera della pagina
+   * (`CatalogNasPreviews`, una per cartella) con i suoi file e, dalla radice di ogni share, le copertine delle sottocartelle. Cio' che la pagina puo'
+   * disegnare (miniature dei file, copertine) sono esattamente i file del NAS che si possono mostrare adesso: mai un nascosto, un compagno di gruppo
+   * nascosto o uno nascosto un attimo fa (la lettura chiede al catalogo, non all'istantanea). Il disegno poi passa anche dalla Libreria visibile
+   * (`NasPreviewGateTest`, `NasLibraryThumbnailsTest`).
+   */
+  val nasFolderPreviews = SurfaceProbe { w ->
+    val me = AccountId.of(HiddenWorldBuilder.ME)
+    val shown = LinkedHashSet<MediaId>()
+    val problems = ArrayList<String>()
+    for (share in listOf(HiddenWorldBuilder.PRIVATE_SHARE, HiddenWorldBuilder.COMMON_SHARE)) {
+      val places = w.nas.values.filter { it.share == share }
+      for ((dir, inDir) in places.groupBy { it.path.substringBeforeLast('/') }) {
+        val files = inDir.map { SharePath.parse(it.path) }
+        val previews = CatalogNasPreviews.read(w.db, me, share, SharePath.parse(dir), files, emptyList())
+        shown += previews.files.values
+      }
+      val tops = places.map { it.path.substringBefore('/') }.distinct().map { SharePath.of(it) }
+      val covers = CatalogNasPreviews.read(w.db, me, share, null, emptyList(), tops)
+      for ((folder, media) in covers.folders) {
+        if (media.size > NasFolderPreviews.FOLDER_COVER_COUNT) problems += "una copertina ha piu' di quattro foto"
+        if (media.toSet().size != media.size) problems += "una copertina ripete una foto"
+        if (folder !in tops) problems += "una copertina per una cartella che la pagina non ha chiesto"
+        shown += media
+      }
+    }
+    Probed(shown = shown, expected = w.idsOf(w.nas.keys.filter { it in w.oracle.liveShowable }), within = w.liveShowable, problems = problems)
   }
 
   /**

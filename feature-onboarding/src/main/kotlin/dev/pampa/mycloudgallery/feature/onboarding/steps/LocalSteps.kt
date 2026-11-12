@@ -115,6 +115,7 @@ internal fun BackupSourcesScreen(
           tone = NoticeTone.Info,
           icon = Icons.Rounded.Info,
           title = stringResource(R.string.sources_none_title),
+          bodyBehindInfo = true,
           body = stringResource(R.string.sources_none_detail),
         )
       }

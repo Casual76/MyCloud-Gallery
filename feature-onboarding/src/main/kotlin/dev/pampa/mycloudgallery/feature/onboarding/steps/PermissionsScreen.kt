@@ -16,8 +16,6 @@ import androidx.compose.ui.semantics.stateDescription
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
-import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
-import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
@@ -126,6 +124,7 @@ internal fun PermissionsScreen(
           icon = Icons.Rounded.Tune,
           title = stringResource(R.string.permissions_reduced_title),
           body = stringResource(reducedDetail(snapshot)),
+          bodyBehindInfo = true,
         ) {
           CardButton(
             text = stringResource(R.string.action_open_app_settings),
@@ -174,12 +173,11 @@ private fun PermissionRow(
   val state = snapshot.state(kind)
   val asked = kind in snapshot.requested
   val needsAction = state == PermissionState.DENIED || state == PermissionState.PARTIAL
-  val (label, tone) = when (state) {
-    PermissionState.GRANTED -> R.string.permissions_state_granted to FluidTone.Success
-    PermissionState.PARTIAL -> R.string.permissions_state_partial to FluidTone.Warning
-    PermissionState.DENIED ->
-      if (asked) R.string.permissions_state_denied to FluidTone.Danger else R.string.permissions_state_todo to FluidTone.Warning
-    PermissionState.NOT_NEEDED -> R.string.permissions_state_not_needed to FluidTone.Neutral
+  val label = when (state) {
+    PermissionState.GRANTED -> R.string.permissions_state_granted
+    PermissionState.PARTIAL -> R.string.permissions_state_partial
+    PermissionState.DENIED -> if (asked) R.string.permissions_state_denied else R.string.permissions_state_todo
+    PermissionState.NOT_NEEDED -> R.string.permissions_state_not_needed
   }
   // I4 (fase I): la piastrella dice che cosa si ottiene (la campanella, le foto, il segnaposto, la rete) con il colore della sua famiglia;
   // concesso e' il segno «fatto» nell'angolo, il resto la capsula che chiede il tocco. Lo stato si dice una volta; la frase del perche'
@@ -195,14 +193,21 @@ private fun PermissionRow(
         icon = kind.icon(),
         family = kind.family(),
         size = GalleryIconTileDefaults.Medium,
-        status = if (state == PermissionState.GRANTED) GalleryIconStatus.Done else null,
+        status = when {
+          state == PermissionState.GRANTED -> GalleryIconStatus.Done
+          state == PermissionState.PARTIAL -> GalleryIconStatus.Attention
+          state == PermissionState.DENIED && asked -> GalleryIconStatus.Problem
+          else -> null
+        },
         statusDescription = stateText,
       )
     },
     leadingTile = false,
-    labels = if (done) null else ({ FluidStatusBadge(label = stateText, tone = tone) }),
+    // CU-18 (fase I): niente «Da concedere» su ogni riga. Concesso = il segno «fatto»; parziale = attenzione; negato dopo la domanda = problema; da
+    // chiedere = nessun segno e la freccia: la riga si tocca. La parola la dice TalkBack.
+    labels = null,
     onClick = if (needsAction) ({ if (asked && state == PermissionState.DENIED) onOpenSettings() else onRequest(kind) }) else null,
-    disclosure = false,
-    modifier = Modifier.semantics { stateDescription = if (done) "$stateText. $why" else why },
+    disclosure = needsAction,
+    modifier = Modifier.semantics { stateDescription = "$stateText. $why" },
   )
 }

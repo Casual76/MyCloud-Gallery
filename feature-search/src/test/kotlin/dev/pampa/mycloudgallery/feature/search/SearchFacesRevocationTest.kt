@@ -3,11 +3,15 @@ package dev.pampa.mycloudgallery.feature.search
 import android.app.Application
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.testing.SyntheticLibrary
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.PeopleMode
@@ -228,5 +232,26 @@ class SearchFacesRevocationTest {
     assertThat(faces.image(anna, lib.snapshot)).isNull()
     rule.mainClock.advanceTimeByFrame()
     rule.onAllNodesWithTag(SuggestionFaceTag, useUnmergedTree = true).assertCountEquals(0)
+  }
+
+  /**
+   * CS-24 (giro 3 della fase I): il volto gia' disegnato la cui foto d'origine si nasconde **dopo**. Nessuna revoca: il ritaglio resta tenuto con il segno
+   * di adesso; e' l'istantanea visibile nuova, senza nessuna foto d'origine, che al disegno dopo toglie il volto (resta il segno della persona).
+   */
+  @Test
+  fun unVoltoGiaDisegnatoSeNeVaQuandoLaSuaFotoDOrigineSiNascondeDopo_CS24() {
+    val faces = SuggestionFaces.fixed(mapOf(anna to (Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).asImageBitmap() to setOf(origin))))
+    val item = SuggestionItem(Suggestion.PersonSuggestion(PersonOption(listOf(anna), PeopleMode.ANY, "Anna")), SuggestionArt.Face(anna))
+    var library by mutableStateOf<TimelineSnapshot>(lib.snapshot)
+    rule.setSearchContent { SuggestionDisc(item, library, null, faces) }
+    rule.onAllNodesWithTag(SuggestionFaceTag, useUnmergedTree = true).assertCountEquals(1)
+    // La foto d'origine si nasconde: l'istantanea visibile nuova non la contiene piu'.
+    library = object : TimelineSnapshot by lib.snapshot {
+      override fun indexOf(id: MediaId): Int = if (id == origin) -1 else lib.snapshot.indexOf(id)
+    }
+    rule.waitForIdle()
+    assertThat(faces.count).isEqualTo(1)
+    rule.onAllNodesWithTag(SuggestionFaceTag, useUnmergedTree = true).assertCountEquals(0)
+    rule.onAllNodesWithTag(SuggestionGlyphTag, useUnmergedTree = true).assertCountEquals(1)
   }
 }

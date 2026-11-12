@@ -41,7 +41,6 @@
   <string name="models_area_private">Nessun dispositivo analizza la tua area privata.</string>
 
   <!-- Copertura (D31) -->
-  <string name="models_section_coverage">Copertura della ricerca</string>
   <string name="models_coverage_complete">La ricerca per contenuto copre tutte le foto e i video.</string>
   <string name="models_coverage_partial">La ricerca per contenuto copre %1$s foto e video su %2$s.</string>
   <string name="models_coverage_model_missing">La ricerca per contenuto è ferma: manca il modello (%1$s).</string>
@@ -127,7 +126,6 @@
   <string name="models_close">Chiudi</string>
   <string name="models_details">Dettagli</string>
   <string name="models_percent">%1$d%%</string>
-  <string name="models_count_of">%1$s / %2$s</string>
   <string name="models_count_of_total">/ %1$s</string>
   <string name="models_coverage_all">Tutte le foto</string>
   <string name="models_coverage_updating_short">Aggiorno</string>

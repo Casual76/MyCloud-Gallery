@@ -105,7 +105,9 @@ class SearchSettingsUiTest {
     // Lo stato e la stima: segni e numeri a vista, le frasi intere per TalkBack. CU-19: che cosa fa adesso questo telefono e' il tempo che manca, non
     // un secondo «quanti su quanti» sotto quello della copertura.
     // Pacchetto X: lo stato sta in testata, detto una volta (sotto resta solo la misura).
-    shown("Analisi in corso · circa 95 min").assertIsDisplayed()
+    // Grafica XU: la testata dell'analisi, sorella del Backup: due parole e una riga.
+    shown("In corso").assertIsDisplayed()
+    shown("Restano 13.760 · circa 95\u00A0min").assertIsDisplayed()
     assertThat(rule.onAllNodesWithText("1.240 / 15.000", useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
     shown("≈ 2 notti").performScrollTo().assertIsDisplayed()
     said("Analizzare 13.760 foto e video richiede circa 2 notti.").assertExists()
@@ -114,7 +116,7 @@ class SearchSettingsUiTest {
     assertThat(rule.onAllNodesWithText("CPU", substring = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
     assertThat(rule.onAllNodesWithText("GPU", substring = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
     scrollClick("Questo dispositivo analizza")
-    scrollClick("Indicizza ora")
+    scrollClick("Analizza ora")
     assertThat(handlers.calls).containsExactly("indexer:false", "indexNow").inOrder()
   }
 
@@ -125,7 +127,7 @@ class SearchSettingsUiTest {
     // Il calcolo e' fermo per lo spazio: il tasto e' il rimedio, non «Indicizza ora».
     assertThat(rule.onAllNodesWithText("Libera spazio").fetchSemanticsNodes()).hasSize(1)
     // Pacchetto X: niente foglio dietro la riga di stato (lo stato sta in testata e nella pagina Analisi): le azioni sono a vista.
-    scrollClick("Indicizza ora")
+    scrollClick("Analizza ora")
     assertThat(handlers.calls).containsExactly("indexNow")
     // Senza ricerche recenti nessun «0» accanto al tasto.
     assertThat(rule.onAllNodesWithText("0", useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
@@ -260,8 +262,8 @@ class SearchSettingsUiTest {
   fun iPulsantiEGliAnelliSonoDa48DpAncheAlTestoGrande() {
     show(SearchSamples.settingsReadingOn, fontScale = 1.3f)
     val density = rule.density.density
-    val indexNow = rule.onNodeWithText("Indicizza ora").performScrollTo().fetchSemanticsNode()
-    assertWithMessage("«Indicizza ora» sotto i 48 dp").that(indexNow.boundsInRoot.height / density).isAtLeast(47.5f)
+    val indexNow = rule.onNodeWithText("Analizza ora").performScrollTo().fetchSemanticsNode()
+    assertWithMessage("«Analizza ora» sotto i 48 dp").that(indexNow.boundsInRoot.height / density).isAtLeast(47.5f)
     // Le scelte della lettura stanno nel foglio dietro il tocco: anche li' 48 dp.
     openReading()
     for (label in listOf("Non su questo dispositivo", "Spegni")) {

@@ -1,27 +1,30 @@
 package dev.pampa.mycloudgallery.feature.search
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-
 import androidx.compose.ui.test.performClick
 import com.google.common.truth.Truth.assertThat
+import dev.antigravity.fluidengine.ui.fluid.FluidMotionPolicy
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
 import dev.pampa.mycloudgallery.feature.search.contract.AnalysisFlow
 import dev.pampa.mycloudgallery.feature.search.models.AnalysisHandlers
+import dev.pampa.mycloudgallery.feature.search.models.AnalysisLaneTag
 import dev.pampa.mycloudgallery.feature.search.models.AnalysisQuietTag
-import dev.pampa.mycloudgallery.feature.search.models.AnalysisRecentTag
+import dev.pampa.mycloudgallery.feature.search.models.AnalysisRestTag
 import dev.pampa.mycloudgallery.feature.search.models.AnalysisScreen
 import dev.pampa.mycloudgallery.feature.search.models.AnalysisShownTag
 import dev.pampa.mycloudgallery.feature.search.models.AnalysisStatusTag
 import dev.pampa.mycloudgallery.feature.search.models.CodeAction
+import dev.pampa.mycloudgallery.feature.search.models.laneStep
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,12 +33,13 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Pacchetto X: la pagina "Analisi delle foto" — lo stato si vede e le anteprime scorrono (quella di adesso, le appena fatte con il
- * segno, le prossime); un media non mostrabile e' una tessera neutra. In pausa dice il motivo vero e fa partire con un tasto solo.
+ * Pacchetto X, grafica XU: la pagina "Analisi delle foto" — la testata sorella del Backup (anello, due parole, una riga, il tasto quando serve) e il
+ * nastro che passa nel mirino (adesso, le finite con la spunta, le prossime); un media non mostrabile e' la casella neutra. A riposo il mirino tiene
+ * l'icona del perche'. Il passo del nastro si calcola dalle anteprime che restano, e con il movimento ridotto la pagina non scorre.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = android.app.Application::class, qualifiers = "it-w360dp-h2200dp-xhdpi")
+@Config(application = android.app.Application::class, qualifiers = "it-w360dp-h800dp-xhdpi")
 class AnalysisScreenTest {
 
   @get:Rule
@@ -60,25 +64,36 @@ class AnalysisScreenTest {
       AnalysisScreen(AnalysisScenes.RUNNING, AnalysisScenes.flow(), AnalysisScenes.thumbnails, Recording(), onBack = {})
     }
     rule.onNodeWithTag(AnalysisStatusTag).assertIsDisplayed()
-    // La riga di stato si dice in una frase sola (TalkBack): la si cerca come descrizione.
+    // La testata: due parole e una riga a vista, la frase intera per TalkBack.
+    rule.onNodeWithText("In corso", useUnmergedTree = true).assertIsDisplayed()
+    rule.onNodeWithText("Restano 13.760 · circa 95\u00A0min", useUnmergedTree = true).assertIsDisplayed()
     rule.onAllNodesWithContentDescription("Sta analizzando le foto adesso", substring = true).onFirst().assertIsDisplayed()
-    rule.onNodeWithText("Adesso", ignoreCase = true, useUnmergedTree = true).assertExists()
-    rule.onNodeWithText("Appena fatte", ignoreCase = true, useUnmergedTree = true).assertExists()
-    rule.onNodeWithText("Prossime", ignoreCase = true, useUnmergedTree = true).assertExists()
-    // Le anteprime composte a vista (quella di adesso e le prime delle file); la neutra non e' un'anteprima.
-    assertThat(rule.onAllNodesWithTag(AnalysisShownTag).fetchSemanticsNodes()).isNotEmpty()
-    assertThat(rule.onAllNodesWithTag(AnalysisQuietTag).fetchSemanticsNodes()).hasSize(1)
-    rule.onNodeWithTag(AnalysisRecentTag).assertExists()
+    rule.onAllNodesWithText("82%", useUnmergedTree = true).onFirst().assertIsDisplayed()
+    // Il nastro: dice che cosa guarda e quante ne passano; niente etichette da modulo.
+    rule.onNodeWithTag(AnalysisLaneTag).assertIsDisplayed()
+    rule.onAllNodesWithContentDescription("Adesso guarda una foto. 5 appena fatte. 4 in arrivo").onFirst().assertExists()
+    assertThat(rule.onAllNodesWithText("Prossime", ignoreCase = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+    assertThat(rule.onAllNodesWithText("Appena fatte", ignoreCase = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+    // Le anteprime (quella di adesso, le finite, le prossime); la neutra non e' un'anteprima e ce n'e' una sola.
+    assertThat(rule.onAllNodesWithTag(AnalysisShownTag, useUnmergedTree = true).fetchSemanticsNodes().size).isAtLeast(5)
+    assertThat(rule.onAllNodesWithTag(AnalysisQuietTag, useUnmergedTree = true).fetchSemanticsNodes()).hasSize(1)
+    // In corso non c'e' niente da far partire.
+    assertThat(rule.onAllNodesWithText("Analizza ora").fetchSemanticsNodes()).isEmpty()
   }
 
   @Test
   fun inPausaDiceIlMotivoEFaPartire() {
     val handlers = Recording()
     rule.setSearchContent {
-      AnalysisScreen(AnalysisScenes.PAUSED, AnalysisFlow.EMPTY, AnalysisScenes.thumbnails, handlers, onBack = {})
+      AnalysisScreen(AnalysisScenes.PAUSED, AnalysisScenes.restFlow(), AnalysisScenes.thumbnails, handlers, onBack = {})
     }
-    rule.onNodeWithText("In pausa · telefono caldo").assertIsDisplayed()
-    rule.onNodeWithText("Indicizza ora").performClick()
+    rule.onNodeWithText("In pausa", useUnmergedTree = true).assertIsDisplayed()
+    rule.onNodeWithText("Telefono caldo", useUnmergedTree = true).assertIsDisplayed()
+    rule.onAllNodesWithContentDescription("L’analisi è in pausa: telefono caldo", substring = true).onFirst().assertExists()
+    // Nel mirino l'icona del perche', con le ultime analizzate ferme accanto.
+    rule.onNodeWithTag(AnalysisRestTag, useUnmergedTree = true).assertIsDisplayed()
+    rule.onAllNodesWithContentDescription("Le ultime 5 analizzate").onFirst().assertExists()
+    rule.onNodeWithText("Analizza ora").performClick()
     assertThat(handlers.now).isEqualTo(1)
   }
 
@@ -88,6 +103,57 @@ class AnalysisScreenTest {
       AnalysisScreen(LibraryAnalysisStatus.NotHere(ready = 10, total = 12), AnalysisFlow.EMPTY, AnalysisScenes.thumbnails, Recording(), onBack = {})
     }
     rule.onAllNodesWithContentDescription("le analizza un altro dispositivo", substring = true).onFirst().assertIsDisplayed()
-    assertThat(rule.onAllNodesWithText("Indicizza ora").fetchSemanticsNodes()).isEmpty()
+    rule.onNodeWithText("Su un altro dispositivo", useUnmergedTree = true).assertIsDisplayed()
+    assertThat(rule.onAllNodesWithText("Analizza ora").fetchSemanticsNodes()).isEmpty()
+  }
+
+  @Test
+  fun ilModelloCheMancaHaIlSuoRimedio() {
+    val handlers = Recording()
+    rule.setSearchContent {
+      AnalysisScreen(LibraryAnalysisStatus.ModelMissing, AnalysisFlow.EMPTY, AnalysisScenes.thumbnails, handlers, onBack = {})
+    }
+    rule.onNodeWithText("Manca il modello", useUnmergedTree = true).assertIsDisplayed()
+    rule.onNodeWithText("Scarica ora").performClick()
+    assertThat(handlers.codes).containsExactly(CodeAction.DOWNLOAD_NOW)
+  }
+
+  @Test
+  fun tuttoProntoNonHaTastiENonSiAnnuncia() {
+    rule.setSearchContent {
+      AnalysisScreen(LibraryAnalysisStatus.AllReady, AnalysisScenes.restFlow(), AnalysisScenes.thumbnails, Recording(), onBack = {})
+    }
+    rule.onNodeWithText("Tutto pronto", useUnmergedTree = true).assertIsDisplayed()
+    rule.onAllNodesWithText("100%", useUnmergedTree = true).onFirst().assertIsDisplayed()
+    rule.onNodeWithTag(AnalysisRestTag, useUnmergedTree = true).assertIsDisplayed()
+    assertThat(rule.onAllNodesWithText("Analizza ora").fetchSemanticsNodes()).isEmpty()
+  }
+
+  /** Con il movimento ridotto la pagina si compone e resta ferma (nessuna molla del nastro da aspettare). */
+  @Test
+  fun conIlMovimentoRidottoIlNastroNonScorre() {
+    rule.setSearchContent {
+      CompositionLocalProvider(LocalFluidMotionPolicy provides FluidMotionPolicy(durationScale = 0f)) {
+        AnalysisScreen(AnalysisScenes.RUNNING, AnalysisScenes.flow(), AnalysisScenes.thumbnails, Recording(), onBack = {})
+      }
+    }
+    rule.waitForIdle()
+    rule.onNodeWithTag(AnalysisLaneTag).assertIsDisplayed()
+  }
+
+  /** Il passo: di quanti posti scorre la corsia fra due fotografie del nastro (la prima anteprima che resta dice quanto). */
+  @Test
+  fun ilPassoDelNastroSiContaDalleAnteprimeCheRestano() {
+    val before = AnalysisScenes.flow()
+    // Un passo: la prossima entra nel mirino, quella di adesso diventa la prima finita.
+    val one = AnalysisFlow(before.next[0], listOf(before.current!!) + before.recent, before.next.drop(1))
+    assertThat(laneStep(before, one)).isEqualTo(1)
+    // Tre passi in uno (il motore e' piu' veloce del passo della pagina).
+    val three = AnalysisFlow(before.next[2], listOf(before.next[1], before.next[0], before.current!!) + before.recent, before.next.drop(3))
+    assertThat(laneStep(before, three)).isEqualTo(3)
+    // Dalla pausa: niente scorre, la corsia si ferma dov'e'.
+    assertThat(laneStep(one, AnalysisFlow(null, one.recent, emptyList()))).isEqualTo(0)
+    // Niente in comune: nessuno scorrimento (le anteprime cambiano sul posto).
+    assertThat(laneStep(before, AnalysisScenes.restFlow(seed = 900))).isEqualTo(0)
   }
 }

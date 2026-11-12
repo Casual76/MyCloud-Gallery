@@ -19,7 +19,7 @@
   </plurals>
   <string name="models_indexer_no_estimate">Da analizzare: %1$s foto e video. La stima delle notti arriva appena il modello di analisi è pronto e il dispositivo è stato misurato.</string>
   <string name="models_indexer_nothing">Non c’è niente da analizzare.</string>
-  <string name="models_index_now">Indicizza ora</string>
+  <string name="models_index_now">Analizza ora</string>
 
   <!-- Stato del calcolo (AiStatus) -->
   <string name="models_status_off">Questo dispositivo non analizza le foto.</string>

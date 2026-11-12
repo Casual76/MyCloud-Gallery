@@ -182,7 +182,26 @@ private fun CoverageHero(coverage: SearchCoverage, explainIndexer: Boolean, anal
     is SearchCoverage.ModelMissing -> Triple(null, stringResource(R.string.models_coverage_missing_short), sizeText(coverage.sizeBytes))
   }
   FluidListGroup {
-    Box(modifier = Modifier.fillMaxWidth()) {
+    if (analysis != LibraryAnalysisStatus.Idle) {
+      // Grafica XU: con l'analisi legata la testata e' quella dell'analisi (sorella del Backup): lo stesso anello della copertura, il segno dello stato
+      // sull'arco, due parole e una riga; toccata apre la pagina "Analisi delle foto". La «i» e le sue frasi restano quelle della copertura.
+      AnalysisHero(
+        status = analysis,
+        ring = coverageRing(coverage, fraction, sentence + " " + subtitle),
+        onOpen = onOpenAnalysis,
+        corner = {
+          GalleryInfoButton(
+            label = stringResource(R.string.models_coverage_info),
+            open = explaining,
+            onToggle = { explaining = !explaining },
+            modifier = Modifier.align(Alignment.TopEnd).padding(SearchDimens.TightGap),
+          )
+        },
+        below = {
+          GalleryInfoDetail(text = sentence + note + indexer + "\n\n" + subtitle, visible = explaining, modifier = Modifier.fillMaxWidth())
+        },
+      )
+    } else Box(modifier = Modifier.fillMaxWidth()) {
       Column(modifier = Modifier.fillMaxWidth().padding(SearchDimens.HeroPadding), horizontalAlignment = Alignment.CenterHorizontally) {
         GalleryProgressRing(
           progress = fraction,
@@ -209,8 +228,6 @@ private fun CoverageHero(coverage: SearchCoverage, explainIndexer: Boolean, anal
             Text(text = detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
           }
         }
-        // Pacchetto X: lo stato dell'analisi detto una volta, in testata; la riga apre la pagina dove si vede scorrere.
-        AnalysisHeroLine(analysis, resources, onOpenAnalysis)
         GalleryInfoDetail(
           text = sentence + note + indexer + "\n\n" + subtitle,
           visible = explaining,
@@ -231,6 +248,24 @@ private fun CoverageHero(coverage: SearchCoverage, explainIndexer: Boolean, anal
       }
     }
   }
+}
+
+/** L'anello della testata dell'analisi in Ricerca e modelli: la copertura (gli stessi numeri di prima), con il percento e «pronte / totale» dentro. */
+@Composable
+private fun coverageRing(coverage: SearchCoverage, fraction: Float, description: String): AnalysisRing = when (coverage) {
+  is SearchCoverage.Partial -> AnalysisRing(
+    progress = fraction,
+    busy = false,
+    percent = analysisPercent(coverage.covered, coverage.total),
+    ready = GalleryNumbers.format(coverage.covered),
+    total = stringResource(R.string.models_count_of_total, GalleryNumbers.format(coverage.total)),
+    glyph = AnalysisGlyph,
+    done = false,
+    description = description,
+  )
+  SearchCoverage.Complete -> AnalysisRing(1f, false, analysisPercent(1, 1), null, null, AnalysisGlyph, done = true, description = description)
+  is SearchCoverage.Updating -> AnalysisRing(fraction, false, coverage.percent, null, null, AnalysisGlyph, done = false, description = description)
+  is SearchCoverage.ModelMissing -> AnalysisRing(0f, false, null, null, null, Icons.Rounded.Download, done = false, description = description)
 }
 
 /** Un motivo di cio' che la ricerca non conosce ancora: il suo segno, due parole, il numero. TalkBack dice la frase intera. */

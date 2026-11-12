@@ -18,8 +18,6 @@ import dev.pampa.mycloudgallery.feature.search.contract.AnalysisFlow
 import dev.pampa.mycloudgallery.feature.search.contract.AnalysisThumb
 import dev.pampa.mycloudgallery.feature.search.contract.SearchRefs
 import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
-import dev.pampa.mycloudgallery.feature.search.models.AnalysisScreen
-import dev.pampa.mycloudgallery.feature.search.models.NoAnalysisHandlers
 import dev.pampa.mycloudgallery.feature.search.testing.SearchSamples
 import java.util.UUID
 
@@ -34,13 +32,10 @@ internal enum class Scene(val file: String, val tall: Boolean, val dir: String =
   SETTINGS_DONE("ricerca-e-modelli-completa", true),
   SETTINGS_ABSENT("ricerca-e-modelli-assenti", true),
   ACTIVATION("attivazione-lettura-del-testo", true, P8_DIR),
-  ANALYSIS("analisi-delle-foto", true, X_DIR),
-  ANALYSIS_PAUSED("analisi-in-pausa", true, X_DIR),
 }
 
 private const val I2_DIR = "../docs/screenshots/beta-grafica/I2"
 private const val P8_DIR = "../docs/screenshots/6-P8"
-private const val X_DIR = "../docs/screenshots/beta-grafica/X-indice-visibile"
 
 internal object SearchScenes {
   @Composable
@@ -51,13 +46,14 @@ internal object SearchScenes {
       Scene.SETTINGS_DONE -> SearchSettingsScreen(SearchSamples.settingsReadingOn, false, true, true, true, NoSearchSettingsHandlers, onBack = {})
       Scene.SETTINGS_ABSENT -> SearchSettingsScreen(SearchSamples.settingsAbsent, false, true, true, true, NoSearchSettingsHandlers, onBack = {})
       Scene.ACTIVATION -> TextReadingActivationScreen(onActivate = {}, onNotNow = {}, onBack = {})
-      Scene.ANALYSIS -> AnalysisScreen(AnalysisScenes.RUNNING, AnalysisScenes.flow(), AnalysisScenes.thumbnails, NoAnalysisHandlers, onBack = {})
-      Scene.ANALYSIS_PAUSED -> AnalysisScreen(AnalysisScenes.PAUSED, AnalysisFlow.EMPTY, AnalysisScenes.thumbnails, NoAnalysisHandlers, onBack = {})
     }
   }
 }
 
-/** Pacchetto X: i dati finti della pagina "Analisi delle foto" (solo immagini sintetiche; una voce neutra per un media non mostrabile). */
+/**
+ * Pacchetto X: i dati finti della pagina "Analisi delle foto" (solo immagini sintetiche; una voce neutra per un media non mostrabile). Gli screenshot
+ * a misura di schermo stanno in `AnalysisScreenshotTest` (grafica XU).
+ */
 internal object AnalysisScenes {
   val RUNNING = LibraryAnalysisStatus.Running(remaining = 13_760, etaMinutes = 95, ready = 12_300, total = 15_000)
   val PAUSED = LibraryAnalysisStatus.Paused(LibraryAnalysisWait.THERMAL, remaining = 13_760, ready = 12_300, total = 15_000)
@@ -73,6 +69,10 @@ internal object AnalysisScenes {
       video = video,
     )
   }
+
+  /** A riposo: niente di adesso ne' prossime, le ultime finite ferme. */
+  fun restFlow(seed: Long = 41): AnalysisFlow =
+    AnalysisFlow(current = null, recent = listOf(shown(seed), shown(seed - 1, video = true), shown(seed - 2), shown(seed - 3), shown(seed - 4)), next = emptyList())
 
   fun flow(): AnalysisFlow = AnalysisFlow(
     current = shown(42),

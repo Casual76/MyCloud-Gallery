@@ -48,18 +48,46 @@ internal object SearchDimens {
   /** Il margine interno di una piastrella (aree, modelli). */
   val TilePadding: Dp = 12.dp
 
-  // --- Pacchetto X: la pagina "Analisi delle foto" (il nastro delle anteprime; su tablet piu' grandi) ------------------------------------
+  // --- Pacchetto X / XU: l'analisi delle foto (testata sorella di quella del Backup, il nastro delle anteprime) ---------------------------------
 
-  /** L'anteprima del media di adesso, e quelle delle file (appena fatte, prossime). */
-  val AnalysisCurrent: Dp = 128.dp
-  val AnalysisCurrentWide: Dp = 176.dp
-  val AnalysisThumb: Dp = 64.dp
-  val AnalysisThumbWide: Dp = 88.dp
+  /** La testata: gli stessi numeri di `BackupDimens` (margine 20, fra le righe 10 e 4, segno sull'anello 30 rientrato di 8, glifo al centro 40). */
+  val AnalysisHeroPadding: Dp = 20.dp
+  val AnalysisHeroGap: Dp = 10.dp
+  val AnalysisLineGap: Dp = 4.dp
+  val AnalysisHeroMark: Dp = 30.dp
+  val AnalysisHeroMarkInset: Dp = 8.dp
+  val AnalysisHeroGlyph: Dp = 40.dp
 
-  /** Il segno sulle anteprime appena fatte e il glifo dentro un'anteprima. */
-  val AnalysisMark: Dp = 20.dp
-  val AnalysisGlyph: Dp = 22.dp
+  /** Quanto i numeri dentro l'anello restano lontani dal bordo (il tratto dell'anello grande e un respiro). */
+  val AnalysisRingInset: Dp = 16.dp
 
-  /** Da questa larghezza la pagina usa le misure larghe (tablet): piu' anteprime, non una colonna stretta. */
-  val AnalysisWide: Dp = 600.dp
+  /** Il nastro: l'anteprima di adesso (fra il minimo e il massimo, secondo lo spazio), le altre in fila, lo spazio fra loro. */
+  val LaneCurrentMin: Dp = 148.dp
+  val LaneCurrentMax: Dp = 340.dp
+  val LaneSideMin: Dp = 64.dp
+  val LaneSideMax: Dp = 112.dp
+  val LaneGap: Dp = 12.dp
+
+  /** Il mirino intorno all'anteprima di adesso: quanto sta fuori, quanto e' lungo un angolo, il tratto, quanto si stringe all'arrivo. */
+  val LaneGateInset: Dp = 10.dp
+  val LaneGateCorner: Dp = 26.dp
+  val LaneGateStroke: Dp = 4.dp
+  val LaneGateFocus: Dp = 10.dp
+
+  /** Il segno «fatto» sulle finite e il segno del video, a misura fissa (non scalano con l'anteprima). */
+  val LaneMark: Dp = 22.dp
+  val LaneVideoGlyph: Dp = 20.dp
+
+  /** L'altezza minima del nastro (telefono in orizzontale, testo grande) e la parte dello schermo che prende. */
+  val LaneMinHeight: Dp = 220.dp
+
+  /** Quanto il nastro passa oltre i suoi limiti: sul telefono il margine della pagina (da bordo a bordo), accanto alla testata niente. */
+  val LaneNoBleed: Dp = 0.dp
+
+  /** Da questa larghezza testata e nastro stanno affiancati (tablet in orizzontale); la testata li' e' larga cosi'. */
+  val AnalysisSideBySide: Dp = 840.dp
+  val AnalysisHeroSideWidth: Dp = 380.dp
+
+  /** La misura di lettura della pagina "Analisi delle foto": larga, perche' il nastro usa la larghezza del tablet. */
+  val AnalysisPageMaxWidth: Dp = 1240.dp
 }

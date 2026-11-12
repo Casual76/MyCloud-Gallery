@@ -256,7 +256,7 @@ private fun ActiveCard(op: NasOperationState, onStop: (OpId) -> Unit) {
         }
         if (progress != null) {
           Box(modifier = Modifier.size(OpRing), contentAlignment = Alignment.Center) {
-            GalleryProgressRing(progress = progress, modifier = Modifier.fillMaxSize(), color = ring, strokeWidth = OpRingStroke)
+            GalleryProgressRing(progress = progress, modifier = Modifier.fillMaxSize(), color = ring, strokeWidth = OpRingStroke, animate = true)
             Text(
               text = stringResource(R.string.nas_ops_percent, (progress * PERCENT).toInt()),
               style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Bold),

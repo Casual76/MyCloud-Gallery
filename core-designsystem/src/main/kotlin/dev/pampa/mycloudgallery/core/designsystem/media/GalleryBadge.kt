@@ -1,6 +1,5 @@
 package dev.pampa.mycloudgallery.core.designsystem.media
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -29,11 +28,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -336,47 +331,6 @@ fun GalleryBadgeCluster(
   }
 }
 
-/**
- * Un anello di avanzamento: una traccia e un arco che parte da ore dodici. Usato dal badge di
- * caricamento e dall'indicatore di stato globale.
- */
-@Composable
-fun GalleryProgressRing(
-  progress: Float,
-  modifier: Modifier = Modifier,
-  color: Color = MaterialTheme.colorScheme.primary,
-  trackColor: Color = color.copy(alpha = RingTrackAlpha),
-  strokeWidth: Dp = RingStroke,
-) {
-  Canvas(modifier = modifier) {
-    val stroke = strokeWidth.toPx()
-    val inset = stroke / 2f
-    val arcSize = Size(size.width - stroke, size.height - stroke)
-    val topLeft = Offset(inset, inset)
-    drawArc(
-      color = trackColor,
-      startAngle = 0f,
-      sweepAngle = FullCircle,
-      useCenter = false,
-      topLeft = topLeft,
-      size = arcSize,
-      style = Stroke(width = stroke),
-    )
-    val fraction = progress.coerceIn(0f, 1f)
-    if (fraction > 0f) {
-      drawArc(
-        color = color,
-        startAngle = StartAtTop,
-        sweepAngle = FullCircle * fraction,
-        useCenter = false,
-        topLeft = topLeft,
-        size = arcSize,
-        style = Stroke(width = stroke, cap = StrokeCap.Round),
-      )
-    }
-  }
-}
-
 private val BadgeIconPadding = 4.dp
 private val BadgeLabeledPadding = 7.dp
 private val BadgeGlyphGap = 3.dp
@@ -385,7 +339,4 @@ private val BadgeRingSize = 18.dp
 private val BadgeRingStroke = 1.5.dp
 private val BadgeHairline = 0.5.dp
 private const val HairlineAlpha = 0.28f
-private val RingStroke = 2.dp
 private const val RingTrackAlpha = 0.28f
-private const val FullCircle = 360f
-private const val StartAtTop = -90f

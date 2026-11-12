@@ -3,7 +3,6 @@ package dev.pampa.mycloudgallery.feature.library.library
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -39,9 +38,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
@@ -57,7 +53,7 @@ import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteScope
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
-import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustration
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.library.contract.GridStyle
@@ -299,23 +295,8 @@ private fun LibraryFigureState(
   tone: GalleryIllustrationTone = GalleryIllustrationTone.Brand,
   below: (@Composable () -> Unit)? = null,
 ) {
-  CenteredState(modifier) {
-    Column(
-      modifier = Modifier.widthIn(max = StateTextMaxWidth).padding(horizontal = GalleryDimens.Gutter),
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(StateGap),
-    ) {
-      GalleryIllustration(icon = icon, tone = tone)
-      Text(
-        text = title,
-        style = MaterialTheme.typography.headlineSmall,
-        color = MaterialTheme.colorScheme.onSurface,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.semantics { heading() },
-      )
-      below?.invoke()
-    }
-  }
+  // La forma comune di core-designsystem (fase I: una sola forma di stato vuoto), nata qui.
+  GalleryFigureState(icon = icon, title = title, modifier = modifier, tone = tone, action = below)
 }
 
 /**
@@ -367,15 +348,6 @@ internal fun LibraryFilterEmptyState(filter: LibraryFilter, onShowAll: () -> Uni
   LibraryFigureState(icon = Icons.Rounded.FilterAltOff, title = title, modifier = modifier) {
     FluidButton(text = stringResource(R.string.library_filter_show_all), onClick = onShowAll, size = FluidButtonSize.Large, style = FluidButtonStyle.Tinted)
   }
-}
-
-@Composable
-private fun CenteredState(modifier: Modifier, content: @Composable () -> Unit) {
-  Column(
-    modifier = modifier.fillMaxSize(),
-    horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.Center,
-  ) { content() }
 }
 
 @Composable
@@ -771,7 +743,6 @@ internal fun MediaGridState.isFavorite(id: MediaId): Boolean {
 }
 
 private val StateTextMaxWidth = 340.dp
-private val StateGap = 12.dp
 private val ProgressGap = 6.dp
 private val FooterPadding = 16.dp
 private val NoticeSpacing = 8.dp

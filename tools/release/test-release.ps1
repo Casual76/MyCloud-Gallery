@@ -54,7 +54,11 @@ $common = @("-TestKeystore", $ksA, "-TestStorePassword", $password)
 # --- L'overlay di base: i file del repository come devono essere per una release di prova ---------------------------------------------
 $base = Join-Path $work "overlay-base"
 foreach ($dir in @("docs", "tools\release", "release", "core-release\src\main\kotlin\dev\pampa\mycloudgallery\core\release\keys")) { New-Item -ItemType Directory -Path (Join-Path $base $dir) -Force | Out-Null }
-Copy-Item -LiteralPath (Join-Path $realRoot "docs\sicurezza.md") -Destination (Join-Path $base "docs\sicurezza.md")
+# Il documento vero ha gia' l'impronta di pampa.jks (dal 03/11/2026): le prove partono da una copia senza, come prima della prima scrittura.
+$docBlank = (((Read-Utf8 (Join-Path $realRoot "docs\sicurezza.md")) -split '\r?\n') | ForEach-Object {
+  if ($_.StartsWith('| `pampa.jks` |')) { [regex]::Replace($_, '`[0-9a-fA-F]{64}`', 'da scrivere') } else { $_ }
+}) -join "`n"
+[System.IO.File]::WriteAllText((Join-Path $base "docs\sicurezza.md"), $docBlank, $utf8)
 $keysRel = "core-release\src\main\kotlin\dev\pampa\mycloudgallery\core\release\keys\ReleaseKeys.kt"
 $keysText = (Read-Utf8 (Join-Path $realRoot $keysRel)) -replace 'const val PROVISIONAL: Boolean = true', 'const val PROVISIONAL: Boolean = false'
 [System.IO.File]::WriteAllText((Join-Path $base $keysRel), $keysText, $utf8)
@@ -81,7 +85,13 @@ function New-CaseOverlay([string]$Name, [hashtable]$Files = @{}) {
   Copy-Item -LiteralPath $base -Destination $dir -Recurse
   foreach ($relative in $Files.Keys) {
     $target = Join-Path $dir $relative
-    if ($null -eq $Files[$relative]) { Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue; continue }
+    if ($null -eq $Files[$relative]) {
+      # Un file che deve mancare: via dalla sostituzione, e un segnaposto perche' non valga quello vero del repository (Resolve-RepoFile).
+      Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+      New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
+      [System.IO.File]::WriteAllText(($target + ".assente"), "", $utf8)
+      continue
+    }
     New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
     [System.IO.File]::WriteAllText($target, $Files[$relative], $utf8)
   }
@@ -118,7 +128,7 @@ Check "il testo del Pampa Store ha le quattro voci e nessun cancelletto" ($store
 Write-Host "`nLa firma" -ForegroundColor Cyan
 Expect-Fail "un APK con un'altra chiave fa fallire" (Invoke-Case (New-MiniApk $apkDir "altra-chiave" (Good @{ Keystore = $ksB })) $base) "non e' quella di pampa.jks"
 Expect-Fail "un APK senza firma v3 fa fallire" (Invoke-Case (New-MiniApk $apkDir "senza-v3" (Good @{ V3 = $false })) $base) "firma v3"
-Expect-Fail "l'impronta non scritta nel documento fa fallire" (Invoke-Case $goodApk (New-CaseOverlay "senza-impronta" @{ "docs\sicurezza.md" = (Read-Utf8 (Join-Path $realRoot "docs\sicurezza.md")) })) "manca l'impronta"
+Expect-Fail "l'impronta non scritta nel documento fa fallire" (Invoke-Case $goodApk (New-CaseOverlay "senza-impronta" @{ "docs\sicurezza.md" = $docBlank })) "manca l'impronta"
 
 Write-Host "`nIl contenuto dell'APK" -ForegroundColor Cyan
 Expect-Fail "un APK debuggable fa fallire" (Invoke-Case (New-MiniApk $apkDir "debuggable" (Good @{ Debuggable = $true })) $base) "DEBUGGABLE"

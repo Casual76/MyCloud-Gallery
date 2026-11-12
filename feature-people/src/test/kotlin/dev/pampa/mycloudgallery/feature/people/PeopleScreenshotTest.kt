@@ -178,7 +178,7 @@ abstract class PeopleShots(private val dark: Boolean, private val device: String
 
   @Test fun paginaSenzaNome() = shoot("pagina-senza-nome", "Persona senza nome", "Nome", content = page(scenes.pageUnnamed()))
 
-  @Test fun paginaNascosta() = shoot("pagina-nascosta", "Persona nascosta", "Mostra di nuovo", content = page(scenes.pageHidden()))
+  @Test fun paginaNascosta() = shoot("pagina-nascosta", "Mostra di nuovo", content = page(scenes.pageHidden()))
 
   @Test fun paginaDimenticata() = shoot("pagina-dimenticata", "Persona dimenticata", content = page(scenes.pageForgotten()))
 

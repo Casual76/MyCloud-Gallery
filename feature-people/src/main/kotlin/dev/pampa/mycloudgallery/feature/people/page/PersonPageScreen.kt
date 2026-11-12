@@ -24,7 +24,6 @@ import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -32,10 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
@@ -75,13 +72,8 @@ import dev.pampa.mycloudgallery.feature.people.ui.PersonAvatar
 import androidx.compose.material.icons.rounded.PersonOff
 import androidx.compose.material.icons.rounded.PersonSearch
 import androidx.compose.material.icons.rounded.HideImage
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoButton
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
 import dev.pampa.mycloudgallery.feature.people.ui.PeopleFigureState
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
 
 // LA PAGINA DI UNA PERSONA (Fase 8, P9; docs/fase8-progetto.md §1.5 `PersonPageState`, §2.6 "Pagina persona", D25). In stile Foto: in testa il volto
 // grande e rotondo con il nome (o l'invito "Aggiungi un nome") e il conto **sotto**; due bottoni da 50 dp ("Rinomina" e "Controlla le foto"),
@@ -288,31 +280,19 @@ private fun LazyListScope.proposals(list: List<MergeProposal>, crops: PeopleCrop
   item(key = "maybe-gap") { Spacer(Modifier.height(PeopleDimens.BlockGap)) }
 }
 
-/** La «i» della pagina di una persona nascosta e, aperta, la frase sotto. */
-@Composable
-private fun HiddenWhy(why: String) {
-  var open by rememberSaveable { mutableStateOf(false) }
-  Column(horizontalAlignment = Alignment.CenterHorizontally) {
-    GalleryInfoButton(label = why, open = open, onToggle = { open = !open })
-    GalleryInfoDetail(text = why, visible = open)
-  }
-}
-
 /** Una persona nascosta: la pagina lo dice e offre di mostrarla di nuovo; le sue foto restano in Libreria (E-F28). */
 private fun LazyListScope.hidden(header: PersonHeader, crops: PeopleCrops, handlers: PersonPageHandlers, ui: PersonPageUi) {
   ui.message?.let { message -> item(key = "message") { PeopleMessageBlock(message, handlers::onDismissMessage) } }
   item(key = "hidden") {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(PeopleDimens.BlockGap), modifier = Modifier.fillMaxWidth()) {
       PersonAvatar(header.cover, crops, PeopleDimens.AvatarHeader, Modifier.size(PeopleDimens.AvatarHeader))
-      // Giro 1 (CU-23): la figura e' il suo volto (sopra), poi il titolo; che cosa vuol dire "nascosta" sta dietro la «i».
-      Text(
-        text = stringResource(R.string.persone_hidden_title),
-        style = MaterialTheme.typography.headlineSmall,
-        color = MaterialTheme.colorScheme.onSurface,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.semantics { heading() },
+      // Giro 1 (CU-23): la figura e' il suo volto (sopra), poi il titolo; giro 2: il titolo e la «i» sono la riga comune (GalleryInfoRow), che apre
+      // sotto che cosa vuol dire "nascosta" e lo dice a TalkBack.
+      GalleryInfoRow(
+        label = stringResource(R.string.persone_hidden_title),
+        detail = stringResource(R.string.persone_hidden_detail),
+        labelStyle = MaterialTheme.typography.headlineSmall,
       )
-      HiddenWhy(stringResource(R.string.persone_hidden_detail))
       FluidButton(
         text = stringResource(R.string.persone_show_again), onClick = { handlers.onAction(PersonAction.UNHIDE) },
         size = FluidButtonSize.Large, fillWidth = true,

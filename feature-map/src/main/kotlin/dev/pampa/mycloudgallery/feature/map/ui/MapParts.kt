@@ -22,12 +22,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoButton
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 
@@ -93,7 +87,7 @@ internal fun MapCredit(text: String, modifier: Modifier = Modifier) {
 /**
  * Fase I, giro di correzione 2 (CS-17): uno stato vuoto o di errore della Mappa nella forma unica della galleria ([GalleryFigureState]): la figura,
  * il titolo, al piu' i tasti ([action]). Il perche' ([why]), dove spiega una regola o rassicura (le foto non sono perse, nascoste o sparite, la carta
- * che resta sul telefono), sta dietro la «i» comune ([GalleryInfoButton]): un tocco lo apre sotto, TalkBack lo dice nella descrizione della «i».
+ * che resta sul telefono), e' il `why` della forma comune: la «i» sotto il titolo (giro 3: niente piu' copia della «i» qui).
  */
 @Composable
 internal fun MapFigureState(
@@ -110,21 +104,7 @@ internal fun MapFigureState(
     tone = tone,
     fill = false,
     modifier = modifier.fillMaxWidth(),
-    action = if (why == null && action == null) {
-      null
-    } else {
-      {
-        if (why != null) MapWhy(why)
-        action?.invoke()
-      }
-    },
+    why = why,
+    action = action,
   )
-}
-
-/** La «i» di uno stato e, aperta, la frase sotto. */
-@Composable
-private fun MapWhy(why: String) {
-  var open by rememberSaveable(why) { mutableStateOf(false) }
-  GalleryInfoButton(label = why, open = open, onToggle = { open = !open })
-  GalleryInfoDetail(text = why, visible = open)
 }

@@ -7,7 +7,6 @@ import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Flight
 import androidx.compose.material.icons.rounded.History
-import androidx.compose.material.icons.rounded.HourglassEmpty
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.runtime.Immutable
@@ -33,6 +32,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.HourglassTop
 
 // LA SEZIONE RICORDI DELLE RACCOLTE (Fase 9, P9; docs/fase9-progetto.md §1.5 `MemoriesSectionState`, §2.5, D14, D31, E-MEM1; "Avvio e pagine istantanei"
 // in docs/decisioni.md). Ogni sezione delle Raccolte e' un dato che chi la possiede consegna con un `CollectionsSectionProvider` (feature-library);
@@ -156,11 +157,12 @@ class MemoriesSectionSources(
       val title = resources.getString(R.string.memorie_section)
       val entries = when (state) {
         MemoriesSectionState.Working -> listOf(
-          row(MemoriesEntryTarget.WORKING, resources.getString(R.string.memorie_row_working), resources.getString(R.string.memorie_row_working_detail), Icons.Rounded.HourglassEmpty, FluidTone.Info),
+          // Giro 3: "Sto preparando i ricordi" e' in corso (le frecce che girano); "Aspetto la tua libreria" e' un'attesa (la clessidra).
+          row(MemoriesEntryTarget.WORKING, resources.getString(R.string.memorie_row_working), resources.getString(R.string.memorie_row_working_detail), Icons.Rounded.Sync, FluidTone.Info),
         )
         is MemoriesSectionState.Empty -> listOf(
           if (state.reason == ShelfEmptyReason.LIBRARY_NOT_READY) {
-            row(MemoriesEntryTarget.LIBRARY, resources.getString(R.string.memorie_row_library), resources.getString(R.string.memorie_row_library_detail), Icons.Rounded.HourglassEmpty, FluidTone.Neutral)
+            row(MemoriesEntryTarget.LIBRARY, resources.getString(R.string.memorie_row_library), resources.getString(R.string.memorie_row_library_detail), Icons.Rounded.HourglassTop, FluidTone.Neutral)
           } else {
             row(MemoriesEntryTarget.EMPTY, resources.getString(R.string.memorie_row_empty), resources.getString(R.string.memorie_row_empty_detail), Icons.Rounded.AutoAwesome, FluidTone.Neutral)
           },

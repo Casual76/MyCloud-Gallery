@@ -18854,6 +18854,19 @@ di I4 (`f329e9c3`: stato vuoto, «i», anello), la scheda di copertina corretta 
   un'illustrazione chiamata a mano. La «i» sotto la figura e' scritta in tre posti (Raccolte, Persone, Mappa) con i due pezzi comuni: se
   `GalleryFigureState` prendesse un parametro `why` sparirebbero tutte e tre le copie.
 
+#### I1, giro di correzione 3 (12/11/2026)
+
+- **Le copie della «i» sono tolte.** `GalleryFigureState` ha ora `why` (I4, `85cef033`): `CollectionEmptyState`, `PeopleFigureState` e
+  `MapFigureState` lo passano e non scrivono piu' la «i» a mano. La pagina di una persona nascosta (il volto come figura) usa la riga comune
+  `GalleryInfoRow` («Persona nascosta» e la «i»: tutta la riga apre la frase e TalkBack sente «Persona nascosta. …»). Nessuna «i» fatta a mano resta
+  nelle cartelle di I1.
+- **CU-27**: con la figura centrata di I4 gli stati vuoti delle mie pagine (Tutti i ricordi, Preferiti e le altre raccolte, Nascosti, cestino,
+  Persone, Mappa) sono al centro anche dentro un elenco e sul tablet; screenshot rifatti.
+- **Lo stesso segno per lo stesso stato** (`GalleryIconStatus`): l'attesa e' la clessidra (`HourglassTop`), cio' che e' in corso le frecce che
+  girano (`Sync`), la pausa le due barre. Persone nelle Raccolte: «Sto per riconoscere i volti» la clessidra (prima l'orologio), con la percentuale le
+  frecce; Ricordi: «Aspetto la tua libreria» la clessidra, «Sto preparando i ricordi» le frecce (prima entrambe la clessidra vuota); zone senza
+  Internet: una zona ferma che riprende da sola (all'apertura, quando torna il Wi-Fi) la clessidra, una che vuole un tocco le due barre.
+
 ### I4, il resto dell'app con meno testo (fase I, 11/11 notte)
 
 Il metro dell'utente: «se non sapessi leggere o sentire, potrei usare l'app?». Censimento in `docs/i4-censimento.md`, prima e dopo in

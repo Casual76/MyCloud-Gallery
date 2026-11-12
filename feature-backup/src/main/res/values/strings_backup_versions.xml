@@ -46,9 +46,9 @@
   <string name="backup_versions_why_nas_unreachable">Il NAS non risponde. Riprova quando sei a casa.</string>
   <string name="backup_versions_why_frozen">I lavori sul NAS sono fermi per un cambiamento anomalo: controlla la Diagnostica.</string>
   <string name="backup_versions_why_read_only">Questa area è in sola lettura: non si può ripristinare.</string>
-  <string name="backup_versions_why_not_mine">Questo media non è tuo: non puoi ripristinarne l’originale.</string>
+  <string name="backup_versions_why_not_mine">Questa foto non è tua: non puoi ripristinarne l’originale.</string>
   <string name="backup_versions_why_not_available">Il ripristino non è ancora pronto.</string>
-  <string name="backup_versions_why_busy">Sto ancora lavorando su questo media: riprova fra poco.</string>
+  <string name="backup_versions_why_busy">Sto ancora lavorando su questa foto: riprova fra poco.</string>
   <string name="backup_versions_why_current_not_safe">La versione di adesso non ha ancora una copia controllata sul NAS: ripristinando l’originale la perderesti. Prima il backup la mette al sicuro, poi potrai ripristinare.</string>
   <string name="backup_versions_why_paused">Il backup è in pausa: riprendilo dalla pagina Backup per ripristinare l’originale.</string>
   <string name="backup_versions_why_test_only">Il backup vero non è ancora acceso: per ora sul NAS non scrivo.</string>

@@ -96,16 +96,16 @@ class SharingScreenTest : SharingComposeBase() {
   fun spentaDiceCheLaPosizioneRestaEIlSuoStatoEDiSpento() {
     page(on = false)
     assertThat(has(string(R.string.sharing_remove_location))).isTrue()
-    assertThat(has(string(R.string.sharing_state_off_detail))).isTrue()
-    assertThat(has(string(R.string.sharing_state_on_detail))).isFalse()
+    assertThat(described(string(R.string.sharing_state_off_detail))).isTrue()
+    assertThat(described(string(R.string.sharing_state_on_detail))).isFalse()
     assertThat(switchNode().config[SemanticsProperties.ToggleableState]).isEqualTo(ToggleableState.Off)
   }
 
   @Test
   fun accesaDiceCheLaPosizioneSiToglieEIlMenuDelViewerLoDice() {
     page(on = true)
-    assertThat(has(string(R.string.sharing_state_on_detail))).isTrue()
-    assertThat(has(string(R.string.sharing_state_off_detail))).isFalse()
+    assertThat(described(string(R.string.sharing_state_on_detail))).isTrue()
+    assertThat(described(string(R.string.sharing_state_off_detail))).isFalse()
     assertThat(switchNode().config[SemanticsProperties.ToggleableState]).isEqualTo(ToggleableState.On)
     // L'indicatore: la frase dice dove si vede.
     assertThat(string(R.string.sharing_state_on_detail)).contains("Condividi senza posizione")
@@ -141,8 +141,13 @@ class SharingScreenTest : SharingComposeBase() {
   @Test
   fun ilControlloEIlPerCheDeiFormatiCiSono_L41() {
     page(on = false)
-    rule.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasText(string(R.string.sharing_footnote_formats), substring = true))
+    // Giro 1 della fase I (CU-20): i formati stanno dietro la «i»; la garanzia resta in pagina.
+    rule.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasText(string(R.string.sharing_formats_info), substring = true))
     assertThat(has(string(R.string.sharing_footnote_check))).isTrue()
+    assertThat(has(string(R.string.sharing_footnote_formats))).isFalse()
+    rule.onNodeWithText(string(R.string.sharing_formats_info)).performClick()
+    rule.waitForIdle()
+    assertThat(has(string(R.string.sharing_footnote_formats))).isTrue()
     val formats = string(R.string.sharing_footnote_formats)
     for (format in listOf("JPEG", "PNG", "WebP", "MP4", "MOV", "HEIC")) assertThat(formats).contains(format)
   }
@@ -151,7 +156,7 @@ class SharingScreenTest : SharingComposeBase() {
   fun leFrasiSonoSempliciENonHannoGergo() {
     val all = listOf(
       R.string.sharing_title, R.string.sharing_section_location, R.string.sharing_remove_location, R.string.sharing_remove_location_detail,
-      R.string.sharing_state_on, R.string.sharing_state_on_detail, R.string.sharing_state_off, R.string.sharing_state_off_detail,
+      R.string.sharing_state_on_detail, R.string.sharing_state_off_detail, R.string.sharing_figure_here, R.string.sharing_figure_out, R.string.sharing_formats_info,
       R.string.sharing_footnote_check, R.string.sharing_footnote_formats, R.string.sharing_entry_on, R.string.sharing_entry_off,
     ).map { string(it) }
     for (text in all) {

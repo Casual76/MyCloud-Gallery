@@ -125,7 +125,7 @@ class PhoneOnlySheetTest : ComposeBackupTallTest() {
       PhoneOnlyAdvice.WAIT to "1 si sta caricando o ha un problema",
       PhoneOnlyAdvice.FROZEN to "1 è fermo",
       PhoneOnlyAdvice.UNAVAILABLE to "1 non si può togliere ora",
-      PhoneOnlyAdvice.OUTSIDE_TEST_FENCE to "1 è fuori dalla cartella di prova",
+      PhoneOnlyAdvice.OUTSIDE_TEST_FENCE to "1 resta sul telefono: il backup vero non è ancora acceso",
       PhoneOnlyAdvice.NOT_ON_PHONE to "1 non è sul telefono",
     )
     assertThat(expected.keys).containsExactlyElementsIn(PhoneOnlyAdvice.entries)

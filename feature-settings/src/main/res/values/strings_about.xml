@@ -64,4 +64,6 @@
   <string name="about_license_gpl3_url">https://www.gnu.org/licenses/gpl-3.0.html</string>
   <string name="about_libraries_footnote">Le librerie non inviano dati. Per la galleria del telefono l’app non fa nessuna connessione di rete; solo la mappa dettagliata, se è accesa, chiede le zone guardate a OpenFreeMap. Gli indirizzi qui sotto sono solo testo: non si aprono da soli.</string>
   <string name="about_licenses_footnote">Il testo completo di ogni licenza e gli avvisi di copyright sono nei progetti delle librerie, agli indirizzi indicati.</string>
+  <!-- Giro 1 della fase I: la frase sotto il titolo di un gruppo, dietro la «i». -->
+  <string name="about_section_info">Che cos’è</string>
 </resources>

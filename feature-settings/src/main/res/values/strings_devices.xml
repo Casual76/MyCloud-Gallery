@@ -6,16 +6,10 @@
   <string name="devices_title">Dispositivi</string>
   <string name="devices_empty_title">Nessuna famiglia</string>
   <string name="devices_empty_detail">Questo telefono non fa ancora parte di una famiglia. Finita la configurazione, qui compariranno i dispositivi.</string>
-  <string name="devices_hero_eyebrow">Famiglia</string>
   <plurals name="devices_active_value">
     <item quantity="one">%1$d attivo</item>
     <item quantity="other">%1$d attivi</item>
   </plurals>
-  <string name="devices_hero_title">Dispositivi che scrivono sul NAS</string>
-  <string name="devices_hero_detail">Ogni telefono e profilo del tablet è un dispositivo.</string>
-  <string name="devices_hero_detail_admin">Li approvi e li revochi tu.</string>
-  <string name="devices_metric_waiting">Da approvare</string>
-  <string name="devices_metric_inactive">Non più attivi</string>
   <string name="devices_stale_title">Elenco forse non aggiornato</string>
   <string name="devices_keystore_title">Chiavi di sicurezza non disponibili</string>
   <string name="devices_keystore_message">Il telefono non riesce a usare le chiavi di sicurezza in questo momento: l’elenco è quello dell’ultima lettura e da qui non si approva né si cambia niente.</string>
@@ -177,4 +171,8 @@
   <string name="approve_missing_title">Richiesta non trovata</string>
   <string name="approve_missing_detail">È già stata approvata da un altro admin, oppure è scaduta e il dispositivo l’ha rifatta.</string>
   <string name="approve_back_to_devices">Torna ai dispositivi</string>
+  <!-- Giro 1 della fase I (CU-5): le frasi dei gruppi dietro la «i»; il valore corto a destra di un dispositivo mai visto. -->
+  <string name="devices_requests_info">Quanto tempo c’è</string>
+  <string name="devices_info">Non più attivi e ultima attività</string>
+  <string name="device_never_seen_short">Mai visto</string>
 </resources>

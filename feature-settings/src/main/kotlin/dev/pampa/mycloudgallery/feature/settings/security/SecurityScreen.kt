@@ -6,7 +6,6 @@ import android.provider.Settings
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.SdStorage
 import androidx.compose.material.icons.rounded.Star
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Lock
@@ -55,11 +54,9 @@ import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
-import dev.antigravity.fluidengine.ui.fluid.FluidHero
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -74,13 +71,13 @@ import dev.pampa.mycloudgallery.core.security.lock.AppLockTimeout
 import dev.pampa.mycloudgallery.core.security.lock.AuthPromptText
 import dev.pampa.mycloudgallery.core.security.lock.AuthResult
 import dev.pampa.mycloudgallery.feature.settings.R
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsStatusHeader
 import dev.pampa.mycloudgallery.feature.settings.port.AppLockPreferences
 import dev.pampa.mycloudgallery.feature.settings.port.ScreenLockProbe
 import dev.pampa.mycloudgallery.feature.settings.ui.Feedback
 import dev.pampa.mycloudgallery.feature.settings.ui.FeedbackNote
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
 import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
-import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
 import dev.pampa.mycloudgallery.feature.settings.ui.rememberSystemAuthenticator
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -243,20 +240,30 @@ internal fun SecurityScreen(state: SecurityUiState, actions: SecurityActions) {
     onBack = actions.onBack,
     ambient = FluidAmbient(tone = if (noScreenLock) FluidHeroTone.Alert else FluidHeroTone.Secondary, motif = FluidHeroMotif.Glow),
   ) {
+    // Giro 1 della fase I (CU-5): in cima acceso o spento con il segno; il tempo lo dice la capsula scelta qui sotto, il come la «i».
     item {
-      FluidHero(
-        tone = if (enabled) FluidHeroTone.PrimaryToSecondary else if (noScreenLock) FluidHeroTone.Alert else FluidHeroTone.Tertiary,
-        motif = FluidHeroMotif.Dots,
-        eyebrow = stringResource(R.string.security_eyebrow),
+      SettingsStatusHeader(
+        icon = if (enabled) Icons.Rounded.Lock else Icons.Rounded.PhonelinkLock,
+        family = GalleryIconFamily.Security,
         value = stringResource(if (enabled) R.string.security_value_on else R.string.security_value_off),
-        title = stringResource(if (enabled) R.string.security_hero_on_title else R.string.security_hero_off_title),
-        description = if (enabled) {
+        status = when {
+          enabled -> GalleryIconStatus.Done
+          noScreenLock -> GalleryIconStatus.Attention
+          else -> null
+        },
+        label = if (enabled) null else stringResource(R.string.security_hero_off_title),
+      )
+    }
+    item {
+      SettingsInfo(
+        label = stringResource(R.string.security_how),
+        text = if (enabled) {
           // CU-14: il tempo entra a meta' frase, con la minuscola (le scelte hanno la maiuscola perche' sono righe a se').
-          stringResource(R.string.security_hero_on_detail, stringResource(state.settings.timeout.labelRes()).replaceFirstChar { it.lowercase() })
+          stringResource(R.string.security_hero_on_title) + ". " +
+            stringResource(R.string.security_hero_on_detail, stringResource(state.settings.timeout.labelRes()).replaceFirstChar { it.lowercase() })
         } else {
           stringResource(R.string.security_hero_off_detail)
         },
-        icon = if (enabled) Icons.Rounded.Lock else Icons.Rounded.PhonelinkLock,
       )
     }
 

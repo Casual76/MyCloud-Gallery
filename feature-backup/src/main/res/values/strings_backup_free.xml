@@ -15,12 +15,7 @@
   <string name="backup_free_idle_detail">Guardo cosa è già al sicuro sul NAS.</string>
 
   <string name="backup_free_summary_title">Si possono liberare %1$s</string>
-  <plurals name="backup_free_summary_detail">
-    <item quantity="one">%1$s foto o video è già al sicuro sul NAS. Prima di toglierlo ricontrollo la copia.</item>
-    <item quantity="other">%1$s foto e video sono già al sicuro sul NAS. Prima di toglierli ricontrollo ogni copia.</item>
-  </plurals>
   <string name="backup_free_summary_empty_title">Per ora non c’è niente da liberare</string>
-  <string name="backup_free_summary_empty_detail">Quello che è al sicuro sul NAS e non è troppo recente compare qui.</string>
   <string name="backup_free_recent_note">Gli ultimi %1$s giorni restano sul telefono: sono quelli che guardi di più.</string>
 
   <string name="backup_free_filter_title">Cosa liberare</string>
@@ -44,8 +39,8 @@
   <string name="backup_free_ex_frozen_detail">Il NAS ha avuto un cambiamento anomalo: finché non controlli non si libera niente.</string>
   <string name="backup_free_ex_nas">Il NAS non risponde</string>
   <string name="backup_free_ex_nas_detail">Mi serve per ricontrollare le copie.</string>
-  <string name="backup_free_ex_fence">Fuori dalla cartella di prova</string>
-  <string name="backup_free_ex_fence_detail">In prova si libera solo la cartella di prova.</string>
+  <string name="backup_free_ex_fence">Backup in pausa</string>
+  <string name="backup_free_ex_fence_detail">Il backup vero non è ancora acceso: per ora si libera solo la cartella già salvata.</string>
   <string name="backup_free_ex_recent">Degli ultimi giorni</string>
   <string name="backup_free_ex_recent_detail">Restano sul telefono: sono quelli che guardi di più.</string>
   <string name="backup_free_ex_copy_changed">La copia sul NAS è cambiata</string>
@@ -205,8 +200,8 @@
     <item quantity="other">%1$s non si possono togliere ora: il backup non è pronto.</item>
   </plurals>
   <plurals name="backup_free_phone_fence">
-    <item quantity="one">%1$s è fuori dalla cartella di prova.</item>
-    <item quantity="other">%1$s sono fuori dalla cartella di prova.</item>
+    <item quantity="one">%1$s resta sul telefono: il backup vero non è ancora acceso.</item>
+    <item quantity="other">%1$s restano sul telefono: il backup vero non è ancora acceso.</item>
   </plurals>
   <plurals name="backup_free_phone_not_on_phone">
     <item quantity="one">%1$s non è sul telefono: non c’è niente da togliere.</item>
@@ -242,7 +237,7 @@
     <item quantity="other">Il backup sta ancora caricando i file, o ha avuto un problema.</item>
   </plurals>
   <string name="backup_free_phone_not_on_nas_frozen">Il NAS ha avuto un cambiamento anomalo: la copia non si può controllare.</string>
-  <string name="backup_free_phone_not_on_nas_fence">In prova l’app controlla solo la cartella di prova.</string>
+  <string name="backup_free_phone_not_on_nas_fence">Il backup vero non è ancora acceso: per ora l’app controlla solo la cartella già salvata.</string>
   <!-- GF-13: plurali giusti e nessun genere ("la elimini" valeva per una foto, non per un video ne' per cinque file): si parla del file. -->
   <plurals name="backup_free_phone_not_on_nas_trash">
     <item quantity="one">Se elimini il file dal telefono, va nel cestino di Android: lo recuperi da Eliminati di recente per 30 giorni, poi non ci sarà più da nessuna parte.</item>
@@ -265,4 +260,15 @@
   <string name="backup_free_phone_note_not_now_detail">Il backup non è pronto: riprova più tardi dalla pagina Backup.</string>
   <string name="backup_free_phone_note_waiting_title">Non ancora al sicuro</string>
   <string name="backup_free_phone_note_waiting_detail">Il backup ci sta ancora lavorando: riapri questo foglio più tardi.</string>
+  <!-- Giro 1 della fase I (CU-6): il riepilogo come testata (numero, anteprime, garanzia in una riga); il come e il perche' dietro la «i». -->
+  <string name="backup_free_hero_unit">da liberare</string>
+  <plurals name="backup_free_hero_count">
+    <item quantity="one">%1$s foto o video già al sicuro sul NAS</item>
+    <item quantity="other">%1$s foto e video già al sicuro sul NAS</item>
+  </plurals>
+  <string name="backup_free_guarantee">Prima ricontrollo ogni copia.</string>
+  <string name="backup_free_preview_more">+%1$s</string>
+  <string name="backup_free_guardian_title">Prima una copia privata</string>
+  <string name="backup_free_how_info">Come funziona</string>
+  <string name="backup_free_excluded_info">Perché restano</string>
 </resources>

@@ -21,6 +21,6 @@
   <string name="quality_covers_info">Quando entrano</string>
   <plurals name="quality_items">
     <item quantity="one">Una anteprima per questo livello.</item>
-    <item quantity="other">%1$d anteprime per questo livello.</item>
+    <item quantity="other">%1$s anteprime per questo livello.</item>
   </plurals>
 </resources>

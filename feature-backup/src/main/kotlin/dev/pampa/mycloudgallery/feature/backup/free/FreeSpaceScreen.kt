@@ -1,6 +1,13 @@
 package dev.pampa.mycloudgallery.feature.backup.free
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.runtime.CompositionLocalProvider
+import dev.pampa.mycloudgallery.feature.backup.ui.LocalBackupCovers
+import dev.pampa.mycloudgallery.feature.backup.ui.BackupInfoToggle
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.rounded.DeleteForever
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,7 +29,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -31,16 +37,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
-import dev.antigravity.fluidengine.ui.fluid.FluidRowValue
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
-import dev.antigravity.fluidengine.ui.theme.FluidListRow
-import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.backup.contract.BackupAction
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceExclusion
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceKind
-import dev.pampa.mycloudgallery.core.backup.contract.FreeSpacePlan
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmation
 import dev.pampa.mycloudgallery.core.designsystem.state.phoneTrashText
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
@@ -110,6 +112,8 @@ fun FreeSpaceRoute(
       value = viewModel.monotonicMs()
     }
   }
+  // Giro 1 (CU-6): le anteprime di cio' che si toglie passano dalla Libreria visibile, come le copertine del backup.
+  CompositionLocalProvider(LocalBackupCovers provides viewModel.covers) {
   FreeSpaceScreen(
     state = state,
     sheet = sheet,
@@ -132,6 +136,7 @@ fun FreeSpaceRoute(
     hostPadding = hostPadding,
     backdropOut = backdropOut,
   )
+  }
 }
 
 private const val NOW_REFRESH_MS = 60_000L
@@ -225,29 +230,15 @@ internal fun StrongWarning(permanent: Boolean, modifier: Modifier = Modifier) {
 
 // --- Il riepilogo ----------------------------------------------------------------------------------------------------------------
 
+/**
+ * Il riepilogo (giro 1 della fase I, CU-6): l'avviso forte in cima (C13), la testata con quanto si libera, le anteprime e la garanzia ([FreeHero]),
+ * le scelte con la piastrella, i tasti con l'icona e chi resta sul telefono come piastrelle con il numero. Le frasi lunghe (gli ultimi giorni, il
+ * cestino, il perche' di ogni motivo) stanno dietro la «i»; resta in pagina solo cio' che dice uno stato (l'ora del NAS che manca, LS-11).
+ */
 private fun LazyListScope.summary(state: FreeSpaceUi.Summary, actions: FreeSpaceActions) {
   val plan = state.plan
   item(key = "warning") { StrongWarning(permanent = false) }
-  item(key = "summary") {
-    if (plan.itemCount > 0) {
-      BackupCard(
-        tone = BackupTone.Calm,
-        glyph = Icons.Rounded.CleaningServices,
-        title = stringResource(R.string.backup_free_summary_title, BackupText.size(plan.totalBytes)),
-        detail = pluralStringResource(R.plurals.backup_free_summary_detail, plan.itemCount, BackupText.count(plan.itemCount)),
-      )
-    } else {
-      BackupCard(
-        tone = BackupTone.Waiting,
-        glyph = Icons.Rounded.CheckCircle,
-        title = stringResource(R.string.backup_free_summary_empty_title),
-        detail = stringResource(R.string.backup_free_summary_empty_detail),
-      )
-    }
-  }
-  if (plan.filter.excludeRecentDays > 0) {
-    item(key = "recent") { BackupNote(stringResource(R.string.backup_free_recent_note, plan.filter.excludeRecentDays)) }
-  }
+  item(key = "summary") { FreeHero(plan) }
   // LS-11: senza l'ora del NAS ogni media con una data conta come recente (fallire chiusi): lo si dice, e il riepilogo si ricalcola da solo.
   if (!state.nasTimeKnown) {
     item(key = "nas-time") { BackupNote(stringResource(R.string.backup_free_nas_time_note)) }
@@ -257,57 +248,62 @@ private fun LazyListScope.summary(state: FreeSpaceUi.Summary, actions: FreeSpace
     FluidListGroup {
       FreeSpaceKind.entries.forEachIndexed { index, kind ->
         if (index > 0) FluidListDivider()
-        val (title, detail) = filterText(kind)
-        BackupChoiceRow(
-          title = stringResource(title),
-          detail = stringResource(detail),
-          selected = kind == state.kind,
-          onSelect = { actions.choose(kind) },
-        )
+        FreeKindRow(kind = kind, selected = kind == state.kind, onSelect = { actions.choose(kind) })
       }
     }
   }
   if (plan.needsGuardian > 0) {
-    item(key = "guardian") { BackupNote(stringResource(R.string.backup_free_guardian_note, BackupText.count(plan.needsGuardian))) }
-  }
-  if (plan.excluded.isNotEmpty()) {
-    item(key = "excluded-title") { BackupSectionTitle(stringResource(R.string.backup_free_excluded_title)) }
-    item(key = "excluded") {
-      FluidListGroup {
-        // Nell'ordine del contratto, non in quello di una mappa: la pagina non cambia da una volta all'altra.
-        FreeSpaceExclusion.entries.filter { it in plan.excluded }.forEachIndexed { index, reason ->
-          if (index > 0) FluidListDivider()
-          val (title, detail) = exclusionText(reason)
-          FluidListRow(
-            title = stringResource(title),
-            subtitle = stringResource(detail),
-            tone = FluidTone.Neutral,
-            disclosure = false,
-            titleMaxLines = 3,
-            badge = { FluidRowValue(text = BackupText.count(plan.excluded.getValue(reason))) },
-          )
-        }
-      }
-    }
+    item(key = "guardian") { FluidListGroup { GuardianRow(plan.needsGuardian) } }
   }
   item(key = "buttons") {
     Column(verticalArrangement = Arrangement.spacedBy(BackupDimens.BlockGap)) {
-      BackupButton(label = stringResource(R.string.backup_free_action), onClick = actions.openConfirm, enabled = plan.itemCount > 0)
-      BackupButton(
-        label = stringResource(R.string.backup_free_action_now),
+      FluidButton(
+        text = stringResource(R.string.backup_free_action),
+        onClick = actions.openConfirm,
+        style = FluidButtonStyle.Filled,
+        size = FluidButtonSize.Large,
+        fillWidth = true,
+        enabled = plan.itemCount > 0,
+        leading = { Icon(imageVector = Icons.Rounded.CleaningServices, contentDescription = null) },
+      )
+      FluidButton(
+        text = stringResource(R.string.backup_free_action_now),
         onClick = actions.openConfirmNow,
         style = FluidButtonStyle.Tinted,
+        size = FluidButtonSize.Large,
+        fillWidth = true,
         enabled = plan.itemCount > 0,
+        leading = { Icon(imageVector = Icons.Rounded.DeleteForever, contentDescription = null) },
       )
     }
   }
-  item(key = "trash-note") { BackupNote(stringResource(phoneTrashText(R.string.backup_free_trash_note, R.string.backup_free_trash_note_gallery))) }
-}
-
-private fun filterText(kind: FreeSpaceKind): Pair<Int, Int> = when (kind) {
-  FreeSpaceKind.ALL -> R.string.backup_free_filter_all to R.string.backup_free_filter_all_detail
-  FreeSpaceKind.VIDEOS_ONLY -> R.string.backup_free_filter_videos to R.string.backup_free_filter_videos_detail
-  FreeSpaceKind.OLDER_THAN_A_YEAR -> R.string.backup_free_filter_old to R.string.backup_free_filter_old_detail
+  item(key = "how") {
+    val how = listOfNotNull(
+      if (plan.filter.excludeRecentDays > 0) stringResource(R.string.backup_free_recent_note, plan.filter.excludeRecentDays) else null,
+      stringResource(phoneTrashText(R.string.backup_free_trash_note, R.string.backup_free_trash_note_gallery)),
+    ).joinToString("\n")
+    BackupInfoToggle(label = stringResource(R.string.backup_free_how_info), text = how)
+  }
+  if (plan.excluded.isNotEmpty()) {
+    // Nell'ordine del contratto, non in quello di una mappa: la pagina non cambia da una volta all'altra.
+    val reasons = FreeSpaceExclusion.entries.filter { it in plan.excluded }
+    item(key = "excluded-title") { BackupSectionTitle(stringResource(R.string.backup_free_excluded_title)) }
+    item(key = "excluded") {
+      FluidListGroup {
+        reasons.forEachIndexed { index, reason ->
+          if (index > 0) FluidListDivider()
+          ExclusionRow(reason = reason, count = plan.excluded.getValue(reason))
+        }
+      }
+    }
+    item(key = "excluded-info") {
+      val why = reasons.map { reason ->
+        val (title, detail) = exclusionText(reason)
+        stringResource(title) + ": " + stringResource(detail)
+      }.joinToString("\n")
+      BackupInfoToggle(label = stringResource(R.string.backup_free_excluded_info), text = why)
+    }
+  }
 }
 
 /** Il titolo e la frase di ogni motivo di esclusione del §2.5: un `when` esaustivo, un motivo nuovo non compila senza il suo testo. */

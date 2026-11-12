@@ -5,13 +5,15 @@
   <string name="sharing_section_location">Quando condividi foto e video</string>
   <string name="sharing_remove_location">Rimuovi la posizione</string>
   <string name="sharing_remove_location_detail">Le altre app ricevono una copia senza il luogo.</string>
-  <string name="sharing_state_on">Acceso</string>
   <string name="sharing_state_on_detail">Ogni foto e video parte senza posizione: nel menu, «Condividi senza posizione».</string>
-  <string name="sharing_state_off">Spento</string>
   <string name="sharing_state_off_detail">Foto e video partono con il luogo, se c’è.</string>
   <string name="sharing_footnote_check">Se la posizione non si toglie, la condivisione si ferma. Il file sul telefono e sul NAS non cambia.</string>
   <string name="sharing_footnote_formats">Senza posizione: JPEG, PNG, WebP, MP4, MOV e HEIC (diventa JPEG). Gli altri formati, se vuoi, partono con la posizione.</string>
 
   <string name="sharing_entry_on">Senza posizione</string>
   <string name="sharing_entry_off">Con posizione</string>
+  <!-- Giro 1 della fase I (CU-5, CU-20): la figura di che cosa ricevono le altre app; i formati dietro la «i». -->
+  <string name="sharing_figure_here">Sul telefono</string>
+  <string name="sharing_figure_out">Alle altre app</string>
+  <string name="sharing_formats_info">Quali file</string>
 </resources>

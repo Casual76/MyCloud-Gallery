@@ -149,6 +149,10 @@ class BackupEntryTest {
     assertThat(marks.getValue(BackupStatus.UpToDate(6_658, null))).isEqualTo(dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus.Done)
     assertThat(marks.getValue(BackupStatus.Problem(BackupProblemCode.QUOTA, 0))).isEqualTo(dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus.Attention)
     assertThat(marks.getValue(BackupStatus.TestOnly)).isEqualTo(dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus.Paused)
+    // Giro 1 (CU-7): l'attesa e' la clessidra (la piastrella), senza il segno della pausa.
+    val waiting = marks.filterKeys { it is BackupStatus.Waiting }
+    assertThat(waiting).isNotEmpty()
+    assertThat(waiting.values.toSet()).containsExactly(null)
     assertThat(backupEntryMark(null)).isNull()
   }
 }

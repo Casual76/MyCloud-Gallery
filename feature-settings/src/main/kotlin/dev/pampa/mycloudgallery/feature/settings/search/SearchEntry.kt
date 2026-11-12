@@ -1,6 +1,10 @@
 package dev.pampa.mycloudgallery.feature.settings.search
 
 import android.content.Context
+import dev.pampa.mycloudgallery.feature.settings.ui.RowValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ImageSearch
 import androidx.compose.runtime.Composable
@@ -17,7 +21,6 @@ import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.toneMark
-import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
 import java.util.Optional
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -66,27 +69,31 @@ class SearchEntryViewModel @Inject constructor(
   val summary: StateFlow<SearchEntrySummary?> = entry.orElse(null)?.summary ?: MutableStateFlow<SearchEntrySummary?>(null)
 }
 
-/** La riga "Ricerca e modelli": il titolo, lo stato in una frase e, se serve attenzione, una pillola. [summary] null = non e' ancora legata: la frase dice a cosa serve. */
+/**
+ * La riga "Ricerca e modelli" (giro 1 della fase I, CU-5: prima la frase con due informazioni sotto il titolo): il titolo, il segno sulla piastrella e
+ * a destra un valore corto solo quando c'e' qualcosa da dire (manca un modello, l'avviso da confermare, questo telefono analizza). La frase intera la
+ * sente TalkBack. [summary] null = non e' ancora legata.
+ */
 @Composable
 internal fun SearchEntryRow(summary: SearchEntrySummary?, onClick: () -> Unit) {
   val tone = searchEntryTone(summary)
+  val title = stringResource(R.string.settings_search)
+  val spoken = SearchEntryTexts.subtitleOf(LocalContext.current, summary)
+  val value = when {
+    summary?.modelMissing == true -> stringResource(R.string.settings_search_pill_model)
+    summary?.readingNeedsNotice == true -> stringResource(R.string.settings_search_pill_notice)
+    summary?.indexer == true -> stringResource(R.string.settings_search_value_indexer)
+    else -> null
+  }
   FluidListRow(
-    title = stringResource(R.string.settings_search),
-    subtitle = SearchEntryTexts.subtitleOf(LocalContext.current, summary),
+    title = title,
+    subtitle = "",
     tone = tone,
     leading = { RowTile(Icons.Rounded.ImageSearch, status = toneMark(tone)) },
     leadingTile = false,
-    // Le pillole stanno in `labels` (sotto il titolo se ruberebbero la riga), non in `badge`.
-    labels = when {
-      summary?.modelMissing == true -> {
-        { StatusPill(stringResource(R.string.settings_search_pill_model), FluidTone.Warning) }
-      }
-      summary?.readingNeedsNotice == true -> {
-        { StatusPill(stringResource(R.string.settings_search_pill_notice), FluidTone.Warning) }
-      }
-      else -> null
-    },
+    badge = value?.let { v -> { RowValue(v) } },
     onClick = onClick,
+    modifier = Modifier.semantics { contentDescription = "$title. $spoken" },
   )
 }
 

@@ -7,7 +7,6 @@ import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.VpnKey
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
@@ -17,12 +16,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
-import dev.antigravity.fluidengine.ui.fluid.FluidHero
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidRowValue
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -40,7 +37,6 @@ import dev.pampa.mycloudgallery.core.network.contract.Via
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.port.NasAccountSettings
 import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
-import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
 import dev.pampa.mycloudgallery.feature.settings.ui.messageRes
 import java.util.Optional
 import javax.inject.Inject
@@ -50,6 +46,14 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import androidx.compose.runtime.getValue
+import androidx.compose.material3.Icon
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsStatusHeader
 
 /** L'account come lo mostra la pagina: utente e indirizzo (mai la password, che non esce dal Keystore). */
 internal data class AccountUi(
@@ -133,9 +137,9 @@ internal fun NasAccountRoute(links: NasAccountLinks) {
 /**
  * Impostazioni → Account del NAS: chi e' l'account, dove sta il NAS e come va il collegamento.
  *
- * In cima dice la cosa che conta adesso. Se l'interruttore di sicurezza e' aperto (E-R8, E-S12) la pagina lo
- * dice per primo e porta alla nuova password: **nessun tentativo parte da solo**, perche' il NAS blocca
- * l'account dopo pochi errori.
+ * In cima lo stato e basta (giro 1 della fase I, CU-5): il segno e una o due parole. Se l'interruttore di sicurezza e' aperto (E-R8, E-S12) la
+ * testata lo dice e porta alla nuova password: **nessun tentativo parte da solo**, perche' il NAS blocca l'account dopo pochi errori. Il perche' di
+ * uno stato, le regole del cambio e la sigla del protocollo stanno dietro la «i».
  */
 @Composable
 internal fun NasAccountScreen(state: NasAccountUiState, links: NasAccountLinks) {
@@ -158,7 +162,8 @@ internal fun NasAccountScreen(state: NasAccountUiState, links: NasAccountLinks) 
       return@FluidScreen
     }
 
-    item { AccountHero(state = state, onPassword = links.openPassword) }
+    item { AccountHeader(state = state, onPassword = links.openPassword) }
+    accountWhy(state)?.let { why -> item { SettingsInfo(label = stringResource(R.string.account_why), text = stringResource(why)) } }
 
     item { GallerySectionHeader(title = stringResource(R.string.account_section_account)) }
     item {
@@ -178,29 +183,29 @@ internal fun NasAccountScreen(state: NasAccountUiState, links: NasAccountLinks) 
       FluidListGroup {
         FluidListRow(
           title = stringResource(R.string.account_change_password),
-          subtitle = stringResource(
-            if (state.blockedBy != null) R.string.account_change_password_needed else R.string.account_change_password_detail,
-          ),
+          subtitle = "",
           tone = if (state.blockedBy != null) FluidTone.Danger else FluidTone.Primary,
-          leading = { RowTile(Icons.Rounded.Key) },
+          leading = { RowTile(Icons.Rounded.Key, status = if (state.blockedBy != null) GalleryIconStatus.Problem else null) },
           leadingTile = false,
-          labels = if (state.blockedBy != null) {
-            { StatusPill(stringResource(R.string.account_pill_needed), FluidTone.Danger) }
-          } else {
-            null
-          },
           onClick = links.openPassword,
         )
         FluidListDivider()
         FluidListRow(
           title = stringResource(R.string.account_change_address),
-          subtitle = stringResource(R.string.account_change_address_detail),
+          subtitle = "",
           tone = FluidTone.Info,
           leading = { RowTile(Icons.Rounded.Dns) },
           leadingTile = false,
           onClick = links.openAddress,
         )
       }
+    }
+    item {
+      SettingsInfo(
+        label = stringResource(R.string.account_change_info),
+        text = stringResource(R.string.account_change_password_detail) + ". " + stringResource(R.string.account_change_address_detail) + ". " +
+          stringResource(R.string.account_footnote),
+      )
     }
 
     (state.connection as? NasConnState.Ready)?.let { ready ->
@@ -211,9 +216,8 @@ internal fun NasAccountScreen(state: NasAccountUiState, links: NasAccountLinks) 
             R.string.account_link_encryption,
             stringResource(if (ready.info.encrypted) R.string.value_yes else R.string.value_no),
             Icons.Rounded.Lock,
+            status = if (ready.info.encrypted) GalleryIconStatus.Done else GalleryIconStatus.Attention,
           )
-          FluidListDivider()
-          ValueRow(R.string.account_link_dialect, ready.info.dialect.label(), Icons.Rounded.VpnKey)
           FluidListDivider()
           ValueRow(R.string.account_link_route, stringResource(ready.info.via.labelRes()), Icons.Rounded.Wifi)
           FluidListDivider()
@@ -221,100 +225,98 @@ internal fun NasAccountScreen(state: NasAccountUiState, links: NasAccountLinks) 
             R.string.account_link_identity,
             stringResource(if (account.guidPinned) R.string.account_identity_pinned else R.string.account_identity_unpinned),
             Icons.Rounded.Dns,
+            status = if (account.guidPinned) GalleryIconStatus.Done else null,
           )
         }
       }
+      // CU-20: la sigla del protocollo non sta in pagina; chi la cerca la trova dietro la «i».
+      item { SettingsInfo(label = stringResource(R.string.account_link_info), text = stringResource(ready.info.dialect.infoRes())) }
     }
-    item { FluidSectionFootnote(text = stringResource(R.string.account_footnote)) }
   }
 }
 
+/** La testata: lo stato del collegamento in una o due parole, con il segno; con la password da rifare, il tasto. */
 @Composable
-private fun AccountHero(state: NasAccountUiState, onPassword: () -> Unit) {
-  val blocked = state.blockedBy
+private fun AccountHeader(state: NasAccountUiState, onPassword: () -> Unit) {
   val connection = state.connection
   when {
-    blocked != null -> FluidHero(
-      tone = FluidHeroTone.Alert,
-      motif = FluidHeroMotif.Ripples,
-      eyebrow = stringResource(R.string.account_eyebrow),
-      value = stringResource(R.string.account_hero_blocked_value),
-      title = stringResource(R.string.account_hero_blocked_title),
-      description = stringResource(blocked.messageRes()),
+    state.blockedBy != null -> SettingsStatusHeader(
       icon = Icons.Rounded.Key,
-      urgent = true,
-      actionLabel = stringResource(R.string.account_hero_blocked_action),
-      onAction = onPassword,
+      family = GalleryIconFamily.Security,
+      value = stringResource(R.string.account_hero_blocked_title),
+      status = GalleryIconStatus.Problem,
+      action = {
+        FluidButton(
+          text = stringResource(R.string.account_hero_blocked_action),
+          onClick = onPassword,
+          style = FluidButtonStyle.Filled,
+          size = FluidButtonSize.Large,
+          fillWidth = true,
+          leading = { Icon(Icons.Rounded.Key, contentDescription = null) },
+        )
+      },
     )
-    connection is NasConnState.Ready -> FluidHero(
-      tone = FluidHeroTone.PrimaryToSecondary,
-      motif = FluidHeroMotif.Dots,
-      eyebrow = stringResource(R.string.account_eyebrow),
-      value = stringResource(R.string.account_hero_ready_value),
-      title = stringResource(if (connection.info.encrypted) R.string.account_hero_ready_title else R.string.account_hero_unencrypted_title),
-      description = stringResource(connection.info.via.heroDetailRes()),
+    connection is NasConnState.Ready -> SettingsStatusHeader(
       icon = Icons.Rounded.Cloud,
+      family = GalleryIconFamily.Backup,
+      value = stringResource(if (connection.info.encrypted) R.string.account_hero_ready_value else R.string.account_hero_unencrypted_title),
+      status = if (connection.info.encrypted) GalleryIconStatus.Done else GalleryIconStatus.Attention,
     )
-    connection is NasConnState.Unavailable -> FluidHero(
-      tone = FluidHeroTone.Secondary,
-      motif = FluidHeroMotif.Ripples,
-      eyebrow = stringResource(R.string.account_eyebrow),
-      value = stringResource(R.string.account_hero_unavailable_value),
-      title = stringResource(R.string.account_hero_unavailable_title),
-      description = stringResource(connection.error.messageRes()),
+    connection is NasConnState.Unavailable -> SettingsStatusHeader(
       icon = Icons.Rounded.CloudOff,
+      family = GalleryIconFamily.Backup,
+      value = stringResource(R.string.account_hero_unavailable_value),
+      status = GalleryIconStatus.Problem,
     )
-    connection is NasConnState.WakingUp -> FluidHero(
-      tone = FluidHeroTone.Tertiary,
-      motif = FluidHeroMotif.Ripples,
-      eyebrow = stringResource(R.string.account_eyebrow),
+    connection is NasConnState.WakingUp -> SettingsStatusHeader(
+      icon = Icons.Rounded.Cloud,
+      family = GalleryIconFamily.Backup,
       value = stringResource(R.string.account_hero_waking_value),
-      title = stringResource(R.string.account_hero_waking_title),
-      description = stringResource(R.string.account_hero_waking_detail),
-      icon = Icons.Rounded.Cloud,
+      status = GalleryIconStatus.Running,
     )
-    else -> FluidHero(
-      tone = FluidHeroTone.Secondary,
-      motif = FluidHeroMotif.Glow,
-      eyebrow = stringResource(R.string.account_eyebrow),
-      value = stringResource(R.string.account_hero_idle_value),
-      title = stringResource(R.string.account_hero_idle_title),
-      description = stringResource(R.string.account_hero_idle_detail),
+    else -> SettingsStatusHeader(
       icon = Icons.Rounded.Cloud,
+      family = GalleryIconFamily.Backup,
+      value = stringResource(R.string.account_hero_idle_value),
     )
   }
 }
 
+/** Il perche' dello stato, dietro la «i»: la password bloccata, il NAS che non risponde, il risveglio. Null quando non c'e' niente da spiegare. */
+private fun accountWhy(state: NasAccountUiState): Int? {
+  val blocked = state.blockedBy
+  val connection = state.connection
+  return when {
+    blocked != null -> blocked.messageRes()
+    connection is NasConnState.Unavailable -> connection.error.messageRes()
+    connection is NasConnState.WakingUp -> R.string.account_hero_waking_detail
+    else -> null
+  }
+}
+
 @Composable
-private fun ValueRow(label: Int, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+private fun ValueRow(label: Int, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, status: GalleryIconStatus? = null) {
   FluidListRow(
     title = stringResource(label),
     subtitle = "",
     disclosure = false,
     tone = FluidTone.Neutral,
-    leading = { RowTile(icon) },
+    leading = { RowTile(icon, status = status) },
     leadingTile = false,
     badge = { FluidRowValue(text = value) },
   )
 }
 
-private fun SmbDialect.label(): String = when (this) {
-  SmbDialect.SMB_3_1_1 -> "SMB 3.1.1"
-  SmbDialect.SMB_3_0_2 -> "SMB 3.0.2"
-  SmbDialect.SMB_3_0 -> "SMB 3.0"
-  SmbDialect.SMB_2_1 -> "SMB 2.1"
-  SmbDialect.SMB_2_0_2 -> "SMB 2.0.2"
-  SmbDialect.UNKNOWN -> "?"
+// Giro 1 della fase I (CU-20): prima «Protocollo di rete: SMB 3.1.1»; la sigla non serve a chi usa l'app, quanto e' recente si'.
+private fun SmbDialect.infoRes(): Int = when (this) {
+  SmbDialect.SMB_3_1_1 -> R.string.account_link_dialect_newest
+  SmbDialect.SMB_3_0_2, SmbDialect.SMB_3_0 -> R.string.account_link_dialect_recent
+  SmbDialect.SMB_2_1, SmbDialect.SMB_2_0_2 -> R.string.account_link_dialect_old
+  SmbDialect.UNKNOWN -> R.string.account_link_dialect_unknown
 }
 
 private fun Via.labelRes(): Int = when (this) {
   Via.HOME_LAN -> R.string.via_home
   Via.HOME_LAN_THROUGH_VPN -> R.string.via_home_vpn
   Via.VPN -> R.string.via_vpn
-}
-
-private fun Via.heroDetailRes(): Int = when (this) {
-  Via.HOME_LAN -> R.string.account_hero_via_home
-  Via.HOME_LAN_THROUGH_VPN -> R.string.account_hero_via_home_vpn
-  Via.VPN -> R.string.account_hero_via_vpn
 }

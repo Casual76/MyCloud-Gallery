@@ -11,4 +11,6 @@
   <string name="settings_search_reading_notice">lettura del testo da confermare</string>
   <string name="settings_search_pill_model">Manca un modello</string>
   <string name="settings_search_pill_notice">Da confermare</string>
+  <!-- Giro 1 della fase I (CU-5): il valore corto a destra quando questo telefono analizza le foto. -->
+  <string name="settings_search_value_indexer">Analizza qui</string>
 </resources>

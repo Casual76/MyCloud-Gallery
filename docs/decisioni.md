@@ -19041,3 +19041,19 @@ non vuole quella che segue il tema; di serie resta l'**Automatica** (scura dove 
   larghezza: a 360 dp e a 1,3x non vanno a capo.
 - **CS-10 e CS-15**: tolte le stringhe orfane (`models_indexer_title`, `models_section_areas`, `models_status_title`, e quelle rese orfane qui); «foto e
   video» al posto di «media», niente «CPU»/«GPU» («2,8 foto/s»; nelle frasi «con il processore grafico»).
+
+### I3, giro di correzione 1 (fase I, 12 novembre 2026)
+
+Rilievi del giro 1 per I3 (`TRIAGE.md`); prima e dopo, parole contate e prove sul telefono in `docs/I3-giro1.md`.
+
+- **Sottopagine delle Impostazioni**: in cima la piastrella con il segno e il valore corto (`SettingsStatusHeader`), mai una frase che ripete lo stato;
+  lo stato delle righe a destra o con il segno; le frasi dietro la «i» condivisa o nella descrizione per TalkBack (`DescribedRow`). Informazioni tiene
+  in pagina le attribuzioni (licenze).
+- **Stati e segni**: la pausa una volta per pagina (sull'anello); sulle copertine il segno solo se la cartella e' diversa dalle altre (problema, spenta);
+  l'attesa con la clessidra e solo quella; nessuna piastrella grigia accanto alle colorate; scelte uniche con il segno di scelta, non con l'interruttore.
+- **Componenti condivisi**: l'anello del backup e quello di Libera spazio sono `GalleryProgressRing`; la «i» di backup e Impostazioni e' quella di
+  core-designsystem. TalkBack sente il perche' nella descrizione di chi apre la «i».
+- **Libera spazio**: riepilogo come testata (GB nell'anello, anteprime dalla Libreria visibile, garanzia in una riga), scelte e motivi come piastrelle
+  con il numero, il come dietro la «i». Recinzioni e logica invariate; le parole della recinzione sono «In pausa» / «il backup vero non e' ancora acceso».
+- **Copertine**: la finestra delle miniature segue lo schermo (copertine visibili e sei accanto), non piu' le prime 24.
+- **Parole**: niente «media», «preset», sigle del protocollo; numeri con il punto delle migliaia.

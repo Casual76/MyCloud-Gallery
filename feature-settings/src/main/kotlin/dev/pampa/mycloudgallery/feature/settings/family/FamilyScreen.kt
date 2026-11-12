@@ -18,7 +18,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
-import dev.antigravity.fluidengine.ui.fluid.FluidHero
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
@@ -27,7 +26,6 @@ import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
-import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.family.contract.RegistryService
 import dev.pampa.mycloudgallery.core.family.contract.StaleReason
@@ -35,13 +33,17 @@ import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
-import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import androidx.compose.runtime.getValue
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.feature.settings.ui.DescribedRow
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsStatusHeader
 
 /** Lo stato della pagina Famiglia: chi sono io nella famiglia e quanti siamo. */
 internal data class FamilyUiState(
@@ -155,32 +157,30 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
       return@FluidScreen
     }
 
+    // Giro 1 della fase I (CG-4): in cima quanti dispositivi e chi sei; l'unico avvertimento che resta in pagina e' quello sulle chiavi (l'unico admin).
+    val soleAdmin = state.isAdmin && state.adminCount <= 1
     item {
-      FluidHero(
-        tone = FluidHeroTone.TertiaryToPrimary,
-        motif = FluidHeroMotif.Dots,
-        eyebrow = stringResource(R.string.family_hero_eyebrow),
-        value = pluralStringResource(R.plurals.family_hero_value, state.deviceCount, state.deviceCount),
-        title = stringResource(if (state.isAdmin) R.string.family_hero_title_admin else R.string.family_hero_title),
-        description = pluralStringResource(
-          if (state.isAdmin) R.plurals.family_hero_detail_admin else R.plurals.family_hero_detail,
-          state.adminCount,
-          state.adminCount,
-        ),
+      SettingsStatusHeader(
         icon = Icons.Rounded.Groups,
+        family = GalleryIconFamily.People,
+        value = pluralStringResource(R.plurals.family_hero_value, state.deviceCount, state.deviceCount),
+        label = stringResource(if (state.isAdmin) R.string.family_hero_title_admin else R.string.family_hero_title),
+        status = if (soleAdmin) GalleryIconStatus.Attention else null,
       )
+    }
+    if (soleAdmin) {
+      item { Note(title = stringResource(R.string.family_sole_admin_title), message = pluralStringResource(R.plurals.family_hero_detail_admin, 1, 1), tone = FluidTone.Warning) }
     }
 
     if (state.isAdmin) {
       item { GallerySectionHeader(title = stringResource(R.string.family_section_invite)) }
       item {
         FluidListGroup {
-          FluidListRow(
+          DescribedRow(
             title = stringResource(R.string.family_invite),
-            subtitle = stringResource(R.string.family_invite_detail),
+            detail = stringResource(R.string.family_invite_detail),
+            icon = Icons.Rounded.PersonAdd,
             tone = FluidTone.Primary,
-            leading = { RowTile(Icons.Rounded.PersonAdd) },
-            leadingTile = false,
             onClick = links.openInvite,
           )
         }
@@ -190,59 +190,62 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
     item { GallerySectionHeader(title = stringResource(R.string.family_section_protect)) }
     item {
       FluidListGroup {
-        FluidListRow(
+        DescribedRow(
           title = stringResource(R.string.family_kit),
-          subtitle = stringResource(R.string.family_kit_detail),
+          detail = stringResource(R.string.family_kit_detail),
+          icon = Icons.Rounded.Key,
           tone = FluidTone.Warning,
-          leading = { RowTile(Icons.Rounded.Key) },
-          leadingTile = false,
+          status = if (soleAdmin) GalleryIconStatus.Attention else null,
           onClick = links.openRecoveryKit,
         )
         FluidListDivider()
-        FluidListRow(
+        DescribedRow(
           title = stringResource(R.string.family_state),
-          subtitle = stringResource(R.string.family_state_detail),
-          tone = FluidTone.Info,
-          leading = { RowTile(Icons.Rounded.QrCode2) },
-          leadingTile = false,
+          detail = stringResource(R.string.family_state_detail),
+          icon = Icons.Rounded.QrCode2,
           onClick = links.openFamilyState,
         )
       }
+    }
+    item {
+      SettingsInfo(
+        label = stringResource(R.string.family_protect_info),
+        text = stringResource(R.string.family_kit_detail) + ". " + stringResource(R.string.family_state_detail) + ". " +
+          pluralStringResource(if (state.isAdmin) R.plurals.family_hero_detail_admin else R.plurals.family_hero_detail, state.adminCount, state.adminCount),
+      )
     }
 
     if (!state.isAdmin) {
       item { GallerySectionHeader(title = stringResource(R.string.family_section_admin)) }
       item {
         FluidListGroup {
-          FluidListRow(
+          DescribedRow(
             title = stringResource(R.string.family_second_admin),
-            subtitle = stringResource(R.string.family_second_admin_detail),
+            detail = stringResource(R.string.family_second_admin_detail),
+            icon = Icons.Rounded.AdminPanelSettings,
             tone = FluidTone.Primary,
-            leading = { RowTile(Icons.Rounded.AdminPanelSettings) },
-            leadingTile = false,
             onClick = links.openSecondAdmin,
           )
           FluidListDivider()
-          FluidListRow(
+          DescribedRow(
             title = stringResource(R.string.family_replace_admin),
-            subtitle = stringResource(R.string.family_replace_admin_detail),
+            detail = stringResource(R.string.family_replace_admin_detail),
+            icon = Icons.Rounded.SwitchAccount,
             tone = FluidTone.Warning,
-            leading = { RowTile(Icons.Rounded.SwitchAccount) },
-            leadingTile = false,
             onClick = links.openReplaceAdmin,
           )
           FluidListDivider()
           // L'admin ha perso il telefono e non c'e' piu' ne' kit ne' codice: si riparte dal PC (ON-6).
-          FluidListRow(
+          DescribedRow(
             title = stringResource(R.string.family_start_over),
-            subtitle = stringResource(R.string.family_start_over_detail),
+            detail = stringResource(R.string.family_start_over_detail),
+            icon = Icons.Rounded.RestartAlt,
             tone = FluidTone.Danger,
-            leading = { RowTile(Icons.Rounded.RestartAlt) },
-            leadingTile = false,
             onClick = links.openStartOverGuide,
           )
         }
       }
+      // Le chiavi: serve il codice del kit (resta in pagina, CG-4).
       item { FluidSectionFootnote(text = stringResource(R.string.family_admin_footnote)) }
     }
 
@@ -250,16 +253,16 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
       item { GallerySectionHeader(title = stringResource(R.string.family_section_danger)) }
       item {
         FluidListGroup {
-          FluidListRow(
+          DescribedRow(
             title = stringResource(R.string.family_reset),
-            subtitle = stringResource(R.string.family_reset_detail),
+            detail = stringResource(R.string.family_reset_detail),
+            icon = Icons.Rounded.RestartAlt,
             tone = FluidTone.Danger,
-            leading = { RowTile(Icons.Rounded.RestartAlt) },
-            leadingTile = false,
             onClick = links.openReset,
           )
         }
       }
+      // L'azione distruttiva: quando si usa resta in pagina (CG-4).
       item { FluidSectionFootnote(text = stringResource(R.string.family_danger_footnote)) }
     }
 
@@ -272,12 +275,11 @@ private fun androidx.compose.foundation.lazy.LazyListScope.rejoinSection(links: 
   item { GallerySectionHeader(title = stringResource(R.string.family_section_rejoin)) }
   item {
     FluidListGroup {
-      FluidListRow(
+      DescribedRow(
         title = stringResource(R.string.family_rejoin),
-        subtitle = stringResource(R.string.family_rejoin_detail),
+        detail = stringResource(R.string.family_rejoin_detail),
+        icon = Icons.Rounded.QrCodeScanner,
         tone = FluidTone.Warning,
-        leading = { RowTile(Icons.Rounded.QrCodeScanner) },
-        leadingTile = false,
         onClick = links.openRejoin,
       )
     }

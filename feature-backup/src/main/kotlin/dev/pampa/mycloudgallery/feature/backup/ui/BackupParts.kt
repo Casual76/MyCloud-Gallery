@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,6 +36,15 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryLiveAnnouncement
 import dev.pampa.mycloudgallery.feature.backup.BackupDimens
+import dev.pampa.mycloudgallery.feature.backup.R
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoGlyph
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
+import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.res.stringResource
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateOf
 
 // I pezzi delle pagine del backup che non sono chrome: la scheda di stato (un tono, un glifo, un titolo, una frase, un avanzamento e dei
 // tasti), l'intestazione di un gruppo, la nota. Tutti dai ruoli dello schema (nessun colore a mano) e dai toni del piede, le cui coppie
@@ -147,50 +155,30 @@ internal fun BackupNote(text: String, modifier: Modifier = Modifier) {
 
 /**
  * I3 (fase I): una spiegazione dietro un tocco. In pagina c'e' solo la «i» con un'etichetta corta ([label]); il tocco apre la frase sotto, nello stesso
- * posto, e la richiude. Un tasto da 48 dp con il suo stato per TalkBack; con «Rimuovi animazioni» la frase compare senza movimento.
+ * posto, e la richiude. Giro 1 (CS-5): la «i» e la frase sono quelle di core-designsystem ([GalleryInfoGlyph], [GalleryInfoDetail]), come nelle
+ * Impostazioni e nel pop-up; la riga e' un tasto da 48 dp con il suo stato, e TalkBack sente la frase nella sua descrizione, senza tocco.
  */
 @Composable
 internal fun BackupInfoToggle(label: String, text: String, modifier: Modifier = Modifier) {
-  var open by androidx.compose.runtime.saveable.rememberSaveable(text) { androidx.compose.runtime.mutableStateOf(false) }
-  val reduced = dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy.current.reducedMotion
-  val openState = androidx.compose.ui.res.stringResource(dev.pampa.mycloudgallery.feature.backup.R.string.backup_hero_detail_open)
-  val closedState = androidx.compose.ui.res.stringResource(dev.pampa.mycloudgallery.feature.backup.R.string.backup_hero_detail_closed)
-  Column(modifier = modifier.padding(horizontal = BackupDimens.BlockGap)) {
+  var open by rememberSaveable(text) { mutableStateOf(false) }
+  val openState = stringResource(R.string.backup_hero_detail_open)
+  val closedState = stringResource(R.string.backup_hero_detail_closed)
+  Column(modifier = modifier.padding(horizontal = BackupDimens.BlockGap), verticalArrangement = Arrangement.spacedBy(BackupDimens.LineGap)) {
     Row(
       modifier = Modifier
-        .defaultMinSize(minHeight = dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens.MinTouchTarget)
-        .fluidPressable(onClick = { open = !open }, role = androidx.compose.ui.semantics.Role.Button)
+        .defaultMinSize(minHeight = GalleryDimens.MinTouchTarget)
+        .fluidPressable(onClick = { open = !open }, role = Role.Button)
         .semantics(mergeDescendants = true) {
-          role = androidx.compose.ui.semantics.Role.Button
+          role = Role.Button
+          contentDescription = "$label. $text"
           stateDescription = if (open) openState else closedState
         },
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(BackupDimens.LineGap),
     ) {
-      Icon(
-        imageVector = androidx.compose.material.icons.Icons.Rounded.Info,
-        contentDescription = null,
-        tint = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.size(BackupDimens.InfoGlyph),
-      )
+      GalleryInfoGlyph(open = open, tint = MaterialTheme.colorScheme.primary)
       Text(text = label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
     }
-    androidx.compose.animation.AnimatedVisibility(
-      visible = open,
-      enter = if (reduced) {
-        androidx.compose.animation.EnterTransition.None
-      } else {
-        androidx.compose.animation.fadeIn(dev.antigravity.fluidengine.ui.fluid.FluidMotion.fadeIn()) +
-          androidx.compose.animation.expandVertically(dev.antigravity.fluidengine.ui.fluid.FluidMotion.intSize())
-      },
-      exit = if (reduced) {
-        androidx.compose.animation.ExitTransition.None
-      } else {
-        androidx.compose.animation.fadeOut(dev.antigravity.fluidengine.ui.fluid.FluidMotion.fadeOut()) +
-          androidx.compose.animation.shrinkVertically(dev.antigravity.fluidengine.ui.fluid.FluidMotion.intSize())
-      },
-    ) {
-      Text(text = text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+    GalleryInfoDetail(text = text, visible = open, color = MaterialTheme.colorScheme.onSurfaceVariant)
   }
 }

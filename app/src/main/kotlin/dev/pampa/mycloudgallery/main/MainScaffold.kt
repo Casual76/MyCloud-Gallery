@@ -176,6 +176,8 @@ fun MainScaffold(
   BackHandler(enabled = searchOpen) { onCloseSearch() }
   // H4: con la tastiera su, Indietro chiude la ricerca in un passo solo (non prima la tastiera e poi la ricerca).
   SearchImeBack(enabled = searchOpen) { onCloseSearch() }
+  // Prova sull'S25 (12/11): con la ricerca aperta la finestra non scorre per la tastiera (la barra sale gia' da sola con gli inset).
+  SearchKeepsWindowStill(enabled = searchOpen)
 
   // Il posto della pillola (B3): lo prende chi, dentro una scheda, mostra la barra delle azioni di una selezione.
   val tabBarSlot = remember { GalleryTabBarSlot() }

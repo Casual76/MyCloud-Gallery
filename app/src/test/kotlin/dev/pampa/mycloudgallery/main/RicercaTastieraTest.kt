@@ -6,7 +6,11 @@ import android.graphics.Insets
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -131,6 +135,34 @@ class RicercaTastieraTest {
     assertThat(abs((before.bottom - after.bottom) - lifted)).isAtMost(1f)
     assertThat(abs(after.left - before.left)).isAtMost(1f)
     assertThat(after.holds(cellAfter.center.x, cellAfter.center.y)).isTrue()
+  }
+
+  /**
+   * Prova sull'S25 del 12/11/2026: senza un `windowSoftInputMode` Android fa scorrere tutta la finestra per tenere visibile il campo con il fuoco, e quella
+   * salita si sommava a quella della barra (barra a meta' schermo, suggerimenti in alto fuori dallo schermo). Con la ricerca aperta la finestra chiede
+   * `adjustResize` (nessuno scorrimento, solo gli inset); alla chiusura torna com'era, cosi' le altre pagine tengono il comportamento di prima. Una
+   * finestra senza modalita' dichiarata non puo' tornare a «non specificata»: si rimette `adjustPan`, quella che Android applicava.
+   */
+  @Test
+  @Suppress("DEPRECATION")
+  fun conLaRicercaApertaLaFinestraNonScorrePerLaTastiera_eAllaChiusuraTornaComEra() {
+    val scenes = ScaffoldScenes()
+    var open by mutableStateOf(true)
+    fun adjust(): Int = compose.runOnIdle { compose.activity.window.attributes.softInputMode and WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST }
+    val before = adjust()
+    assertThat(before).isEqualTo(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_UNSPECIFIED)
+    compose.setContent { MyCloudGalleryTheme { GalleryScaffold(scenes, GalleryTab.Library, searchOpen = open, search = scenes.searchIdle) } }
+    compose.waitForIdle()
+    assertThat(adjust()).isEqualTo(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+
+    open = false
+    compose.waitForIdle()
+    assertThat(adjust()).isEqualTo(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN)
+
+    // E di nuovo aperta, di nuovo ferma.
+    open = true
+    compose.waitForIdle()
+    assertThat(adjust()).isEqualTo(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
   }
 
   private fun dev.pampa.mycloudgallery.core.library.contract.PixelRect.holds(x: Float, y: Float): Boolean = x in left..right && y in top..bottom

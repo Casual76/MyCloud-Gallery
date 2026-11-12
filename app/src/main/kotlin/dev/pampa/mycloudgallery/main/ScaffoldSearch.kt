@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.main
 
 import android.os.Build
+import android.view.WindowManager
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
 import androidx.annotation.RequiresApi
@@ -124,6 +125,41 @@ internal fun SearchImeBack(enabled: Boolean, onBack: () -> Unit) {
     val dispatcher = view.findOnBackInvokedDispatcher()
     dispatcher?.let { callback.register(it) }
     onDispose { dispatcher?.let { callback.unregister(it) } }
+  }
+}
+
+/**
+ * **Con la ricerca aperta la finestra non si sposta per la tastiera** (prova sull'S25 del 12/11/2026). La barra di ricerca sale da sola sopra la tastiera
+ * ([GallerySearchLift], dagli inset). L'activity non dichiara un `windowSoftInputMode`, e di serie Android **fa scorrere tutta la finestra** verso l'alto
+ * perche' il campo con il fuoco resti visibile (`adjustPan`): le due salite si sommavano, la barra finiva a meta' schermo e la barra dei suggerimenti in
+ * alto usciva dallo schermo. Finche' la ricerca e' aperta la finestra chiede `adjustResize` (con il bordo a bordo: nessuno spostamento, solo gli inset), e
+ * alla chiusura torna com'era: le altre pagine con un campo di testo tengono il comportamento di prima.
+ *
+ * «Com'era» va detto per esteso: una finestra che ha avuto una modalita' non torna a «non specificata» (`Window.setSoftInputMode(0)` non cambia niente, e
+ * `ViewRootImpl` tiene l'ultima modalita' esplicita). Senza modalita' dichiarata e senza viste che scorrono (c'e' solo la vista di Compose) quella che
+ * Android applicava era `adjustPan`: alla chiusura si rimette quella.
+ *
+ * Va posata **prima** della barra di ricerca nella composizione: l'effetto gira prima che il campo prenda il fuoco e chiami la tastiera.
+ */
+@Composable
+internal fun SearchKeepsWindowStill(enabled: Boolean) {
+  if (!enabled) return
+  val view = LocalView.current
+  DisposableEffect(view) {
+    val window = view.context.findActivity()?.window
+    val before = window?.attributes?.softInputMode
+    if (window != null && before != null) {
+      @Suppress("DEPRECATION") // Con il bordo a bordo `adjustResize` non ridimensiona niente: dice solo "non spostare la finestra, dammi gli inset".
+      val resize = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+      window.setSoftInputMode((before and WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST.inv()) or resize)
+    }
+    onDispose {
+      if (window != null && before != null) {
+        val mask = WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST
+        val unspecified = (before and mask) == WindowManager.LayoutParams.SOFT_INPUT_ADJUST_UNSPECIFIED
+        window.setSoftInputMode(if (unspecified) (before and mask.inv()) or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN else before)
+      }
+    }
   }
 }
 

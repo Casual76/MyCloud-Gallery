@@ -47,6 +47,12 @@ internal data class CacheCounters(
  *   stati solo con riferimenti deboli: non trattiene le celle uscite dalla composizione.
  * - **Niente `recycle()`.** Una bitmap scartata puo' essere ancora disegnata da una cella: la libera il GC.
  *
+ * - **Gli stati li crea solo chi li legge.** Uno stato di Compose nasce solo in [stateFor], cioe' sul filo di chi compone;
+ *   [put] e gli scarti (che girano sui fili del caricatore) aggiornano gli stati che esistono gia' e non ne creano. Uno
+ *   stato creato da un altro filo **dopo** che una composizione ha preso la sua istantanea, e letto in quella
+ *   composizione, fa cadere l'app («Reading a state that was created after the snapshot was taken»): era il crash della
+ *   scheda Album del 11/11/2026 (copertine chieste prima che le celle fossero composte).
+ *
  * Tutto sotto un lock corto; le scritture sugli stati di Compose avvengono dopo averlo rilasciato.
  */
 internal class ThumbnailCache(val budgetBytes: Long) {
@@ -55,7 +61,7 @@ internal class ThumbnailCache(val budgetBytes: Long) {
     require(budgetBytes > 0) { "Il budget della cache e' positivo." }
   }
 
-  private class Entry(val image: ImageBitmap, val bytes: Long, val state: MutableState<ImageBitmap?>)
+  private class Entry(val image: ImageBitmap, val bytes: Long)
 
   private val lock = Any()
   private val entries = LinkedHashMap<ThumbKey, Entry>(128, 0.75f, true)
@@ -67,16 +73,23 @@ internal class ThumbnailCache(val budgetBytes: Long) {
   private val hits = AtomicLong()
   private val misses = AtomicLong()
 
-  /** Lo stato osservabile di [key]: null finche' la miniatura non e' in cache. Non avvia niente. */
+  /**
+   * Lo stato osservabile di [key]: null finche' la miniatura non e' in cache. Non avvia niente. E' l'unico punto che crea
+   * uno stato (vedi la descrizione della classe): se la miniatura c'e' gia', lo stato nasce con lei dentro.
+   */
   fun stateFor(key: ThumbKey): State<ImageBitmap?> {
     synchronized(lock) {
       val entry = entries[key]
-      if (entry != null) {
-        hits.incrementAndGet()
-        return entry.state
+      if (entry != null) hits.incrementAndGet() else misses.incrementAndGet()
+      val existing = states[key]?.get()
+      if (existing != null) return existing
+      val created = mutableStateOf(entry?.image)
+      states[key] = WeakReference(created)
+      if (states.size >= statesSweepAt) {
+        states.values.removeAll { it.get() == null }
+        statesSweepAt = maxOf(SWEEP_START, states.size * 2)
       }
-      misses.incrementAndGet()
-      return stateLocked(key)
+      return created
     }
   }
 
@@ -109,10 +122,10 @@ internal class ThumbnailCache(val budgetBytes: Long) {
     val updates = ArrayList<Pair<MutableState<ImageBitmap?>, ImageBitmap?>>()
     synchronized(lock) {
       entries.remove(key)?.let { usedBytes -= it.bytes }
-      val state = stateLocked(key)
-      entries[key] = Entry(image, bytes, state)
+      entries[key] = Entry(image, bytes)
       usedBytes += bytes
-      updates += state to image
+      // Solo lo stato che una cella ha gia' chiesto: qui (filo del caricatore) non se ne creano.
+      states[key]?.get()?.let { updates += it to image }
       // Una richiesta visibile puo' far uscire quelle in arrivo; una in arrivo (o fuori finestra) no.
       evictLocked(budgetBytes, updates, protectVisible = true, protectAhead = key !in visible, keep = key)
     }
@@ -183,7 +196,7 @@ internal class ThumbnailCache(val budgetBytes: Long) {
         if (key == keep || !allowed(key)) continue
         iterator.remove()
         usedBytes -= entry.bytes
-        updates += entry.state to null
+        states[key]?.get()?.let { updates += it to null }
         evicted = true
       }
       return evicted
@@ -192,18 +205,6 @@ internal class ThumbnailCache(val budgetBytes: Long) {
     if (usedBytes > targetBytes && !protectAhead) pass { it !in visible }
     if (usedBytes > targetBytes && !protectVisible) return pass { true }
     return false
-  }
-
-  private fun stateLocked(key: ThumbKey): MutableState<ImageBitmap?> {
-    val existing = states[key]?.get()
-    if (existing != null) return existing
-    val created = mutableStateOf<ImageBitmap?>(null)
-    states[key] = WeakReference(created)
-    if (states.size >= statesSweepAt) {
-      states.values.removeAll { it.get() == null }
-      statesSweepAt = maxOf(SWEEP_START, states.size * 2)
-    }
-    return created
   }
 
   private fun applyUpdates(updates: List<Pair<MutableState<ImageBitmap?>, ImageBitmap?>>) {

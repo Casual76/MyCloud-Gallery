@@ -1,6 +1,8 @@
 package dev.pampa.mycloudgallery.core.imaging.cache
 
 import android.graphics.Bitmap
+import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.graphics.ImageBitmap
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbKey
@@ -9,6 +11,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.GraphicsMode
+import kotlin.concurrent.thread
 
 /** La cache a budget (D5): LRU in byte, voci visibili protette, stato osservabile e `trim` per livello. */
 @RunWith(RobolectricTestRunner::class)
@@ -22,6 +25,40 @@ class ThumbnailCacheTest {
   private fun bitmap(): Bitmap = Bitmap.createBitmap(160, 160, Bitmap.Config.ARGB_8888)
 
   private val unit = 160L * 160 * 4
+
+  /**
+   * Il crash della scheda Album dell'11/11/2026 («Reading a state that was created after the snapshot was taken», in
+   * `AlbumCoverThumb`): una composizione prende la sua istantanea, poi il caricatore (un altro filo) mette in cache una
+   * miniatura che nessuna cella aveva ancora chiesto, e la composizione la chiede e la legge. Prima `put` creava li' lo stato
+   * di Compose, nato dopo l'istantanea: la lettura lanciava. Ora lo stato nasce solo in `stateFor`, sul filo di chi legge.
+   */
+  @Test
+  fun unaMiniaturaMessaDaUnAltroFiloDopoLIstantaneaSiLeggeSenzaCadere() {
+    val cache = ThumbnailCache(budgetBytes = unit * 10)
+    val composition = Snapshot.takeMutableSnapshot()
+    try {
+      var image: ImageBitmap? = null
+      thread { image = cache.put(key(1), bitmap()) }.join()
+      val read = composition.enter { cache.stateFor(key(1)).value }
+      assertThat(read).isSameInstanceAs(image)
+    } finally {
+      composition.dispose()
+    }
+  }
+
+  /** Lo stato chiesto prima da una cella riceve la miniatura che arriva dopo da un altro filo, e torna null allo scarto. */
+  @Test
+  fun loStatoGiaChiestoRiceveLaMiniaturaDaUnAltroFiloETornaNullAlloScarto() {
+    val cache = ThumbnailCache(budgetBytes = unit * 10)
+    val state = cache.stateFor(key(1))
+    assertThat(state.value).isNull()
+    var image: ImageBitmap? = null
+    thread { image = cache.put(key(1), bitmap()) }.join()
+    assertThat(state.value).isSameInstanceAs(image)
+    assertThat(cache.stateFor(key(1))).isSameInstanceAs(state)
+    thread { cache.clear() }.join()
+    assertThat(state.value).isNull()
+  }
 
   @Test
   fun lAccessoSegnaLUsoERestituisceLaStessaBitmap() {

@@ -4,6 +4,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiBuffer
 import dev.pampa.mycloudgallery.core.ai.contract.AiCandidates
 import dev.pampa.mycloudgallery.core.ai.contract.AiComputeRun
 import dev.pampa.mycloudgallery.core.ai.contract.AiDiag
+import dev.pampa.mycloudgallery.core.ai.contract.AiLive
 import dev.pampa.mycloudgallery.core.ai.contract.AiRecipe
 import dev.pampa.mycloudgallery.core.ai.contract.AiResults
 import dev.pampa.mycloudgallery.core.ai.contract.AiRoles
@@ -61,6 +62,11 @@ data class AiComputeParts(
    * calcolo dei volti). Di serie nessuno: il buffer si svuota come nella Fase 6.
    */
   val keepers: BufferKeepers = BufferKeepers.NONE,
+  /**
+   * Pacchetto X (12/11/2026): i media che l'utente ha chiesto di analizzare adesso ("Analizza adesso" dal visore): passano davanti nella
+   * coda, con le stesse regole e gli stessi cancelli di sempre ([AiUrgentKeys]). Di serie nessuno.
+   */
+  val urgent: AiUrgentKeys = AiUrgentKeys.NONE,
 )
 
 /**
@@ -94,6 +100,11 @@ class AiComputeEngine(
   private val state = MutableStateFlow<AiStatus>(AiStatus.Idle(null))
   val status: StateFlow<AiStatus> get() = state
 
+  private val liveFlow = MutableStateFlow(AiLive.EMPTY)
+
+  /** Il calcolo mentre scorre (media di adesso, ultimi finiti, prossimi), per la pagina "Analisi delle foto": solo in memoria. */
+  val live: StateFlow<AiLive> get() = liveFlow
+
   private val computer = MediaComputer(parts.images, parts.reader, parts.inputs, recipe, counters)
 
   /** IX-7: gli errori passeggeri del motore per chiave in questo processo (un media che fallisce sempre non si riprova senza fine). */
@@ -106,7 +117,7 @@ class AiComputeEngine(
 
   /** Una tappa con le regole di [control] (in :app: `StageScope` di `StagedRun`, vedi [AiStageBatch]). */
   suspend fun run(scope: AiScope, budget: Duration, control: AiRunControl): AiRunResult {
-    val session = ComputeSession(parts, computer, recipe, config, counters, nanos, pause, budget, control, state, strikes)
+    val session = ComputeSession(parts, computer, recipe, config, counters, nanos, pause, budget, control, state, strikes, liveFlow)
     if (!parts.roles.indexer.value) {
       state.value = AiStatus.Off
       return session.result(AiStop.ROLE_OFF)

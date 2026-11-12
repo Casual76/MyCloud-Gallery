@@ -210,6 +210,30 @@ interface AiUnsupportedFrom : AiUnsupported {
   suspend fun mark(key: ContentKey, cls: AiClass, from: AiInputOrigin)
 }
 
+/**
+ * Le chiavi che l'utente ha chiesto di analizzare **adesso** (Pacchetto X, 12/11/2026: "Analizza adesso" dal visore). Il calcolo le mette
+ * **davanti nella coda** — dentro l'unita' presa e nelle liste locali (solo telefono, solo buffer) — senza cambiare nient'altro: stessi
+ * cancelli, stesse prenotazioni, stesso salvataggio subito e stessa pubblicazione. I confini delle unita' non si toccano (dipendono solo
+ * dai media del mese, D9): cambia solo l'ordine con cui questo dispositivo li lavora dentro l'unita' che ha gia' preso.
+ *
+ * [urgent] si legge a inizio unita' o lista (mai per ogni media): e' un insieme piccolo, tenuto da `:app` in un file locale (mai sul NAS:
+ * e' una richiesta di questo dispositivo, come i segni "non supportato"). [done] si chiama quando un media urgente e' finito qui
+ * (calcolato, gia' fatto da altri o non supportato): la chiave esce dalla coda delle urgenze. Un media che resta "in attesa" (l'anteprima
+ * non c'e') **resta urgente**: sara' il primo al prossimo giro in cui si puo'.
+ */
+interface AiUrgentKeys {
+  fun urgent(): Set<ContentKey>
+
+  fun done(key: ContentKey) = Unit
+
+  companion object {
+    /** Nessuna urgenza: la coda resta quella di sempre. */
+    val NONE: AiUrgentKeys = object : AiUrgentKeys {
+      override fun urgent(): Set<ContentKey> = emptySet()
+    }
+  }
+}
+
 /** I contatori del calcolo per la Diagnostica (§2.6): solo numeri. */
 class AiComputeCounters {
   /** Il motore delle immagini e' passato alla CPU (E-A12, `AI_GPU_FALLBACK`). */

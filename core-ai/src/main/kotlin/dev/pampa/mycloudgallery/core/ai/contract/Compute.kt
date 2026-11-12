@@ -172,6 +172,26 @@ sealed interface AiStatus {
   data class Problem(val code: DiagCode) : AiStatus
 }
 
+/**
+ * Il calcolo **mentre scorre**, per la pagina "Analisi delle foto" (Pacchetto X, 12/11/2026): il media di adesso, gli ultimi finiti qui e
+ * i prossimi in coda, per chiave di contenuto. Solo in memoria e mai nei log (le chiavi sono dati, D40): chi mostra risolve le chiavi in
+ * anteprime con il cancello della Libreria (un media che la Libreria non mostrerebbe non si mostra nemmeno qui). A tappa ferma [current]
+ * e [next] sono vuoti e [recent] resta: sono le ultime analizzate su questo dispositivo in questo processo.
+ */
+data class AiLive(val current: ContentKey?, val recent: List<ContentKey>, val next: List<ContentKey>) {
+  override fun toString(): String = "AiLive(ora=${if (current != null) "si" else "no"}, fatte=${recent.size}, prossime=${next.size})"
+
+  companion object {
+    val EMPTY = AiLive(null, emptyList(), emptyList())
+
+    /** Quante ultime finite si ricordano (il nastro della pagina non ne mostra di piu'). */
+    const val RECENT: Int = 24
+
+    /** Quante prossime si annunciano. */
+    const val NEXT: Int = 12
+  }
+}
+
 /** La misura breve del dispositivo (D15): 20 immagini sintetiche dell'APK. */
 data class ProbeResult(val imagesPerSecond: Double, val backend: AiBackend, val coldStartMs: Long) {
   /** Le notti per [items] media (una notte utile = [hoursPerNight] ore in carica). Almeno 1. */

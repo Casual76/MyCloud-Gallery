@@ -26,6 +26,8 @@ import dev.pampa.mycloudgallery.core.search.contract.Suggestions
 import dev.pampa.mycloudgallery.core.search.contract.Today
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerControl
 import dev.pampa.mycloudgallery.feature.search.contract.TextReadingAccepted
+import dev.pampa.mycloudgallery.ai.AppAnalysisLive
+import dev.pampa.mycloudgallery.feature.search.contract.AnalysisLiveSource
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.graph.GalleryStopper
@@ -86,6 +88,12 @@ object AiModule {
   @Singleton
   fun indexerControl(@ApplicationContext context: Context, stack: AiStack, graph: AppGraph): IndexerControl =
     AppIndexerControl(stack, graph.scope, java.io.File(context.noBackupFilesDir, AppIndexerControl.PROBE_FILE)) { AiWorkScheduling.indexNow(context) }
+
+  /** Pacchetto X: il nastro della pagina "Analisi delle foto" (le chiavi del motore dietro il cancello della Libreria). */
+  @Provides
+  @Singleton
+  fun analysisLive(stack: AiStack, graph: AppGraph, gallery: GalleryGraph): AnalysisLiveSource =
+    AppAnalysisLive(stack.ai, gallery.repository.snapshot, stack.search.keys, stack.ai.parts.facts, { key -> stack.search.index.hasVectors(key) }, graph.scope)
 
   @Provides @Singleton fun deviceProbe(stack: AiStack, graph: AppGraph): DeviceProbe {
     return dev.pampa.mycloudgallery.core.ai.runtime.SingleFlightDeviceProbe(

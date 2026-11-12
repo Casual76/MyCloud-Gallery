@@ -1,0 +1,81 @@
+package dev.pampa.mycloudgallery.feature.viewer.menu
+
+import android.content.res.Resources
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
+import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.feature.viewer.R
+import kotlinx.coroutines.flow.Flow
+
+// "Analizza adesso" del viewer (Pacchetto X, 12/11/2026): la foto o il video aperti passano davanti nella coda dell'analisi. Il viewer
+// non vede core-ai ne' core-search (Phase6ArchitectureTest): chiede a questa porta lo stato del media e, al tocco, la precedenza; chi
+// analizza, con quali regole e con quale esito lo decide `:app` (stesso percorso del calcolo, nessuna scorciatoia).
+
+/** Com'e' messo un media rispetto all'analisi per la ricerca, per il segno nelle informazioni e la voce del menu. */
+enum class MediaAnalysisKind {
+  /** Gia' analizzato: pronto per la ricerca. Un segno, nessun tasto inutile. */
+  READY,
+
+  /** In coda: si puo' farlo passare davanti ("Analizza adesso"). */
+  QUEUED,
+
+  /** Chiesto adesso dall'utente: e' il primo in coda (o lo sara' appena le regole lo lasciano partire). */
+  FIRST,
+
+  /** In analisi in questo momento. */
+  ANALYZING,
+
+  /** Questo formato non si puo' analizzare. */
+  UNSUPPORTED,
+
+  /** Manca il modello di analisi su questo dispositivo: si scarica da "Ricerca e modelli". Nessun tasto. */
+  MODEL_MISSING,
+
+  /** Questo dispositivo non analizza: le foto le analizza un altro dispositivo. Nessun tasto che non puo' funzionare. */
+  NOT_HERE,
+
+  /** Non si sa ancora (il catalogo non ha risposto): nessuna voce, nessuna capsula. */
+  UNKNOWN,
+}
+
+/** Perche' un media chiesto adesso non parte subito: il motivo vero delle regole, in una riga. */
+enum class MediaAnalysisHold {
+  /** Il telefono e' troppo caldo: parte appena si raffredda. */
+  HOT,
+
+  /** Il media sta solo sul NAS e il NAS non risponde. */
+  NAS,
+
+  /** Le anteprime non sono ancora pronte. */
+  PREPARATION,
+
+  /** Un altro motivo delle regole (la Diagnostica lo dice per esteso). */
+  RULES,
+}
+
+/** Lo stato di un media: il suo caso e, se e' stato chiesto ma non parte, perche'. */
+data class MediaAnalysis(val kind: MediaAnalysisKind, val hold: MediaAnalysisHold? = null) {
+  companion object {
+    val UNKNOWN = MediaAnalysis(MediaAnalysisKind.UNKNOWN)
+  }
+}
+
+/**
+ * L'analisi del media aperto. `:app` la lega al calcolo e all'indice locale: [observe] segue il media mentre il pannello e' aperto (da
+ * "in coda" a "primo" a "pronto"), [analyzeNow] lo mette davanti nella coda e fa partire subito il calcolo come richiesta dell'utente,
+ * con le regole di sempre.
+ */
+interface ViewerAnalysis {
+  fun observe(id: MediaId): Flow<MediaAnalysis>
+
+  fun analyzeNow(id: MediaId)
+}
+
+/** La voce "Analizza adesso" del menu: c'e' solo quando il media e' in coda (gia' pronto o gia' chiesto: nessun tasto inutile). */
+internal fun analysisMenuEntries(resources: Resources, media: MediaAnalysis, onAnalyze: () -> Unit): List<GalleryMenuEntry> =
+  if (media.kind == MediaAnalysisKind.QUEUED) {
+    listOf(GalleryMenuEntry.Item(resources.getString(R.string.analysis_now), onAnalyze, Icons.Rounded.AutoAwesome))
+  } else {
+    emptyList()
+  }

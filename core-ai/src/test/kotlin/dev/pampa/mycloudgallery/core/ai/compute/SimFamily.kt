@@ -31,6 +31,9 @@ import dev.pampa.mycloudgallery.core.trust.data.VecBody
 /** Il motore delle immagini che conta le immagini calcolate per contenuto (byte) e fa avanzare l'orologio finto. */
 class CountingEmbedder(private val inner: FakeImageEmbedder = FakeImageEmbedder(), private val tick: () -> Unit = {}) : ImageEmbedder {
   val perImage = HashMap<String, Int>()
+
+  /** Pacchetto X: l'ordine con cui le immagini sono state calcolate (i loro byte come testo). */
+  val order = ArrayList<String>()
   override val backend get() = inner.backend
 
   /** Revisione A (IX-7): gli errori del motore delle prossime chiamate, in ordine (vuoto = nessuno). */
@@ -41,6 +44,7 @@ class CountingEmbedder(private val inner: FakeImageEmbedder = FakeImageEmbedder(
     images.forEach {
       val k = String(it.jpeg, Charsets.UTF_8)
       perImage[k] = (perImage[k] ?: 0) + 1
+      order += k
       tick()
     }
     return inner.embed(images)
@@ -96,6 +100,17 @@ class SimDevice(
 
   /** Fase 8 (D17): chi tiene ancora le anteprime del buffer (di serie nessuno, come nella Fase 6). */
   var keepers: dev.pampa.mycloudgallery.core.ai.contract.BufferKeepers = dev.pampa.mycloudgallery.core.ai.contract.BufferKeepers.NONE
+
+  /** Pacchetto X: le urgenze ("Analizza adesso") di questo dispositivo: l'insieme e le chiavi uscite con `done`. */
+  val urgentKeys = LinkedHashSet<ContentKey>()
+  val urgentDone = ArrayList<ContentKey>()
+  private val urgentPort = object : AiUrgentKeys {
+    override fun urgent(): Set<ContentKey> = urgentKeys.toSet()
+
+    override fun done(key: ContentKey) {
+      if (urgentKeys.remove(key)) urgentDone += key
+    }
+  }
   var freeBytes: Long = Long.MAX_VALUE
   var clock = 0L
   val images = CountingEmbedder(FakeImageEmbedder()) { clock += 1_000_000_000L }
@@ -194,6 +209,7 @@ class SimDevice(
       unsupported = AiUnsupported { key, cls -> unsupported += key to cls },
       freeSpace = AiFreeSpace { freeBytes },
       keepers = keepers,
+      urgent = urgentPort,
     )
     engine = AiComputeEngine(parts, recipe, config, nanos = { clock }, pause = { pauses?.add(it) })
   }

@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.ai.compute
 import dev.pampa.mycloudgallery.core.ai.contract.AiBuffer
 import dev.pampa.mycloudgallery.core.ai.contract.AiCandidate
 import dev.pampa.mycloudgallery.core.ai.contract.AiDiag
+import dev.pampa.mycloudgallery.core.ai.contract.AiLive
 import dev.pampa.mycloudgallery.core.ai.contract.AiRecipe
 import dev.pampa.mycloudgallery.core.ai.contract.AiRunResult
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
@@ -40,6 +41,8 @@ internal class ComputeSession(
   private val state: MutableStateFlow<AiStatus>,
   /** IX-7: gli errori passeggeri del motore per chiave, per tutto il processo (li tiene il motore). */
   strikes: MutableMap<ContentKey, Int> = HashMap(),
+  /** Pacchetto X: il calcolo mentre scorre, per la pagina "Analisi delle foto" (solo in memoria, mai nei log). */
+  private val live: MutableStateFlow<AiLive> = MutableStateFlow(AiLive.EMPTY),
 ) {
   private val start = nanos()
   private val tally = Tally()
@@ -200,7 +203,11 @@ internal class ComputeSession(
     } catch (e: IOException) {
       emptyMap()
     }
-    var queue = claim.items
+    // Pacchetto X: i media chiesti adesso dall'utente davanti, dentro questa unita' (i suoi confini non cambiano).
+    var queue = urgentFirst(claim.items) { it.contentKey }
+    var queueKeys = queue.map { it.contentKey }
+    var doneInUnit = 0
+    showLive(null, queueKeys, -1)
     var index = 0
     var stop: AiStop? = null
     var lastDone: ContentKey? = null
@@ -219,6 +226,7 @@ internal class ComputeSession(
             claim = r.claim
             val still = r.claim.items.mapTo(HashSet()) { it.contentKey }
             queue = queue.take(index) + queue.drop(index).filter { it.contentKey in still }
+            queueKeys = queue.map { it.contentKey }
           }
           KeepAliveResult.Lost -> {
             counters.unitsLost.incrementAndGet()
@@ -239,12 +247,14 @@ internal class ComputeSession(
       for (item in planned) {
         quickGate()?.let { stop = it }
         if (stop != null) break
+        showLive(item.key, queueKeys, doneInUnit)
         val end = worker.process(share, item, localOnly = false, staged = staged)
         if (end == ItemEnd.MODEL_MISSING) {
           stop = AiStop.MODEL_MISSING
           break
         }
-        tally.count(end, item.key)
+        counted(end, item.key)
+        doneInUnit++
         lastDone = item.key
         running(queue.size)
       }
@@ -311,6 +321,7 @@ internal class ComputeSession(
     val others = othersOf(share, list.map { it.contentKey })
     val stop = local(share, list, others) { candidate -> parts.buffer.get(candidate.contentKey, inputClassOf(candidate)) != null }
     if (stop != null && stop != AiStop.BUFFER_ONLY) return finish(stop)
+    restLive()
     state.value = AiStatus.BufferOnlyDone(tally.computed)
     return result(AiStop.BUFFER_ONLY)
   }
@@ -324,7 +335,11 @@ internal class ComputeSession(
   }
 
   private suspend fun local(share: String?, list: List<AiCandidate>, others: Map<ContentKey, Set<AiClass>>, usable: suspend (AiCandidate) -> Boolean): AiStop? {
-    val chosen = list.filter { usable(it) }
+    // Pacchetto X: i media chiesti adesso dall'utente davanti anche nelle liste locali (solo telefono, solo buffer).
+    val chosen = urgentFirst(list.filter { usable(it) }) { it.contentKey }
+    val chosenKeys = chosen.map { it.contentKey }
+    var doneInList = 0
+    showLive(null, chosenKeys, -1)
     var index = 0
     while (index < chosen.size) {
       if (index > 0) gate()?.let { return it }
@@ -336,12 +351,14 @@ internal class ComputeSession(
           return it
         }
         val planned = worker.plan(share, candidate.contentKey, candidate.kind, candidate.source, candidate.missing, others[candidate.contentKey].orEmpty(), staged)
+        showLive(candidate.contentKey, chosenKeys, doneInList)
         val end = worker.process(share, planned, localOnly = true, staged = staged)
         if (end == ItemEnd.MODEL_MISSING) {
           if (share != null) stageAll(share, staged)
           return AiStop.MODEL_MISSING
         }
-        tally.count(end, candidate.contentKey)
+        counted(end, candidate.contentKey)
+        doneInList++
         running(chosen.size)
       }
       if (share != null) stageAll(share, staged)
@@ -356,6 +373,59 @@ internal class ComputeSession(
   private fun inputClassOf(candidate: AiCandidate) =
     Planned(candidate.contentKey, candidate.kind, candidate.source, emptySet()).inputClass
 
+  /** Le ultime finite qui (le piu' recenti prima), da una tappa all'altra dello stesso processo. */
+  private val recentKeys: ArrayDeque<ContentKey> = ArrayDeque(live.value.recent)
+
+  /** Le urgenze di adesso; un guasto del registro non ferma mai il calcolo (vale come nessuna). */
+  private fun urgentKeys(): Set<ContentKey> = try {
+    parts.urgent.urgent()
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    emptySet()
+  }
+
+  /**
+   * Le chiavi urgenti davanti, il resto nell'ordine di sempre (ordinamento stabile). Cambia solo l'ordine di lavoro **dentro** questa
+   * lista: unita', prenotazioni, cancelli e salvataggi restano identici, e la ripresa (che e' `AiResults.saved`, non la posizione) non
+   * ne sa niente.
+   */
+  private fun <T> urgentFirst(items: List<T>, key: (T) -> ContentKey): List<T> {
+    val urgent = urgentKeys()
+    if (urgent.isEmpty()) return items
+    return items.sortedByDescending { key(it) in urgent }
+  }
+
+  /** Conta un media, e se e' finito qui toglie la sua urgenza (chi resta "in attesa" la tiene: sara' il primo quando si potra'). */
+  private fun counted(end: ItemEnd, key: ContentKey) {
+    tally.count(end, key)
+    if (end == ItemEnd.COMPUTED) {
+      recentKeys.remove(key)
+      recentKeys.addFirst(key)
+      while (recentKeys.size > AiLive.RECENT) recentKeys.removeLast()
+    }
+    if (end == ItemEnd.COMPUTED || end == ItemEnd.SKIPPED || end == ItemEnd.FAILED) {
+      try {
+        parts.urgent.done(key)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        // Una comodita': al giro dopo il media non e' piu' candidato e l'urgenza cade da sola.
+      }
+    }
+  }
+
+  /** Il media di adesso e i prossimi della coda [keys] dopo [currentAt] (la posizione del media di adesso), per la pagina "Analisi". */
+  private fun showLive(current: ContentKey?, keys: List<ContentKey>, currentAt: Int) {
+    val next = if (keys.isEmpty()) emptyList() else keys.subList(minOf(currentAt + 1, keys.size), minOf(keys.size, currentAt + 1 + AiLive.NEXT))
+    live.value = AiLive(current, recentKeys.toList(), next)
+  }
+
+  /** A tappa ferma: niente media di adesso ne' prossimi; le ultime finite restano (la pagina le mostra ferme). */
+  private fun restLive() {
+    live.value = AiLive(null, recentKeys.toList(), emptyList())
+  }
+
   private fun running(total: Int) {
     val done = tally.computed + tally.skipped + tally.failed + tally.waiting
     val seconds = elapsed().inWholeMilliseconds / 1000.0
@@ -365,6 +435,7 @@ internal class ComputeSession(
   }
 
   private fun finish(stop: AiStop?): AiRunResult {
+    restLive()
     state.value = if (stop == null) AiStatus.Idle(null) else AiComputeEngine.waitingFor(stop)
     return result(stop)
   }

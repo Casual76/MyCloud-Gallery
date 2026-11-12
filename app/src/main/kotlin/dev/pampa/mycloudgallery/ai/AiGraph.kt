@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.ai.compute.AiRunControl
 import dev.pampa.mycloudgallery.core.ai.compute.BufferAnalysisSink
 import dev.pampa.mycloudgallery.core.ai.compute.DiskAiBuffer
 import dev.pampa.mycloudgallery.core.ai.contract.AiBackend
+import dev.pampa.mycloudgallery.core.ai.contract.AiLive
 import dev.pampa.mycloudgallery.core.ai.contract.AiRecipe
 import dev.pampa.mycloudgallery.core.ai.contract.AiRoles
 import dev.pampa.mycloudgallery.core.ai.contract.AiRunResult
@@ -34,6 +35,11 @@ import dev.pampa.mycloudgallery.core.index.ai.AiEntry
 import dev.pampa.mycloudgallery.core.index.ai.AiIndexCounters
 import dev.pampa.mycloudgallery.core.index.ai.AiTraffic
 import dev.pampa.mycloudgallery.core.index.contract.FlushReason
+import dev.pampa.mycloudgallery.core.index.contract.UnitPriority
+import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
+import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
+import dev.pampa.mycloudgallery.core.rules.RuleDecision
+import dev.pampa.mycloudgallery.core.rules.WorkRequest
 import dev.pampa.mycloudgallery.core.index.contract.VideoFrame
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.OcrSource
@@ -46,7 +52,7 @@ import dev.pampa.mycloudgallery.core.trust.data.DeviceRole
 import dev.pampa.mycloudgallery.core.trust.data.OcrBody
 import dev.pampa.mycloudgallery.nas.NasAiHooks
 import dev.pampa.mycloudgallery.nas.NasAiRuntime
-import dev.pampa.mycloudgallery.nas.NoUnitPriority
+
 import dev.pampa.mycloudgallery.search.SearchGraph
 import java.io.File
 import java.io.IOException
@@ -59,6 +65,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -101,6 +108,12 @@ class AiGraphParts(
   val account: () -> String? = { null },
   /** L'azzeramento rilascia anche il ritagliatore del soggetto (P13): il modello occupa circa 240 MB. */
   val releaseCutout: suspend () -> Unit = {},
+  /**
+   * Pacchetto X: il verdetto del motore delle regole per una richiesta, com'e' adesso (in :app: `ActivityRulesEngine`). Serve a dire il
+   * motivo **vero** di una pausa nello stato ridotto e a rispondere subito a "Analizza adesso" se le regole lo fermano. Null = non
+   * valutabile qui (montaggi di prova): lo stato dice "in coda" senza inventare motivi.
+   */
+  val decide: (suspend (WorkRequest) -> RuleDecision?)? = null,
 )
 
 /**
@@ -172,6 +185,19 @@ class AiGraph(
   val analysisSink = BufferAnalysisSink(buffer) { indexer.value }
 
   val unsupported = FileAiUnsupported(File(noBackup, FileAiUnsupported.FILE))
+
+  /** Pacchetto X: i media chiesti adesso dall'utente ("Analizza adesso"), in un file locale: passano davanti nella coda del calcolo. */
+  val urgent = AiUrgentFile(File(noBackup, AiUrgentFile.FILE))
+
+  /**
+   * Le urgenze come priorita' delle unita' (D12): il mese e la parte che contengono un media chiesto si prendono per primi, con il
+   * meccanismo che c'e' gia' (`UnitPriority.visible`, chiavi ridotte).
+   */
+  private val urgentPriority: UnitPriority = object : UnitPriority {
+    override val visible: StateFlow<Set<Long>> = urgent.state
+      .map { keys -> keys.mapTo(HashSet()) { it.short } }
+      .stateIn(graphScope, SharingStarted.Eagerly, urgent.state.value.mapTo(HashSet()) { it.short })
+  }
 
   /** Revisione A (R4, R5): il dato, la provenienza e il corpo da ripubblicare stanno insieme nell'indice locale. */
   val results = IndexAiResults(search.index) { search.open() }
@@ -276,6 +302,45 @@ class AiGraph(
    */
   val status: StateFlow<AiStatus> = statusFlow.asStateFlow()
 
+  private val liveFlow = MutableStateFlow(AiLive.EMPTY)
+
+  /** Pacchetto X: il calcolo mentre scorre (media di adesso, ultimi finiti, prossimi), per la pagina "Analisi delle foto". */
+  val live: StateFlow<AiLive> = liveFlow.asStateFlow()
+
+  /** Il lavoro che resta a questo dispositivo (foto + video), riletto a fine tappa come fa la pagina; null = non ancora letto. */
+  private val remainingFlow = MutableStateFlow<Int?>(null)
+
+  /** Il verdetto delle regole per il calcolo, rivalutato quando lo stato o il ruolo cambiano (mai a ogni fotogramma). */
+  private val decisionFlow = MutableStateFlow<RuleDecision?>(null)
+
+  /**
+   * Pacchetto X: l'**unico** stato ridotto dell'analisi per testata, nuvola e pagina "Analisi delle foto" (`AnalysisStatusReducers`).
+   * Si aggiorna dagli eventi del motore; il lavoro che resta si rilegge a ogni tappa finita, come la pagina (IX-3).
+   */
+  val analysis: StateFlow<LibraryAnalysisStatus> = combine(indexer, statusFlow, remainingFlow, search.engine.coverage, decisionFlow) { on, status, remaining, coverage, decision ->
+    AnalysisStatusReducers.reduce(AnalysisStatusReducers.Facts(on, status, remaining, coverage, decision))
+  }.stateIn(
+    graphScope, SharingStarted.Eagerly,
+    AnalysisStatusReducers.reduce(AnalysisStatusReducers.Facts(indexer.value, statusFlow.value, null, search.engine.coverage.value, null)),
+  )
+
+  init {
+    graphScope.launch {
+      // A ogni tappa finita (e all'avvio): il lavoro che resta e il motivo vero di un'eventuale pausa.
+      statusFlow.collect { if (it !is AiStatus.Running) refreshAnalysisFacts() }
+    }
+    graphScope.launch {
+      indexer.collect { refreshAnalysisFacts() }
+    }
+  }
+
+  private suspend fun refreshAnalysisFacts() {
+    runCatching { backlog() }
+    decisionFlow.value = runCatching {
+      parts.decide?.invoke(WorkRequest.Background(BackgroundActivity.AI_COMPUTE, writesToNas = true))
+    }.getOrNull()
+  }
+
   /**
    * IX-2: com'e' finita una tappa, in parole della pagina. Le attese delle regole che fermano una tappa **prima** di partire non passano dal
    * motore e non arrivavano mai alla pagina; il motore dice "regole" anche per il caldo e per il tempo finito. Qui il motivo vero (caldo,
@@ -311,7 +376,8 @@ class AiGraph(
     val computeParts = AiComputeParts(
       roles = roles,
       units = rt.units,
-      priority = NoUnitPriority,
+      // Pacchetto X: le unita' con un media chiesto adesso vengono per prime (D12), come i media sullo schermo per la preparazione.
+      priority = urgentPriority,
       candidates = CatalogAiCandidates(rt.work, { textReadingHere.value }, phone),
       buffer = buffer,
       fetcher = rt.fetcher,
@@ -331,9 +397,13 @@ class AiGraph(
       freeSpace = AiFreeSpace { noBackupDir.usableSpace },
       modelReady = { modelReady() },
       keepers = BufferKeepers { keys -> keepers.stillWanted(keys) },
+      urgent = urgent,
     )
     val created = AiComputeEngine(computeParts, recipe)
     engine = rt to created
+    graphScope.launch {
+      created.live.collect { liveFlow.value = it }
+    }
     graphScope.launch {
       created.status.collect {
         statusFlow.value = it
@@ -378,7 +448,10 @@ class AiGraph(
   /** Il lavoro che resta su questo dispositivo (§2.8, `AiBacklog`): null senza NAS. */
   suspend fun backlog(): dev.pampa.mycloudgallery.core.rules.estimate.AiWork? {
     val rt = parts.nas() ?: return null
-    return dev.pampa.mycloudgallery.core.ai.compute.AiBacklog(roles, CatalogAiCandidates(rt.work, { textReadingHere.value }, phone), buffer, recipe).count()
+    val work = dev.pampa.mycloudgallery.core.ai.compute.AiBacklog(roles, CatalogAiCandidates(rt.work, { textReadingHere.value }, phone), buffer, recipe).count()
+    // Pacchetto X: chiunque rilegga il lavoro che resta alimenta lo stato ridotto (niente seconda lettura per la pagina).
+    remainingFlow.value = ((work.photos + work.videos).coerceAtMost(Int.MAX_VALUE.toLong())).toInt()
+    return work
   }
 
   /** Il contatore dei contatori del calcolo di adesso (Diagnostica). */
@@ -396,6 +469,7 @@ class AiGraph(
     job.cancel()
     runCatching { images.release() }
     statusMemory.clear()
+    urgent.clear()
     runCatching { parts.releaseCutout() }
     runCatching { parts.shutdown().onTurnedOff() }
     runCatching { buffer.clear() }

@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import dev.pampa.mycloudgallery.feature.people.crops.GuardedPeopleCrops
 
 /**
  * IL MONTAGGIO DI UNA COSA SOLA PER PROCESSO (le persone, [FacesGraph]) e il suo stop (Fase 8, P13; la stessa regola degli album, Fase 7 I11): lo stop
@@ -123,6 +124,11 @@ class FacesGraph internal constructor(
   private val workRequest: (FacesWork) -> Unit = {},
   /** L350: le persone potranno mai montarsi qui? Falso senza famiglia (nessun NAS): l'attesa del montaggio non finirebbe mai e lo stato di sempre e' la verita'. */
   private val canMount: Boolean = true,
+  /**
+   * I6: l'app e' visibile adesso (una finestra avviata)? Lo legge [onTrimMemory]: i ritagli nuovi aspettano solo se l'app e' davvero nascosta. Di serie
+   * si': senza questo segnale non si mette in attesa niente.
+   */
+  private val appVisible: () -> Boolean = { true },
   /** Il codice dell'ultimo giro dei dati personali che il gancio dei volti ha fermato (D30), o null: per la Diagnostica. */
   private val holdSource: () -> String? = { null },
 ) {
@@ -306,11 +312,20 @@ class FacesGraph internal constructor(
    * `onTrimMemory` (§2.2 "Rilascio"): rilevatore ed embedder si rilasciano quando il sistema ha davvero poca memoria (come il motore delle immagini, IX-5 della
    * Fase 6: in primo piano `RUNNING_LOW` e `RUNNING_CRITICAL`, in cache `MODERATE` e `COMPLETE`; non per il solo passaggio in secondo piano, che e' dove il
    * calcolo notturno gira) e si riaprono da soli al prossimo bisogno; le copertine in memoria si buttano appena l'app non si vede piu'.
+   *
+   * I6: e' uno svuotamento **per memoria** ([GuardedPeopleCrops.trim]), non una revoca: le Raccolte tengono i volti che hanno (nessun ritaglio rifatto
+   * ad app nascosta, nessun lampo in primo piano con poca memoria). Con l'app nascosta i ritagli nuovi aspettano che torni visibile ([onAppVisible]).
+   * Le revoche restano quelle di privacy: cancellazione (`clear`), Persone spenta o rimontata (persone montate diverse).
    */
   fun onTrimMemory(level: Int) {
     val live = mount.current ?: return
     if (releasesEnginesAt(level)) live.scope.launch { runCatching { live.releaseEngines() } }
-    if (dropsCoversAt(level)) live.crops.clear()
+    if (dropsCoversAt(level)) live.crops.trim(appHidden = level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN && !appVisible())
+  }
+
+  /** I6: l'app e' tornata visibile: i ritagli in attesa dopo uno svuotamento per memoria ripartono. */
+  fun onAppVisible() {
+    mount.current?.crops?.resume()
   }
 
   // --- Fine -----------------------------------------------------------------------------------------------------------------------------

@@ -136,8 +136,8 @@ class FacesCropsFacade(private val graph: FacesGraph) : PeopleCrops {
  * CU-19 (fase H, giro 3): i volti delle righe delle Raccolte. Come [FacesCropsFacade] (stesso cancello, stessa cache in memoria), ma ogni ritaglio porta
  * le sue **foto d'origine**, le celle visibili che contengono il volto: le Raccolte tolgono subito un volto la cui foto esce dalla vista del catalogo e
  * tengono gli altri mentre il cancello li riconferma (nessun lampo a ogni lotto del backup). [revocations] cambia quando i ritagli gia' dati non valgono
- * piu' per ragioni che la vista non dice: Persone montata, spenta o rimontata (azzeramento), cache dei ritagli svuotata (cancellazione locale, poca
- * memoria).
+ * piu' per ragioni che la vista non dice: Persone montata, spenta o rimontata (azzeramento), cache dei ritagli svuotata per la cancellazione locale.
+ * I6: lo svuotamento **per memoria** (`onTrimMemory`) non e' una revoca: i ritagli dati restano validi.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppCollectionFaceCrops(private val graph: FacesGraph) : CollectionFaceCrops {

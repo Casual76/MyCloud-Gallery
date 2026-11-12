@@ -16,6 +16,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 
 /**
  * I ritagli dei volti (Fase 8, P9; D25, D28, §2.6 "Copertine e ritagli", E-F38): il cancello prima di ogni ritaglio (un media nascosto un attimo fa non da' una
@@ -112,6 +116,54 @@ class GuardedPeopleCropsTest {
     assertThat(crops.cachedBytes).isEqualTo(0)
     // CU-19 (fase H, giro 3): chi tiene una copia dei ritagli (le Raccolte) lo sa e la butta.
     assertThat(crops.clears.value).isEqualTo(before + 1)
+  }
+
+  /** I6: svuotare per memoria non e' una revoca: la cache si svuota, [GuardedPeopleCrops.clears] non cambia (le Raccolte tengono i loro volti). */
+  @Test
+  fun svuotarePerMemoria_nonRevoca() = runBlocking {
+    val source = Counting { square(it) }
+    val crops = GuardedPeopleCrops(source, Gate())
+    crops.crop(faces[0], 96)
+    val before = crops.clears.value
+    crops.trim(appHidden = false)
+    assertThat(crops.cachedBytes).isEqualTo(0)
+    assertThat(crops.clears.value).isEqualTo(before)
+    assertThat(crops.paused.value).isFalse()
+    // In primo piano (poca memoria) si ritaglia subito di nuovo.
+    assertThat(crops.crop(faces[0], 96)).isNotNull()
+    assertThat(source.calls.get()).isEqualTo(2)
+  }
+
+  /** I6: dopo uno svuotamento per memoria con l'app nascosta non si ritaglia niente finche' l'app non torna visibile; poi una volta sola. */
+  @Test
+  fun adAppNascosta_nonSiRitagliaFinoAlRitorno() = runBlocking {
+    val source = Counting { square(it) }
+    val crops = GuardedPeopleCrops(source, Gate())
+    crops.trim(appHidden = true)
+    assertThat(crops.paused.value).isTrue()
+    val waiting = async(Dispatchers.Default) { crops.crop(faces[0], 96) }
+    delay(200)
+    assertThat(waiting.isCompleted).isFalse()
+    assertThat(source.calls.get()).isEqualTo(0)
+    crops.resume()
+    assertThat(withTimeout(5_000) { waiting.await() }).isNotNull()
+    assertThat(source.calls.get()).isEqualTo(1)
+    assertThat(crops.paused.value).isFalse()
+  }
+
+  /** I6: una foto nascosta mentre il ritaglio aspetta l'app: al ritorno il cancello si richiede e non si ritaglia. */
+  @Test
+  fun unaFotoNascostaDuranteLAttesa_nonDaRitaglio() = runBlocking {
+    val gate = Gate()
+    val source = Counting { square(it) }
+    val crops = GuardedPeopleCrops(source, gate)
+    crops.trim(appHidden = true)
+    val waiting = async(Dispatchers.Default) { crops.crop(faces[0], 96) }
+    delay(200)
+    gate.open = false
+    crops.resume()
+    assertThat(withTimeout(5_000) { waiting.await() }).isNull()
+    assertThat(source.calls.get()).isEqualTo(0)
   }
 
   @Test

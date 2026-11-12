@@ -18867,6 +18867,29 @@ di I4 (`f329e9c3`: stato vuoto, «i», anello), la scheda di copertina corretta 
   frecce; Ricordi: «Aspetto la tua libreria» la clessidra, «Sto preparando i ricordi» le frecce (prima entrambe la clessidra vuota); zone senza
   Internet: una zona ferma che riprende da sola (all'apertura, quando torna il Wi-Fi) la clessidra, una che vuole un tocco le due barre.
 
+#### I1, rifinitura I6 (12/11/2026): lo svuotamento dei ritagli per memoria non e' una revoca
+
+- **Il rischio** (dalla fase H, CU, mai visto sul telefono): `FacesGraph.onTrimMemory` svuotava i ritagli dei volti con `clear()` gia' da
+  `TRIM_MEMORY_UI_HIDDEN`; `clear()` fa crescere `GuardedPeopleCrops.clears`, che `AppCollectionFaceCrops.revocations` trasforma in una revoca: le
+  Raccolte buttavano i volti e li ritagliavano di nuovo subito, ad app nascosta (la memoria liberata tornava occupata), e con poca memoria in primo
+  piano i volti visibili sparivano e tornavano.
+- **La correzione.** `GuardedPeopleCrops.trim(appHidden)` svuota la cache **per memoria** senza cambiare `clears`; `clear()` resta per le ragioni di
+  privacy (la cancellazione locale), e Persone spenta o rimontata cambia le persone montate e quindi il segno, come prima. `onTrimMemory` usa `trim`.
+  Con l'app davvero nascosta (`AppGraph.appContext`, il primo piano di `ProcessWatcher`) i ritagli nuovi **aspettano** che l'app torni visibile
+  (`FacesGraph.onAppVisible`, collegato in `FacesWiring`) e poi **richiedono il cancello**, perche' durante l'attesa una foto puo' essere stata
+  nascosta. Il contratto `CollectionFaceCrops` non cambia.
+- **La garanzia di CG-5 e CU-19 non cambia**: una foto nascosta toglie il suo volto dalla vista prima di ogni attesa (`CollectionCovers`), la
+  cancellazione e Persone spenta revocano. I ritagli tenuti dalle Raccolte dopo uno svuotamento per memoria sono gli stessi che il cancello aveva
+  permesso, e restano sotto il controllo della vista.
+- **Prove** (`GuardedPeopleCropsTest`: svuotare per memoria non revoca; ad app nascosta non si ritaglia fino al ritorno, poi una volta; una foto
+  nascosta durante l'attesa non da' ritaglio. `FacesTrimMemoryTest` sul grafo vero: `onTrimMemory(UI_HIDDEN)` non revoca e mette in attesa, il
+  ritorno in primo piano fa ripartire, `RUNNING_LOW` non revoca e non mette in attesa, `clear` revoca). **Mutazioni**, tre corse, codice rimesso dopo
+  ciascuna: senza il controllo delle foto d'origine al disegno cade `CollectionCoversGiro2Test.laFotoDOrigineNascosta…`; senza il segno delle
+  revoche nelle Raccolte cade `…unaRevocaConLaStessaVista…`; senza il cancello prima del ritaglio cadono tre prove di `GuardedPeopleCropsTest`; con
+  `clear` che non fa crescere `clears` cadono la prova della cache e la revoca per cancellazione di `FacesTrimMemoryTest`; con `onTrimMemory` che
+  revoca cade `FacesTrimMemoryTest`; senza l'attesa cadono le due prove dell'attesa; senza il cancello dopo l'attesa cade la prova della foto nascosta
+  durante l'attesa; senza la ripartenza al ritorno cade `FacesTrimMemoryTest`.
+
 ### I4, il resto dell'app con meno testo (fase I, 11/11 notte)
 
 Il metro dell'utente: «se non sapessi leggere o sentire, potrei usare l'app?». Censimento in `docs/i4-censimento.md`, prima e dopo in

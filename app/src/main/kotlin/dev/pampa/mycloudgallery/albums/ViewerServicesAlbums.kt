@@ -40,6 +40,7 @@ fun ViewerServices.withAlbums(albums: ViewerAlbumActions): ViewerServices = View
   textReader = textReader,
   subjectPress = subjectPress,
   similarSearch = similarSearch,
+  analysis = analysis,
   subjectCutter = subjectCutter,
   cutoutSaver = cutoutSaver,
   people = people,

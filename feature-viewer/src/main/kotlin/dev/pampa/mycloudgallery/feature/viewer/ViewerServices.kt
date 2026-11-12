@@ -40,6 +40,7 @@ import dev.pampa.mycloudgallery.feature.viewer.info.ViewerMediaAlbums
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextReader
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextSource
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMediaActions
+import dev.pampa.mycloudgallery.feature.viewer.menu.ViewerAnalysis
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting
 import dev.pampa.mycloudgallery.feature.viewer.motion.PowerSaving
@@ -154,6 +155,11 @@ class ViewerServices(
   val textReader: ViewerTextReader? = null,
   val subjectPress: ViewerSubjectPress? = null,
   val similarSearch: ViewerSimilarSearch = NoViewerSimilarSearch,
+  /**
+   * Pacchetto X: "Analizza adesso" e lo stato dell'analisi del media aperto (voce ⋮ e capsula nelle informazioni). Null = nessuna voce e
+   * nessuna capsula (D13); `:app` la lega al calcolo e all'indice locale. Mai per un media aperto dai Nascosti (come album e mappa).
+   */
+  val analysis: ViewerAnalysis? = null,
   val subjectCutter: ViewerSubjectCutter? = null,
   val cutoutSaver: CutoutSaver? = null,
   val albums: ViewerAlbumActions = NoViewerAlbumActions,

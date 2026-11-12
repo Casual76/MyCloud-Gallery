@@ -420,10 +420,16 @@ class GalleryGraph(
     val cutoutSaver: dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutSaver? = null,
     /** Correzioni F (TS-4): "Trova simili" dalla selezione della Libreria. Null = l'azione non compare. */
     val selectionSimilar: dev.pampa.mycloudgallery.ai.SearchSelectionSimilar? = null,
+    /** Pacchetto X: "Analizza adesso" e lo stato dell'analisi del media aperto. Null = nessuna voce (D13). */
+    val analysis: dev.pampa.mycloudgallery.feature.viewer.menu.ViewerAnalysis? = null,
   )
 
   @Volatile
   var searchViewer: SearchViewerHooks? = null
+
+  /** Pacchetto X: lo stato ridotto dell'analisi per la riga nel pannello della nuvola. Lo lega l'applicazione con [searchViewer]. */
+  @Volatile
+  var analysisStatus: kotlinx.coroutines.flow.StateFlow<dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus>? = null
 
   /** Fase 6 (P14): la coda dei video delle foto in movimento del NAS (`cacheDir/motion/`), una per processo. */
   val nasMotion: dev.pampa.mycloudgallery.feature.viewer.video.NasMotionSource? by lazy {
@@ -750,6 +756,7 @@ class GalleryGraph(
       textSource = searchViewer?.textSource,
       textReader = searchViewer?.textReader,
       similarSearch = searchViewer?.similarSearch ?: dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerSimilarSearch,
+      analysis = searchViewer?.analysis,
       subjectCutter = searchViewer?.subjectCutter,
       cutoutSaver = searchViewer?.cutoutSaver,
       // Fase 8 (P13): la riga "Persone" nelle info (solo con la porta legata).

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pacchetto X: "Analizza adesso" e lo stato dell'analisi del media aperto. Niente gergo: si dice "pronta per la ricerca". -->
+    <string name="analysis_now">Analizza adesso</string>
+    <string name="analysis_badge_spoken">Ricerca: %1$s</string>
+    <string name="analysis_badge_ready_photo">Pronta per la ricerca</string>
+    <string name="analysis_badge_ready_video">Pronto per la ricerca</string>
+    <string name="analysis_badge_queued">Da analizzare</string>
+    <string name="analysis_badge_first_photo">Prima in coda</string>
+    <string name="analysis_badge_first_video">Primo in coda</string>
+    <string name="analysis_badge_analyzing">Analisi in corso</string>
+    <string name="analysis_badge_unsupported">Non si può analizzare</string>
+    <string name="analysis_badge_model_missing">Serve il modello di analisi</string>
+    <string name="analysis_badge_not_here">L’analisi la fa un altro dispositivo</string>
+    <string name="analysis_hold_hot">Telefono caldo: parte appena si raffredda</string>
+    <string name="analysis_hold_nas">Aspetta il NAS</string>
+    <string name="analysis_hold_preparation">Si sta preparando</string>
+    <string name="analysis_hold_rules">Parte appena si può</string>
+</resources>

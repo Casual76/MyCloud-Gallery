@@ -133,6 +133,12 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionsController
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionsState
 import dev.pampa.mycloudgallery.feature.viewer.menu.backupMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.menu.similarMenuEntries
+import dev.antigravity.fluidengine.ui.haptics.FluidHapticEvent
+import dev.antigravity.fluidengine.ui.haptics.LocalFluidHaptics
+import dev.pampa.mycloudgallery.feature.viewer.info.analysisNote
+import dev.pampa.mycloudgallery.feature.viewer.menu.MediaAnalysis
+import dev.pampa.mycloudgallery.feature.viewer.menu.MediaAnalysisKind
+import dev.pampa.mycloudgallery.feature.viewer.menu.analysisMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.menu.everywhereLocations
 import dev.pampa.mycloudgallery.feature.viewer.menu.nasMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.download.DownloadState
@@ -907,6 +913,19 @@ private fun ViewerOverlays(
   val cutout = controller.cutout
   LaunchedEffect(currentId) { cutout.bind(currentId) }
   val canCutout = currentKind != MediaKind.VIDEO && cutout.available
+  // Pacchetto X: lo stato dell'analisi del media aperto (voce ⋮, capsula nelle informazioni). Mai dai Nascosti, come album e mappa.
+  val analysisMedia by produceState(MediaAnalysis.UNKNOWN, services.analysis, currentId, request.secure) {
+    if (request.secure) return@produceState
+    services.analysis?.observe(currentId)?.collect { value = it }
+  }
+  var askedAnalysis by remember { mutableStateOf<MediaId?>(null) }
+  val analysisHaptics = LocalFluidHaptics.current
+  LaunchedEffect(analysisMedia.kind, currentId) {
+    if (askedAnalysis == currentId && analysisMedia.kind == MediaAnalysisKind.READY) {
+      analysisHaptics.play(FluidHapticEvent.Tap)
+      askedAnalysis = null
+    }
+  }
   val handlers = ViewerActionHandlers(
     onToggleFavorite = controller::toggleFavorite,
     onToggleHidden = controller::toggleHidden,
@@ -949,6 +968,10 @@ private fun ViewerOverlays(
       onFind = { services.similarSearch.findSimilar(currentId) },
       onExplain = { state.message = ViewerMessage.SimilarUnavailable },
     ),
+    analysisActions = if (request.secure) emptyList() else analysisMenuEntries(resources, analysisMedia) {
+      askedAnalysis = currentId
+      services.analysis?.analyzeNow(currentId)
+    },
     dock = LocalViewerDock.current.entry(secure = request.secure),
     albumActions = albumMenuEntries(
       resources,
@@ -1201,6 +1224,15 @@ private fun ViewerOverlays(
       )
     }
     val backupNote = remember(backupState, onPhone, format) { backupState?.let { backupNote(format, it, onPhone) } }
+    // Pacchetto X: la capsula dell'analisi (mai dai Nascosti); in coda e' lei il tasto "Analizza adesso".
+    val analysisNote = remember(analysisMedia, kind, format) {
+      if (request.secure) null else analysisNote(format, analysisMedia, video = kind == MediaKind.VIDEO)
+    }
+    val onAnalysisNow: (() -> Unit)? = if (!request.secure && analysisMedia.kind == MediaAnalysisKind.QUEUED) {
+      { askedAnalysis = currentId; services.analysis?.analyzeNow(currentId) }
+    } else {
+      null
+    }
     // La mappa sotto il luogo e i dati, poi le persone, poi le copie (H2).
     // Le facce subito sotto la testa; la mappa, gli album e le copie dopo la scheda dello scatto (giro di correzione 1).
     val extras = remember(placeMapPanel.sections, albumsPanel.sections, similar.sections) {
@@ -1230,6 +1262,8 @@ private fun ViewerOverlays(
             leading = peoplePanel.sections,
             accent = accent,
             backupPending = backupPending,
+            analysis = analysisNote,
+            onAnalysis = onAnalysisNow,
           )
         }
       } else {
@@ -1253,6 +1287,8 @@ private fun ViewerOverlays(
             leading = peoplePanel.sections,
             accent = accent,
             backupPending = backupPending,
+            analysis = analysisNote,
+            onAnalysis = onAnalysisNow,
           )
         }
         // Il video continua ad andare e i suoi comandi stanno sopra il bordo del pannello, e salgono con lui (H2).

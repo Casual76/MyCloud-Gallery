@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import dev.pampa.mycloudgallery.core.faces.contract.FaceCropGate
 import dev.pampa.mycloudgallery.core.model.FaceLocator
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleCrops
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -19,81 +20,116 @@ import kotlinx.coroutines.flow.first
  *     Persone si spegne o quando si cancella: una ragione di privacy) o con [trim] (a `onTrimMemory`: solo memoria). Nessun file, nessun database,
  *     nessun `cacheDir`.
  *
+ * I6 (fase I, rifinitura, con la review CG-I1): **ogni svuotamento apre una generazione nuova**. Un ritaglio cominciato prima non rientra nella
+ * cache svuotata; se nel frattempo c'e' stata una **revoca** ([clear]) non torna nemmeno a chi l'aveva chiesto. Dopo uno svuotamento per memoria con
+ * l'app nascosta i ritagli nuovi aspettano lo **stato** [visible] (il livello, non un fronte da non perdere) e poi richiedono il cancello.
+ *
  * Le bitmap non vengono riciclate qui: possono essere ancora sullo schermo. Mai un ritaglio, un volto o un id nei log (D37).
  */
 class GuardedPeopleCrops(
   private val source: PeopleCrops,
   private val gate: FaceCropGate,
   private val cache: ByteLru<String, Bitmap> = ByteLru(CACHE_BYTES) { it.allocationByteCount },
+  /**
+   * I6: l'app e' visibile adesso (il primo piano, che `:app` tiene in modo sincrono quando una finestra parte o si ferma). Di serie sempre visibile:
+   * senza questo segnale non si aspetta mai.
+   */
+  private val visible: StateFlow<Boolean> = AlwaysVisible,
 ) : PeopleCrops {
+
+  /** Tiene insieme la generazione, lo svuotamento e la pubblicazione nella cache. */
+  private val lock = Any()
+
+  /** Quante volte la cache e' stata svuotata ([trim] o [clear]); sotto [lock]. */
+  private var generation = 0L
+
+  /** I6: dopo un [trim] con l'app nascosta, finche' un ritaglio non trova l'app visibile. */
+  @Volatile
+  private var heldWhileHidden = false
+
+  private val producedCount = AtomicLong()
 
   override suspend fun crop(face: FaceLocator, sizePx: Int): Bitmap? {
     val key = keyOf(face, sizePx)
+    // Il segno delle revoche all'inizio: se cambia mentre si aspetta o si ritaglia, il ritaglio non vale piu'.
+    val revocation = clearsFlow.value
     if (!gate.mayShow(face)) {
       cache.remove(key)
       return null
     }
     cache.get(key)?.let { return it }
-    if (pausedFlow.value) {
-      // I6: dopo uno svuotamento per memoria con l'app nascosta non si ritaglia niente finche' l'app non torna visibile ([resume]). Poi il cancello
-      // si richiede: durante l'attesa la foto puo' essere stata nascosta.
-      pausedFlow.first { !it }
-      if (!gate.mayShow(face)) {
-        cache.remove(key)
-        return null
+    if (heldWhileHidden) {
+      if (!visible.value) {
+        // Ad app nascosta dopo uno svuotamento per memoria non si ritaglia: si aspetta che lo stato dica "visibile" (se lo e' gia', non si aspetta).
+        visible.first { it }
+        // Durante l'attesa la foto puo' essere stata nascosta, o le persone revocate.
+        if (!gate.mayShow(face)) {
+          cache.remove(key)
+          return null
+        }
+        if (clearsFlow.value != revocation) return null
+        cache.get(key)?.let { return it }
       }
-      cache.get(key)?.let { return it }
+      heldWhileHidden = false
     }
+    val startedIn = synchronized(lock) { generation }
+    producedCount.incrementAndGet()
     val bitmap = source.crop(face, sizePx) ?: return null
-    cache.put(key, bitmap)
+    synchronized(lock) {
+      // Una revoca mentre la sorgente lavorava: il ritaglio non torna a nessuno e non entra in cache.
+      if (clearsFlow.value != revocation) return null
+      // Uno svuotamento per memoria mentre la sorgente lavorava: il ritaglio vale (torna a chi l'ha chiesto) ma la cache liberata resta libera.
+      if (generation == startedIn) cache.put(key, bitmap)
+    }
     return bitmap
   }
 
   /**
    * Svuota la cache per una ragione di **privacy** (Persone spenta, cancellazione): cambia [clears], e chi tiene una copia dei ritagli (le Raccolte)
-   * la butta.
+   * la butta. Un ritaglio in corso non esce.
    */
   fun clear() {
-    cache.clear()
-    clearsFlow.value = clearsFlow.value + 1
+    synchronized(lock) {
+      generation++
+      cache.clear()
+      clearsFlow.value = clearsFlow.value + 1
+    }
   }
 
   /**
    * I6: svuota la cache **per memoria** (`onTrimMemory`). La privacy non c'entra: i ritagli gia' dati restano validi (una foto nascosta li toglie gia'
    * dalla vista, Persone spenta o la cancellazione passano da [clear]), quindi [clears] non cambia e le Raccolte non buttano e non rifanno i volti che
-   * hanno. Con [appHidden] i ritagli nuovi aspettano che l'app torni visibile ([resume]): niente lavoro ad app nascosta, e la memoria liberata resta
-   * libera.
+   * hanno. Con [uiHidden] (il sistema dice che l'interfaccia non si vede) e l'app davvero non visibile adesso, i ritagli nuovi aspettano che lo torni.
    */
-  fun trim(appHidden: Boolean) {
-    cache.clear()
-    if (appHidden) pausedFlow.value = true
-  }
-
-  /** I6: l'app e' di nuovo visibile, i ritagli in attesa ripartono (dopo il cancello). */
-  fun resume() {
-    pausedFlow.value = false
+  fun trim(uiHidden: Boolean) {
+    synchronized(lock) {
+      generation++
+      cache.clear()
+    }
+    if (uiHidden && !visible.value) heldWhileHidden = true
   }
 
   private val clearsFlow = MutableStateFlow(0L)
 
-  private val pausedFlow = MutableStateFlow(false)
-
-  /** I6: se i ritagli nuovi aspettano che l'app torni visibile (dopo [trim] con l'app nascosta). */
-  val paused: StateFlow<Boolean> get() = pausedFlow
-
   /**
-   * CU-19 (fase H, giro 3): quante volte la cache e' stata svuotata. Chi tiene una copia dei ritagli fuori da qui (le righe delle Raccolte) la butta
-   * quando cambia: una cancellazione o Persone spenta non passano dalla vista del catalogo.
+   * CU-19 (fase H, giro 3): quante volte la cache e' stata svuotata per privacy. Chi tiene una copia dei ritagli fuori da qui (le righe delle
+   * Raccolte) la butta quando cambia: una cancellazione o Persone spenta non passano dalla vista del catalogo.
    */
   val clears: StateFlow<Long> get() = clearsFlow
 
   /** Quanti byte di ritagli tiene in memoria adesso (per le prove: mai oltre il tetto). */
   val cachedBytes: Long get() = cache.weight
 
+  /** I6: quante volte la sorgente ha cominciato un ritaglio (per le prove: nessun ritaglio ad app nascosta). */
+  val produced: Long get() = producedCount.get()
+
   private fun keyOf(face: FaceLocator, sizePx: Int): String = face.encode() + "@" + sizePx
 
   companion object {
     /** D25: 8 MB. */
     const val CACHE_BYTES: Long = 8L * 1024 * 1024
+
+    /** Sempre visibile: chi non passa lo stato dell'app non aspetta mai. */
+    private val AlwaysVisible: StateFlow<Boolean> = MutableStateFlow(true)
   }
 }

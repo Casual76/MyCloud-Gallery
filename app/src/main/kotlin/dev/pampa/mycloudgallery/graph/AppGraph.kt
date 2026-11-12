@@ -655,8 +655,17 @@ class MutableAppContext(initial: AppContext = AppContext(inForeground = false, p
   private val state = MutableStateFlow(initial)
   override val context: StateFlow<AppContext> = state.asStateFlow()
 
+  private val foregroundState = MutableStateFlow(initial.inForeground)
+
+  /**
+   * I6 (review CG-I1): solo il primo piano, aggiornato **nello stesso momento** di [context] (nessun collector in mezzo). Chi aspetta che l'app torni
+   * visibile (i ritagli dei volti) guarda questo livello: un'uscita e un rientro rapidi non possono far perdere il ritorno.
+   */
+  val foreground: StateFlow<Boolean> = foregroundState.asStateFlow()
+
   fun update(inForeground: Boolean, profileActive: Boolean) {
     state.value = AppContext(inForeground = inForeground, profileActive = profileActive)
+    foregroundState.value = inForeground
   }
 }
 

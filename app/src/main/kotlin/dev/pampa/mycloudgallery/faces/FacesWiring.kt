@@ -100,8 +100,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
 
 /**
  * Come si montano le persone nel processo (Fase 8, P13; docs/fase8-progetto.md §1.4): le porte di core-faces legate a cio' che l'app ha gia' (registro,
@@ -400,7 +398,12 @@ object FacesWiring {
         history = history,
       )
       peopleRef[0] = people
-      val crops = GuardedPeopleCrops(AppPeopleCropSource(cells, ai.ai.buffer, catalogOf, CutoutSources(context.contentResolver, gallery.intents::uriOf, nas.imageOrigin, ReplicaHq(nas.blobs, nas.locations))), people)
+      // I6: dopo uno svuotamento per memoria ad app nascosta i ritagli aspettano il primo piano, letto come livello (`MutableAppContext.foreground`).
+      val crops = GuardedPeopleCrops(
+        AppPeopleCropSource(cells, ai.ai.buffer, catalogOf, CutoutSources(context.contentResolver, gallery.intents::uriOf, nas.imageOrigin, ReplicaHq(nas.blobs, nas.locations))),
+        people,
+        visible = graph.appContext.foreground,
+      )
       cropsRef[0] = crops
 
       started.complete(Unit)
@@ -440,16 +443,8 @@ object FacesWiring {
     }
     // CA-3: il primo calcolo dopo l'accensione segue le regole di sottofondo; «Analizza ora» (COMPUTE_NOW) e' l'unico a scavalcarle (mappa in `FacesWorkScheduling`).
     val workRequest: (FacesGraph.FacesWork) -> Unit = { work -> FacesWorkScheduling.request(context, work) }
-    return FacesGraph(
-      graph.scope, build, ready, workRequest, canMount = nas != null,
-      // I6: i ritagli aspettano solo se l'app e' davvero nascosta (il primo piano lo tiene `ProcessWatcher`).
-      appVisible = { graph.appContext.context.value.inForeground },
-    ) { nas?.organizer?.parts?.personalSync?.lastHold?.value }.also { faces ->
+    return FacesGraph(graph.scope, build, ready, workRequest, canMount = nas != null) { nas?.organizer?.parts?.personalSync?.lastHold?.value }.also { faces ->
       graphRef[0] = faces
-      // I6: quando l'app torna visibile i ritagli in attesa dopo uno svuotamento per memoria ripartono.
-      graph.scope.launch {
-        graph.appContext.context.map { it.inForeground }.distinctUntilChanged().filter { it }.collect { faces.onAppVisible() }
-      }
       // Il gancio dei dati personali nasce con il processo: finche' le persone non sono montate, con dati dei volti sul disco non si pubblica.
       nas?.organizer?.prePublish = FacesPrePublish({ graphRef[0] }, stores)
     }

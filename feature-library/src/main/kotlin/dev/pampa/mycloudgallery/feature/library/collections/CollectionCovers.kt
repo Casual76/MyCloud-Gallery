@@ -270,6 +270,21 @@ class CollectionCovers(
     }
   }
 
+  /**
+   * I6 (review CG-I1): le revoche ascoltate per tutta la vita delle copie dei volti, non solo mentre la scheda e' composta ([refresh] gira dentro
+   * [CollectionCoverWindow], che in modalita' modifica non c'e'). A ogni segno nuovo si buttano le copie permesse con un segno diverso: nessun volto
+   * revocato resta in memoria ne' si disegna al ritorno, prima che la scheda rifaccia i suoi. Lo lancia il proprietario ([CollectionsLayoutViewModel]).
+   */
+  suspend fun dropRevoked() {
+    val crops = faceCrops ?: return
+    crops.revocations.collect { token ->
+      faceImages.filterValues { it.token != token }.keys.forEach { faceImages.remove(it) }
+    }
+  }
+
+  /** I6: quanti volti tiene adesso (per le prove: dopo una revoca, nessuno). */
+  val heldFaces: Int get() = faceImages.size
+
   private fun faceKey(face: FaceLocator, sizePx: Int): String = face.encode() + "@" + sizePx
 
   /** Nessun segno delle revoche ancora visto. */

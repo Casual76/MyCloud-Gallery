@@ -236,6 +236,12 @@ class CollectionsLayoutViewModel private constructor(
 
   internal val inputs: StateFlow<CollectionsInputs> get() = controller.inputs
 
+  init {
+    // I6 (review CG-I1): le copie dei volti vivono qui, e qui si ascoltano le revoche (anche in modalita' modifica, quando la scheda non e' composta).
+    val withFaces = covers
+    if (withFaces != null && faces.isPresent) viewModelScope.launch { withFaces.dropRevoked() }
+  }
+
   fun startEditing() = controller.startEditing()
 
   fun stopEditing() = controller.stopEditing()

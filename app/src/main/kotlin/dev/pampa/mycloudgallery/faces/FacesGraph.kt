@@ -124,11 +124,6 @@ class FacesGraph internal constructor(
   private val workRequest: (FacesWork) -> Unit = {},
   /** L350: le persone potranno mai montarsi qui? Falso senza famiglia (nessun NAS): l'attesa del montaggio non finirebbe mai e lo stato di sempre e' la verita'. */
   private val canMount: Boolean = true,
-  /**
-   * I6: l'app e' visibile adesso (una finestra avviata)? Lo legge [onTrimMemory]: i ritagli nuovi aspettano solo se l'app e' davvero nascosta. Di serie
-   * si': senza questo segnale non si mette in attesa niente.
-   */
-  private val appVisible: () -> Boolean = { true },
   /** Il codice dell'ultimo giro dei dati personali che il gancio dei volti ha fermato (D30), o null: per la Diagnostica. */
   private val holdSource: () -> String? = { null },
 ) {
@@ -314,18 +309,14 @@ class FacesGraph internal constructor(
    * calcolo notturno gira) e si riaprono da soli al prossimo bisogno; le copertine in memoria si buttano appena l'app non si vede piu'.
    *
    * I6: e' uno svuotamento **per memoria** ([GuardedPeopleCrops.trim]), non una revoca: le Raccolte tengono i volti che hanno (nessun ritaglio rifatto
-   * ad app nascosta, nessun lampo in primo piano con poca memoria). Con l'app nascosta i ritagli nuovi aspettano che torni visibile ([onAppVisible]).
-   * Le revoche restano quelle di privacy: cancellazione (`clear`), Persone spenta o rimontata (persone montate diverse).
+   * ad app nascosta, nessun lampo in primo piano con poca memoria). Con l'interfaccia nascosta i ritagli nuovi aspettano lo **stato** "visibile"
+   * dell'app (`MutableAppContext.foreground`, letto da [GuardedPeopleCrops]: nessun fronte da non perdere). Le revoche restano quelle di privacy:
+   * cancellazione (`clear`), Persone spenta o rimontata (persone montate diverse).
    */
   fun onTrimMemory(level: Int) {
     val live = mount.current ?: return
     if (releasesEnginesAt(level)) live.scope.launch { runCatching { live.releaseEngines() } }
-    if (dropsCoversAt(level)) live.crops.trim(appHidden = level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN && !appVisible())
-  }
-
-  /** I6: l'app e' tornata visibile: i ritagli in attesa dopo uno svuotamento per memoria ripartono. */
-  fun onAppVisible() {
-    mount.current?.crops?.resume()
+    if (dropsCoversAt(level)) live.crops.trim(uiHidden = level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)
   }
 
   // --- Fine -----------------------------------------------------------------------------------------------------------------------------

@@ -74,12 +74,8 @@
 
   <!-- Stati vuoti -->
   <string name="album_empty_title">Album vuoto</string>
-  <string name="album_empty_detail">Aggiungi foto e video: restano dove sono, l’album li raccoglie.</string>
-  <string name="album_empty_view_only">Qui non puoi aggiungere foto: l’album è in sola visione.</string>
   <string name="album_empty_smart_title">Nessuna foto corrisponde alle regole</string>
-  <string name="album_empty_smart_detail">Prova ad allargare il periodo o il luogo, oppure aggiungi le foto a mano.</string>
   <string name="album_empty_shared_title">Ancora niente in questo album</string>
-  <string name="album_empty_shared_detail">Le foto compaiono quando i familiari le aggiungono e arrivano sul tuo telefono.</string>
 
   <!-- Recomputing, chiuso, non disponibile -->
   <string name="album_recomputing_title">Cerco le foto dell’album</string>
@@ -134,7 +130,7 @@
   </plurals>
   <string name="album_banner_inherited">Sei il nuovo responsabile dell’album</string>
   <string name="album_banner_inherited_detail">Chi l’aveva creato non è più in famiglia: da adesso i permessi sono tuoi.</string>
-  <string name="album_banner_sharing_running">Condivisione in corso: %1$s di %2$s</string>
+  <string name="album_banner_sharing_running">Condivisione · %1$s / %2$s</string>
   <string name="album_banner_sharing_running_detail">Si sposta in background: puoi usare l’app.</string>
   <string name="album_banner_sharing_done">Condivisione finita: %1$s elementi</string>
   <string name="album_banner_sharing_partly">Condivisione finita con qualche problema</string>

@@ -18,6 +18,8 @@ import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Flight
+import androidx.compose.material.icons.rounded.Luggage
+import androidx.compose.material.icons.rounded.TravelExplore
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,13 +41,13 @@ import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.albums.contract.TripId
 import dev.pampa.mycloudgallery.core.albums.contract.TripProposal
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryCoverCard
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.core.model.TripKind
@@ -113,8 +115,9 @@ fun TripsScreen(
   ) {
     if (notice != null) item(key = "notice") { FluidInlineMessage(message = notice, tone = FluidTone.Info, onDismiss = onDismissNotice) }
     when (state) {
-      TripsState.Searching -> item(key = "searching") { FluidEmptyState(title = stringResource(R.string.trips_searching_title), detail = "") }
-      TripsState.Empty -> item(key = "empty") { FluidEmptyState(title = stringResource(R.string.trips_empty_title), detail = "") }
+      // CU-23 (fase I): gli stati vuoti nella forma comune (figura e titolo), non una parola in alto a sinistra.
+      TripsState.Searching -> item(key = "searching") { GalleryFigureState(icon = Icons.Rounded.TravelExplore, title = stringResource(R.string.trips_searching_title), fill = false) }
+      TripsState.Empty -> item(key = "empty") { GalleryFigureState(icon = Icons.Rounded.Luggage, title = stringResource(R.string.trips_empty_title), fill = false) }
       is TripsState.NoGps -> {
         // Senza una casa stimabile la pagina lo dice una volta (e' il perche' dei soli eventi), poi gli eventi.
         item(key = "no-gps") {
@@ -122,7 +125,7 @@ fun TripsScreen(
         }
         item(key = "events-header") { GallerySectionHeader(title = stringResource(R.string.trips_events_header)) }
         if (state.events.isEmpty()) {
-          item(key = "events-empty") { FluidEmptyState(title = stringResource(R.string.trips_events_empty), detail = "") }
+          item(key = "events-empty") { GalleryFigureState(icon = Icons.Rounded.Event, title = stringResource(R.string.trips_events_empty), fill = false) }
         } else {
           proposalCards(state.events, columns, thumbnails, handlers, creating)
         }

@@ -8,7 +8,6 @@ import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Group
-import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.PauseCircle
 import androidx.compose.material.icons.rounded.PersonOff
@@ -50,6 +49,8 @@ data class Strip(
   val title: String,
   val detail: String,
   val action: StripAction = StripAction.NONE,
+  /** CU-15 (fase I): quanto e' fatto (0..1) di un lavoro che avanza: la striscia lo mostra con l'anello al posto della piastrella. */
+  val progress: Float? = null,
 )
 
 internal object AlbumStrips {
@@ -82,7 +83,8 @@ internal object AlbumStrips {
       val album = ready.content.album as? Album.Shared
       if (permissions != null && album != null) {
         val who = if (permissions.mine) resources.getString(R.string.album_permissions_creator_you) else resources.getString(R.string.album_permissions_creator, creatorName.orEmpty())
-        add(Strip("permissions", Icons.Rounded.Lock, FluidTone.Info, resources.getString(AlbumText.level(permissions.level)), who, StripAction.OPEN_PERMISSIONS))
+        // CU-15: il segno di cio' che gli altri possono fare (il lucchetto faceva pensare a «chiuso»).
+        add(Strip("permissions", AlbumText.levelIcon(permissions.level), FluidTone.Info, resources.getString(AlbumText.level(permissions.level)), who, StripAction.OPEN_PERMISSIONS))
       }
     }
 
@@ -137,6 +139,7 @@ internal object AlbumStrips {
     is ShareOpState.Running -> Strip(
       "sharing", Icons.Rounded.CloudUpload, FluidTone.Primary, progressTitle(resources, progress.kind, progress.done, progress.total),
       resources.getString(R.string.album_banner_sharing_running_detail),
+      progress = if (progress.total > 0) (progress.done.toFloat() / progress.total).coerceIn(0f, 1f) else null,
     )
     is ShareOpState.Paused -> {
       val why = resources.getString(

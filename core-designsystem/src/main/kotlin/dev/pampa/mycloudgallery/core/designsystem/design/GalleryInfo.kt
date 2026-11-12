@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
@@ -82,12 +83,19 @@ fun GalleryInfoButton(
 
 /** La frase dietro la «i», quando e' aperta. Si vede; TalkBack la sente gia' nella descrizione di chi la apre. */
 @Composable
-fun GalleryInfoDetail(text: String, visible: Boolean, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurface) {
+fun GalleryInfoDetail(
+  text: String,
+  visible: Boolean,
+  modifier: Modifier = Modifier,
+  color: Color = MaterialTheme.colorScheme.onSurface,
+  textAlign: TextAlign? = null,
+) {
   if (!visible) return
   Text(
     text = text,
     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
     color = color,
+    textAlign = textAlign,
     modifier = modifier.semantics { hideFromAccessibility() },
   )
 }

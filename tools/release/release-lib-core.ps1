@@ -104,7 +104,9 @@ function Get-FileSha256([string]$Path) {
 # --- I nomi delle versioni (pacchetto U, giro 1: docs/aggiornamenti-in-app.md, "Le versioni") -------------------------------------------------
 # La forma ammessa e' quella che l'aggiornamento dentro l'app accetta (UpdateRules.VERSION in feature-update): tre numeri senza zeri davanti, al piu'
 # quattro cifre l'uno, e per una beta `-beta.` con DUE cifre. Niente `v`, niente `+`, niente quarto numero.
-$script:VersionNamePattern = '^(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})(-beta\.\d{2})?$'
+# Giro 2 (US2-4): [0-9] e non \d (che in .NET accetta qualunque cifra Unicode, l'app solo quelle ASCII), \A e \z e non ^ e $ (che in
+# .NET accetta anche un a capo finale): la stessa regola di UpdateRules.VERSION, carattere per carattere.
+$script:VersionNamePattern = '\A(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})(-beta\.[0-9]{2})?\z'
 
 function Test-VersionName([string]$Name) {
   return ($Name -cmatch $script:VersionNamePattern)
@@ -148,12 +150,12 @@ function Read-VersionRows([string]$Path) {
     if ($columns.Count -ne 6) { $problems.Add("versions.txt riga ${number}: servono sei colonne (versione codice stato canale data sha256)"); continue }
     $row = [pscustomobject]@{ Name = $columns[0]; Code = 0; State = $columns[2]; Channel = $columns[3]; Date = $columns[4]; Sha = $columns[5].ToLowerInvariant(); Line = $number }
     if (-not (Test-VersionName $columns[0])) { $problems.Add("versions.txt riga ${number}: versione '$($columns[0])' non valida (1.0.0 oppure 1.1.0-beta.02: tre numeri, la beta con due cifre, niente v ne' +)"); continue }
-    if ($columns[1] -notmatch '^[1-9]\d{0,8}$') { $problems.Add("versions.txt riga ${number}: versionCode '$($columns[1])' non valido"); continue }
+    if ($columns[1] -cnotmatch '\A[1-9][0-9]{0,8}\z') { $problems.Add("versions.txt riga ${number}: versionCode '$($columns[1])' non valido"); continue }
     $row.Code = [int]$columns[1]
     if (@("pubblicata", "prevista") -notcontains $row.State) { $problems.Add("versions.txt riga ${number}: stato '$($row.State)' non valido (pubblicata o prevista)"); continue }
     if (@("beta", "stable") -notcontains $row.Channel) { $problems.Add("versions.txt riga ${number}: canale '$($row.Channel)' non valido (beta o stable)"); continue }
     if ($row.State -eq "pubblicata") {
-      if ($row.Date -notmatch '^\d{4}-\d{2}-\d{2}$') { $problems.Add("versions.txt riga ${number}: una versione pubblicata ha la data AAAA-MM-GG"); continue }
+      if ($row.Date -cnotmatch '\A[0-9]{4}-[0-9]{2}-[0-9]{2}\z') { $problems.Add("versions.txt riga ${number}: una versione pubblicata ha la data AAAA-MM-GG"); continue }
       if ($row.Sha -notmatch '^[0-9a-f]{64}$') { $problems.Add("versions.txt riga ${number}: una versione pubblicata ha l'impronta SHA-256 dell'APK"); continue }
     }
     $rows.Add($row)

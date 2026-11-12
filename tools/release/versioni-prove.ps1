@@ -31,6 +31,18 @@ foreach ($good in @("1.0.0", "0.9.12", "12.3.4", "1.1.0-beta.01", "1.1.0-beta.99
 foreach ($bad in @("v1.1.0", "1.1.0+build.5", "1.1.0.0", "1.1", "01.1.0", "1.1.0-beta.3", "1.1.0-beta.100", "1.1.0-rc.01", "1.1.0-beta", " 1.1.0", "10000.0.0", "1.1.0-BETA.01")) {
   Assert-That "'$bad' non passa" (-not (Test-VersionName $bad))
 }
+# Giro 2 (US2-4): le cifre non ASCII (arabo-indiane, a tutta larghezza) non passano, ne' nel suffisso ne' nei numeri; un a capo finale nemmeno.
+# L'app le rifiuta (UpdateRules.VERSION usa [0-9]): con \d qui sarebbero passate e l'elenco sarebbe stato inutilizzabile.
+$arabic = [string][char]0x0660 + [string][char]0x0661
+$wide = [string][char]0xFF11
+foreach ($case in @(
+    @(("1.1.0-beta." + $arabic), "beta con due cifre arabo-indiane"),
+    @(($wide + ".0.0"), "un numero a tutta larghezza"),
+    @(("1." + [string][char]0x0661 + ".0"), "un numero arabo-indiano"),
+    @("1.0.0`n", "un a capo finale"),
+    @("1.1.0-beta.01`n", "una beta con un a capo finale"))) {
+  Assert-That ("'" + $case[1] + "' non passa") ((-not (Test-VersionName $case[0])) -and $case.Count -eq 2 -and -not $case[0].Contains(" ")) ("provato: " + $case[0])
+}
 
 Write-Host "`nIl confronto dell'app (come compareVersions di engine-foundation)" -ForegroundColor Cyan
 $table = @(
@@ -65,6 +77,10 @@ $p = Test-Rows "1.1.0-beta.1  2  prevista  beta  -  -`n" "1.1.0-beta.1" "beta"
 Assert-That "una beta con una cifra non passa (forma)" ((($p -join "; ")) -like "*non valida*") ($p -join "; ")
 $p = Test-Rows "v1.1.0  2  prevista  beta  -  -`n" "v1.1.0" "beta"
 Assert-That "una v davanti non passa (forma)" ((($p -join "; ")) -like "*non valida*") ($p -join "; ")
+$p = Test-Rows ("1.1.0-beta." + $arabic + "  2  prevista  beta  -  -`n") ("1.1.0-beta." + $arabic) "beta"
+Assert-That "una beta con cifre arabo-indiane non passa in versions.txt" ((($p -join "; ")) -like "*non valida*") ($p -join "; ")
+try { $p = Test-Rows ("1.1.0-beta.01  1" + [string][char]0x0662 + "  prevista  beta  -  -`n") "1.1.0-beta.01" "beta" } catch { $p = @("eccezione: " + $_.Exception.Message) }
+Assert-That "un versionCode con una cifra arabo-indiana non passa" ((($p -join "; ")) -like "*versionCode*non valido*") ($p -join "; ")
 $current = @((Read-VersionRows (Join-Path $script:Root "release\versions.txt")).Problems)
 Assert-That "il release/versions.txt di oggi ha la forma ammessa" ($current.Count -eq 0) ($current -join "; ")
 

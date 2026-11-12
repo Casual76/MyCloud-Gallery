@@ -191,8 +191,19 @@ function Invoke-ElencoCheck {
   try { $json = $text | ConvertFrom-Json } catch { $problems.Add("l'elenco non e' JSON valido"); return (& $result) }
   $app = $json.app
   if (-not $app) { $problems.Add("l'elenco non ha 'app'"); return (& $result) }
-  if ($app.repository -and ($app.repository.repoOwner -cne $Owner -or $app.repository.repoName -cne $Repo)) {
-    $problems.Add("l'elenco indica il repository $($app.repository.repoOwner)/$($app.repository.repoName), non $Owner/$Repo")
+  # Giro 2 (US2-3): app.repository e' OBBLIGATORIO. Senza (o con owner o nome vuoti) l'engine non costruisce l'offerta e nessun telefono riceve
+  # l'aggiornamento: un verde qui sarebbe falso. Le chiavi come le legge l'engine (EngineManifest.kt: repoOwner o owner, repoName o name).
+  $repository = $app.repository
+  $repoOwner = ""
+  $repoName = ""
+  if ($repository -is [System.Management.Automation.PSCustomObject]) {
+    $repoOwner = [string]$(if ($null -ne $repository.repoOwner) { $repository.repoOwner } else { $repository.owner })
+    $repoName = [string]$(if ($null -ne $repository.repoName) { $repository.repoName } else { $repository.name })
+  }
+  if ([string]::IsNullOrWhiteSpace($repoOwner) -or [string]::IsNullOrWhiteSpace($repoName)) {
+    $problems.Add("l'elenco non ha app.repository con owner e nome: l'app non offrirebbe l'aggiornamento (serve $Owner/$Repo)")
+  } elseif ($repoOwner -cne $Owner -or $repoName -cne $Repo) {
+    $problems.Add("l'elenco indica il repository $repoOwner/$repoName, non $Owner/$Repo")
   }
   $entry = $app.$Channel
   if (-not $entry) { $problems.Add("l'elenco non ha la voce '$Channel'"); return (& $result) }
@@ -261,10 +272,13 @@ function Invoke-ElencoCheck {
     }
     if ($fields.Count -gt 0) { $plans += [pscustomobject]@{ Channel = $name; Fields = $fields } }
   }
+  # Giro 2 (US2-2): l'elenco su disco deve essere ancora quello letto all'inizio, ANCHE quando non c'e' niente da scrivere: altrimenti il verde
+  # direbbe "la voce e l'asset sono l'APK finale" di un elenco che nel frattempo indica un'altra versione.
+  if ((Get-FileSha256 $ElencoPath) -ne $before) { $problems.Add("l'elenco e' cambiato mentre lo verificavo: non scrivo niente, rilancia"); return (& $result) }
   if ($problems.Count -gt 0 -or $plans.Count -eq 0) { return (& $result) }
 
-  # La scrittura: solo se l'elenco e' quello letto all'inizio; il testo nuovo si rilegge prima di sostituire il file.
-  if ((Get-FileSha256 $ElencoPath) -ne $before) { $problems.Add("l'elenco e' cambiato mentre lo verificavo: non scrivo niente, rilancia"); return (& $result) }
+  # La scrittura: il testo nuovo si rilegge prima di sostituire il file, e la revisione si riguarda subito prima. Sono due controlli, non una
+  # transazione: contro uno scrittore che cambia il file fra l'ultimo controllo e Move-Item non c'e' un blocco condiviso (docs/sicurezza.md C489).
   $newText = $text
   foreach ($plan in $plans) {
     $span = Find-JsonObjectSpan $newText @("app", $plan.Channel)
@@ -296,7 +310,7 @@ function Get-ApkIdentity($Tools, [string]$Apk) {
   if ($digests.Count -eq 1) { $facts.CertSha256 = @($digests.Keys)[0] }
   $badging = Invoke-Native -File $Tools.Aapt2 -Arguments @("dump", "badging", $Apk)
   foreach ($line in $badging.Lines) {
-    if ($line -match "^package: name='([^']*)' versionCode='(\d+)' versionName='([^']*)'") {
+    if ($line -match "^package: name='([^']*)' versionCode='([0-9]+)' versionName='([^']*)'") {
       $facts.Package = $Matches[1]; $facts.VersionCode = [int]$Matches[2]; $facts.VersionName = $Matches[3]
       break
     }

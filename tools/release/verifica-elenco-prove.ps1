@@ -156,6 +156,43 @@ Assert-Refused "l'elenco cambiato durante la verifica" $p (Invoke-Case $p -Downl
 $p = New-Refused "scaricamento-fallito"
 Assert-Refused "lo scaricamento non riesce" $p (Invoke-Case $p -Download { param($url, $target) throw "404" }) "*non riesco a scaricare*"
 
+Write-Host "`nGiro 2: l'elenco gia' completo cambiato nel frattempo (US2-2)" -ForegroundColor Cyan
+# Il caso ordinario dopo la correzione del publisher: sha256 e peso ci sono gia', non c'e' niente da scrivere. Mentre si scarica, un altro processo
+# rimette nel file una voce valida che indica un'altra versione: il verde direbbe che la voce e' l'APK finale, e non lo e' piu'.
+$p = New-Refused "completo-cambiato" -WithSha
+$otherVersion = (Read-Utf8 (New-Elenco "altra-versione" -WithSha -Extra @{ version = "1.1.0-beta.02"; releaseTag = "beta-mycloud-gallery-v1.1.0-beta.02"; apkAsset = "mycloud-gallery-1.1.0-beta.02.apk" }))
+$o = Invoke-Case $p -Download {
+    param($url, $target)
+    Copy-Item -LiteralPath (Join-Path $published ($url -split '/')[-1]) -Destination $target
+    [IO.File]::WriteAllText($p, $otherVersion, $utf8)
+    $script:hashes[$p] = Get-FileSha256 $p
+  }
+Assert-Refused "gia' completo e sostituito durante lo scaricamento: non e' verde" $p $o "*cambiato*"
+
+Write-Host "`nGiro 2: app.repository obbligatorio (US2-3)" -ForegroundColor Cyan
+# Senza repository (o con owner o nome vuoti) l'engine non costruisce l'offerta: nessun telefono riceverebbe l'aggiornamento.
+function New-RepoCase([string]$Name, [string]$Repository) {
+  $p = New-Elenco $Name -WithSha
+  $text = (Read-Utf8 $p) -replace '    "repository": \{[^}]*\},\r\n', $Repository
+  [IO.File]::WriteAllText($p, $text, $utf8)
+  $script:hashes[$p] = Get-FileSha256 $p
+  return $p
+}
+foreach ($case in @(
+    @("repository-assente", "", "assente"),
+    @("repository-null", "    `"repository`": null,`r`n", "null"),
+    @("repository-vuoto", "    `"repository`": {},`r`n", "oggetto vuoto"),
+    @("repository-nomi-vuoti", "    `"repository`": { `"repoOwner`": `"`", `"repoName`": `"`" },`r`n", "owner e nome vuoti"),
+    @("repository-testo", "    `"repository`": `"$owner/$repo`",`r`n", "una stringa al posto dell'oggetto"))) {
+  $p = New-RepoCase $case[0] $case[1]
+  Assert-Refused ("app.repository " + $case[2] + ": non e' verde") $p (Invoke-Case $p) "*non ha app.repository*"
+}
+$p = New-RepoCase "repository-chiavi-corte" "    `"repository`": { `"owner`": `"$owner`", `"name`": `"$repo`" },`r`n"
+$o = Invoke-Case $p
+Assert-That "app.repository con owner e name (le chiavi che l'engine accetta anche): passa" ($o.Problems.Count -eq 0) ($o.Problems -join "; ")
+$p = New-RepoCase "repository-altro-owner" "    `"repository`": { `"repoOwner`": `"Altro`", `"repoName`": `"$repo`" },`r`n"
+Assert-Refused "app.repository di un altro owner" $p (Invoke-Case $p) "*indica il repository*"
+
 Write-Host "`nIl lettore del JSON" -ForegroundColor Cyan
 $sample = '{ "a": { "x": "}{\"", "app": [1, {"b": 2}] }, "app": { "beta": { "k": "v\\" } } }'
 $span = Find-JsonObjectSpan $sample @("app", "beta")

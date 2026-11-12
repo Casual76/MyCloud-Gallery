@@ -1,7 +1,5 @@
 package dev.pampa.mycloudgallery.feature.map.grid
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
@@ -14,7 +12,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridInteractionState
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryWall
 import dev.pampa.mycloudgallery.core.designsystem.grid.rememberGalleryGridCellStyle
@@ -27,6 +24,11 @@ import dev.pampa.mycloudgallery.feature.map.contract.MapThumbnails
 import dev.pampa.mycloudgallery.feature.map.contract.ZoneGridState
 import dev.pampa.mycloudgallery.feature.map.ui.MapDimens
 import dev.pampa.mycloudgallery.feature.map.ui.MapText
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.HideImage
+import androidx.compose.material.icons.rounded.WrongLocation
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
+import dev.pampa.mycloudgallery.feature.map.ui.MapFigureState
 
 // LA PAGINA DELLA GRIGLIA DI UNA ZONA O DI UN LUOGO (Fase 9, P4; docs/fase9-progetto.md §1.5 `ZoneGridState`, §2.10, D28, D30). Il nome del posto (o "Questa zona"), quante foto e la parete di
 // celle della Libreria; un tocco apre il viewer. "Primo fotogramma subito": finche' la griglia non e' pronta c'e' lo scheletro con la sua intestazione. Solo componenti G2; niente testo sopra le foto.
@@ -78,9 +80,9 @@ internal fun ZoneGridScreen(
       listState = listState,
       contentMaxWidth = MapDimens.SheetWidth,
     ) {
+      // Giro 2 (CS-17): la forma unica degli stati vuoti; perche' non ci sono piu' (sparite o nascoste) dietro la «i».
       item(key = "empty") {
-        Column(verticalArrangement = Arrangement.spacedBy(MapDimens.BlockGap)) {
-          FluidEmptyState(title = stringResource(R.string.mappa_zone_empty_title), detail = stringResource(R.string.mappa_zone_empty_detail))
+        MapFigureState(icon = Icons.Rounded.HideImage, title = stringResource(R.string.mappa_zone_empty_title), why = stringResource(R.string.mappa_zone_empty_detail)) {
           FluidButton(text = stringResource(R.string.mappa_zone_back), onClick = handlers::onBack, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true)
         }
       }
@@ -94,8 +96,12 @@ internal fun ZoneGridScreen(
       contentMaxWidth = MapDimens.SheetWidth,
     ) {
       item(key = "failed") {
-        Column(verticalArrangement = Arrangement.spacedBy(MapDimens.BlockGap)) {
-          FluidEmptyState(title = stringResource(R.string.mappa_failed_title), detail = stringResource(R.string.mappa_failed_detail))
+        MapFigureState(
+          icon = Icons.Rounded.WrongLocation,
+          title = stringResource(R.string.mappa_failed_title),
+          why = stringResource(R.string.mappa_failed_detail),
+          tone = GalleryIllustrationTone.Caution,
+        ) {
           FluidButton(text = stringResource(R.string.mappa_retry), onClick = handlers::onRetry, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true)
           FluidButton(text = stringResource(R.string.mappa_zone_back), onClick = handlers::onBack, style = FluidButtonStyle.Plain, size = FluidButtonSize.Large, fillWidth = true)
         }

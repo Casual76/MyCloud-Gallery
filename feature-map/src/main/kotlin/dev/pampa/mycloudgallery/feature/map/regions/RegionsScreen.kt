@@ -26,7 +26,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -38,6 +37,8 @@ import dev.pampa.mycloudgallery.core.map.contract.RegionState
 import dev.pampa.mycloudgallery.core.map.contract.RegionStatus
 import dev.pampa.mycloudgallery.feature.map.R
 import dev.pampa.mycloudgallery.feature.map.ui.MapDimens
+import androidx.compose.material.icons.rounded.TravelExplore
+import dev.pampa.mycloudgallery.feature.map.ui.MapFigureState
 
 // ZONE SENZA INTERNET: LA PAGINA (Fase 9, P5; docs/fase9-progetto.md §2.9, D26; decisione dell'utente del 31/10). Righe raggruppate di Fluid (come Impostazioni -> Mappa, regola 2 del design system: il tono
 // sulla piastrella, mai sulla riga): le zone scaricate (con l'avanzamento), le 20 regioni italiane, i paesi vicini e "La zona attorno a un luogo" (ricerca per nome, raggio di 15, 30 o 60 km). Ogni riga
@@ -234,7 +235,8 @@ private fun offerSubtitle(resources: Resources, offer: RegionOffer): String {
 private fun LazyListScope.aroundPage(around: AroundState, handlers: RegionsHandlers) {
   item(key = "message") { FluidSectionFootnote(text = stringResource(R.string.regions_around_note)) }
   if (!around.available) {
-    item(key = "unavailable") { FluidEmptyState(title = stringResource(R.string.regions_around_title), detail = stringResource(R.string.regions_around_unavailable)) }
+    // Giro 2 (CS-17): la forma unica degli stati vuoti. Il titolo dice lo stato (quello della pagina e' gia' sopra): nessuna frase.
+    item(key = "unavailable") { MapFigureState(icon = Icons.Rounded.TravelExplore, title = stringResource(R.string.regions_around_unavailable_title)) }
     return
   }
   if (around.picked == null) {

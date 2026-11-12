@@ -219,7 +219,8 @@ internal class RegionsScreenTest : MapScreenTest() {
     switch(AroundState(query = "zzz", searched = true))
     assertShows("nessuno", "Nessun luogo trovato")
     switch(AroundState(available = false))
-    assertShows("senza dataset", "L’elenco dei luoghi non è disponibile su questo telefono")
+    // Giro 2 (CS-17): lo stato e' il titolo della figura, nessuna frase.
+    assertShows("senza dataset", "Elenco dei luoghi non disponibile")
     assertThat(rec.calls).containsAtLeast("luogo-scelto", "raggio")
   }
 

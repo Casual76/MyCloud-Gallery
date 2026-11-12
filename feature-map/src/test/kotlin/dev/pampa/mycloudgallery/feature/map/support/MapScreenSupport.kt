@@ -29,6 +29,14 @@ internal abstract class MapScreenTest : MapComposeTest() {
     for (text in texts) assertWithMessage("$scene: manca «$text»").that(shows(text)).isTrue()
   }
 
+  /** Giro 2 (CS-17): una frase che sta dietro la «i» di uno stato: TalkBack la dice (la descrizione della «i»), la pagina non la scrive. */
+  protected fun says(text: String): Boolean =
+    composeRule.onAllNodes(androidx.compose.ui.test.hasContentDescription(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
+
+  protected fun assertSays(scene: String, vararg texts: String) {
+    for (text in texts) assertWithMessage("$scene: la «i» non dice «$text»").that(says(text)).isTrue()
+  }
+
   protected fun assertDoesNotShow(scene: String, vararg texts: String) {
     for (text in texts) assertWithMessage("$scene: non deve esserci «$text»").that(shows(text)).isFalse()
   }

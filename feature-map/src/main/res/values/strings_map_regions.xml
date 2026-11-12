@@ -78,7 +78,8 @@
   <string name="regions_around_hint">Nome del luogo</string>
   <string name="regions_around_note">Il luogo si sceglie per nome: la zona non parte mai dalla tua casa né dalle tue foto.</string>
   <string name="regions_around_none">Nessun luogo trovato</string>
-  <string name="regions_around_unavailable">L’elenco dei luoghi non è disponibile su questo telefono.</string>
+  <!-- Giro 2 (CS-17): lo stato in poche parole, come titolo dello stato vuoto (la frase non c\'e\' piu\'). -->
+  <string name="regions_around_unavailable_title">Elenco dei luoghi non disponibile</string>
   <string name="regions_around_radius_header">Raggio attorno a «%1$s»</string>
   <string name="regions_around_radius">%1$d km</string>
   <string name="regions_around_change">Cambia luogo</string>

@@ -18843,6 +18843,17 @@ di I4 (`f329e9c3`: stato vuoto, «i», anello), la scheda di copertina corretta 
   persona e poi scorrere le Raccolte a sinistra: le copertine arrivano anche per le schede mai viste, e la griglia accanto non perde le sue; (c) un
   tocco sulla «i» di uno stato vuoto apre la frase sotto, un altro la chiude; TalkBack la dice senza tocco.
 
+#### I1, giro di correzione 2 (12/11/2026)
+
+- **CS-17 (la forma unica dello stato vuoto, nella Mappa).** I sei `FluidEmptyState` di `feature-map` (la mappa vuota e con errore, la griglia di
+  una zona vuota e con errore, Impostazioni -> Mappa quando la mappa dettagliata non c'e', «La zona attorno a un luogo» senza l'elenco dei luoghi)
+  sono ora `GalleryFigureState` attraverso `MapFigureState` (`ui/MapParts.kt`): la figura, il titolo, i tasti. La frase resta solo dove rassicura o
+  spiega (le foto non sono perse, sparite o nascoste, quante sono senza posizione, la carta semplice che resta sul telefono) e sta dietro la «i»
+  comune. Nella zona attorno a un luogo il titolo dello stato ripeteva quello della pagina: ora e' lo stato, «Elenco dei luoghi non disponibile»
+  (la frase di prima e' tolta). Nelle altre cartelle di I1 (Persone, Ricordi, Raccolte, Nascosti, cestino) non resta nessun `FluidEmptyState` ne'
+  un'illustrazione chiamata a mano. La «i» sotto la figura e' scritta in tre posti (Raccolte, Persone, Mappa) con i due pezzi comuni: se
+  `GalleryFigureState` prendesse un parametro `why` sparirebbero tutte e tre le copie.
+
 ### I4, il resto dell'app con meno testo (fase I, 11/11 notte)
 
 Il metro dell'utente: «se non sapessi leggere o sentire, potrei usare l'app?». Censimento in `docs/i4-censimento.md`, prima e dopo in
@@ -19084,3 +19095,12 @@ Rilievi del giro 1 per I3 (`TRIAGE.md`); prima e dopo, parole contate e prove su
   con il numero, il come dietro la «i». Recinzioni e logica invariate; le parole della recinzione sono «In pausa» / «il backup vero non e' ancora acceso».
 - **Copertine**: la finestra delle miniature segue lo schermo (copertine visibili e sei accanto), non piu' le prime 24.
 - **Parole**: niente «media», «preset», sigle del protocollo; numeri con il punto delle migliaia.
+
+### I2, giro 2 della review (12/11 notte): la prova delle foto nascoste dopo (CS-23)
+- Una foto nascosta **dopo** che la terna e' pronta, a cache calda: `SearchPreviewsHiddenLaterTest` prende la terna vera del controller (due esempi con la
+  foto e la ricerca recente con la foto del suo primo risultato), la disegna con la barra vera e il caricatore finto con cache (`FakeThumbnailLoader`, che
+  ora registra anche `keep`), poi toglie dall'istantanea visibile prima la foto di un esempio e poi quella della recente: al disegno dopo il tondo ha il
+  segno del tipo e il caricatore non tiene piu' la miniatura, anche se e' ancora in cache.
+- Con il controllo tolto le prove cadono: il tondo che ricorda l'indice della foto senza guardare l'istantanea di adesso (`remember(media)` al posto di
+  `remember(library, media)` in `photoArt`) e le richieste tenute che non seguono l'istantanea (`remember(items, thumbnails)` in
+  `KeepSuggestionPreviews`).

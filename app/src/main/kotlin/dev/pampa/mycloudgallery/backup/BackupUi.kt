@@ -36,6 +36,7 @@ import dev.pampa.mycloudgallery.feature.nas.contract.NasScreen
 import dev.pampa.mycloudgallery.feature.settings.backup.BackupEntryStatus
 import dev.pampa.mycloudgallery.feature.viewer.info.MediaBackupStates
 import dev.pampa.mycloudgallery.work.BackupWorkScheduling
+import dev.pampa.mycloudgallery.work.NasWorkScheduling
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -389,6 +390,17 @@ class AppBackupActions(
    */
   override fun onPageResumed() {
     backup.kick()
+    // Fase I (punto 7.4): la ricerca sul NAS che aspetta solo il prossimo giro (fino a 6 ore) si chiede adesso. `scanNow` e' unica (KEEP): una
+    // verifica gia' in coda o in corso resta quella.
+    scope.launch {
+      try {
+        if (backup.firstSearchIdle()) NasWorkScheduling.scanNow(context)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        GalleryLog.w(TAG) { "ricerca sul NAS non chiesta: ${e.javaClass.simpleName}" }
+      }
+    }
     if (!fixing) return
     fixing = false
     scope.launch {

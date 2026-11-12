@@ -616,6 +616,19 @@ class BackupGraph(
   /** Le impostazioni delle regole (D34: "Proteggi subito le foto nuove"), per la corsa delle foto nuove. */
   val ruleSettings get() = inputs.ruleSettings
 
+  /**
+   * Fase I (12/11, punto 7.4): la ricerca sul NAS prima del primo backup **aspetta solo il prossimo giro**: l'area privata non e' ancora scandita, nessuna
+   * scansione gira e nessuna regola la ferma (con una regola che la ferma la pagina dice quale, e la ripresa a tempo dei lavori del NAS la rifa'). Chi
+   * apre la pagina Backup la chiede subito (`NasWorkScheduling.scanNow`, unica), cosi' la riga «Cerco cosa c'e' gia' sul NAS» dice il vero.
+   */
+  suspend fun firstSearchIdle(): Boolean {
+    val share = privateShare() ?: return false
+    val scanner = nas.runtime?.scannerOf(share) ?: return false
+    if (scanner.status.value is NasScanStatus.Scanning) return false
+    if (privateAreaScanned()) return false
+    return nasInputs.rules.evaluate(WorkRequest.Background(BackgroundActivity.INDEX_SYNC)) is RuleDecision.Run
+  }
+
   /** La scansione **iniziale** completa dell'area privata e' finita? (§2.11 punto 1: senza, il piano non propone niente.) */
   suspend fun privateAreaScanned(): Boolean {
     val share = privateShare() ?: return false

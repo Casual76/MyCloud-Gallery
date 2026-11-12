@@ -1555,7 +1555,7 @@ public static class DexCallScanner {
         if (rest.Contains("$$ExternalSyntheticApiModelOutline")) {
           try { if (R8Provenance.PlatformOutline(rest)) continue; }
           catch (Exception e) { throw new InvalidOperationException(R8Provenance.Origin(dexPath, line) + ": " + e.Message); }
-          rest += " " + R8Provenance.OutlineBody(rest);
+          rest = R8Provenance.OutlineCall(rest);
         }
         foreach (var target in targets) {
           if (rest.Contains(target)) { if (target == "Landroidx/glance/" && R8Provenance.SignatureOnlyArtifact(rest, target)) continue; facts.Calls.Add(target + "|" + String.Join("\n", R8Provenance.Origins(dexPath, line, target))); facts.Insns.Add(originalRest); }

@@ -152,3 +152,18 @@ Aggiunte quattro prove negative dell'inoltro JNI: destinazione NATIVE pubblica, 
 Suite sintetica completa: **120/120 OK**, uscita 0. Rilanciate le sette ispezioni sull'APK vero, con impronte di APK e mapping riconfermate uguali agli originali in sola lettura: **7/7 OK**, uscita 0. D12/R2/LA-5 25,1 s; D30 19 s; D34 19,8 s; HTTPS/ML Kit 18 s; LiteRT 18,6 s; OkHttp/MapLibre 21,7 s; Glance/KT 25,5 s. Le prove del codice restano 45 HTTPS/ML Kit, 60 LiteRT, 3065 OkHttp (151 da net/), 163 nostre MapLibre e 9016 Glance (84 da widget).
 
 Evidenze aggiunte sotto tools/release/fixtures/hk: `jni-non-privato-synthetic.log` e `jni-non-privato-apk.log`. Nessun Gradle, dispositivo, push o modifica al controllo, ai sorgenti dell'app o a engine/.
+
+## 12 novembre: il nome della classe che ospita un outline non e' una chiamata
+
+Nel controllo intero della prima beta (`c80e15f0`) il passo 7h e' caduto con «MapLibre chiamato da codice nostro fuori da feature/map/:
+`NsdNasDiscovery.startDiscovery` (`Lorg/maplibre/`)». Il bytecode dice altro: R8 ha messo l'outline di `NsdManager.discoverServices(String, int, Network,
+Executor, DiscoveryListener)` (Android 13) nella classe `Lorg/maplibre/android/geometry/VisibleRegion$$ExternalSyntheticApiModelOutline0;`, cioe' una
+classe sintetica condivisa che porta il nome di una qualunque delle classi che ne usano un outline. Il corpo dell'outline chiama solo `NsdManager`.
+`PlatformOutline` non lo esenta, e fa bene (nomina `Landroid/net/Network;`, che per il passo HTTPS non e' innocuo): il testo dell'istruzione veniva
+quindi passato ai passi con il corpo accodato, ma anche con il nome della classe ospite, che 7h leggeva come una chiamata a MapLibre.
+
+Regola nuova (`R8Provenance.OutlineCall`, usata da `DexCallScanner`): per un outline non di sola piattaforma si toglie dal testo SOLO il nome della classe
+ospite; la firma dell'outline e tutto il suo corpo restano, quindi una chiamata vera a una libreria dentro un outline resta attribuita al chiamante.
+Prove sintetiche aggiunte (12): outline dal nome MapLibre con il corpo NSD non conta; corpo che chiama MapLibre, OkHttp, Glance o `HttpURLConnection`
+resta attribuito, con ospite innocuo e con ospite dal nome MapLibre; corpo assente cade. Suite: **132/132 OK**. Sette ispezioni rilanciate sullo stesso APK
+di `c80e15f0`, senza Gradle: **7/7 OK** (66 HTTPS/ML Kit, 60 LiteRT, 3065 OkHttp di cui 151 da net/, 179 nostre MapLibre, 9016 Glance di cui 84 dal widget).

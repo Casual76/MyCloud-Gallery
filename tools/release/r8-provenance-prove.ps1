@@ -162,6 +162,19 @@ foreach($target in @('Lorg/maplibre/Real;','Lokhttp3/Real;','Landroidx/glance/Re
  Check "outline $target non esentato" (-not [R8Provenance]::PlatformOutline($ref))
  Check "outline $target propagato al chiamante" ([R8Provenance]::OutlineBody($ref).Contains($target))
 }
+# 12/11: il nome della classe che ospita l'outline non e' una chiamata alla libreria; il corpo si'. Il caso vero: l'outline di NsdManager.discoverServices
+# (non di sola piattaforma: nomina Network) ospitato da una classe dal nome di MapLibre.
+$ref=Outline 'org/maplibre/Fake' 'invoke-virtual/range {v0, v1, v2, v3, v4, v5}, Landroid/net/nsd/NsdManager;.discoverServices:(Ljava/lang/String;ILandroid/net/Network;Ljava/util/concurrent/Executor;Landroid/net/nsd/NsdManager$DiscoveryListener;)V'
+Check 'outline con Network non e'' di sola piattaforma' (-not [R8Provenance]::PlatformOutline($ref))
+Check 'outline nome MapLibre corpo NSD: il nome dell''ospite non conta' (-not [R8Provenance]::OutlineCall($ref).Contains('Lorg/maplibre/'))
+Check 'outline nome MapLibre corpo NSD: il corpo resta nel testo' ([R8Provenance]::OutlineCall($ref).Contains('Landroid/net/Network;'))
+foreach($target in @('Lorg/maplibre/Real;','Lokhttp3/Real;','Landroidx/glance/Real;','Ljava/net/HttpURLConnection;')) {
+ $ref=Outline 'dev/pampa/Innocuo' ('invoke-static {}, '+$target+'.real:()V')
+ Check "outline ospite innocuo corpo $target resta attribuito" ([R8Provenance]::OutlineCall($ref).Contains($target))
+ $ref=Outline 'org/maplibre/Fake' ('invoke-static {}, '+$target+'.real:()V')
+ Check "outline ospite MapLibre corpo $target resta attribuito" ([R8Provenance]::OutlineCall($ref).Contains($target))
+}
+Throws 'outline corpo assente cade anche nel testo' {[R8Provenance]::OutlineCall('{}, Lmissing/Fake$$ExternalSyntheticApiModelOutline0;.m:()V // method@1')}
 Throws 'outline corpo assente cade' {[R8Provenance]::PlatformOutline('{}, Lmissing/Fake$$ExternalSyntheticApiModelOutline0;.m:()V // method@1')}
 $ref=Outline 'org/maplibre/Fake' 'invoke-custom {}, call_site@1'
 Throws 'outline indiretto cade' {[R8Provenance]::PlatformOutline($ref)}

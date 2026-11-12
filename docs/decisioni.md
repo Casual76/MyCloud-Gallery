@@ -18890,6 +18890,33 @@ di I4 (`f329e9c3`: stato vuoto, «i», anello), la scheda di copertina corretta 
   revoca cade `FacesTrimMemoryTest`; senza l'attesa cadono le due prove dell'attesa; senza il cancello dopo l'attesa cade la prova della foto nascosta
   durante l'attesa; senza la ripartenza al ritorno cade `FacesTrimMemoryTest`.
 
+#### I1, I6 giro 2 (12/11/2026): la review indipendente CG-I1
+
+- **CG-I1-01 (maggiore, corretto).** Il ritorno visibile poteva perdersi: la pausa era un flag abbassato da un collector sul primo piano, e lo
+  `StateFlow` accorpa un'uscita e un rientro rapidi. Ora non c'e' ne' collector ne' flag da abbassare: `GuardedPeopleCrops` aspetta lo **stato**
+  `MutableAppContext.foreground` (aggiornato nello stesso momento del contesto dell'app da `ProcessWatcher`, in modo sincrono) e, se l'app e' gia'
+  visibile, non aspetta affatto. Tolti `FacesGraph.onAppVisible`, il parametro `appVisible` e il collector di `FacesWiring`.
+- **CG-I1-02 (minore, corretto).** Ogni `trim`/`clear` apre una generazione: un ritaglio cominciato prima non rientra nella cache liberata. Trovato:
+  con una **revoca vera** durante la produzione (`clear` mentre la sorgente lavora) il ritaglio, prima, tornava a chi l'aveva chiesto **ed entrava in
+  cache** (una richiesta dopo lo riceveva dalla memoria se il cancello diceva ancora si'). Ora una revoca durante l'attesa o la produzione fa tornare
+  null e non tocca la cache.
+- **CG-I1-03 (minore, corretto).** Prove deterministiche con `runTest` e barriere (la sorgente ferma su un `CompletableDeferred`; il ritaglio fermo
+  sullo stato di visibilita' esattamente dove lo lascia `runCurrent`, con il primo cancello gia' passato). La prova sul grafo vero ora ritaglia
+  davvero (`FacesIntegrationTest.i6_…`, sulla scena con le persone calcolate): cache piena, uscita/rientro rapidi con lo svuotamento in mezzo,
+  attesa ad app nascosta e un ritaglio al ritorno (contatore della sorgente), poca memoria in primo piano, Persone spenta mentre un ritaglio aspetta.
+  `FacesTrimMemoryTest` tolto.
+- **Limite 4a (chiuso).** `ArchivePeople.shownCellsOf` (e quindi `mayShow`) rifiuta tutto con Persone non attiva qui (`availability`), come gia'
+  facevano elenchi e pagine; prova in `PeopleVisibilityTest` e sul grafo (cancellazione mentre un ritaglio aspetta: niente volto ne' per chi
+  aspettava ne' per chi chiede dopo).
+- **Limite 4b (chiuso).** `CollectionCovers.dropRevoked`, lanciato dal `CollectionsLayoutViewModel` (il proprietario delle copie): a ogni revoca si
+  buttano le copie permesse con un segno diverso anche quando la scheda non e' composta (modalita' modifica). Prova in `CollectionCoversGiro2Test`.
+- **Resta (non fatto, costo/beneficio):** un ritaglio che ha gia' passato il controllo dello stato e poi trova l'app appena nascosta ritaglia lo
+  stesso (non entra in cache); coordinare l'ammissione alla sorgente con lo svuotamento vorrebbe un blocco attorno alla decodifica.
+- **Mutazioni** (tre corse, codice rimesso dopo ciascuna; ogni prova cade per la sua): foto d'origine al disegno (E1), segno delle revoche nelle
+  Raccolte (E2), `clear` senza revoca (E3), primo cancello (E4), `onTrimMemory` che revoca (N1), attesa tolta (N2), secondo cancello tolto (N3,
+  ora deterministico), attesa su un fronte invece che sullo stato (N4, il difetto di CG-I1-01 rimesso: cade la prova del ritorno non visto e quella
+  sul grafo), generazione tolta (N5), barriera di revoca tolta (N6), `availability` tolta dal cancello (N7), `dropRevoked` vuoto (N8).
+
 ### I4, il resto dell'app con meno testo (fase I, 11/11 notte)
 
 Il metro dell'utente: «se non sapessi leggere o sentire, potrei usare l'app?». Censimento in `docs/i4-censimento.md`, prima e dopo in

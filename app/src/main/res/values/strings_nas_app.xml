@@ -23,4 +23,6 @@
   <string name="nas_unfreeze_wrong">Il numero non corrisponde.</string>
   <string name="nas_unfreeze_confirm">Ho controllato, continua</string>
   <string name="nas_unfreeze_cancel">Annulla</string>
+  <!-- Giro 1 della fase I (CU-22): la piastrella del cestino del NAS nelle Raccolte, corta e diversa da «Eliminati di recente» del telefono. -->
+  <string name="collections_nas_trash">Cestino del NAS</string>
 </resources>

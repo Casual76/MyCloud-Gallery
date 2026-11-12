@@ -7,6 +7,7 @@ import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.Text
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.hasScrollAction
@@ -103,7 +104,7 @@ class CollectionsExtraGroupsTabletTest : ComposeScreenTest() {
     }
 
     // CS-17: senza raccolte-filtro il pannello parte da "Scegli una raccolta".
-    composeRule.onNodeWithText("Scegli una raccolta").assertExists()
+    composeRule.onNodeWithContentDescription("Scegli una raccolta").assertExists()
     composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText("Cartelle NAS"))
     composeRule.onNodeWithText("Cartelle NAS").performClick()
     composeRule.waitForIdle()

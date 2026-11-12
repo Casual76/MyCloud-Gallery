@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.BurstMode
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.FolderDelete
 import androidx.compose.material.icons.rounded.Luggage
 import androidx.compose.material.icons.rounded.PhotoAlbum
 import androidx.compose.material.icons.rounded.Storage
@@ -238,7 +239,7 @@ object CollectionsSectionSamples {
         entries = listOf(
           CollectionEntry("nas/folders", "Cartelle NAS", "Sfoglia, crea, rinomina, sposta ed elimina", Icons.Rounded.Folder, FluidTone.Primary),
           CollectionEntry("nas/space", "Spazio NAS", "Spazio libero, quota e file più grandi", Icons.Rounded.Storage, FluidTone.Info),
-          CollectionEntry("nas/trash", "Eliminati di recente del NAS", "Il cestino del NAS: 30 giorni per ripensarci", Icons.Rounded.Delete, FluidTone.Danger),
+          CollectionEntry("nas/trash", "Cestino del NAS", "Il cestino del NAS: 30 giorni per ripensarci", Icons.Rounded.FolderDelete, FluidTone.Danger),
           CollectionEntry("nas/operations", "Operazioni in corso", "Quello che sta facendo il NAS per te", Icons.Rounded.Sync, FluidTone.Success),
         ),
       ),

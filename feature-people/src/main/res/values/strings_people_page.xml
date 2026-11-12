@@ -5,6 +5,8 @@
   <string name="persone_page_title_unknown">Persona</string>
   <string name="persone_more">Altre azioni</string>
   <string name="persone_review">Controlla le foto</string>
+  <!-- Giro 1 (CU-12): l'etichetta corta del tasto (TalkBack dice «Controlla le foto»). -->
+  <string name="persone_button_review">Controlla</string>
   <string name="persone_merge_with">Unisci con…</string>
   <string name="persone_split">Dividi…</string>
   <string name="persone_set_cover">Scegli copertina</string>
@@ -15,13 +17,10 @@
   <string name="persone_maybe_header">Forse è anche…</string>
 
   <string name="persone_page_empty_title">Nessuna foto da mostrare</string>
-  <string name="persone_page_empty_detail">I volti di questa persona non si ritrovano più nelle foto. Puoi ricontrollare dopo il prossimo calcolo.</string>
   <string name="persone_forgotten_title">Persona dimenticata</string>
-  <string name="persone_forgotten_detail">Il gruppo e il nome non ci sono più. Se arrivano foto nuove, potrebbe ricomparire senza nome.</string>
   <string name="persone_all_hidden_title">Tutte le foto sono nascoste</string>
   <string name="persone_all_hidden_detail">Il nome e il gruppo ci sono ancora: sono le foto a stare tra i Nascosti. Tornano qui appena ne mostri una.</string>
   <string name="persone_not_found_title">Questa persona non c\'è</string>
-  <string name="persone_not_found_detail">Può essere stata unita a un\'altra o dimenticata.</string>
   <string name="persone_hidden_title">Persona nascosta</string>
   <string name="persone_hidden_detail">Non compare in Persone, nei suggerimenti e nella ricerca. Le sue foto restano in Libreria.</string>
 
@@ -37,7 +36,6 @@
   <string name="persone_review_not_icon">Non è %1$s: togli i volti scelti</string>
   <string name="persone_review_ignore">Ignora questo volto</string>
   <string name="persone_review_empty_title">Nessun volto da controllare</string>
-  <string name="persone_review_empty_detail">I volti di questa persona non si ritrovano in foto che si possono mostrare.</string>
   <string name="persone_review_done_title">Fatto</string>
   <plurals name="persone_review_done_detail">
     <item quantity="one">Un volto cambiato. Vale subito, anche sugli altri tuoi dispositivi.</item>

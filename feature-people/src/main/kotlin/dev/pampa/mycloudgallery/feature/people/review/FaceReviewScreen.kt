@@ -20,7 +20,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
 import dev.pampa.mycloudgallery.core.model.FaceLocator
 import dev.pampa.mycloudgallery.feature.people.R
@@ -30,6 +29,9 @@ import dev.pampa.mycloudgallery.feature.people.contract.PeopleCrops
 import dev.pampa.mycloudgallery.feature.people.contract.ReviewPurpose
 import dev.pampa.mycloudgallery.feature.people.ui.PeopleDimens
 import dev.pampa.mycloudgallery.feature.people.ui.PeopleMessageBlock
+import androidx.compose.material.icons.rounded.Face
+import androidx.compose.material.icons.rounded.TaskAlt
+import dev.pampa.mycloudgallery.feature.people.ui.PeopleFigureState
 
 // "CONTROLLA LE FOTO" E "DIVIDI" (Fase 8, P9; docs/fase8-progetto.md §1.5 `FaceReviewState`, §2.6, E-F20, E-F21, E-F3). La griglia dei volti di
 // una persona, dal meno sicuro. In "Controlla le foto" si toccano i volti che non sono di questa persona e si dice "Non e' …" (o "Ignora" per un
@@ -102,9 +104,11 @@ internal fun FaceReviewScreen(
     when (val state = ui.state) {
       FaceReviewState.Applying -> item(key = "applying") { FluidLoadingBlock() }
       FaceReviewState.Done -> item(key = "done") {
-        FluidEmptyState(
+        // Giro 1 (CU-23): la figura della spunta e "Fatto"; quanti volti e dove vale, dietro la «i».
+        PeopleFigureState(
+          icon = Icons.Rounded.TaskAlt,
           title = stringResource(R.string.persone_review_done_title),
-          detail = if (ui.changed > 0) resources.getQuantityString(R.plurals.persone_review_done_detail, ui.changed, ui.changed) else stringResource(R.string.persone_review_done_none),
+          why = if (ui.changed > 0) resources.getQuantityString(R.plurals.persone_review_done_detail, ui.changed, ui.changed) else stringResource(R.string.persone_review_done_none),
         )
       }
       is FaceReviewState.Grid -> {
@@ -130,7 +134,7 @@ internal fun FaceReviewScreen(
           }
         }
         if (state.faces.isEmpty()) {
-          item(key = "empty") { FluidEmptyState(title = stringResource(R.string.persone_review_empty_title), detail = stringResource(R.string.persone_review_empty_detail)) }
+          item(key = "empty") { PeopleFigureState(icon = Icons.Rounded.Face, title = stringResource(R.string.persone_review_empty_title)) }
         } else {
           faceGrid("faces", state.faces, columns) { index, face, tileModifier ->
             val chosen = face.face in state.selection

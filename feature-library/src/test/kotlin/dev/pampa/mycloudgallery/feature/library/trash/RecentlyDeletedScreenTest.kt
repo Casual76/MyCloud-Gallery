@@ -103,7 +103,8 @@ class RecentlyDeletedScreenTest : ComposeScreenTest() {
 
     showTrash(controller(source = counting))
 
-    composeRule.onNodeWithText("Hai annullato lo sblocco. Gli Eliminati di recente restano chiusi.").assertExists()
+    // Giro 1 (CU-23): il motivo sta dietro la «i» dello stato vuoto (la sua descrizione).
+    composeRule.onNodeWithContentDescription("Hai annullato lo sblocco. Gli Eliminati di recente restano chiusi.").assertExists()
     assertThat(counting.reads).isEqualTo(0)
     assertThat(loader.seen).isEmpty()
     composeRule.onAllNodesWithContentDescription("Foto eliminata", substring = true).assertCountEquals(0)
@@ -203,8 +204,8 @@ class RecentlyDeletedScreenTest : ComposeScreenTest() {
     showTrashOn(PhoneTrash.GALLERY, controller(source = FakeRecentlyDeletedSource(emptyList())))
 
     composeRule.onNodeWithText("Niente eliminato di recente").assertExists()
-    composeRule.onNodeWithText("resta qui 30 giorni", substring = true).assertExists()
-    composeRule.onAllNodesWithText("lo ripristini da lì entro 30 giorni", substring = true).assertCountEquals(0)
+    composeRule.onNodeWithContentDescription("resta qui 30 giorni", substring = true).assertExists()
+    composeRule.onAllNodesWithContentDescription("lo ripristini da lì entro 30 giorni", substring = true).assertCountEquals(0)
   }
 
   @Test

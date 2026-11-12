@@ -27,7 +27,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberNewWindowEntry
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuButton
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
@@ -56,6 +55,8 @@ import dev.pampa.mycloudgallery.feature.memories.ui.MemoriesText
 import dev.pampa.mycloudgallery.feature.memories.ui.MemoryCover
 import dev.pampa.mycloudgallery.feature.memories.ui.UndoBar
 import dev.pampa.mycloudgallery.feature.memories.ui.coverRequest
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryFigureState
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIcons
 
 // LA PAGINA DEL RICORDO (Fase 9, P9; docs/fase9-progetto.md §1.5 `MemoryPageState`, §2.4, D13). Il titolo grande ("Un anno fa", "Oslo, marzo 2025",
 // "Con Anna"), il sottotitolo (periodo e luoghi), la copertina, "Riproduci" in evidenza, la griglia degli elementi (stessa cella e stesso viewer della
@@ -102,10 +103,10 @@ internal fun MemoryPageScreen(
     is MemoryPageState.Ready -> ReadyPage(ui, page, thumbnails, handlers, modifier, listState)
     MemoryPageState.Gone -> Plain(stringResource(R.string.memorie_page_title_unknown), handlers, modifier, listState) {
       ui.undo?.let { offer -> item(key = "undo") { UndoBar(offer, handlers::onUndo) } }
-      item(key = "gone") { EmptyBlock(R.string.memorie_gone_title, R.string.memorie_gone_detail, handlers) }
+      item(key = "gone") { EmptyBlock(R.string.memorie_gone_title, handlers) }
     }
     MemoryPageState.NotFound -> Plain(stringResource(R.string.memorie_page_title_unknown), handlers, modifier, listState) {
-      item(key = "not-found") { EmptyBlock(R.string.memorie_not_found_title, R.string.memorie_not_found_detail, handlers) }
+      item(key = "not-found") { EmptyBlock(R.string.memorie_not_found_title, handlers) }
     }
   }
   Sheets(ui, handlers)
@@ -116,10 +117,10 @@ private fun Plain(title: String, handlers: MemoryPageHandlers, modifier: Modifie
   FluidScreen(title = title, modifier = modifier, onBack = handlers::onBack, listState = listState, contentMaxWidth = MemoriesDimens.SheetWidth, content = content)
 }
 
+/** Giro 1 (CU-23): un ricordo che non c'e' nella forma unica degli stati vuoti: la figura, il titolo e il tasto per tornare. */
 @Composable
-private fun EmptyBlock(@StringRes title: Int, @StringRes detail: Int, handlers: MemoryPageHandlers) {
-  Column(verticalArrangement = Arrangement.spacedBy(MemoriesDimens.BlockGap)) {
-    FluidEmptyState(title = stringResource(title), detail = stringResource(detail))
+private fun EmptyBlock(@StringRes title: Int, handlers: MemoryPageHandlers) {
+  GalleryFigureState(icon = GalleryIcons.Memories.icon, title = stringResource(title), fill = false) {
     FluidButton(text = stringResource(R.string.memorie_back_to_memories), onClick = handlers::onBack, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true)
   }
 }

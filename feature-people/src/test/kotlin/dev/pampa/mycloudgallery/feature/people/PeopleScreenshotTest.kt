@@ -172,11 +172,11 @@ abstract class PeopleShots(private val dark: Boolean, private val device: String
   private fun page(ui: dev.pampa.mycloudgallery.feature.people.contract.PersonPageUi): @Composable () -> Unit =
     { PersonPageScreen(ui, scenes.thumbs.thumbnails, scenes.crops, NoPersonPageHandlers) }
 
-  @Test fun paginaPersona() = shoot("pagina-persona", "Anna", "Controlla le foto", "FORSE È ANCHE…", content = page(scenes.pageUi(scenes.world.anna)))
+  @Test fun paginaPersona() = shoot("pagina-persona", "Anna", "Controlla", "FORSE È ANCHE…", content = page(scenes.pageUi(scenes.world.anna)))
 
   @Test fun paginaPersonaTestoGrande() = shoot("pagina-persona", "Anna", fontScale = LARGE_TEXT, content = page(scenes.pageUi(scenes.world.anna)))
 
-  @Test fun paginaSenzaNome() = shoot("pagina-senza-nome", "Aggiungi un nome", content = page(scenes.pageUnnamed()))
+  @Test fun paginaSenzaNome() = shoot("pagina-senza-nome", "Persona senza nome", "Nome", content = page(scenes.pageUnnamed()))
 
   @Test fun paginaNascosta() = shoot("pagina-nascosta", "Persona nascosta", "Mostra di nuovo", content = page(scenes.pageHidden()))
 

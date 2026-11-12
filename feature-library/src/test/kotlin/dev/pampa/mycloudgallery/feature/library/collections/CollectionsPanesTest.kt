@@ -10,7 +10,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
@@ -60,7 +62,7 @@ class CollectionsPanesTest : ComposeScreenTest() {
     start(360)
     for (dp in listOf(360, 600, 839)) {
       resizeTo(dp)
-      composeRule.onAllNodesWithText("Scegli una raccolta").assertCountEquals(0)
+      composeRule.onAllNodesWithContentDescription("Scegli una raccolta").assertCountEquals(0)
     }
     // CS-17: le righe che si scelgono sono quelle di produzione (i Nascosti), non piu' le raccolte-filtro del vecchio "Telefono".
     composeRule.onNodeWithText("Nascosti").performClick()
@@ -73,9 +75,9 @@ class CollectionsPanesTest : ComposeScreenTest() {
     start(840)
     for (dp in listOf(840, 1280)) {
       resizeTo(dp)
-      composeRule.onNodeWithText("Scegli una raccolta").assertExists()
+      composeRule.onNodeWithContentDescription("Scegli una raccolta").assertExists()
       val list = composeRule.onNodeWithText("Nascosti").getUnclippedBoundsInRoot()
-      val detail = composeRule.onNodeWithText("Scegli una raccolta").getUnclippedBoundsInRoot()
+      val detail = composeRule.onNodeWithContentDescription("Scegli una raccolta").getUnclippedBoundsInRoot()
       // L'elenco sta a sinistra e il dettaglio comincia dopo di lui.
       assertThat(list.right).isAtMost(detail.left)
     }

@@ -32,7 +32,9 @@ class PersonPageScreensTest : PeopleScreenTest() {
   @Test
   fun paginaConNome_haIlTitoloIlContoLeAzioniELeFotoMostrabili() {
     showAll(content = page(scenes.pageUi(scenes.world.anna)))
-    assertShows("pagina", "Anna", "4 foto", "Rinomina", "Controlla le foto", "FORSE È ANCHE…", "Marco")
+    assertShows("pagina", "Anna", "4 foto", "Rinomina", "Controlla", "FORSE È ANCHE…", "Marco")
+    // Giro 1 (CU-12): il tasto scrive una parola, TalkBack dice la frase intera.
+    assertThat(says("Controlla le foto")).isTrue()
     // Le foto sono quelle mostrabili: l'ultima di Anna e' nascosta e non c'e' (D28).
     assertThat(countDescribed("Foto, ")).isEqualTo(4)
     assertDoesNotShow("pagina", "Aggiungi un nome")
@@ -41,7 +43,9 @@ class PersonPageScreensTest : PeopleScreenTest() {
   @Test
   fun paginaSenzaNome_invitaADareUnNome() {
     showAll(content = page(scenes.pageUnnamed()))
-    assertShows("pagina senza nome", "Persona senza nome", "Aggiungi un nome", "Controlla le foto", "5 foto")
+    assertShows("pagina senza nome", "Persona senza nome", "Nome", "Controlla", "5 foto")
+    assertThat(says("Aggiungi un nome")).isTrue()
+    assertThat(says("Controlla le foto")).isTrue()
   }
 
   @Test
@@ -91,8 +95,8 @@ class PersonPageScreensTest : PeopleScreenTest() {
   fun toccareIBottoniDellaTestata() {
     val handlers = RecordingPage()
     showAll(content = page(scenes.pageUnnamed(), handlers))
-    composeRule.onNodeWithText("Aggiungi un nome", useUnmergedTree = true).performClick()
-    composeRule.onNodeWithText("Controlla le foto", useUnmergedTree = true).performClick()
+    composeRule.onNodeWithContentDescription("Aggiungi un nome").performClick()
+    composeRule.onNodeWithContentDescription("Controlla le foto").performClick()
     assertThat(handlers.actions).containsExactly(PersonAction.RENAME, PersonAction.REVIEW).inOrder()
   }
 
@@ -235,11 +239,12 @@ class PersonPageScreensTest : PeopleScreenTest() {
   fun controlla_statiApplicareFattoVuotoEMessaggio() {
     val set = switching(scenes.reviewApplying()) { FaceReviewScreen(it, "Anna", scenes.crops, RecordingReview()) }
     set(scenes.reviewDone(2))
-    assertShows("fatto", "Fatto", "2 volti cambiati", "Valgono subito, anche sugli altri tuoi dispositivi")
+    assertShows("fatto", "Fatto")
+    assertSays("fatto", "2 volti cambiati", "Valgono subito, anche sugli altri tuoi dispositivi")
     set(scenes.reviewDone(1))
-    assertShows("fatto uno", "Un volto cambiato")
+    assertSays("fatto uno", "Un volto cambiato")
     set(scenes.reviewDone(0))
-    assertShows("fatto niente", "Non è cambiato niente")
+    assertSays("fatto niente", "Non è cambiato niente")
     set(scenes.reviewEmpty())
     assertShows("vuoto", "Nessun volto da controllare")
     set(scenes.reviewWithMessage())

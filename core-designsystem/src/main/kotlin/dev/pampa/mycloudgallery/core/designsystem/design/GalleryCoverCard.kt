@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +36,9 @@ object GalleryCoverCardDefaults {
 
   /** Il punto "nuovo" in alto a destra e il suo filo chiaro. */
   val NewDot: Dp = 10.dp
+
+  /** Quanto sale la sfumatura sopra il titolo (dalla foto allo scrim pieno). */
+  val FadeHeight: Dp = 28.dp
   val NewDotRing: Dp = 2.dp
 }
 
@@ -47,7 +51,8 @@ object GalleryCoverCardDefaults {
  * @param titleStyle il corpo del titolo (le schede larghe dei caroselli lo hanno piu' grande).
  * @param titleMaxLines quante righe al piu' per il titolo.
  * @param isNew il punto dell'accento in alto a destra (la parola la dice la descrizione della scheda).
- * @param labelsSpoken falso se la descrizione della scheda dice gia' tutto: i testi si vedono ma TalkBack non li rilegge.
+ * @param labelsSpoken falso (di serie): la scheda ha la sua descrizione (`contentDescription` con `mergeDescendants`) e i testi si vedono ma TalkBack
+ *   non li rilegge (una sola lettura per scheda, CS-6 della fase I); vero solo per una scheda senza descrizione propria.
  * @param cover la copertina (la foto, il volto, il segno della famiglia mentre la foto non c'e'), sotto a tutto.
  */
 @Composable
@@ -58,7 +63,7 @@ fun GalleryCoverCard(
   titleStyle: TextStyle = MaterialTheme.typography.titleSmall,
   titleMaxLines: Int = 2,
   isNew: Boolean = false,
-  labelsSpoken: Boolean = true,
+  labelsSpoken: Boolean = false,
   cover: @Composable BoxScope.() -> Unit,
 ) {
   Box(modifier = modifier) {
@@ -77,18 +82,25 @@ fun GalleryCoverCard(
   }
 }
 
-/** Il titolo di una scheda in basso, bianco sopra la sfumatura, con la riga piccola sotto. */
+/**
+ * Il titolo di una scheda in basso, bianco, con la riga piccola sotto. La sfumatura sale dalla foto **sopra** le righe e arriva piena dove comincia
+ * il titolo: dietro le lettere lo scrim e' gia' intero, e il bianco regge una foto bianca (5,7:1, `GalleryCoverCardContrastTest`). Prima la sfumatura
+ * correva dietro le righe stesse e il titolo stava nella parte chiara (2-2,6:1 su una copertina chiara, CU-2 della fase I).
+ */
 @Composable
 private fun GalleryCoverLabel(title: String, caption: String?, titleStyle: TextStyle, titleMaxLines: Int, spoken: Boolean, modifier: Modifier) {
   val scrim = GalleryOnPhoto.scrim()
   val quiet = if (spoken) Modifier else Modifier.semantics { hideFromAccessibility() }
   val inset = GalleryCoverCardDefaults.TextInset
-  Column(
-    modifier = modifier
-      .fillMaxWidth()
-      .background(Brush.verticalGradient(listOf(scrim.copy(alpha = 0f), scrim)))
-      .padding(start = inset, end = inset, bottom = inset, top = inset * 2),
-  ) {
+  Column(modifier = modifier.fillMaxWidth()) {
+    Box(modifier = Modifier.fillMaxWidth().height(GalleryCoverCardDefaults.FadeHeight).background(Brush.verticalGradient(listOf(scrim.copy(alpha = 0f), scrim))))
+    GalleryCoverLines(title, caption, titleStyle, titleMaxLines, quiet, Modifier.fillMaxWidth().background(scrim).padding(start = inset, end = inset, bottom = inset))
+  }
+}
+
+@Composable
+private fun GalleryCoverLines(title: String, caption: String?, titleStyle: TextStyle, titleMaxLines: Int, quiet: Modifier, modifier: Modifier) {
+  Column(modifier = modifier) {
     Text(text = title, style = titleStyle, color = GalleryOnPhoto.Content, maxLines = titleMaxLines, overflow = TextOverflow.Ellipsis, modifier = quiet)
     if (caption != null) {
       Text(text = caption, style = MaterialTheme.typography.labelMedium, color = GalleryOnPhoto.Content, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = quiet)

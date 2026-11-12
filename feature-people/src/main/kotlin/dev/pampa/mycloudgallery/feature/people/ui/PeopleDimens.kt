@@ -19,7 +19,13 @@ internal object PeopleDimens {
   /** I1: il lato del ritaglio chiesto per una scheda (il volto riempie l'altezza): sul telefono arriva al tetto [CropMaxPx], come le schede delle Raccolte. */
   val CardCrop: Dp = 144.dp
 
-  /** I1: il margine del nome sopra la sfumatura in basso, e del segno della scelta in alto. */
+  /** Giro 1 (CU-23): lo spazio sopra e sotto uno stato vuoto (la figura, il titolo, il tasto). */
+  val StatePadding: Dp = 24.dp
+
+  /** Giro 1 (CU-12): l'icona dentro i tasti della pagina di una persona. */
+  val ButtonGlyph: Dp = 20.dp
+
+  /** I1: il margine del segno della scelta in alto. */
   val CardInset: Dp = 10.dp
 
   /** Il lato dell'avatar grande in testa alla pagina di una persona. */

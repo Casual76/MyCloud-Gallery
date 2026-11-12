@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.google.common.truth.Truth.assertThat
@@ -100,7 +101,8 @@ class HiddenScreenTest : ComposeScreenTest() {
 
     showHidden()
 
-    composeRule.onNodeWithText("Hai annullato lo sblocco. I Nascosti restano chiusi.").assertExists()
+    // Giro 1 (CU-23): il motivo sta dietro la «i» dello stato vuoto (la sua descrizione).
+    composeRule.onNodeWithContentDescription("Hai annullato lo sblocco. I Nascosti restano chiusi.").assertExists()
     assertThat(world.hiddenLibrary.reads).isEqualTo(0)
     composeRule.onAllNodes(anyCell).assertCountEquals(0)
 
@@ -118,7 +120,7 @@ class HiddenScreenTest : ComposeScreenTest() {
 
     showHidden()
 
-    composeRule.onNodeWithText("Troppi tentativi", substring = true).assertExists()
+    composeRule.onNodeWithContentDescription("Troppi tentativi", substring = true).assertExists()
     assertThat(world.hiddenLibrary.reads).isEqualTo(0)
   }
 
@@ -138,7 +140,7 @@ class HiddenScreenTest : ComposeScreenTest() {
   fun senzaUnaActivityPerLaSchermataDiSistemaRestaChiuso() {
     showHidden(authenticator = null)
 
-    composeRule.onNodeWithText("Lo sblocco non è disponibile adesso. Riprova fra poco.").assertExists()
+    composeRule.onNodeWithContentDescription("Lo sblocco non è disponibile adesso. Riprova fra poco.").assertExists()
     assertThat(world.hiddenLibrary.reads).isEqualTo(0)
     assertThat(windowIsSecure()).isTrue()
   }

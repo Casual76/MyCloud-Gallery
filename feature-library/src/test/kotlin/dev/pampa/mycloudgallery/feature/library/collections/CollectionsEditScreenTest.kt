@@ -389,7 +389,7 @@ class CollectionsEditScreenTabletTest : CollectionsEditScreenBase() {
     show { Host() }
 
     // G2: senza le raccolte-filtro del Telefono (scheda Album) il dettaglio parte da "Scegli una raccolta".
-    composeRule.onNodeWithText("Scegli una raccolta").assertExists()
+    composeRule.onNodeWithContentDescription("Scegli una raccolta").assertExists()
     // Le due colonne: l'elenco a sinistra, il dettaglio a destra; le sezioni nello stesso ordine del telefono.
     composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasContentDescription(TRASH_ROW, substring = true))
     // Ricordi e Luoghi (Fase 9) non hanno ancora un fornitore negli esempi: non ci sono; Album, Album smart e Telefono sono nella scheda Album.
@@ -440,7 +440,7 @@ class CollectionsEditScreenTabletTest : CollectionsEditScreenBase() {
 
     // La raccolta aperta non si vede piu': il pannello dice di sceglierne una, non resta sul suo dettaglio.
     composeRule.onAllNodesWithText("dettaglio recently_deleted").assertCountEquals(0)
-    composeRule.onNodeWithText("Scegli una raccolta").assertExists()
+    composeRule.onNodeWithContentDescription("Scegli una raccolta").assertExists()
   }
 
   @Test

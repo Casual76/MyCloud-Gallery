@@ -46,7 +46,6 @@ fun MediaPickerRoute(
       CollectionEmptyState(
         icon = Icons.Rounded.PhotoLibrary,
         title = stringResource(R.string.picker_empty_title),
-        detail = stringResource(R.string.picker_empty_message),
       )
     },
     modifier = modifier,

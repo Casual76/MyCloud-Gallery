@@ -54,13 +54,15 @@ class PeopleListScreensTest : PeopleScreenTest() {
   @Test
   fun elenco_primoCalcolo_conLaPercentuale() {
     showAll { PeopleListScreen(scenes.listWorking(35), scenes.crops, NoPeopleListHandlers) }
-    assertShows("calcolo", "Sto riconoscendo i volti", "Fatto il 35%")
+    assertShows("calcolo", "Sto riconoscendo i volti")
+    assertSays("calcolo", "Fatto il 35%")
   }
 
   @Test
   fun elenco_primoCalcolo_inAttesaESenzaPersone_eConUnMessaggio() {
     val set = switching(scenes.listWorking(null)) { PeopleListScreen(it, scenes.crops, NoPeopleListHandlers) }
-    assertShows("calcolo senza percentuale", "Sto riconoscendo i volti", "Aspetto il momento giusto")
+    assertShows("calcolo senza percentuale", "Sto riconoscendo i volti")
+    assertSays("calcolo senza percentuale", "Aspetto il momento giusto")
     set(scenes.listEmpty())
     assertShows("vuoto", "Ancora nessuna persona")
     set(scenes.listWithMessage(PeopleMessage.NOT_ACTIVE))
@@ -191,7 +193,8 @@ class PeopleListScreensTest : PeopleScreenTest() {
   @Test
   fun altriVolti_vuoto() {
     showAll { OthersScreen(scenes.othersEmpty(), scenes.crops, NoOthersHandlers) }
-    assertShows("altri volti vuoto", "Nessun gruppo senza nome", "almeno tre foto")
+    assertShows("altri volti vuoto", "Nessun gruppo senza nome")
+    assertSays("altri volti vuoto", "almeno tre foto")
   }
 
   @Test
@@ -278,7 +281,8 @@ class PeopleListScreensTest : PeopleScreenTest() {
     composeRule.onNodeWithText("Nonna Rosa", useUnmergedTree = true).performClick()
     assertThat(handlers.shown).containsExactly(scenes.nascosta)
     set(HiddenPeopleState.Empty to null)
-    assertShows("nascoste vuoto", "Nessuna persona nascosta", "foto restano in Libreria")
+    assertShows("nascoste vuoto", "Nessuna persona nascosta")
+    assertSays("nascoste vuoto", "foto restano in Libreria")
     set(HiddenPeopleState.Loading to null)
     set(scenes.hiddenReady() to PeopleMessage.NOT_FOUND)
     assertShows("nascoste messaggio", "Questa persona non c'è più")

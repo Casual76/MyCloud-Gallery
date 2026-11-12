@@ -49,6 +49,26 @@ fun interface FileChecksum {
   fun sha256(file: File): String
 }
 
+/**
+ * Il cancello del passaggio ad Android (giro 2, US2-1 e UU2-1): aperto solo mentre l'activity dell'app e' RESUMED. Lo aprono e lo chiudono gli eventi
+ * del ciclo di vita dell'activity (`UpdateLifecycleEffect` alla radice: ON_RESUME apre, ON_PAUSE e l'uscita dalla composizione chiudono), non
+ * l'importanza del processo: un servizio in primo piano, il backup, non lo apre. [GuardedUpdateInstaller.commit] lo guarda una volta sola, dopo le
+ * verifiche e subito prima di `installFile`.
+ */
+class ForegroundGate {
+  @Volatile private var resumed = false
+
+  fun inFront(): Boolean = resumed
+
+  fun open() {
+    resumed = true
+  }
+
+  fun close() {
+    resumed = false
+  }
+}
+
 /** Lo scaricamento e l'installazione dell'engine 3.0.4 (non modificato): `download` usa l'`EngineHttp` avvolto (`UpdateHttp`). */
 class EngineApkTransfer(private val engine: AndroidAppUpdateInstaller) : ApkTransfer {
   override suspend fun download(update: AvailableAppUpdate, onProgress: (AppUpdateInstallState.Downloading) -> Unit): File =

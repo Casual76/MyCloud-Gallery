@@ -37,7 +37,8 @@ import dev.pampa.mycloudgallery.feature.update.UpdatesState
 
 // LA PAGINA IMPOSTAZIONI -> AGGIORNAMENTI (pacchetto U, 12/11/2026; giro 1 delle critiche). Dall'alto: la figura con lo stato e il tasto che serve
 // (Controlla adesso, Aggiorna, Consenti, Installa, Riprova); quando c'e' una versione, che cosa cambia in poche righe; le versioni da ricevere come due
-// scelte con il segno (Stabile, di serie, e Beta), con la «i» per chi torna a Stabile. La versione installata la dice la figura (UU-7): nessuna riga in
+// scelte con il segno (Stabile, di serie, e Beta), con la «i» «Se torno a Stabile» solo con Beta scelto (giro 2, UU2-5). La versione installata la dice
+// la figura (UU-7): nessuna riga in
 // piu'. Aperta, la pagina controlla da sola se sono passate 24 ore (UU-4) e intanto mostra la versione gia' nota.
 
 @Composable
@@ -73,12 +74,15 @@ fun UpdatesScreen(state: UpdatesState, actions: UpdateActions, onBack: () -> Uni
         )
       }
     }
-    item(key = "channel-why") {
-      GalleryInfoRow(
-        label = stringResource(R.string.update_channel_beta_why_label),
-        detail = stringResource(R.string.update_channel_beta_why),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = UpdateDimens.CardPadding),
-      )
+    // Solo a chi riceve le beta: con Stabile (la scelta di serie) la riga non direbbe niente, o sembrerebbe un comando.
+    if (state.channel == UpdateChannel.BETA) {
+      item(key = "channel-why") {
+        GalleryInfoRow(
+          label = stringResource(R.string.update_channel_beta_why_label),
+          detail = stringResource(R.string.update_channel_beta_why),
+          modifier = Modifier.fillMaxWidth().padding(horizontal = UpdateDimens.CardPadding),
+        )
+      }
     }
   }
 }

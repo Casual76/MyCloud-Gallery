@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.InstallMobile
@@ -64,7 +65,8 @@ import java.util.Locale
 
 // LA FIGURA DELL'AGGIORNAMENTO (pacchetto U; giro 1 delle critiche). Il metro dell'utente: «se non sapessi leggere potrei usarla?». La figura e' l'icona
 // VERA dell'app (quella scelta in «Icona dell'app», data da `:app` con [LocalUpdateAppIcon]) con il segno nell'angolo: il punto esclamativo per una
-// novita', la spunta per «pronta» e «aggiornata», la clessidra per «non ancora», la croce per un guasto; l'anello comune della galleria mentre lavora;
+// novita' e per «pronta» (c'e' da toccare «Installa»: giro 2, UU2-3), la spunta solo per «aggiornata», la clessidra per «non ancora», la croce per un
+// guasto; l'anello comune della galleria mentre lavora (alla misura dell'icona mentre controlla, perche' la pagina non salti: UU2-9);
 // l'interruttore quando serve il permesso. Due parole la nominano, un tasto la risolve. Lo stesso pezzo nella pagina, nell'avviso e nella pagina
 // «versione fermata».
 
@@ -106,12 +108,12 @@ class UpdateActions(
 }
 
 /**
- * La figura dell'aggiornamento in grande, centrata: la testata della pagina Aggiornamenti e il cuore della pagina «versione fermata».
+ * La figura dell'aggiornamento in grande, centrata: la testata della pagina Aggiornamenti e il cuore della pagina «versione fermata» ([stopped]).
  * [showCheck] falso toglie «Controlla adesso» (chi la mostra ha gia' il suo).
  */
 @Composable
-fun UpdatePanel(state: UpdatesState, actions: UpdateActions, modifier: Modifier = Modifier, showCheck: Boolean = true) {
-  val model = UpdatePanels.of(state).let { if (!showCheck && it.primary == UpdateAction.CHECK) it.copy(primary = null) else it }
+fun UpdatePanel(state: UpdatesState, actions: UpdateActions, modifier: Modifier = Modifier, showCheck: Boolean = true, stopped: Boolean = false) {
+  val model = UpdatePanels.of(state, stopped).let { if (!showCheck && it.primary == UpdateAction.CHECK) it.copy(primary = null) else it }
   val words = panelWords(state, model)
   var whyOpen by rememberSaveable(words.why) { mutableStateOf(false) }
   Column(
@@ -144,7 +146,10 @@ fun UpdatePanel(state: UpdatesState, actions: UpdateActions, modifier: Modifier 
   }
 }
 
-/** I due tasti del modello: il principale sopra (pieno, o leggero quando non e' la cosa da fare), il leggero sotto. Alti almeno 48 dp. */
+/**
+ * I due tasti del modello: il principale sopra (pieno, o leggero quando non e' la cosa da fare), il leggero sotto. Alti almeno 48 dp. Il pieno a tutta
+ * larghezza al piu' largo come l'avviso: sul tablet in orizzontale non diventa una barra di 700 dp (UU2-9).
+ */
 @Composable
 internal fun PanelButtons(model: UpdatePanelModel, actions: UpdateActions, fillWidth: Boolean) {
   val context = LocalContext.current
@@ -152,6 +157,7 @@ internal fun PanelButtons(model: UpdatePanelModel, actions: UpdateActions, fillW
     FluidButton(
       text = context.getString(action.label),
       onClick = actionFor(action, actions),
+      modifier = Modifier.widthIn(max = UpdateDimens.PromptMaxWidth),
       style = if (model.primaryFilled) FluidButtonStyle.Filled else FluidButtonStyle.Plain,
       size = FluidButtonSize.Large,
       fillWidth = fillWidth && model.primaryFilled,
@@ -168,7 +174,7 @@ internal fun PanelButtons(model: UpdatePanelModel, actions: UpdateActions, fillW
 }
 
 internal fun actionFor(action: UpdateAction, actions: UpdateActions): () -> Unit = when (action) {
-  UpdateAction.CHECK -> actions.check
+  UpdateAction.CHECK, UpdateAction.RECHECK -> actions.check
   UpdateAction.INSTALL, UpdateAction.INSTALL_READY, UpdateAction.RETRY -> actions.install
   UpdateAction.CANCEL_READY -> actions.cancelReady
   UpdateAction.DOWNLOAD_METERED -> actions.downloadMetered
@@ -196,7 +202,9 @@ internal fun panelWords(state: UpdatesState, model: UpdatePanelModel): PanelWord
     UpdateFigure.UNAVAILABLE -> resources.getString(R.string.update_unavailable) to installed
     UpdateFigure.FOUND -> resources.getString(R.string.update_found) to
       resources.getString(R.string.update_found_detail, state.installedVersion, offer?.version.orEmpty(), size.orEmpty()).removeSuffix(" · ")
-    UpdateFigure.UNUSABLE -> resources.getString(R.string.update_unusable) to resources.getString(R.string.update_unusable_detail)
+    // La clessidra dice gia' «aspetta»: niente «Riprova domani» accanto a «Controlla adesso» (UU2-10).
+    UpdateFigure.UNUSABLE -> resources.getString(R.string.update_unusable) to null
+    UpdateFigure.COMING -> resources.getString(R.string.update_coming) to null
     UpdateFigure.METERED -> resources.getString(R.string.update_metered) to size
     UpdateFigure.PERMISSION -> {
       why = resources.getString(R.string.update_permission_why)
@@ -229,9 +237,11 @@ internal fun panelWords(state: UpdatesState, model: UpdatePanelModel): PanelWord
  */
 @Composable
 internal fun UpdateFigureView(model: UpdatePanelModel, hero: Boolean, step: InstallStep? = null) {
-  val ringSize: Dp = if (hero) UpdateDimens.HeroRing else UpdateDimens.PromptRing
   val iconSize: Dp = if (hero) UpdateDimens.HeroIcon else UpdateDimens.PromptIcon
-  val glyphSize: Dp = if (hero) UpdateDimens.HeroGlyph else UpdateDimens.PromptGlyph
+  // «Sto controllando» dura meno di un secondo: l'anello alla misura dell'icona, cosi' la testata non cresce e ricala (UU2-9).
+  val checking = model.figure == UpdateFigure.CHECKING
+  val ringSize: Dp = if (checking) iconSize else if (hero) UpdateDimens.HeroRing else UpdateDimens.PromptRing
+  val glyphSize: Dp = if (hero && !checking) UpdateDimens.HeroGlyph else UpdateDimens.PromptGlyph
   when (model.figure) {
     UpdateFigure.CHECKING, UpdateFigure.WORKING, UpdateFigure.DOWNLOADING, UpdateFigure.AWAITING -> {
       val progress = when (model.figure) {
@@ -288,9 +298,10 @@ internal fun UpdateFigureView(model: UpdatePanelModel, hero: Boolean, step: Inst
 /** Il segno nell'angolo dell'icona dell'app, per ogni figura ferma. */
 internal fun statusOf(figure: UpdateFigure): GalleryIconStatus? = when (figure) {
   UpdateFigure.IDLE -> null
-  UpdateFigure.UP_TO_DATE, UpdateFigure.READY, UpdateFigure.INSTALLED -> GalleryIconStatus.Done
-  UpdateFigure.UNAVAILABLE, UpdateFigure.UNUSABLE -> GalleryIconStatus.Waiting
-  UpdateFigure.FOUND, UpdateFigure.METERED, UpdateFigure.PERMISSION -> GalleryIconStatus.Attention
+  // La spunta verde vuol dire «fatto»: solo per l'app aggiornata. «Pronta» ha il segno di chi deve toccare (UU2-3).
+  UpdateFigure.UP_TO_DATE, UpdateFigure.INSTALLED -> GalleryIconStatus.Done
+  UpdateFigure.UNAVAILABLE, UpdateFigure.UNUSABLE, UpdateFigure.COMING -> GalleryIconStatus.Waiting
+  UpdateFigure.FOUND, UpdateFigure.READY, UpdateFigure.METERED, UpdateFigure.PERMISSION -> GalleryIconStatus.Attention
   UpdateFigure.FAILED -> GalleryIconStatus.Problem
   UpdateFigure.CHECKING, UpdateFigure.WORKING, UpdateFigure.DOWNLOADING, UpdateFigure.AWAITING -> GalleryIconStatus.Running
 }

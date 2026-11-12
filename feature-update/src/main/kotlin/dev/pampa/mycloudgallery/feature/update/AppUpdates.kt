@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.feature.update.install.AndroidInstallPermission
 import dev.pampa.mycloudgallery.feature.update.install.AndroidMeteredNetwork
 import dev.pampa.mycloudgallery.feature.update.install.AndroidPackageFacts
 import dev.pampa.mycloudgallery.feature.update.install.EngineApkTransfer
+import dev.pampa.mycloudgallery.feature.update.install.ForegroundGate
 import dev.pampa.mycloudgallery.feature.update.install.GuardedUpdateInstaller
 import dev.pampa.mycloudgallery.feature.update.install.InstallPermission
 import dev.pampa.mycloudgallery.feature.update.install.InstallStep
@@ -27,6 +28,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,8 +49,9 @@ import kotlinx.coroutines.withContext
 // ([refreshIfDue]); a mano con «Controlla adesso» ([checkNow]) e quando si cambia canale. Mai un lavoro periodico in background. L'ultima versione trovata
 // si ricorda ([SavedOffer]): dopo un riavvio la pagina e il segno la mostrano subito, senza aspettare la rete.
 //
-// L'AVVISO compare quando c'e' una versione da offrire e il promemoria lo permette (`UpdateRules.shouldPrompt`): «Dopo» lo rimanda di tre giorni, al
-// piu' tre volte per la versione installata. Alla prima apertura dopo un aggiornamento riuscito dice «Aggiornata» ([UpdatesState.justUpdated]),
+// L'AVVISO compare quando c'e' una versione da offrire e il promemoria lo permette (`UpdateRules.shouldPrompt`): «Dopo» lo rimanda di tre giorni; al
+// terzo «Dopo» di fila tace trenta giorni, poi il conto riparte (giro 2: mai spento per sempre). Alla prima apertura dopo un aggiornamento riuscito
+// dice «Aggiornata» ([UpdatesState.justUpdated]),
 // confrontando la versione del tentativo salvato con quella che gira: l'evento `Installed` dell'engine non arriva quasi mai (Android chiude l'app).
 //
 // L'INSTALLAZIONE parte solo dal tocco su «Aggiorna» ([install]), in due tempi (`UpdateInstaller.prepare` e `commit`):
@@ -56,8 +59,11 @@ import kotlinx.coroutines.withContext
 //    riguarda la rete e, se e' a consumo senza consenso, si chiede di nuovo;
 //  - il permesso «installa app sconosciute» si chiede quando serve; il tentativo si salva, cosi' se Android chiude l'app per darlo (Android 11) al
 //    ritorno si riprende (UU-3);
-//  - il file scaricato e verificato va alla sessione di Android solo con l'app davanti ([foreground]); altrimenti «Pronta» con «Installa» (UU-1). Se la
-//    finestra di Android non si apre o si chiude senza installare, al ritorno davanti si torna a «Pronta»: «Installa» riprova senza riscaricare.
+//  - il file scaricato e verificato va alla sessione di Android solo con l'activity RESUMED: il cancello ([ForegroundGate]) lo guarda l'installatore,
+//    una volta sola, dopo le verifiche e subito prima di `installFile`, su tutte le strade; altrimenti «Pronta» con «Installa» (UU-1, giro 2 US2-1);
+//  - passato il cancello e' «Sto installando». Se l'app torna davanti senza un esito (il «si'» nella finestra di Android, oppure una finestra chiusa
+//    senza scelta o mai aperta) resta «Sto installando» per [UpdateRules.OUTCOME_WAIT_MILLIS] di app davanti; un esito che arriva vince; senza
+//    esito si torna a «Pronta», e «Installa» riprova senza riscaricare (il file si ricontrolla). Giro 2, UU2-1.
 //
 // LA VERSIONE CORRENTE e' il `versionName` INTERO (con il suffisso beta): una `1.1.0-beta.02` vede la stabile `1.1.0` (update.md, trappole).
 
@@ -118,8 +124,8 @@ class AppUpdates(
   private val installedVersion: String,
   private val permission: InstallPermission,
   private val metered: () -> Boolean,
-  /** L'app e' davanti (un'activity visibile): solo allora il file va alla sessione di Android, che mostra la sua finestra. */
-  private val foreground: () -> Boolean,
+  /** Il cancello che l'installatore guarda prima di `installFile`: lo aprono e chiudono [onResumed] e [onPaused] (il ciclo di vita dell'activity). */
+  private val gate: ForegroundGate,
   /** L'ora per le 24 ore, i tre giorni del promemoria e il tentativo salvato: la da' `:app` (questo modulo non legge l'orologio). */
   private val now: () -> Long,
   private val scope: CoroutineScope,
@@ -141,6 +147,9 @@ class AppUpdates(
   private val loaded = CompletableDeferred<Unit>()
   private val checks = Mutex()
   private var job: Job? = null
+
+  /** L'attesa dell'esito dopo il passaggio ad Android, con l'app davanti ([awaitOutcome]). */
+  private var outcomeWait: Job? = null
 
   /** Il file verificato e la sua versione: «Installa» e «Riprova» non riscaricano finche' c'e'. */
   @Volatile private var readyFile: File? = null
@@ -334,12 +343,8 @@ class AppUpdates(
       val file = ready ?: return@launch
       readyFile = file
       readyVersion = update.version
-      if (foreground()) {
-        commit(update, file)
-      } else {
-        // L'app e' dietro: la finestra di Android non si aprirebbe. Si aspetta «Installa» (UU-1).
-        mutable.update { it.copy(install = InstallStep.Ready(file)) }
-      }
+      // Sempre al secondo tempo: il cancello e' li', dopo i controlli. Con l'app dietro torna «Pronta» e si aspetta «Installa» (UU-1, US2-1).
+      commit(update, file)
     }
   }
 
@@ -360,6 +365,8 @@ class AppUpdates(
           InstallStep.Installed -> forgetReady()
           else -> Unit
         }
+        // Un esito (annullata, un guasto, installata, il permesso tolto) vince sull'attesa.
+        if (!step.isActive()) stopWaiting()
         mutable.update { it.copy(install = step) }
       }
   }
@@ -399,18 +406,25 @@ class AppUpdates(
   }
 
   /**
-   * L'app torna davanti. Con il permesso da dare: se ora c'e', il tentativo riprende (il tocco l'ha gia' dato), riguardando la rete (US-2). Con la
-   * finestra di Android che si aspettava: se l'app e' di nuovo davanti, la finestra non c'e' piu' (chiusa, o mai aperta): si torna a «Pronta».
+   * L'activity e' RESUMED: il cancello si apre. Con il permesso da dare: se ora c'e', il tentativo riprende (il tocco l'ha gia' dato), riguardando la
+   * rete (US-2). Con il file gia' passato ad Android: «Sto installando» e l'attesa dell'esito ([awaitOutcome]).
    */
   fun onResumed() {
+    gate.open()
     scope.launch {
       loaded.await()
       when (state.value.install) {
         InstallStep.NeedsPermission -> resumeAfterPermission()
-        InstallStep.AwaitingUser -> backToReady()
+        InstallStep.Installing, InstallStep.AwaitingUser -> awaitOutcome()
         else -> Unit
       }
     }
+  }
+
+  /** L'activity non e' piu' RESUMED (Home, schermo spento, la finestra di Android sopra): il cancello si chiude e l'attesa si ferma. */
+  fun onPaused() {
+    gate.close()
+    stopWaiting()
   }
 
   private fun resumeAfterPermission() {
@@ -425,7 +439,30 @@ class AppUpdates(
     startAttempt(update, consent = current.meteredConsent)
   }
 
+  /**
+   * Giro 2, UU2-1: il file e' gia' di Android e l'app e' davanti senza un esito. Il «si'» nella finestra di Android riporta l'app davanti mentre Android
+   * installa: qui non si torna a «Pronta» (un secondo «Installa» aprirebbe un'altra sessione) ma si dice «Sto installando» e si aspetta. Solo dopo
+   * [UpdateRules.OUTCOME_WAIT_MILLIS] di app davanti senza niente (la finestra si era chiusa senza scelta, o non si era mai aperta) «Pronta».
+   */
+  private fun awaitOutcome() {
+    if (!gate.inFront()) return
+    mutable.update { if (it.install == InstallStep.AwaitingUser) it.copy(install = InstallStep.Installing) else it }
+    outcomeWait?.cancel()
+    outcomeWait = scope.launch {
+      delay(UpdateRules.OUTCOME_WAIT_MILLIS)
+      val step = state.value.install
+      if (step == InstallStep.Installing || step == InstallStep.AwaitingUser) backToReady()
+    }
+  }
+
+  private fun stopWaiting() {
+    outcomeWait?.cancel()
+    outcomeWait = null
+  }
+
+  /** Nessun esito: il flusso dell'engine si lascia e il file resta, ricontrollato al prossimo «Installa» (senza riscaricare). */
   private fun backToReady() {
+    outcomeWait = null
     job?.cancel()
     job = null
     val file = readyFile?.takeIf { it.isFile }
@@ -433,8 +470,8 @@ class AppUpdates(
   }
 
   /**
-   * «Dopo» sull'avviso: lo chiude e lo rimanda di tre giorni (al piu' tre volte per la versione installata). Un permesso che si aspettava o un guasto
-   * si lasciano: il tentativo finisce. Con «Aggiornata» e' solo «Ok».
+   * «Dopo» sull'avviso (e «Chiudi» su un guasto, giro 2 UU2-2): lo chiude e lo rimanda di tre giorni; al terzo di fila, trenta (`UpdateRules.declined`).
+   * Un permesso che si aspettava o un guasto si lasciano: il tentativo finisce. Con «Aggiornata» e' solo «Ok».
    */
   fun later() {
     promptOpen.value = false
@@ -447,7 +484,8 @@ class AppUpdates(
       clearAttempt()
       mutable.update { it.copy(install = null) }
     }
-    reminder = Reminder(snoozedUntil = now() + UpdateRules.SNOOZE_MILLIS, declines = reminder.declines + 1, forInstalled = installedVersion)
+    val next = UpdateRules.declined(now(), reminder.snoozedUntil, reminder.declines)
+    reminder = Reminder(snoozedUntil = next.until, declines = next.declines, forInstalled = installedVersion)
     val saved = reminder
     scope.launch(io) { store.setReminder(saved) }
   }
@@ -498,14 +536,17 @@ class AppUpdates(
      * Quello vero (`:app`, uno per processo): il client avvolto ([UpdateHttp]) per l'elenco e per l'APK, `EngineAppUpdater` per il controllo,
      * [GuardedUpdateInstaller] sopra `AndroidAppUpdateInstaller` per l'installazione. [versionName] e' il `versionName` intero dell'app.
      */
-    fun create(context: Context, versionName: String, now: () -> Long, foreground: () -> Boolean, scope: CoroutineScope): AppUpdates {
+    fun create(context: Context, versionName: String, now: () -> Long, scope: CoroutineScope): AppUpdates {
       val app = context.applicationContext
       val http = UpdateHttp.create(versionName)
       val permission = AndroidInstallPermission(app)
+      // Lo stesso cancello: AppUpdates lo apre e chiude con il ciclo di vita dell'activity, l'installatore lo guarda prima di `installFile`.
+      val gate = ForegroundGate()
       val installer = GuardedUpdateInstaller(
         transfer = EngineApkTransfer(AndroidAppUpdateInstaller(app, http)),
         facts = AndroidPackageFacts(app),
         permission = permission,
+        inFront = gate::inFront,
       )
       val updater = EngineAppUpdater(http, UpdateSourceConfig.engineSource(app.packageName), installer)
       return AppUpdates(
@@ -515,7 +556,7 @@ class AppUpdates(
         installedVersion = versionName,
         permission = permission,
         metered = AndroidMeteredNetwork(app)::isMetered,
-        foreground = foreground,
+        gate = gate,
         now = now,
         scope = scope,
         clearCache = { UpdateCache.clear(app.cacheDir) },

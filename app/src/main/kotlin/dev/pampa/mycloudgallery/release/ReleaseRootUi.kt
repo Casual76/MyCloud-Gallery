@@ -96,7 +96,13 @@ fun ReleaseRoot(ui: ReleaseUi, update: (@Composable () -> Unit)? = null, onUpdat
       ReleaseUpdateBanner(
         message = banner,
         onDismiss = { dismissed = true },
-        onUpdate = onUpdate,
+        // «Aggiorna» chiude anche l'avviso in alto: l'avanzamento lo mostra la scheda sopra la pillola, una sola offerta (giro 2, UU2-8).
+        onUpdate = onUpdate?.let { update ->
+          {
+            dismissed = true
+            update()
+          }
+        },
         modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
       )
     }

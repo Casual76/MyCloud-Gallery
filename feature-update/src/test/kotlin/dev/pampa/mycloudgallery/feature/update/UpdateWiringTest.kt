@@ -9,7 +9,8 @@ import org.junit.Test
  * SOLO avvolto (`GuardedUpdateHttp`, attraverso `UpdateHttp.create`). Questa prova legge i sorgenti di `:feature-update` e di `:app` e cade se qualcuno:
  *  - costruisce un `EngineHttp(...)` fuori dalla sottoclasse che lo avvolge;
  *  - costruisce `AndroidAppUpdateInstaller` con un argomento solo (allora prende il suo `EngineHttp()` di serie, non avvolto);
- *  - costruisce `EngineAppUpdater` o `AndroidAppUpdateInstaller` fuori dalla fabbrica (`AppUpdates.create`), o la fabbrica non passa loro il client avvolto.
+ *  - costruisce `EngineAppUpdater` o `AndroidAppUpdateInstaller` fuori dalla fabbrica (`AppUpdates.create`), o la fabbrica non passa loro il client avvolto;
+ *  - (giro 2) separa il cancello dell'installatore da quello che il ciclo di vita dell'activity apre e chiude.
  */
 class UpdateWiringTest {
 
@@ -42,5 +43,24 @@ class UpdateWiringTest {
     assertWithMessage("la fabbrica crea il client avvolto").that(factory).contains("val http = UpdateHttp.create(versionName)")
     assertWithMessage("e lo passa allo scaricamento").that(factory).contains("AndroidAppUpdateInstaller(app, http)")
     assertWithMessage("e al controllo").that(factory).contains("EngineAppUpdater(http, ")
+  }
+
+  @Test
+  fun ilCancelloEUnoSolo_lInstallatoreLoGuarda_ilCicloDiVitaDellActivityLoMuove() {
+    // Giro 2, US2-1: lo stesso ForegroundGate all'installatore (che lo guarda prima di installFile) e ad AppUpdates (che lo apre e chiude).
+    val factory = File("src/main/kotlin/dev/pampa/mycloudgallery/feature/update/AppUpdates.kt").readText()
+    assertWithMessage("un cancello nella fabbrica").that(factory).contains("val gate = ForegroundGate()")
+    assertWithMessage("guardato dall'installatore").that(factory).contains("inFront = gate::inFront")
+    assertWithMessage("mosso da AppUpdates").that(factory).contains("gate = gate,")
+    assertWithMessage("l'installatore protetto costruito fuori da AppUpdates.create")
+      .that(uses(Regex("""\bGuardedUpdateInstaller\s*\(""")).filterNot { it.startsWith("AppUpdates.kt:") || it.startsWith("GuardedUpdateInstaller.kt:") })
+      .isEmpty()
+    // Il ciclo di vita dell'activity, non l'importanza del processo.
+    val module = File("../app/src/main/kotlin/dev/pampa/mycloudgallery/di/UpdateModule.kt").readText()
+    assertWithMessage("l'importanza del processo nel modulo dell'aggiornamento").that(module).doesNotContain("getMyMemoryState")
+    val effect = File("src/main/kotlin/dev/pampa/mycloudgallery/feature/update/ui/UpdatePrompt.kt").readText()
+    assertWithMessage("ON_PAUSE chiude il cancello").that(effect).contains("onPauseOrDispose { viewModel.onPaused() }")
+    val root = File("../app/src/main/kotlin/dev/pampa/mycloudgallery/AppRoot.kt").readText()
+    assertWithMessage("l'effetto alla radice dell'activity").that(root).contains("UpdateLifecycleEffect(updatesViewModel)")
   }
 }

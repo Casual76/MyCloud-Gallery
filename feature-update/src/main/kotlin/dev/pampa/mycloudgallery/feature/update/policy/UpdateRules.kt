@@ -185,20 +185,45 @@ object UpdateRules {
   /** Quanto «Dopo» rimanda l'avviso: tre giorni. */
   const val SNOOZE_MILLIS: Long = 3L * 24 * 60 * 60 * 1000
 
-  /** Dopo tre «Dopo» l'avviso non torna piu' finche' l'app non si aggiorna: resta il segno sulla voce delle Impostazioni. */
+  /** Il terzo «Dopo» di fila: l'avviso tace [QUIET_MILLIS], poi il conto riparte da capo. Mai spento per sempre (giro 2, decisione dell'orchestratore). */
   const val MAX_DECLINES: Int = 3
 
+  /** Il silenzio dopo il terzo «Dopo»: trenta giorni. La voce in cima alle Impostazioni resta sempre. */
+  const val QUIET_MILLIS: Long = 30L * 24 * 60 * 60 * 1000
+
+  /** Il rimando salvato dopo un «Dopo»: fino a quando, e quanti «Dopo» di fila ([MAX_DECLINES] = il silenzio lungo). */
+  data class Snooze(val until: Long, val declines: Int)
+
   /**
-   * L'avviso all'apertura (giro 1, UU-4 e US-3): c'e' una versione da offrire, non si e' gia' detto «Dopo» [MAX_DECLINES] volte e il rimando e'
-   * passato. Il rimando e' uno per tutte le versioni: chi pubblica due nomi a giorni alterni non fa tornare l'avviso ogni giorno. Un rimando che
-   * scade oltre [SNOOZE_MILLIS] da adesso vuol dire che l'orologio e' tornato indietro: vale come scaduto.
+   * L'avviso all'apertura (giro 1, UU-4 e US-3; giro 2): c'e' una versione da offrire e il rimando e' passato. Il rimando e' uno per tutte le versioni:
+   * chi pubblica due nomi a giorni alterni non fa tornare l'avviso ogni giorno (al piu' tre avvisi in circa 39 giorni). Un rimando che scade oltre la
+   * sua durata da adesso ([SNOOZE_MILLIS], o [QUIET_MILLIS] dopo il terzo «Dopo») vuol dire che l'orologio e' tornato indietro: vale come scaduto.
    */
-  fun shouldPrompt(hasOffer: Boolean, now: Long, snoozedUntil: Long?, declines: Int): Boolean = when {
-    !hasOffer || declines >= MAX_DECLINES -> false
-    snoozedUntil == null -> true
-    now >= snoozedUntil -> true
-    else -> snoozedUntil - now > SNOOZE_MILLIS
+  fun shouldPrompt(hasOffer: Boolean, now: Long, snoozedUntil: Long?, declines: Int): Boolean =
+    hasOffer && snoozeOver(now, snoozedUntil, windowOf(declines))
+
+  /**
+   * Un «Dopo»: tre giorni, e al terzo di fila trenta. Finito il silenzio, il conto riparte (il primo «Dopo» dopo vale di nuovo tre giorni). Dentro il
+   * silenzio un «Dopo» (sull'avviso del permesso o di un guasto, che compaiono lo stesso) non lo accorcia ne' lo allunga.
+   */
+  fun declined(now: Long, snoozedUntil: Long?, declines: Int): Snooze {
+    val quiet = declines >= MAX_DECLINES
+    if (quiet && snoozedUntil != null && !snoozeOver(now, snoozedUntil, QUIET_MILLIS)) return Snooze(snoozedUntil, declines)
+    val count = if (quiet) 1 else declines + 1
+    return if (count >= MAX_DECLINES) Snooze(now + QUIET_MILLIS, MAX_DECLINES) else Snooze(now + SNOOZE_MILLIS, count)
   }
+
+  private fun windowOf(declines: Int): Long = if (declines >= MAX_DECLINES) QUIET_MILLIS else SNOOZE_MILLIS
+
+  private fun snoozeOver(now: Long, snoozedUntil: Long?, window: Long): Boolean =
+    snoozedUntil == null || now >= snoozedUntil || snoozedUntil - now > window
+
+  /**
+   * Dopo il passaggio ad Android, l'app tornata davanti senza un esito (giro 2, UU2-1): «Sto installando» per questo tempo, contato solo con l'app
+   * davanti. Di solito Android chiude l'app prima (l'aggiornamento e' partito) o arriva «annullata»; se non arriva niente, la finestra si era chiusa
+   * senza una scelta o non si era aperta: si torna a «Pronta» con «Installa».
+   */
+  const val OUTCOME_WAIT_MILLIS: Long = 15_000L
 
   /** Un tentativo salvato (il permesso chiesto, l'installazione partita) vale per la ripresa solo se e' di poco fa: un'ora. */
   const val ATTEMPT_TTL_MILLIS: Long = 60L * 60 * 1000

@@ -123,7 +123,8 @@ internal fun AppRoot(
     CompositionLocalProvider(LocalUpdateAppIcon provides appIcon, LocalTabBarNotice provides notice) {
       Box(modifier = Modifier.fillMaxSize()) {
         // In sola lettura l'avviso del manifest ha «Aggiorna» quando c'e' una versione nuova: il tocco la scarica (l'avviso dell'aggiornamento mostra l'anello).
-        ReleaseRoot(releaseUi, update = { UpdateInline(updatesViewModel) }, onUpdate = if (updates.found != null) updatesViewModel.actions.install else null) {
+        // Nella pagina «versione fermata» il pannello sa dove sta: senza una versione nuova dice «arriva presto», non «App aggiornata» (giro 2, UU2-7).
+        ReleaseRoot(releaseUi, update = { UpdateInline(updatesViewModel, stopped = true) }, onUpdate = if (updates.found != null) updatesViewModel.actions.install else null) {
           AppNavHost(destination = destination, status = status, actions = actions)
         }
       }

@@ -1,30 +1,43 @@
 package dev.pampa.mycloudgallery.feature.update
 
 import com.google.common.truth.Truth.assertThat
+import dev.antigravity.fluidengine.foundation.AppUpdateInstallState
 import dev.antigravity.fluidengine.foundation.AvailableAppUpdate
 import dev.antigravity.fluidengine.foundation.UpdateChannel
+import dev.pampa.mycloudgallery.feature.update.install.ApkTransfer
+import dev.pampa.mycloudgallery.feature.update.install.ForegroundGate
+import dev.pampa.mycloudgallery.feature.update.install.GuardedUpdateInstaller
 import dev.pampa.mycloudgallery.feature.update.install.InstallPermission
 import dev.pampa.mycloudgallery.feature.update.install.InstallStep
+import dev.pampa.mycloudgallery.feature.update.install.PackageFactsSource
 import dev.pampa.mycloudgallery.feature.update.install.UpdateInstaller
+import dev.pampa.mycloudgallery.feature.update.policy.PackageFacts
 import dev.pampa.mycloudgallery.feature.update.policy.UpdateProblem
 import dev.pampa.mycloudgallery.feature.update.policy.UpdateRules
 import dev.pampa.mycloudgallery.feature.update.source.UpdateSourceConfig
 import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Test
 
 /**
- * Pacchetto U (giro 1 delle critiche): quando si controlla (all'apertura al piu' ogni 24 ore, a mano sempre), il canale salvato, la versione trovata
- * ricordata, l'avviso con «Dopo» che rimanda, la domanda dei dati mobili per tentativo (US-2), la ripresa dopo il permesso anche dopo un riavvio (UU-3),
- * «Pronta» quando l'app e' dietro o la finestra di Android si chiude (UU-1), «Aggiornata» alla riapertura (UU-2). Elenco e installatore finti.
+ * Pacchetto U (giri 1 e 2 delle critiche): quando si controlla (all'apertura al piu' ogni 24 ore, a mano sempre), il canale salvato, la versione trovata
+ * ricordata, l'avviso con «Dopo» che rimanda (al terzo trenta giorni, poi riparte), la domanda dei dati mobili per tentativo (US-2), la ripresa dopo il
+ * permesso anche dopo un riavvio (UU-3), «Pronta» quando l'app e' dietro dopo le verifiche (UU-1, US2-1: il cancello mosso dal ciclo di vita), «Sto
+ * installando» dopo il passaggio ad Android con l'attesa dell'esito (UU2-1), «Aggiornata» alla riapertura (UU-2). Elenco e installatore finti; una
+ * prova con l'installatore protetto vero sopra un engine finto.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppUpdatesTest {
@@ -87,6 +100,9 @@ class AppUpdatesTest {
     val file: File = File(dir, "mycloud-gallery-1.1.0.apk").apply { writeBytes(ByteArray(10)) }
     var prepareSteps: List<InstallStep> = listOf(InstallStep.Downloading(1f, 10, 10), InstallStep.Verifying, InstallStep.Ready(file))
     var commitSteps: List<InstallStep> = listOf(InstallStep.Installing, InstallStep.AwaitingUser)
+
+    /** Con un canale il secondo tempo resta vivo dopo [commitSteps], come quello vero che aspetta Android: la prova manda l'esito quando vuole. */
+    var commitTail: Channel<InstallStep>? = null
     val prepares = mutableListOf<AvailableAppUpdate>()
     val commits = mutableListOf<File>()
     val discarded = mutableListOf<File>()
@@ -98,7 +114,12 @@ class AppUpdatesTest {
 
     override fun commit(update: AvailableAppUpdate, file: File): Flow<InstallStep> {
       commits += file
-      return flowOf(*commitSteps.toTypedArray())
+      val steps = commitSteps
+      val tail = commitTail
+      return flow {
+        for (step in steps) emit(step)
+        if (tail != null) emitAll(tail)
+      }
     }
 
     override fun discard(file: File) {
@@ -135,19 +156,21 @@ class AppUpdatesTest {
     val installer = FakeInstaller()
     val permission = FakePermission()
     var metered = false
-    var front = true
     var now = 10 * day
     var cleared = 0
 
-    /** Un processo nuovo (stesso file delle preferenze). */
-    fun updates(version: String = "1.0.0") = AppUpdates(
+    /** Il cancello: lo aprono e chiudono onResumed/onPaused (le prove li chiamano come farebbe il ciclo di vita dell'activity). */
+    val gate = ForegroundGate()
+
+    /** Un processo nuovo (stesso file delle preferenze). [using]: un altro installatore (quello protetto vero, nella prova d'integrazione). */
+    fun updates(version: String = "1.0.0", using: UpdateInstaller = installer) = AppUpdates(
       checker = checker,
-      installer = installer,
+      installer = using,
       store = store,
       installedVersion = version,
       permission = permission,
       metered = { metered },
-      foreground = { front },
+      gate = gate,
       now = { now },
       // Lo scope della prova (non `backgroundScope`, che `advanceUntilIdle` non fa girare): i lavori di AppUpdates finiscono tutti.
       scope = scope,
@@ -260,7 +283,7 @@ class AppUpdatesTest {
   }
 
   @Test
-  fun dopoRimandaDiTreGiorni_alPiuTreVolte() = world {
+  fun dopoRimandaDiTreGiorni_alTerzoTaceTrentaGiorni_poiTornaEIlContoRiparte() = world {
     checker.answer = Result.success(offer("1.1.0"))
     val first = updates()
     first.checkIfDue(); scope.advanceUntilIdle()
@@ -274,16 +297,40 @@ class AppUpdatesTest {
     val back = updates()
     scope.advanceUntilIdle()
     assertThat(back.prompt.value).isTrue()
-    // Detto «Dopo» tre volte, non torna piu' (resta il segno sulla voce).
+    // Il secondo «Dopo» (tre giorni) e il terzo: trenta giorni di silenzio (resta la voce in cima alle Impostazioni).
     back.later(); scope.advanceUntilIdle()
     now += UpdateRules.SNOOZE_MILLIS
     updates().also { scope.advanceUntilIdle() }.later(); scope.advanceUntilIdle()
-    now += 10 * UpdateRules.SNOOZE_MILLIS
-    val last = updates()
-    scope.advanceUntilIdle()
     assertThat(store.savedReminder.declines).isEqualTo(UpdateRules.MAX_DECLINES)
-    assertThat(last.prompt.value).isFalse()
-    assertThat(last.state.value.found?.version).isEqualTo("1.1.0")
+    now += UpdateRules.QUIET_MILLIS - 1
+    val quiet = updates()
+    scope.advanceUntilIdle()
+    assertThat(quiet.prompt.value).isFalse()
+    assertThat(quiet.state.value.found?.version).isEqualTo("1.1.0")
+    // Giro 2: mai spento per sempre. Passati i trenta giorni torna, e il conto riparte: il «Dopo» seguente vale di nuovo tre giorni.
+    now += 1
+    val again = updates()
+    scope.advanceUntilIdle()
+    assertThat(again.prompt.value).isTrue()
+    again.later(); scope.advanceUntilIdle()
+    assertThat(store.savedReminder.declines).isEqualTo(1)
+    assertThat(store.savedReminder.snoozedUntil).isEqualTo(now + UpdateRules.SNOOZE_MILLIS)
+  }
+
+  @Test
+  fun chiudiSullAvvisoDiUnGuasto_loChiudeDavvero() = world {
+    // Giro 2, UU2-2: «Chiudi» sull'avviso e' later(): la scheda se ne va (non torna «Nuova versione» con «Aggiorna»), rimandata come «Dopo».
+    checker.answer = Result.success(offer("1.1.0"))
+    val updates = updates()
+    updates.checkIfDue(); scope.advanceUntilIdle()
+    installer.commitSteps = listOf(InstallStep.Failed(UpdateProblem.OTHER_SIGNATURE))
+    updates.install(); scope.advanceUntilIdle()
+    assertThat(updates.prompt.value).isTrue()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.Failed(UpdateProblem.OTHER_SIGNATURE))
+    updates.later(); scope.advanceUntilIdle()
+    assertThat(updates.prompt.value).isFalse()
+    assertThat(updates.state.value.install).isNull()
+    assertThat(store.savedReminder.declines).isEqualTo(1)
   }
 
   @Test
@@ -420,37 +467,169 @@ class AppUpdatesTest {
   }
 
   @Test
-  fun conLAppDietro_siAspettaInstalla_senzaRiscaricare() = world {
-    // UU-1: lo scaricamento finisce con l'app in secondo piano: niente sessione (la finestra di Android non si aprirebbe), «Pronta» con «Installa».
-    val updates = found()
-    front = false
-    updates.install(); scope.advanceUntilIdle()
-    assertThat(updates.state.value.install).isEqualTo(InstallStep.Ready(installer.file))
-    assertThat(installer.commits).isEmpty()
-    // «Installa», con l'app davanti: la sessione, con lo stesso file.
-    front = true
-    updates.install(); scope.advanceUntilIdle()
-    assertThat(installer.prepares).hasSize(1)
-    assertThat(installer.commits).containsExactly(installer.file)
+  fun ilCicloDiVitaDellActivityMuoveIlCancello() = world {
+    // Giro 2, US2-1: ON_RESUME apre, ON_PAUSE chiude. Nessun'altra fonte (non l'importanza del processo).
+    val updates = updates()
+    scope.advanceUntilIdle()
+    assertThat(gate.inFront()).isFalse()
+    updates.onResumed()
+    assertThat(gate.inFront()).isTrue()
+    updates.onPaused()
+    assertThat(gate.inFront()).isFalse()
   }
 
   @Test
-  fun laFinestraDiAndroidChiusaOMaiAperta_alRitornoPronta() = world {
+  fun ilCancelloChiuso_Pronta_eInstallaNonRiscarica() = world {
+    // UU-1, US2-1: il secondo tempo torna «Pronta» (l'app era dietro dopo le verifiche): nessun tentativo «installando» salvato, «Installa» usa lo
+    // stesso file senza riscaricare.
     val updates = found()
+    installer.commitSteps = listOf(InstallStep.Verifying, InstallStep.Ready(installer.file))
     updates.install(); scope.advanceUntilIdle()
-    assertThat(updates.state.value.install).isEqualTo(InstallStep.AwaitingUser)
-    // Di nuovo davanti senza un esito: mai un'attesa senza tasti.
-    updates.onResumed(); scope.advanceUntilIdle()
     assertThat(updates.state.value.install).isEqualTo(InstallStep.Ready(installer.file))
+    assertThat(store.savedAttempt).isNull()
+    installer.commitSteps = listOf(InstallStep.Installing, InstallStep.AwaitingUser)
+    updates.install(); scope.advanceUntilIdle()
+    assertThat(installer.prepares).hasSize(1)
+    assertThat(installer.commits).containsExactly(installer.file, installer.file)
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.AwaitingUser)
+  }
+
+  /** Un engine finto sotto l'installatore protetto vero: conta i passaggi a `installFile`. */
+  private inner class EngineFake : ApkTransfer {
+    var installs = 0
+
+    override suspend fun download(update: AvailableAppUpdate, onProgress: (AppUpdateInstallState.Downloading) -> Unit): File =
+      File(dir, update.apkAsset).apply { writeBytes(ByteArray(10)) }
+
+    override fun installFile(file: File, expectedVersionName: String, sha256: String): Flow<AppUpdateInstallState> {
+      installs++
+      return flowOf(AppUpdateInstallState.Installing(""), AppUpdateInstallState.AwaitingUserAction(""))
+    }
+  }
+
+  private class SameApp : PackageFactsSource {
+    private val me = PackageFacts("dev.pampa.mycloudgallery", 5, "1.0.0", setOf("ab".repeat(32)))
+
+    override fun installed(): PackageFacts = me
+
+    override fun archive(file: File): PackageFacts = me.copy(versionCode = 6, versionName = "1.1.0")
+  }
+
+  @Test
+  fun integrazione_HomeMentreIlFileSiVerifica_nienteAdAndroid_poiInstallaDavanti() = world {
+    // US2-1 sulla strada vera: «Aggiorna» con l'activity RESUMED; lo scaricamento finisce; mentre il file si ricontrolla prima della sessione l'utente
+    // preme Home (ON_PAUSE). Zero passaggi a installFile, «Pronta». Di nuovo davanti, «Installa» passa.
+    val engine = EngineFake()
+    var hashes = 0
+    lateinit var app: AppUpdates
+    val guarded = GuardedUpdateInstaller(
+      transfer = engine,
+      facts = SameApp(),
+      permission = permission,
+      inFront = gate::inFront,
+      checksum = {
+        hashes++
+        // Il primo SHA-256 e' quello dello scaricamento; il secondo, prima della sessione: li' arriva la pausa.
+        if (hashes == 2) app.onPaused()
+        "a".repeat(64)
+      },
+      io = StandardTestDispatcher(scope.testScheduler),
+    )
+    checker.answer = Result.success(offer("1.1.0"))
+    app = updates(using = guarded)
+    app.onResumed()
+    app.checkNow(); scope.advanceUntilIdle()
+    app.install(); scope.advanceUntilIdle()
+    assertThat(engine.installs).isEqualTo(0)
+    assertThat(app.state.value.install).isInstanceOf(InstallStep.Ready::class.java)
+    app.onResumed(); scope.runCurrent()
+    assertThat(app.state.value.install).isInstanceOf(InstallStep.Ready::class.java)
+    app.install(); scope.runCurrent()
+    assertThat(engine.installs).isEqualTo(1)
+    assertThat(app.state.value.install).isEqualTo(InstallStep.AwaitingUser)
+    app.onPaused(); scope.advanceUntilIdle()
+  }
+
+  @Test
+  fun dopoIlSiNellaFinestraDiAndroid_alRitornoStoInstallando_maiPronta() = world {
+    // Giro 2, UU2-1: la finestra di Android si chiude dopo «Aggiorna» e l'app torna davanti mentre Android installa: «Sto installando», senza tasti;
+    // un secondo «Installa» non c'e' (e non aprirebbe un'altra sessione).
+    val updates = found()
+    installer.commitTail = Channel(Channel.UNLIMITED)
+    updates.onResumed(); scope.runCurrent()
+    updates.install(); scope.runCurrent()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.AwaitingUser)
+    // La finestra di Android sopra l'app (ON_PAUSE), poi il «si'» e l'app di nuovo davanti.
+    updates.onPaused(); scope.runCurrent()
+    updates.onResumed(); scope.runCurrent()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.Installing)
+    scope.advanceTimeBy(UpdateRules.OUTCOME_WAIT_MILLIS - 1); scope.runCurrent()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.Installing)
+    updates.install(); scope.runCurrent()
+    assertThat(installer.commits).hasSize(1)
+    installer.commitTail?.close()
+  }
+
+  @Test
+  fun senzaEsito_dopoLAttesaConLAppDavanti_Pronta_eInstallaNonRiscarica() = world {
+    // La finestra si era chiusa senza una scelta, o non si era aperta: dopo l'attesa «Pronta» con «Installa», mai un'attesa senza tasti.
+    val updates = found()
+    installer.commitTail = Channel(Channel.UNLIMITED)
+    updates.onResumed(); scope.runCurrent()
+    updates.install(); scope.runCurrent()
+    updates.onPaused(); scope.runCurrent()
+    updates.onResumed(); scope.runCurrent()
+    scope.advanceTimeBy(UpdateRules.OUTCOME_WAIT_MILLIS); scope.runCurrent()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.Ready(installer.file))
+    installer.commitTail = null
     updates.install(); scope.advanceUntilIdle()
     assertThat(installer.prepares).hasSize(1)
     assertThat(installer.commits).hasSize(2)
     // «Annulla» su «Pronta»: il file si cancella e si torna alla versione nuova.
     updates.onResumed(); scope.advanceUntilIdle()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.Ready(installer.file))
     updates.cancelReady()
     assertThat(installer.discarded).containsExactly(installer.file)
     assertThat(updates.state.value.install).isNull()
     assertThat(updates.state.value.found?.version).isEqualTo("1.1.0")
+  }
+
+  @Test
+  fun unEsitoCheArrivaVinceSullAttesa() = world {
+    // «Annulla» (o Play Protect) nella finestra: l'esito arriva durante l'attesa e resta, con la riga di Play Protect.
+    val updates = found()
+    installer.commitTail = Channel(Channel.UNLIMITED)
+    updates.onResumed(); scope.runCurrent()
+    updates.install(); scope.runCurrent()
+    updates.onPaused(); scope.runCurrent()
+    updates.onResumed(); scope.runCurrent()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.Installing)
+    installer.commitTail?.trySend(InstallStep.Ready(installer.file, interrupted = true))
+    scope.runCurrent()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.Ready(installer.file, interrupted = true))
+    scope.advanceTimeBy(2 * UpdateRules.OUTCOME_WAIT_MILLIS); scope.runCurrent()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.Ready(installer.file, interrupted = true))
+    installer.commitTail?.close()
+  }
+
+  @Test
+  fun lAttesaContaSoloConLAppDavanti() = world {
+    // Play Protect o un'altra finestra sopra l'app durante l'attesa: il tempo si ferma e riparte da capo al ritorno.
+    val updates = found()
+    installer.commitTail = Channel(Channel.UNLIMITED)
+    updates.onResumed(); scope.runCurrent()
+    updates.install(); scope.runCurrent()
+    updates.onPaused(); scope.runCurrent()
+    updates.onResumed(); scope.runCurrent()
+    scope.advanceTimeBy(UpdateRules.OUTCOME_WAIT_MILLIS / 2); scope.runCurrent()
+    updates.onPaused(); scope.runCurrent()
+    scope.advanceTimeBy(10 * UpdateRules.OUTCOME_WAIT_MILLIS); scope.runCurrent()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.Installing)
+    updates.onResumed(); scope.runCurrent()
+    scope.advanceTimeBy(UpdateRules.OUTCOME_WAIT_MILLIS - 1); scope.runCurrent()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.Installing)
+    scope.advanceTimeBy(1); scope.runCurrent()
+    assertThat(updates.state.value.install).isEqualTo(InstallStep.Ready(installer.file))
   }
 
   @Test
@@ -476,7 +655,8 @@ class AppUpdatesTest {
     val notYet = updates()
     scope.advanceUntilIdle()
     assertThat(notYet.state.value.justUpdated).isNull()
-    // Con la versione nuova: «Aggiornata», una volta. (Di nuovo davanti: «Pronta»; «Installa» riparte la sessione e risalva il tentativo.)
+    // Con la versione nuova: «Aggiornata», una volta. (Di nuovo davanti: «Sto installando», senza esito «Pronta»; «Installa» riparte la sessione e
+    // risalva il tentativo.)
     updates.onResumed(); scope.advanceUntilIdle()
     updates.install(); scope.advanceUntilIdle()
     assertThat(store.savedAttempt?.stage).isEqualTo(AttemptStage.INSTALLING)

@@ -10,7 +10,12 @@ import dev.pampa.mycloudgallery.feature.update.source.UpdateSourceConfig
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
@@ -21,7 +26,8 @@ import org.junit.Test
 /**
  * Pacchetto U (C480, C481, C484, C485, C487): la sequenza dell'installazione in due tempi, fra lo scaricamento e la sessione dell'engine. L'installatore
  * dell'engine e' finto ([FakeTransfer]): ogni controllo dell'app si prova guardando che `installFile` NON venga chiamato e che il file scaricato sparisca;
- * ogni messaggio dell'engine diventa un problema dell'app (UU-6).
+ * ogni messaggio dell'engine diventa un problema dell'app (UU-6). Giro 2 (US2-1): il cancello dell'app davanti si guarda DOPO le verifiche, subito prima di
+ * `installFile`: un'app che va dietro mentre il file si verifica non passa niente ad Android.
  */
 class GuardedUpdateInstallerTest {
 
@@ -94,8 +100,9 @@ class GuardedUpdateInstallerTest {
     transfer: FakeTransfer,
     facts: FakeFacts = FakeFacts(me, good),
     permission: FakePermission = FakePermission(),
+    inFront: () -> Boolean = { true },
     actualSha: () -> String = { sha },
-  ) = GuardedUpdateInstaller(transfer, facts, permission, checksum = { actualSha() }, io = Dispatchers.Unconfined)
+  ) = GuardedUpdateInstaller(transfer, facts, permission, inFront = inFront, checksum = { actualSha() }, io = Dispatchers.Unconfined)
 
   /** Il primo tempo: dall'offerta al file verificato. */
   private fun prepare(
@@ -221,6 +228,85 @@ class GuardedUpdateInstallerTest {
     val transfer = FakeTransfer()
     assertThat(prepare(transfer = transfer, facts = FakeFacts(me, null)).last()).isEqualTo(InstallStep.Failed(UpdateProblem.UNREADABLE))
     assertThat(transfer.installed).isEmpty()
+  }
+
+  // --- Il cancello (giro 2, US2-1) -------------------------------------------------------------------------------------------------------------------
+
+  /** Un file gia' scaricato, pronto per il secondo tempo. */
+  private fun readyFile(): File = File(dir, "mycloud-gallery-1.1.0.apk").apply { writeBytes(ByteArray(10)) }
+
+  /**
+   * Il secondo tempo con un verificatore SOSPESO: lo SHA-256 parte con l'app davanti e si ferma finche' la prova non lo lascia andare; nel frattempo
+   * [whileVerifying] cambia il cancello (Home, schermo spento, oppure il ritorno davanti). Thread veri: il verificatore gira su un suo esecutore.
+   */
+  private fun commitWhileVerifying(transfer: FakeTransfer, gate: ForegroundGate, whileVerifying: () -> Unit): List<InstallStep> {
+    val entered = CountDownLatch(1)
+    val release = CountDownLatch(1)
+    val pool = Executors.newSingleThreadExecutor()
+    val io = pool.asCoroutineDispatcher()
+    val guarded = GuardedUpdateInstaller(
+      transfer = transfer,
+      facts = FakeFacts(me, good),
+      permission = FakePermission(),
+      inFront = gate::inFront,
+      checksum = {
+        entered.countDown()
+        check(release.await(5, TimeUnit.SECONDS)) { "il verificatore non e' stato lasciato andare" }
+        sha
+      },
+      io = io,
+    )
+    return try {
+      runBlocking {
+        val steps = async(Dispatchers.Default) { guarded.commit(update(), readyFile()).toList() }
+        assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue()
+        whileVerifying()
+        release.countDown()
+        steps.await()
+      }
+    } finally {
+      io.close()
+    }
+  }
+
+  @Test
+  fun lAppVaDietroMentreIlFileSiVerifica_nienteAdAndroid_resta_Pronta() {
+    // Davanti all'inizio della verifica, dietro alla fine: zero passaggi a installFile, il file resta «Pronta» (e c'e' ancora).
+    val transfer = FakeTransfer()
+    val gate = ForegroundGate().apply { open() }
+    val steps = commitWhileVerifying(transfer, gate) { gate.close() }
+    assertThat(transfer.installed).isEmpty()
+    assertThat(steps.last()).isEqualTo(InstallStep.Ready(readyFile()))
+    assertThat(steps).doesNotContain(InstallStep.Installing)
+    assertThat(readyFile().exists()).isTrue()
+  }
+
+  @Test
+  fun lAppTornaDavantiMentreIlFileSiVerifica_ilFilePassa() {
+    // Il rovescio: dietro all'inizio, davanti alla fine. Conta lo stato DOPO le verifiche, una volta sola.
+    val transfer = FakeTransfer()
+    val gate = ForegroundGate()
+    val steps = commitWhileVerifying(transfer, gate) { gate.open() }
+    assertThat(transfer.installed).hasSize(1)
+    assertThat(steps).contains(InstallStep.Installing)
+  }
+
+  @Test
+  fun conLAppDietro_nessunaSessione_ePassatoIlCancello_StoInstallando() {
+    // L'engine finto resta al suo «Verifica APK...»: «Sto installando» deve venire dall'app, appena passato il cancello.
+    val transfer = FakeTransfer(engineSteps = listOf(AppUpdateInstallState.Verifying("Verifica APK...")))
+    var front = false
+    val guarded = installer(transfer, inFront = { front })
+    runBlocking {
+      val ready = guarded.prepare(update()).toList().last() as InstallStep.Ready
+      assertThat(guarded.commit(update(), ready.file).toList()).containsExactly(InstallStep.Verifying, InstallStep.Ready(ready.file)).inOrder()
+      assertThat(transfer.installed).isEmpty()
+      // Davanti: subito «Sto installando», prima di qualunque stato dell'engine (giro 2, UU2-1).
+      front = true
+      val steps = guarded.commit(update(), ready.file).toList()
+      assertThat(steps).containsExactly(InstallStep.Verifying, InstallStep.Installing).inOrder()
+    }
+    assertThat(transfer.installed).hasSize(1)
   }
 
   @Test

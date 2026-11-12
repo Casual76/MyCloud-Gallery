@@ -127,6 +127,8 @@ internal class UpdatePhoneShots : UpdateShotsBase("telefono") {
   @Test fun avvisoAggiornataChiaro() = prompt("avviso-aggiornata", UpdateSamples.justUpdated, dark = false)
 
   @Test fun avvisoAggiornataScuro() = prompt("avviso-aggiornata", UpdateSamples.justUpdated, dark = true)
+
+  @Test fun avvisoAnnullataChiaro() = prompt("avviso-annullata", UpdateSamples.interrupted, dark = false)
 }
 
 @RunWith(AndroidJUnit4::class)
@@ -144,6 +146,9 @@ internal class UpdateLargeTextShots : UpdateShotsBase("telefono-testo-grande", f
   @Test fun avvisoChiaro() = prompt("avviso", UpdateSamples.found, dark = false)
 
   @Test fun avvisoProntaChiaro() = prompt("avviso-pronta", UpdateSamples.ready, dark = false)
+
+  // Giro 2, UU2-10: a 1,3x la riga di Play Protect entra intera, «Installa comunque» compreso.
+  @Test fun avvisoAnnullataChiaro() = prompt("avviso-annullata", UpdateSamples.interrupted, dark = false)
 }
 
 @RunWith(AndroidJUnit4::class)

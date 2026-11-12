@@ -101,4 +101,32 @@ class ReleaseStoppedUpdateTest {
     composeRule.onNodeWithText(string(dev.pampa.mycloudgallery.feature.update.R.string.update_check_now)).performClick()
     assertThat(checks).containsExactly("controlla")
   }
+
+  @Test
+  fun fermataSenzaVersioneNuova_arrivaPresto_maiAppAggiornata() {
+    // Giro 2, UU2-7: il kill switch ferma la versione prima che la correzione sia pubblicata. Sotto «fermata» non c'e' «App aggiornata ✓».
+    composeRule.setContent {
+      MyCloudGalleryTheme(settings = EngineSettings(themeMode = ThemeMode.LIGHT)) {
+        val upToDate = UpdatesState("1.0.0", check = CheckState.UpToDate)
+        ReleaseRoot(ReleaseUi.Stopped(ReleaseMessage.DATA_RISK), update = { UpdatePanel(upToDate, UpdateActions(), stopped = true) }) { Text("navigazione dell'app") }
+      }
+    }
+    composeRule.onNodeWithText(string(dev.pampa.mycloudgallery.feature.update.R.string.update_coming)).assertExists()
+    composeRule.onNodeWithText(string(dev.pampa.mycloudgallery.feature.update.R.string.update_up_to_date)).assertDoesNotExist()
+  }
+
+  @Test
+  fun inSolaLettura_AggiornaChiudeAncheLAvvisoInAlto() {
+    // Giro 2, UU2-8: una sola offerta. Dopo il tocco l'avanzamento lo mostra la scheda sopra la pillola, non resta il banner con il suo «Aggiorna».
+    val installs = mutableListOf<String>()
+    composeRule.setContent {
+      MyCloudGalleryTheme(settings = EngineSettings(themeMode = ThemeMode.LIGHT)) {
+        ReleaseRoot(ReleaseUi.UpdateBanner(ReleaseMessage.UPDATE), onUpdate = { installs += "aggiorna" }) { Text("navigazione dell'app") }
+      }
+    }
+    composeRule.onNodeWithText(string(dev.pampa.mycloudgallery.R.string.release_update_action)).performClick()
+    assertThat(installs).containsExactly("aggiorna")
+    composeRule.onNodeWithText(string(dev.pampa.mycloudgallery.R.string.release_update_action)).assertDoesNotExist()
+    composeRule.onNodeWithText("navigazione dell'app").assertExists()
+  }
 }

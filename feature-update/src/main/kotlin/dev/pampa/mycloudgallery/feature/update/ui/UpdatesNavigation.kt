@@ -33,6 +33,8 @@ class UpdatesViewModel @Inject constructor(private val updates: AppUpdates) : Vi
 
   fun onResumed() = updates.onResumed()
 
+  fun onPaused() = updates.onPaused()
+
   /** La pagina aperta: un controllo se l'ultimo ha piu' di 24 ore (UU-4). */
   fun refreshIfDue() {
     updates.refreshIfDue()
@@ -55,12 +57,13 @@ fun UpdatesPage(onBack: () -> Unit, viewModel: UpdatesViewModel = hiltViewModel(
 }
 
 /**
- * L'aggiornamento dentro un'altra pagina (la pagina «versione fermata»): la figura con il suo tasto. Senza una versione trovata offre «Controlla
- * adesso»: la versione fermata e' proprio il caso in cui l'aggiornamento e' il rimedio. Aperta, controlla da sola se sono passate 24 ore.
+ * L'aggiornamento dentro un'altra pagina (la pagina «versione fermata», [stopped]): la figura con il suo tasto. Senza una versione trovata offre
+ * «Controlla adesso»: la versione fermata e' proprio il caso in cui l'aggiornamento e' il rimedio, e li' «nessuna versione nuova» e' la clessidra
+ * («La versione nuova arriva presto»), non la spunta di «App aggiornata» (giro 2, UU2-7). Aperta, controlla da sola se sono passate 24 ore.
  */
 @Composable
-fun UpdateInline(viewModel: UpdatesViewModel = hiltViewModel()) {
+fun UpdateInline(viewModel: UpdatesViewModel = hiltViewModel(), stopped: Boolean = false) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   LaunchedEffect(viewModel) { viewModel.refreshIfDue() }
-  UpdatePanel(state = state, actions = viewModel.actions)
+  UpdatePanel(state = state, actions = viewModel.actions, stopped = stopped)
 }

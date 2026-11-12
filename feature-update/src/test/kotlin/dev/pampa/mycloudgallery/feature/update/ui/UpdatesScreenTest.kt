@@ -91,15 +91,14 @@ class UpdatesScreenTest {
       string(R.string.update_channel_stable_detail),
       string(R.string.update_channel_beta),
       string(R.string.update_channel_beta_detail),
-      // La riga della «i» per chi torna a Stabile (la frase si apre al tocco).
-      string(R.string.update_channel_beta_why_label),
+      // Con Stabile (di serie) nessuna riga «Se torno a Stabile»: e' solo per chi riceve le beta (giro 2, UU2-5).
     )
     rule.onNodeWithText(string(R.string.update_check_now)).performClick()
     assertThat(called).containsExactly("check")
   }
 
   @Test
-  fun ilCanaleSonoDueScelteConIlSegno_StabileDiSerie_eLaIPerChiTorna() {
+  fun ilCanaleSonoDueScelteConIlSegno_StabileDiSerie_senzaLaRigaDiChiTorna() {
     page(UpdateSamples.upToDate)
     val stable = choice(string(R.string.update_channel_stable)).fetchSemanticsNode()
     val beta = choice(string(R.string.update_channel_beta)).fetchSemanticsNode()
@@ -108,7 +107,14 @@ class UpdatesScreenTest {
     assertThat(beta.config.getOrNull(SemanticsProperties.Selected)).isFalse()
     choice(string(R.string.update_channel_beta)).performClick()
     assertThat(channels).containsExactly(UpdateChannel.BETA)
-    // Dietro la «i»: chi torna a Stabile tiene la beta finche' non ne esce una stabile piu' nuova.
+    assertThat(rule.onAllNodesWithText(string(R.string.update_channel_beta_why_label), useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+  }
+
+  @Test
+  fun conBetaScelto_laIDiChiTornaAStabile() {
+    // Giro 2, UU2-5: «Se torno a Stabile» solo con Beta scelto; dietro la «i», chi torna tiene la beta finche' non ne esce una stabile piu' nuova.
+    page(UpdateSamples.foundBeta)
+    rule.onNodeWithText(string(R.string.update_channel_beta_why_label), useUnmergedTree = true).assertExists()
     rule.onNode(hasContentDescription(string(R.string.update_channel_beta_why), substring = true)).assertExists()
   }
 
@@ -231,8 +237,48 @@ class UpdatesScreenTest {
   fun unaVersionePubblicataMale_nonAncoraPronta_senzaAggiorna() {
     page(UpdateSamples.unusable)
     rule.onNodeWithText(string(R.string.update_unusable)).assertExists()
-    rule.onNodeWithText(string(R.string.update_unusable_detail)).assertExists()
+    // La clessidra dice gia' «aspetta»: nessun «Riprova domani» accanto a «Controlla adesso» (giro 2, UU2-10).
+    rule.onNodeWithText(string(R.string.update_check_now)).assertExists()
+    assertThat(texts().none { it.contains("domani") }).isTrue()
     assertThat(rule.onAllNodesWithText(string(R.string.update_action)).fetchSemanticsNodes()).isEmpty()
+  }
+
+  @Test
+  fun nonRiescoAControllare_Riprova() {
+    // Giro 2, UU2-10: dopo un controllo non riuscito il tasto e' «Riprova» (lo stesso controllo).
+    page(UpdateSamples.unavailable)
+    rule.onNodeWithText(string(R.string.update_unavailable)).assertExists()
+    rule.onNodeWithText(string(R.string.update_retry)).performClick()
+    assertThat(called).containsExactly("check")
+  }
+
+  @Test
+  fun dentroLaVersioneFermata_senzaVersioneNuova_arrivaPresto_maiAggiornata() {
+    // Giro 2, UU2-7: «Questa versione e' stata fermata» sopra e «App aggiornata ✓» sotto si contraddicevano.
+    assertThat(UpdatePanels.of(UpdateSamples.upToDate, stopped = true).figure).isEqualTo(UpdateFigure.COMING)
+    assertThat(UpdatePanels.of(UpdateSamples.upToDate, stopped = true).primaryFilled).isTrue()
+    assertThat(statusOf(UpdateFigure.COMING)).isNotEqualTo(statusOf(UpdateFigure.UP_TO_DATE))
+    show { UpdatePanel(state = UpdateSamples.upToDate, actions = actions, stopped = true) }
+    rule.onNodeWithText(string(R.string.update_coming)).assertExists()
+    assertThat(rule.onAllNodesWithText(string(R.string.update_up_to_date)).fetchSemanticsNodes()).isEmpty()
+    rule.onNodeWithText(string(R.string.update_check_now)).performClick()
+    assertThat(called).containsExactly("check")
+  }
+
+  @Test
+  fun prontaNonHaLaSpuntaDiAggiornata() {
+    // Giro 2, UU2-3: la spunta verde vuol dire «fatto»; «Pronta» ha il segno di chi deve toccare, come «Nuova versione».
+    assertThat(statusOf(UpdateFigure.READY)).isNotEqualTo(statusOf(UpdateFigure.INSTALLED))
+    assertThat(statusOf(UpdateFigure.READY)).isEqualTo(statusOf(UpdateFigure.FOUND))
+    assertThat(statusOf(UpdateFigure.UP_TO_DATE)).isEqualTo(statusOf(UpdateFigure.INSTALLED))
+  }
+
+  @Test
+  fun lAvvisoDiUnGuasto_ChiudiLoChiudeDavvero() {
+    // Giro 2, UU2-2: «Chiudi» sull'avviso chiude la scheda (come «Dopo»), non la riporta a «Nuova versione».
+    prompt(UpdateSamples.signature)
+    rule.onNodeWithText(string(R.string.update_close)).performClick()
+    assertThat(called).containsExactly("later")
   }
 
   @Test
@@ -260,6 +306,10 @@ class UpdatesScreenTest {
     prompt(UpdateSamples.justUpdated)
     rule.onNodeWithText(string(R.string.update_installed)).assertExists()
     rule.onNodeWithText("1.1.0").assertExists()
+    // Giro 2, UU2-11: «Ok» sta nella riga del testo (al posto della «×»), la scheda e' di una riga sola.
+    val title = rule.onNodeWithText(string(R.string.update_installed)).fetchSemanticsNode().boundsInRoot
+    val ok = rule.onNodeWithText(string(R.string.update_ok)).fetchSemanticsNode().boundsInRoot
+    assertThat(ok.top).isLessThan(title.bottom + 1f)
     rule.onNodeWithText(string(R.string.update_ok)).performClick()
     assertThat(called).containsExactly("later")
   }

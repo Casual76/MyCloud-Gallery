@@ -10,16 +10,23 @@ import dev.pampa.mycloudgallery.feature.update.policy.UpdateProblem
 // CHE COSA MOSTRA L'AGGIORNAMENTO, DA UNA TABELLA SOLA (pacchetto U; giro 1 delle critiche). La pagina, l'avviso e la pagina «versione fermata»
 // disegnano lo stesso modello: la figura (l'icona dell'app con il suo segno, o l'anello che avanza), due parole, al piu' un tasto pieno e uno leggero.
 // Pure, provate senza comporre (UpdatePanelModelTest): lo stato si dice una volta, e due posti non possono dire cose diverse della stessa installazione.
-// Mai un'attesa senza tasti (UU-1): «Pronta» ha «Installa» e «Annulla»; la finestra di Android che si aspetta torna «Pronta» al ritorno davanti.
+// Mai un'attesa senza tasti (UU-1): «Pronta» ha «Installa» e «Annulla»; dopo il passaggio ad Android «Sto installando», e «Pronta» solo se non arriva un
+// esito (giro 2, UU2-1).
 
 /** La figura: che cosa si vede al posto delle parole. */
 internal enum class UpdateFigure {
   IDLE, CHECKING, UP_TO_DATE, UNAVAILABLE, FOUND, UNUSABLE, METERED, PERMISSION, DOWNLOADING, WORKING, READY, AWAITING, INSTALLED, FAILED,
+
+  /** Nella pagina «versione fermata», senza una versione nuova: la correzione arriva (giro 2, UU2-7). Mai la spunta di «App aggiornata» li'. */
+  COMING,
 }
 
 /** I tasti. */
 internal enum class UpdateAction(@param:StringRes val label: Int) {
   CHECK(R.string.update_check_now),
+
+  /** «Riprova» dopo un controllo non riuscito (giro 2, UU2-10): lo stesso controllo di «Controlla adesso». */
+  RECHECK(R.string.update_retry),
   INSTALL(R.string.update_action),
   INSTALL_READY(R.string.update_install),
   CANCEL_READY(R.string.update_cancel),
@@ -46,8 +53,11 @@ internal data class UpdatePanelModel(
 
 internal object UpdatePanels {
 
-  /** Il modello di [state]. L'installazione, se c'e', viene prima del controllo; la domanda dei dati mobili prima di tutto. */
-  fun of(state: UpdatesState): UpdatePanelModel {
+  /**
+   * Il modello di [state]. L'installazione, se c'e', viene prima del controllo; la domanda dei dati mobili prima di tutto. [stopped]: dentro la pagina
+   * «versione fermata», dove «App aggiornata» contraddirebbe il titolo (UU2-7).
+   */
+  fun of(state: UpdatesState, stopped: Boolean = false): UpdatePanelModel {
     if (state.askMetered) return UpdatePanelModel(UpdateFigure.METERED, UpdateAction.DOWNLOAD_METERED, UpdateAction.CANCEL_METERED)
     when (val step = state.install) {
       InstallStep.Preparing -> return UpdatePanelModel(UpdateFigure.WORKING, secondary = UpdateAction.CANCEL_DOWNLOAD)
@@ -63,8 +73,9 @@ internal object UpdatePanels {
     return when (val check = state.check) {
       CheckState.Idle -> UpdatePanelModel(UpdateFigure.IDLE, UpdateAction.CHECK)
       CheckState.Checking -> UpdatePanelModel(UpdateFigure.CHECKING)
-      CheckState.UpToDate -> UpdatePanelModel(UpdateFigure.UP_TO_DATE, UpdateAction.CHECK, primaryFilled = false)
-      CheckState.Unavailable -> UpdatePanelModel(UpdateFigure.UNAVAILABLE, UpdateAction.CHECK)
+      CheckState.UpToDate ->
+        if (stopped) UpdatePanelModel(UpdateFigure.COMING, UpdateAction.CHECK) else UpdatePanelModel(UpdateFigure.UP_TO_DATE, UpdateAction.CHECK, primaryFilled = false)
+      CheckState.Unavailable -> UpdatePanelModel(UpdateFigure.UNAVAILABLE, UpdateAction.RECHECK)
       is CheckState.Found -> UpdatePanelModel(UpdateFigure.FOUND, UpdateAction.INSTALL)
       is CheckState.Unusable -> UpdatePanelModel(UpdateFigure.UNUSABLE, UpdateAction.CHECK, problem = check.problem, primaryFilled = false)
     }

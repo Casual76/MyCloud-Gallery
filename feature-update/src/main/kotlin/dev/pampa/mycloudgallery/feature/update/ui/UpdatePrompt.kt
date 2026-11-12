@@ -54,14 +54,19 @@ import dev.pampa.mycloudgallery.feature.update.install.InstallStep
 // L'AVVISO (pacchetto U, 12/11/2026; giro 1 delle critiche, UU-5). Discreto e non bloccante: una scheda appoggiata SOPRA la barra delle schede della
 // galleria (la mette li' `:app`, nello scaffold: mai sopra la pillola, mai sopra il visore o le altre pagine), con la figura, due parole e i tasti.
 // Compare quando c'e' una versione da offrire e il promemoria lo permette, quando un tentativo aspetta il permesso, e una volta dopo un aggiornamento
-// riuscito («Aggiornata»). «Dopo» la rimanda di tre giorni; mentre lavora c'e' la «×» che la nasconde e basta (lo scaricamento continua).
+// riuscito («Aggiornata»). «Dopo» la rimanda di tre giorni (al terzo di fila, trenta); «Chiudi» su un guasto la chiude allo stesso modo (giro 2,
+// UU2-2); mentre lavora c'e' la «×» che la nasconde e basta (lo scaricamento continua).
 
-/** Il passo dell'app davanti: al ritorno dalla pagina del permesso, o dalla finestra di Android, l'aggiornamento riprende. Va alla radice (`:app`). */
+/**
+ * Il ciclo di vita dell'activity per l'aggiornamento, alla radice (`:app`): ON_RESUME apre il cancello del passaggio ad Android e riprende (dopo la
+ * pagina del permesso, dopo la finestra di Android); ON_PAUSE, e l'uscita dalla composizione, lo chiudono (giro 2, US2-1). E' il ciclo di vita
+ * dell'activity che ospita la radice, non l'importanza del processo.
+ */
 @Composable
 fun UpdateLifecycleEffect(viewModel: UpdatesViewModel) {
   LifecycleResumeEffect(viewModel) {
     viewModel.onResumed()
-    onPauseOrDispose { }
+    onPauseOrDispose { viewModel.onPaused() }
   }
 }
 
@@ -101,7 +106,13 @@ fun UpdatePromptCard(state: UpdatesState, actions: UpdateActions, modifier: Modi
     else -> words.detail
   }
   val promptTitle = stringResource(R.string.update_prompt_title)
-  val buttons = if (updated != null) updatedButtons(onOpenNotes != null) else promptButtons(model)
+  // «Aggiornata» senza «Novità»: una riga sola, con «Ok» al posto della «×» (giro 2, UU2-11).
+  val okInline = updated != null && onOpenNotes == null
+  val buttons = when {
+    okInline -> emptyList()
+    updated != null -> updatedButtons(withNotes = true)
+    else -> promptButtons(model)
+  }
   FluidCard(
     modifier = modifier
       .padding(UpdateDimens.PromptMargin)
@@ -125,10 +136,14 @@ fun UpdatePromptCard(state: UpdatesState, actions: UpdateActions, modifier: Modi
           overflow = TextOverflow.Ellipsis,
         )
         detail?.takeIf { it.isNotBlank() }?.let {
-          Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis)
+          // Quattro righe: a 1,3x la riga di Play Protect («scegli «Installa comunque»») entra intera (giro 2, UU2-10).
+          Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 4, overflow = TextOverflow.Ellipsis)
         }
       }
-      if (updated == null && hidesOnly(model)) HideButton(onClick = actions.hide)
+      when {
+        okInline -> FluidButton(text = stringResource(R.string.update_ok), onClick = actions.later, style = FluidButtonStyle.Plain, size = FluidButtonSize.Large)
+        updated == null && hidesOnly(model) -> HideButton(onClick = actions.hide)
+      }
     }
     if (buttons.isNotEmpty()) {
       Row(
@@ -173,7 +188,10 @@ internal fun hidesOnly(model: UpdatePanelModel): Boolean = when (model.figure) {
   else -> false
 }
 
-/** Un tasto dell'avviso: «Dopo» (rimanda), «Ok» e «Novità» (dopo l'aggiornamento), o un'azione del modello. */
+/**
+ * Un tasto dell'avviso: «Dopo» (rimanda), «Chiudi» su un guasto (chiude l'avviso come «Dopo»: giro 2, UU2-2), «Ok» e «Novità» (dopo l'aggiornamento),
+ * o un'azione del modello.
+ */
 internal class PromptButton private constructor(
   val label: Int,
   val action: UpdateAction?,
@@ -195,6 +213,7 @@ internal class PromptButton private constructor(
 
   companion object {
     val LATER = PromptButton(R.string.update_later, null, filled = false, kind = Kind.LATER)
+    val CLOSE = PromptButton(R.string.update_close, UpdateAction.CLOSE, filled = false, kind = Kind.LATER)
     val OK = PromptButton(R.string.update_ok, null, filled = false, kind = Kind.OK)
     val NOTES = PromptButton(R.string.update_whats_new, null, filled = true, kind = Kind.NOTES)
 
@@ -209,11 +228,12 @@ internal fun updatedButtons(withNotes: Boolean): List<PromptButton> =
 /**
  * I tasti dell'avviso, da sinistra, mai piu' di due: il leggero, poi il pieno. Con una versione nuova o il permesso «Dopo» e il tasto che risolve;
  * sulla domanda dei dati mobili «Annulla» e «Scarica lo stesso»; mentre scarica solo «Annulla» (la «×» nasconde); con il file pronto «Annulla» e
- * «Installa»; con un guasto «Chiudi» e, se ha senso, «Riprova».
+ * «Installa»; con un guasto «Chiudi» (che chiude davvero l'avviso, UU2-2) e, se ha senso, «Riprova».
  */
 internal fun promptButtons(model: UpdatePanelModel): List<PromptButton> = when (model.figure) {
-  UpdateFigure.METERED, UpdateFigure.READY, UpdateFigure.FAILED ->
+  UpdateFigure.METERED, UpdateFigure.READY ->
     listOfNotNull(model.secondary?.let { PromptButton.of(it, filled = false) }, model.primary?.let { PromptButton.of(it, filled = true) })
+  UpdateFigure.FAILED -> listOfNotNull(PromptButton.CLOSE, model.primary?.let { PromptButton.of(it, filled = true) })
   UpdateFigure.DOWNLOADING, UpdateFigure.WORKING -> listOfNotNull(model.secondary?.let { PromptButton.of(it, filled = false) })
   UpdateFigure.FOUND, UpdateFigure.PERMISSION -> listOfNotNull(PromptButton.LATER, model.primary?.let { PromptButton.of(it, filled = true) })
   else -> emptyList()

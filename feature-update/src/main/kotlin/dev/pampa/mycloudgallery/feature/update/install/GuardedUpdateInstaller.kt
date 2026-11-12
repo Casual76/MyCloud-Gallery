@@ -29,8 +29,9 @@ import kotlinx.coroutines.withContext
 //     firma = quelli dell'app installata, PRIMA di dare il file a qualunque sessione;
 //  5. [InstallStep.Ready]: il file verificato resta nella cache privata e si aspetta (giro 1, UU-1: se l'app non e' davanti, «Pronta» con «Installa»).
 //
-// [commit] (con l'app davanti, subito dopo [prepare] o dal tocco su «Installa»): gli stessi controlli del punto 4 di nuovo sul file, poi `installFile`
-// dell'engine (che ricontrolla sha256, pacchetto e versionName) e la conferma di Android. Ogni messaggio dell'engine diventa un [UpdateProblem]
+// [commit] (subito dopo [prepare], dal tocco su «Installa», al ritorno dal permesso): gli stessi controlli del punto 4 di nuovo sul file, poi IL
+// CANCELLO (giro 2): solo con l'activity dell'app RESUMED ([inFront]) il file va a `installFile` dell'engine (che ricontrolla sha256, pacchetto e
+// versionName) e alla conferma di Android; altrimenti resta «Pronta». Ogni messaggio dell'engine diventa un [UpdateProblem]
 // ([EngineMessages]): nessuna frase dell'engine arriva a chi usa l'app (UU-6). «Annullata» nella finestra di Android non e' un guasto: si torna a «Pronta».
 //
 // Il file sta in `cacheDir/engine_updates/` (privato dell'app) e si cancella quando non serve piu' (installata, un problema del file, «Annulla»);
@@ -71,7 +72,10 @@ interface UpdateInstaller {
   /** Dal tocco su «Aggiorna» al file verificato: finisce con [InstallStep.Ready], [InstallStep.NeedsPermission] o [InstallStep.Failed]. */
   fun prepare(update: AvailableAppUpdate): Flow<InstallStep>
 
-  /** Il file pronto, ricontrollato, alla sessione di Android. Solo con l'app davanti. */
+  /**
+   * Il file pronto, ricontrollato, alla sessione di Android, solo se l'app e' davanti DOPO i controlli; altrimenti finisce con [InstallStep.Ready].
+   * Passato il cancello: [InstallStep.Installing], poi gli stati di Android.
+   */
   fun commit(update: AvailableAppUpdate, file: File): Flow<InstallStep>
 
   /** Toglie il file («Annulla» su «Pronta», una versione che non vale piu'). */
@@ -82,6 +86,8 @@ class GuardedUpdateInstaller(
   private val transfer: ApkTransfer,
   private val facts: PackageFactsSource,
   private val permission: InstallPermission,
+  /** Il cancello ([ForegroundGate.inFront]): vero solo con l'activity dell'app RESUMED. Si guarda subito prima di `installFile`, mai prima. */
+  private val inFront: () -> Boolean,
   private val checksum: FileChecksum = Sha256Files,
   private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : UpdateInstaller, AppUpdateInstaller {
@@ -131,6 +137,15 @@ class GuardedUpdateInstaller(
       send(InstallStep.Failed(problem))
       return@channelFlow
     }
+    // IL CANCELLO, uno solo per tutte le strade (fine dello scaricamento, «Installa», ritorno dal permesso), DOPO le verifiche: anche 110 MB di
+    // SHA-256 richiedono tempo, e l'utente puo' premere Home o spegnere lo schermo nel frattempo. Con l'app dietro il file resta «Pronta» e nessuna
+    // sessione parte (giro 2, US2-1). Il tratto dentro l'engine dopo questo punto non e' dell'app: docs/sicurezza.md L616.
+    if (!inFront()) {
+      send(InstallStep.Ready(file))
+      return@channelFlow
+    }
+    // Da qui il file e' di Android: «Sto installando» (giro 2, UU2-1), mai piu' «Pronta» finche' non arriva un esito o il tempo dell'attesa.
+    send(InstallStep.Installing)
     try {
       transfer.installFile(file, expectedVersionName = update.version, sha256 = update.sha256).collect { state ->
         when (state) {

@@ -174,18 +174,69 @@ class UpdateRulesTest {
   }
 
   @Test
-  fun dopoRimandaDiTreGiorni_alPiuTreVolte() {
+  fun dopoRimandaDiTreGiorni() {
     val now = 1_000_000_000_000L
     val snooze = UpdateRules.SNOOZE_MILLIS
     assertThat(UpdateRules.shouldPrompt(hasOffer = false, now = now, snoozedUntil = null, declines = 0)).isFalse()
     assertThat(UpdateRules.shouldPrompt(hasOffer = true, now = now, snoozedUntil = null, declines = 0)).isTrue()
     // «Dopo»: rimandato di tre giorni, per qualunque versione (chi pubblica due nomi a giorni alterni non lo fa tornare ogni giorno, US-3).
+    assertThat(UpdateRules.declined(now, snoozedUntil = null, declines = 0)).isEqualTo(UpdateRules.Snooze(now + snooze, 1))
     assertThat(UpdateRules.shouldPrompt(hasOffer = true, now = now + 1, snoozedUntil = now + snooze, declines = 1)).isFalse()
     assertThat(UpdateRules.shouldPrompt(hasOffer = true, now = now + snooze, snoozedUntil = now + snooze, declines = 1)).isTrue()
-    // Dopo tre «Dopo» non torna piu' (resta il segno sulla voce delle Impostazioni).
-    assertThat(UpdateRules.shouldPrompt(hasOffer = true, now = now + 10 * snooze, snoozedUntil = now, declines = UpdateRules.MAX_DECLINES)).isFalse()
     // L'orologio e' tornato indietro di piu' del rimando: vale come scaduto.
     assertThat(UpdateRules.shouldPrompt(hasOffer = true, now = now, snoozedUntil = now + 2 * snooze, declines = 1)).isTrue()
+  }
+
+  @Test
+  fun alTerzoDopo_trentaGiorniDiSilenzio_poiIlContoRiparte_maiPerSempre() {
+    // Giro 2 (decisione dell'orchestratore, al posto di «mai piu'»): tre avvisi al piu' in circa 39 giorni, e la voce in cima alle Impostazioni resta.
+    val start = 1_000_000_000_000L
+    val snooze = UpdateRules.SNOOZE_MILLIS
+    val quiet = UpdateRules.QUIET_MILLIS
+    var now = start
+    var until: Long? = null
+    var declines = 0
+    // Tre «Dopo», ognuno appena l'avviso torna.
+    val waits = mutableListOf<Long>()
+    repeat(UpdateRules.MAX_DECLINES) {
+      val next = UpdateRules.declined(now, until, declines)
+      waits += next.until - now
+      until = next.until
+      declines = next.declines
+      now = next.until
+    }
+    assertThat(waits).containsExactly(snooze, snooze, quiet).inOrder()
+    assertThat(declines).isEqualTo(UpdateRules.MAX_DECLINES)
+    // Il silenzio: un attimo prima dei trenta giorni no, allo scadere si'.
+    val silenceStart = until!! - quiet
+    assertThat(UpdateRules.shouldPrompt(hasOffer = true, now = silenceStart + quiet - 1, snoozedUntil = until, declines = declines)).isFalse()
+    assertThat(UpdateRules.shouldPrompt(hasOffer = true, now = until!!, snoozedUntil = until, declines = declines)).isTrue()
+    // Il conto riparte: il primo «Dopo» dopo il silenzio vale di nuovo tre giorni.
+    assertThat(UpdateRules.declined(until!!, until, declines)).isEqualTo(UpdateRules.Snooze(until!! + snooze, 1))
+    // Mai spento per sempre: dieci giri di «Dopo», l'avviso torna sempre.
+    var t = until!!
+    var u: Long? = until
+    var d = declines
+    repeat(10) {
+      assertThat(UpdateRules.shouldPrompt(hasOffer = true, now = t, snoozedUntil = u, declines = d)).isTrue()
+      val next = UpdateRules.declined(t, u, d)
+      assertThat(next.until - t).isAtMost(quiet)
+      u = next.until
+      d = next.declines
+      t = next.until
+    }
+  }
+
+  @Test
+  fun dentroIlSilenzio_unDopoNonLoAccorcia_eLOrologioIndietroNonLoAllunga() {
+    val now = 1_000_000_000_000L
+    val quiet = UpdateRules.QUIET_MILLIS
+    // Un «Dopo» sull'avviso del permesso o di un guasto, durante i trenta giorni: resta il silenzio com'era.
+    val inside = UpdateRules.declined(now + 1, snoozedUntil = now + quiet, declines = UpdateRules.MAX_DECLINES)
+    assertThat(inside).isEqualTo(UpdateRules.Snooze(now + quiet, UpdateRules.MAX_DECLINES))
+    // Un rimando che scade oltre i trenta giorni da adesso: l'orologio e' tornato indietro, vale come scaduto.
+    assertThat(UpdateRules.shouldPrompt(hasOffer = true, now = now, snoozedUntil = now + quiet + 1, declines = UpdateRules.MAX_DECLINES)).isTrue()
+    assertThat(UpdateRules.shouldPrompt(hasOffer = true, now = now, snoozedUntil = now + quiet, declines = UpdateRules.MAX_DECLINES)).isFalse()
   }
 
   @Test

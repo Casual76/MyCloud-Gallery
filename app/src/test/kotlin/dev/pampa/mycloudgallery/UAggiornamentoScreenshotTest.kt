@@ -35,7 +35,9 @@ import dev.pampa.mycloudgallery.feature.update.ui.UpdateActions
 import dev.pampa.mycloudgallery.feature.update.ui.UpdatePanel
 import dev.pampa.mycloudgallery.feature.update.ui.UpdatePromptCard
 import dev.pampa.mycloudgallery.main.LocalTabBarNotice
+import dev.pampa.mycloudgallery.release.ReleaseRoot
 import dev.pampa.mycloudgallery.release.ReleaseStoppedScreen
+import dev.pampa.mycloudgallery.release.ReleaseUi
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
@@ -50,7 +52,8 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Pacchetto U, giro 1 delle critiche (UU-14): l'aggiornamento dove lo vede davvero un genitore. L'avviso appoggiato sopra la barra delle schede della
  * Libreria vera (non sopra la pillola: UU-5), con l'icona vera dell'app (UU-7); «Aggiornata» alla riapertura; la pagina «versione fermata» con una
- * figura sola e «Aggiorna» (UU-8); la voce «Aggiornamenti» in cima alle Impostazioni quando c'e' una versione nuova (UU-4).
+ * figura sola e «Aggiorna» (UU-8); la voce «Aggiornamenti» in cima alle Impostazioni quando c'e' una versione nuova (UU-4). Giro 2: la Libreria sale
+ * sopra l'avviso (UU2-4), la pagina fermata senza una versione nuova («arriva presto», UU2-7), l'avviso in sola lettura con «Aggiorna» (UU2-8).
  *
  * `gradlew :app:recordRoborazziDebug --tests "*UAggiornamento*"` scrive i PNG in `docs/screenshots/beta-grafica/U/`.
  */
@@ -85,6 +88,7 @@ internal abstract class UAggiornamentoShotsBase(private val device: String, priv
   protected val found = UpdatesState(installedVersion = "1.0.0", check = CheckState.Found(offer))
   protected val downloading = found.copy(install = InstallStep.Downloading(0.42f, 48_444_211L, 115_343_360L))
   protected val updated = UpdatesState(installedVersion = "1.1.0", check = CheckState.UpToDate, justUpdated = "1.1.0")
+  protected val noNewVersion = UpdatesState(installedVersion = "1.0.0", check = CheckState.UpToDate)
 
   private val appIcon: @Composable (Dp) -> Unit = { side -> AppIconFigure(choice = AppIconChoice.AUTO, art = AppIconSwitcher.ART, side = side) }
 
@@ -110,7 +114,18 @@ internal abstract class UAggiornamentoShotsBase(private val device: String, priv
   }
 
   protected fun stopped(dark: Boolean) = shoot("versione-fermata", dark) {
-    ReleaseStoppedScreen(ReleaseMessage.SECURITY, onDiagnostics = {}, update = { UpdatePanel(state = found, actions = UpdateActions.None) })
+    ReleaseStoppedScreen(ReleaseMessage.SECURITY, onDiagnostics = {}, update = { UpdatePanel(state = found, actions = UpdateActions.None, stopped = true) })
+  }
+
+  /** La versione fermata prima che la correzione sia pubblicata: la clessidra, «La versione nuova arriva presto», «Controlla adesso» pieno (UU2-7). */
+  protected fun stoppedWithoutFix(dark: Boolean) = shoot("versione-fermata-senza-nuova", dark) {
+    ReleaseStoppedScreen(ReleaseMessage.DATA_RISK, onDiagnostics = {}, update = { UpdatePanel(state = noNewVersion, actions = UpdateActions.None, stopped = true) })
+  }
+
+  /** In sola lettura: l'avviso in alto con «Aggiorna» sopra la Libreria vera (UU-8, UU2-8). */
+  protected fun readOnlyBanner(dark: Boolean) = shoot("sola-lettura-libreria", dark) {
+    val scenes = ScaffoldScenes()
+    ReleaseRoot(ReleaseUi.UpdateBanner(ReleaseMessage.UPDATE), onUpdate = {}) { GalleryScaffold(scenes, GalleryTab.Library) }
   }
 
   protected fun settingsTop(dark: Boolean) = shoot("impostazioni-voce-in-cima", dark) {
@@ -147,6 +162,12 @@ internal class UAggiornamentoPhoneScreenshotTest : UAggiornamentoShotsBase("tele
   @Test fun versioneFermataChiaro() = stopped(dark = false)
 
   @Test fun versioneFermataScuro() = stopped(dark = true)
+
+  @Test fun versioneFermataSenzaNuovaChiaro() = stoppedWithoutFix(dark = false)
+
+  @Test fun solaLetturaChiaro() = readOnlyBanner(dark = false)
+
+  @Test fun solaLetturaScuro() = readOnlyBanner(dark = true)
 
   @Test fun impostazioniChiaro() = settingsTop(dark = false)
 }

@@ -59,6 +59,7 @@
   <string name="icon_status_done">Fatto</string>
   <string name="icon_status_running">In corso</string>
   <string name="icon_status_paused">In pausa</string>
+  <string name="icon_status_waiting">In attesa</string>
   <string name="icon_status_stopped">Fermo</string>
   <string name="icon_status_attention">Attenzione</string>
   <string name="icon_status_problem">Problema</string>

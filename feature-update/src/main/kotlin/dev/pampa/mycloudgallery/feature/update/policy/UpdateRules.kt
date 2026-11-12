@@ -148,9 +148,9 @@ object UpdateRules {
 
   /** I caratteri che cambiano la direzione o non si vedono: LRM/RLM, gli incorporamenti e gli isolamenti bidi, quelli a larghezza zero, il BOM. */
   private val INVISIBLE: Set<Char> = buildSet {
-    addAll(listOf('​', '‌', '‍', '‎', '‏', '؜', '⁠', '﻿'))
-    for (c in '‪'..'‮') add(c)
-    for (c in '⁦'..'⁩') add(c)
+    addAll(listOf('\u200B', '\u200C', '\u200D', '\u200E', '\u200F', '\u061C', '\u2060', '\uFEFF'))
+    for (c in '\u202A'..'\u202E') add(c)
+    for (c in '\u2066'..'\u2069') add(c)
   }
 
   /** Il file ricevuto contro lo sha256 dell'elenco: senza maiuscole ne' spazi, come l'engine. */

@@ -70,6 +70,8 @@ internal class ActionSettingsHandlers(
 
   override fun onIndexNow() = controller.indexNow()
 
+  override fun onOpenAnalysis() = actions.openAnalysis()
+
   override fun onOpenActivation() = actions.openTextReadingActivation()
 
   override fun onExcludeThisDevice() = controller.excludeThisDevice()

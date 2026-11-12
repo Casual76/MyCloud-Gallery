@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelRole
 import dev.pampa.mycloudgallery.core.models.contract.ModelSourceKind
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
 import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
+import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
 import dev.pampa.mycloudgallery.core.search.contract.SearchCoverage
 import dev.pampa.mycloudgallery.core.search.contract.SearchEngine
 import dev.pampa.mycloudgallery.core.search.contract.SearchHistory
@@ -82,6 +83,7 @@ class SearchSettingsController(
   private val offStatus: StateFlow<AiStatus> = MutableStateFlow(AiStatus.Off)
   private val noBacklog: StateFlow<IndexerBacklog> = MutableStateFlow(IndexerBacklog.NONE)
   private val noSpace: StateFlow<IndexSpace> = MutableStateFlow(IndexSpace.NONE)
+  private val noAnalysis: StateFlow<LibraryAnalysisStatus> = MutableStateFlow(LibraryAnalysisStatus.Idle)
   private val noModels: StateFlow<Map<ModelId, ModelState>> = MutableStateFlow(emptyMap())
   private val offReading: StateFlow<TextReadingState> = MutableStateFlow(TextReadingState.Off)
   private val notExcluded: StateFlow<Boolean> = MutableStateFlow(false)
@@ -103,6 +105,7 @@ class SearchSettingsController(
       textReading?.excludedHere ?: notExcluded,
       textReading?.syncPending ?: notExcluded,
       removeOffer,
+      indexer?.analysis ?: noAnalysis,
     ),
   ) { values ->
     @Suppress("UNCHECKED_CAST")
@@ -120,6 +123,7 @@ class SearchSettingsController(
       excludedHere = values[10] as Boolean,
       syncPending = values[11] as Boolean,
       removeOffer = values[12] as Boolean,
+      analysis = values[13] as LibraryAnalysisStatus,
     )
   }.stateIn(scope, SharingStarted.Eagerly, compose(
     indexer?.indexer?.value ?: false, indexer?.status?.value ?: AiStatus.Off,
@@ -148,11 +152,12 @@ class SearchSettingsController(
     excludedHere: Boolean = false,
     syncPending: Boolean = false,
     removeOffer: Boolean = false,
+    analysis: LibraryAnalysisStatus = LibraryAnalysisStatus.Idle,
   ): SearchSettingsState {
     val nights = probeResult?.nightsFor(backlog.toAnalyze)?.takeIf { backlog.toAnalyze > 0 }
     val current = TextReadingSwitch.CURRENT_TEXT_VERSION
     return SearchSettingsState(
-      indexer = IndexerState(isIndexer, status, probeResult, backlog.toAnalyze, nights, backlog.areasWithoutIndexer),
+      indexer = IndexerState(isIndexer, status, probeResult, backlog.toAnalyze, nights, backlog.areasWithoutIndexer, analysis),
       textReading = TextReadingPageState(
         reading,
         current,

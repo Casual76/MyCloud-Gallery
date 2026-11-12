@@ -47,4 +47,19 @@ internal object SearchDimens {
 
   /** Il margine interno di una piastrella (aree, modelli). */
   val TilePadding: Dp = 12.dp
+
+  // --- Pacchetto X: la pagina "Analisi delle foto" (il nastro delle anteprime; su tablet piu' grandi) ------------------------------------
+
+  /** L'anteprima del media di adesso, e quelle delle file (appena fatte, prossime). */
+  val AnalysisCurrent: Dp = 128.dp
+  val AnalysisCurrentWide: Dp = 176.dp
+  val AnalysisThumb: Dp = 64.dp
+  val AnalysisThumbWide: Dp = 88.dp
+
+  /** Il segno sulle anteprime appena fatte e il glifo dentro un'anteprima. */
+  val AnalysisMark: Dp = 20.dp
+  val AnalysisGlyph: Dp = 22.dp
+
+  /** Da questa larghezza la pagina usa le misure larghe (tablet): piu' anteprime, non una colonna stretta. */
+  val AnalysisWide: Dp = 600.dp
 }

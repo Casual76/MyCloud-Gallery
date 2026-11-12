@@ -88,4 +88,8 @@ abstract class SearchPortsModule {
   /** I2: i volti delle persone per le anteprime dei suggerimenti (con il cancello dei volti delle Raccolte). */
   @BindsOptionalOf
   abstract fun searchFaces(): SearchFaces
+
+  /** Pacchetto X: il nastro della pagina "Analisi delle foto" (le anteprime mentre si analizzano, dietro il cancello della Libreria). */
+  @BindsOptionalOf
+  abstract fun analysisLiveSource(): dev.pampa.mycloudgallery.feature.search.contract.AnalysisLiveSource
 }

@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.ProbeResult
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingState
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingSwitch
+import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
 import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
 import dev.pampa.mycloudgallery.core.library.contract.ViewerAnchor
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -35,6 +36,7 @@ object SearchSamples {
       toAnalyze = 13_760,
       nights = 2,
       areasWithoutIndexer = listOf(AreaKind.COMMON_AREA),
+      analysis = LibraryAnalysisStatus.Running(remaining = 13_760, etaMinutes = 95, ready = 12_300, total = 15_000),
     ),
     textReading = TextReadingPageState(TextReadingState.Off, TextReadingSwitch.CURRENT_TEXT_VERSION, needsConsent = true),
     models = ModelsState(
@@ -54,7 +56,7 @@ object SearchSamples {
   val settingsReadingOn: SearchSettingsState = settingsIndexer.copy(
     textReading = TextReadingPageState(TextReadingState.OnForAccount(thisDevice = true), TextReadingSwitch.CURRENT_TEXT_VERSION, needsConsent = false),
     coverage = SearchCoverage.Complete,
-    indexer = settingsIndexer.indexer.copy(status = AiStatus.Idle(null), toAnalyze = 0, nights = null, areasWithoutIndexer = emptyList()),
+    indexer = settingsIndexer.indexer.copy(status = AiStatus.Idle(null), toAnalyze = 0, nights = null, areasWithoutIndexer = emptyList(), analysis = LibraryAnalysisStatus.AllReady),
   )
 
   /** La lettura attiva per l'account ma questo dispositivo si e' escluso, e il testo della spiegazione e' cambiato: va riletto. */
@@ -68,6 +70,7 @@ object SearchSamples {
       indexer = true,
       status = AiStatus.Problem(AiDiag.AI_STORAGE_LOW),
       probe = ProbeResult(imagesPerSecond = 2.8, backend = AiBackend.CPU, coldStartMs = 3_600),
+      analysis = LibraryAnalysisStatus.Problem("AI_STORAGE_LOW"),
       nights = 2,
     ),
     models = settingsIndexer.models.copy(
@@ -83,7 +86,7 @@ object SearchSamples {
 
   /** Un tablet che non analizza e ha il modello delle query da scaricare. */
   val settingsAbsent: SearchSettingsState = settingsIndexer.copy(
-    indexer = IndexerState(indexer = false, status = AiStatus.Off, probe = null, toAnalyze = 0, nights = null, areasWithoutIndexer = emptyList()),
+    indexer = IndexerState(indexer = false, status = AiStatus.Off, probe = null, toAnalyze = 0, nights = null, areasWithoutIndexer = emptyList(), analysis = LibraryAnalysisStatus.NotHere(ready = null, total = null)),
     models = settingsIndexer.models.copy(
       models = listOf(
         ModelRow(ModelCatalog.QUERY_270M.id, ModelState.Absent, ModelCatalog.QUERY_270M.sizeBytes, null, removable = true),

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pacchetto X: la pagina "Analisi delle foto" e la riga di stato in testata. Si dice "analizzare le foto", mai "indice". -->
+    <string name="analysis_page_title">Analisi delle foto</string>
+    <string name="analysis_open">Apri l’analisi delle foto</string>
+    <string name="analysis_status_running">Analisi in corso</string>
+    <string name="analysis_status_running_eta">Analisi in corso · circa %1$d min</string>
+    <string name="analysis_status_queued">In coda</string>
+    <string name="analysis_status_ready">Tutte pronte per la ricerca</string>
+    <string name="analysis_status_not_here">Le foto le analizza un altro dispositivo</string>
+    <string name="analysis_status_model_missing">Serve il modello di analisi</string>
+    <string name="analysis_status_disabled">Analisi spenta</string>
+    <string name="analysis_status_paused">In pausa · %1$s</string>
+    <string name="analysis_remaining">Restano %1$s foto</string>
+    <string name="analysis_ready_of">%1$s di %2$s pronte</string>
+    <string name="analysis_wait_window">fuori dalla fascia oraria</string>
+    <string name="analysis_wait_charging">serve la carica</string>
+    <string name="analysis_wait_battery">batteria scarica</string>
+    <string name="analysis_wait_power_saver">risparmio energetico attivo</string>
+    <string name="analysis_wait_thermal">telefono caldo</string>
+    <string name="analysis_wait_wifi">in attesa del Wi-Fi</string>
+    <string name="analysis_wait_home_wifi">in attesa del Wi-Fi di casa</string>
+    <string name="analysis_wait_nas">il NAS non risponde</string>
+    <string name="analysis_wait_data_cap">tetto dati raggiunto</string>
+    <string name="analysis_wait_preparation">foto in preparazione</string>
+    <string name="analysis_wait_android">riprende al prossimo giro</string>
+    <string name="analysis_wait_profile">profilo non attivo</string>
+    <string name="analysis_wait_other">in attesa</string>
+    <string name="analysis_now_label">Adesso</string>
+    <string name="analysis_recent_label">Appena fatte</string>
+    <string name="analysis_next_label">Prossime</string>
+    <string name="analysis_quiet_description">Foto non mostrata</string>
+    <string name="analysis_photo_description">Foto in analisi</string>
+    <string name="analysis_video_description">Video in analisi</string>
+    <string name="analysis_done_description">Fatto</string>
+    <string name="analysis_empty_ready">Tutte le foto sono pronte per la ricerca</string>
+    <string name="analysis_empty_not_here">Questo dispositivo non analizza le foto</string>
+    <string name="analysis_empty_not_here_why">Le analizza un altro dispositivo della famiglia e i risultati arrivano dal NAS. Qui trovi quante sono già pronte per la ricerca.</string>
+    <string name="analysis_empty_model">Per analizzare serve il modello</string>
+    <string name="analysis_empty_disabled">L’analisi è spenta nelle impostazioni</string>
+    <string name="analysis_sentence_running">Sta analizzando le foto adesso. %1$s</string>
+    <string name="analysis_sentence_queued">Le foto da analizzare sono in coda. %1$s</string>
+    <string name="analysis_sentence_paused">L’analisi è in pausa: %1$s. Riprende da sola.</string>
+    <string name="analysis_sentence_ready">Tutte le foto sono pronte per la ricerca.</string>
+    <string name="analysis_sentence_not_here">Questo dispositivo non analizza le foto: le analizza un altro dispositivo.</string>
+    <string name="analysis_sentence_model_missing">Manca il modello di analisi su questo dispositivo.</string>
+    <string name="analysis_sentence_disabled">L’analisi delle foto è spenta nelle impostazioni.</string>
+</resources>

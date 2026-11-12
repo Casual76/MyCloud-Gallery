@@ -11,6 +11,9 @@ interface SearchSettingsHandlers {
 
   fun onIndexNow()
 
+  /** Pacchetto X: la pagina "Analisi delle foto" dalla testata. Di serie non fa niente, per le anteprime. */
+  fun onOpenAnalysis() = Unit
+
   /** La pagina di attivazione della lettura del testo (D41). */
   fun onOpenActivation()
 

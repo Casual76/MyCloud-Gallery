@@ -80,8 +80,6 @@ class SearchSettingsUiTest {
   /** CU-19: la riga della lettura del testo apre il perche' e le scelte che non sono quella principale. */
   private fun openReading() = said("Leggi il testo nelle foto").performScrollTo().performClick()
 
-  /** CU-19: la riga dello stato dell'analisi apre le frasi intere e tutte le azioni. */
-  private fun openAnalysis(sentence: String) = said(sentence).performScrollTo().performClick()
 
   @Test
   fun laCoperturaEUnAnelloConIlNumeroEIMotiviSonoSegni_I2() {
@@ -106,11 +104,12 @@ class SearchSettingsUiTest {
     rule.onNodeWithText("Questo dispositivo analizza").performScrollTo().assertIsDisplayed()
     // Lo stato e la stima: segni e numeri a vista, le frasi intere per TalkBack. CU-19: che cosa fa adesso questo telefono e' il tempo che manca, non
     // un secondo «quanti su quanti» sotto quello della copertura.
-    shown("≈ 95 min").performScrollTo().assertIsDisplayed()
+    // Pacchetto X: lo stato sta in testata, detto una volta (sotto resta solo la misura).
+    shown("Analisi in corso · circa 95 min").assertIsDisplayed()
     assertThat(rule.onAllNodesWithText("1.240 / 15.000", useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
     shown("≈ 2 notti").performScrollTo().assertIsDisplayed()
     said("Analizzare 13.760 foto e video richiede circa 2 notti.").assertExists()
-    said("Analizzati 1.240 foto e video su 15.000, mancano circa 95 minuti.").assertExists()
+    said("Sta analizzando le foto adesso. Restano 13.760 foto").assertExists()
     // CS-15: niente sigle sotto la stima.
     assertThat(rule.onAllNodesWithText("CPU", substring = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
     assertThat(rule.onAllNodesWithText("GPU", substring = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
@@ -121,14 +120,12 @@ class SearchSettingsUiTest {
 
   /** CU-19: sotto l'analisi un tasto solo, quello che serve adesso; le altre azioni, con le frasi intere, dietro il tocco sulla riga dello stato. */
   @Test
-  fun unaSolaAzioneAVista_LeAltreDietroIlTocco_CU19() {
+  fun leAzioniSonoAVistaSenzaFoglio() {
     show(SearchSamples.settingsProblems)
     // Il calcolo e' fermo per lo spazio: il tasto e' il rimedio, non «Indicizza ora».
     assertThat(rule.onAllNodesWithText("Libera spazio").fetchSemanticsNodes()).hasSize(1)
-    assertThat(rule.onAllNodesWithText("Indicizza ora").fetchSemanticsNodes()).isEmpty()
-    openAnalysis("Memoria quasi piena")
-    rule.onNodeWithText("Indicizza ora").assertIsDisplayed()
-    rule.onNodeWithText("Indicizza ora").performClick()
+    // Pacchetto X: niente foglio dietro la riga di stato (lo stato sta in testata e nella pagina Analisi): le azioni sono a vista.
+    scrollClick("Indicizza ora")
     assertThat(handlers.calls).containsExactly("indexNow")
     // Senza ricerche recenti nessun «0» accanto al tasto.
     assertThat(rule.onAllNodesWithText("0", useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
@@ -395,11 +392,14 @@ class SearchSettingsUiTest {
   @Test
   fun ix2_dopoUnaTappaFinitaPerTempoLaPaginaDiceRiprendoFraPoco() {
     val state = SearchSamples.settingsIndexer.copy(
-      indexer = SearchSamples.settingsIndexer.indexer.copy(status = AiStatus.Waiting(AiWaitReason.NEXT_STAGE)),
+      indexer = SearchSamples.settingsIndexer.indexer.copy(
+        status = AiStatus.Waiting(AiWaitReason.NEXT_STAGE),
+        analysis = dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus.Queued(remaining = 13_760, ready = 12_300, total = 15_000),
+      ),
     )
     show(state)
-    shown("Riprende fra poco").performScrollTo().assertIsDisplayed()
-    said("Riprendo fra poco: l’analisi continua con la prossima tappa.").assertExists()
+    shown("In coda").assertIsDisplayed()
+    said("Le foto da analizzare sono in coda. Restano 13.760 foto").assertExists()
     noneSaid("Questo dispositivo non analizza le foto.")
   }
 }

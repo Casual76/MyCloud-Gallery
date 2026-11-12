@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.search.contract
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.ProbeResult
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingState
+import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
 import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
 import dev.pampa.mycloudgallery.core.library.contract.ViewerAnchor
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -87,6 +88,8 @@ data class IndexerState(
   val nights: Int?,
   /** Le aree senza indicizzatori (E-I12): solo il tipo di area, mai il nome della share. */
   val areasWithoutIndexer: List<AreaKind>,
+  /** Pacchetto X: lo stato ridotto dell'analisi per la testata (un solo stato per tutti i posti). */
+  val analysis: LibraryAnalysisStatus = LibraryAnalysisStatus.Idle,
 )
 
 enum class AreaKind { MY_PRIVATE_AREA, COMMON_AREA }
@@ -125,6 +128,9 @@ interface SearchActions {
   fun openResults(view: OrderedTimelineView, start: MediaId, anchor: ViewerAnchor)
 
   fun openSearchSettings()
+
+  /** Pacchetto X: la pagina "Analisi delle foto" (lo stato e le anteprime mentre si analizzano). Di serie non fa niente. */
+  fun openAnalysis() = Unit
 
   fun openTextReadingActivation()
 

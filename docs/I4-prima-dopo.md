@@ -97,3 +97,13 @@ Diagnostica «Backup in pausa» con la frase di I3; resta «Indice condiviso in 
 | Operazioni in coda | «3 elementi · 190 MB, in coda» | «190 MB» (il conto nel titolo, lo stato nel segno) |
 | Onboarding, Batteria e VPN | piastrelle pallide, «Da fare» su ogni riga, percorsi di 3-4 righe | piastrelle della famiglia, un segno per riga, percorsi dietro la «i» |
 | Cestino del NAS dalle Raccolte | si apriva sul cestino del telefono | si apre sulla sezione «Dal NAS» |
+
+## Giro di rifinitura I6 (12/11)
+| Pagina | Prima | Dopo |
+|---|---|---|
+| Pop-up del backup | arco viola, orologio | arco nel colore del backup, clessidra; pausa con le due barre |
+| Strisce in cima alla Libreria (1x) | il tasto sempre sotto | il tasto accanto al titolo quando ci sta |
+| Batteria | la «i» su una riga sua; due «i» nella scheda | la «i» a destra; la luna nella scheda |
+| VPN, controllo automatico | paragrafo di sei righe sotto l'interruttore | interruttore e «i» |
+| Indirizzo, account, aree, cartelle, chiave | piastrelle grigie o pallide | piastrelle della famiglia |
+| Scegli e Ricevi, stati con messaggio | figura e titolo composti a mano | la figura di stato comune |

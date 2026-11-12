@@ -6,7 +6,6 @@ import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.GppGood
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.PauseCircle
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -112,7 +111,8 @@ internal fun backupFooterNote(status: LibraryBackupStatus): GalleryFooterNote? =
   is LibraryBackupStatus.Paused -> GalleryFooterNote(
     tone = GalleryFooterTone.Waiting,
     label = stringResource(if (status.byUser) R.string.library_cloud_paused_label else R.string.library_cloud_interrupted_label),
-    glyph = if (status.byUser) Icons.Rounded.PauseCircle else Icons.Rounded.Schedule,
+    // CS-25 (fase I): la pausa ha le due barre, il lavoro fermato da Android (riparte da solo) la clessidra.
+    glyph = if (status.byUser) GalleryIconStatus.Paused.glyph() else Icons.Rounded.HourglassTop,
     detail = stringResource(if (status.byUser) R.string.library_cloud_paused_detail else R.string.library_cloud_interrupted_detail),
   )
   // CA-1 (Fase 10): le scritture ferme dal manifest firmato dicono la loro causa.

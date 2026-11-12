@@ -7,13 +7,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Lan
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material.icons.rounded.WifiFind
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,17 +21,22 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProblem
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.network.contract.NasAddress
@@ -131,6 +134,7 @@ internal fun NasAddressScreen(
           icon = Icons.Rounded.Dns,
           title = stringResource(R.string.address_checking_title),
           bodyBehindInfo = true,
+          family = GalleryIconFamily.Network,
           body = stringResource(R.string.address_checking_detail),
         )
       }
@@ -153,13 +157,16 @@ internal fun HomeSection(
   onRefresh: () -> Unit,
   onProblemAction: (ProblemAction) -> Unit,
 ) {
+  val homeLookingDetail = stringResource(R.string.address_home_looking_detail)
   when (home) {
     HomeUi.Loading -> FluidListGroup {
       FluidListRow(
         title = stringResource(R.string.address_home_looking),
-        subtitle = stringResource(R.string.address_home_looking_detail),
+        subtitle = "",
         tone = FluidTone.Primary,
-        leading = { Icon(Icons.Rounded.WifiFind, contentDescription = null) },
+        leading = { GalleryIconTile(icon = Icons.Rounded.WifiFind, family = GalleryIconFamily.Network) },
+        leadingTile = false,
+        modifier = Modifier.semantics { stateDescription = homeLookingDetail },
         badge = { FluidSpinner() },
         disclosure = false,
       )
@@ -175,8 +182,8 @@ internal fun HomeSection(
         title = stringResource(R.string.address_home_confirmed),
         subtitle = home.candidate.describe(),
         tone = FluidTone.Success,
-        leading = { Icon(Icons.Rounded.Home, contentDescription = null) },
-        badge = { Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        leading = { GalleryIconTile(icon = Icons.Rounded.Home, family = GalleryIconFamily.Network, status = GalleryIconStatus.Done) },
+        leadingTile = false,
         disclosure = false,
       )
     }
@@ -199,7 +206,8 @@ private fun AskHome(
         title = stringResource(R.string.address_home_ask),
         subtitle = candidate.describe(),
         tone = FluidTone.Primary,
-        leading = { Icon(Icons.Rounded.Wifi, contentDescription = null) },
+        leading = { GalleryIconTile(icon = Icons.Rounded.Wifi, family = GalleryIconFamily.Network) },
+        leadingTile = false,
         disclosure = false,
       )
     }
@@ -249,7 +257,8 @@ private fun FoundSection(ui: AddressUi, form: AddressForm) {
         title = stringResource(if (ui.discovering) R.string.address_found_looking else R.string.address_found_none),
         subtitle = stringResource(if (ui.discovering) R.string.address_found_looking_detail else R.string.address_found_none_detail),
         tone = FluidTone.Neutral,
-        leading = { Icon(Icons.Rounded.Lan, contentDescription = null) },
+        leading = { GalleryIconTile(icon = Icons.Rounded.Lan, family = GalleryIconFamily.Network) },
+        leadingTile = false,
         badge = if (ui.discovering) ({ FluidSpinner() }) else null,
         disclosure = false,
       )
@@ -266,6 +275,7 @@ private fun FoundSection(ui: AddressUi, form: AddressForm) {
             form.name = nas.name
           },
           icon = Icons.Rounded.Dns,
+          family = GalleryIconFamily.Network,
         )
       }
     }

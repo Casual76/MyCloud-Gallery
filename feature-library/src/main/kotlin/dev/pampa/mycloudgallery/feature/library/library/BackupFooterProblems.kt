@@ -5,7 +5,7 @@ import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.ErrorOutline
-import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
@@ -77,12 +77,13 @@ internal object BackupFooterProblems {
       "unexpected", GalleryFooterTone.Attention, Icons.Rounded.Warning, R.string.backup_footer_unexpected_label,
       R.string.backup_footer_unexpected_detail, R.plurals.backup_footer_unexpected_label_count,
     ),
+    // CS-25 (fase I): le attese che ripartono da sole hanno la clessidra.
     // P14 (5B, D17, E-E6): il PC ha cambiato il file mentre una versione aspettava; niente si sposta, riparte da sola.
-    problem("source_changed", GalleryFooterTone.Waiting, Icons.Rounded.Schedule, R.string.backup_footer_source_changed_label, R.string.backup_footer_source_changed_detail),
+    problem("source_changed", GalleryFooterTone.Waiting, Icons.Rounded.HourglassTop, R.string.backup_footer_source_changed_label, R.string.backup_footer_source_changed_detail),
     problem("phone_storage_low", GalleryFooterTone.Attention, Icons.Rounded.Warning, R.string.backup_footer_phone_storage_low_label, R.string.backup_footer_phone_storage_low_detail),
     problem("stale", GalleryFooterTone.Attention, Icons.Rounded.Warning, R.string.backup_footer_stale_label, R.string.backup_footer_stale_detail),
-    problem("waiting_unlock", GalleryFooterTone.Waiting, Icons.Rounded.Schedule, R.string.backup_footer_waiting_unlock_label, R.string.backup_footer_waiting_unlock_detail),
-    problem("profile_inactive", GalleryFooterTone.Waiting, Icons.Rounded.Schedule, R.string.backup_footer_profile_inactive_label, R.string.backup_footer_profile_inactive_detail),
+    problem("waiting_unlock", GalleryFooterTone.Waiting, Icons.Rounded.HourglassTop, R.string.backup_footer_waiting_unlock_label, R.string.backup_footer_waiting_unlock_detail),
+    problem("profile_inactive", GalleryFooterTone.Waiting, Icons.Rounded.HourglassTop, R.string.backup_footer_profile_inactive_label, R.string.backup_footer_profile_inactive_detail),
     // Correzioni 5B (IN-7): i file che un'altra app ha condiviso e che non si sono salvati sul NAS. Non e' un `BackupProblemCode` (non riguarda le foto del
     // telefono): lo compone `:app` (`BackupStatusReducers.INCOMING_FAILED_CODE`) solo quando il backup non ha niente di piu' urgente da dire. Il tocco porta alla
     // pagina Backup, dove sta "Ricevuti in coda" con "Riprova" e "Scarta".

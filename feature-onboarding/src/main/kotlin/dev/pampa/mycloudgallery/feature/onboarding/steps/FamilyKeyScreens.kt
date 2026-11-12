@@ -7,14 +7,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Create
-import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.FindInPage
+import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Warning
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,13 +32,16 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProblem
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.family.contract.TypedFingerprint
@@ -139,7 +141,8 @@ internal fun KeyIntroPage(chrome: StepChrome, ui: KeyUi, actions: KeyActions, mo
             title = stringResource(R.string.key_what_key),
             subtitle = stringResource(R.string.key_what_key_detail),
             tone = FluidTone.Primary,
-            leading = { Icon(Icons.Rounded.Key, contentDescription = null) },
+            leading = { GalleryIconTile(icon = Icons.Rounded.Key, family = GalleryIconFamily.Security) },
+            leadingTile = false,
             disclosure = false,
           )
           FluidListDivider()
@@ -147,7 +150,8 @@ internal fun KeyIntroPage(chrome: StepChrome, ui: KeyUi, actions: KeyActions, mo
             title = stringResource(R.string.key_what_code),
             subtitle = stringResource(R.string.key_what_code_detail),
             tone = FluidTone.Warning,
-            leading = { Icon(Icons.Rounded.Shield, contentDescription = null) },
+            leading = { GalleryIconTile(icon = Icons.Rounded.Shield, family = GalleryIconFamily.Security, status = GalleryIconStatus.Attention) },
+            leadingTile = false,
             disclosure = false,
           )
         }
@@ -177,7 +181,8 @@ private fun PlanRow(icon: androidx.compose.ui.graphics.vector.ImageVector, text:
     title = stringResource(text),
     subtitle = "",
     tone = FluidTone.Info,
-    leading = { Icon(icon, contentDescription = null) },
+    leading = { GalleryIconTile(icon = icon, family = GalleryIconFamily.Security) },
+    leadingTile = false,
     disclosure = false,
   )
 }
@@ -230,7 +235,8 @@ internal fun KeyShowCodePage(
             subtitle = stringResource(R.string.key_code_fingerprint_detail),
             eyebrow = stringResource(R.string.key_code_fingerprint_title),
             tone = FluidTone.Primary,
-            leading = { Icon(Icons.Rounded.Fingerprint, contentDescription = null) },
+            leading = { GalleryIconTile(icon = Icons.Rounded.Fingerprint, family = GalleryIconFamily.Security) },
+            leadingTile = false,
             disclosure = false,
           )
         }

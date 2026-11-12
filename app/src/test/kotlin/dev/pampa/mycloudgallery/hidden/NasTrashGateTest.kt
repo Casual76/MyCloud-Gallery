@@ -33,19 +33,14 @@ class NasTrashGateTest {
   }
 
   @Test
-  fun nessunFileDiProduzioneRichiamaLaVecchiaPagina() {
+  fun laVecchiaPaginaNonCePiuENessunoLaRichiama() {
+    // I6 (fase I): la pagina senza cancello e il suo ViewModel sono stati tolti; nessun file di produzione li nomina piu'.
+    assertThat(RepoFiles.exists(oldPage)).isFalse()
+    assertThat(RepoFiles.exists("feature-nas/src/main/kotlin/dev/pampa/mycloudgallery/feature/nas/trash/NasTrashViewModel.kt")).isFalse()
     val callers = RepoFiles.production().map { RepoFiles.rel(it) }
-      .filter { it != oldPage && it != "feature-nas/src/main/kotlin/dev/pampa/mycloudgallery/feature/nas/trash/NasTrashViewModel.kt" }
       .filter { path -> Regex("""\b(NasTrashRoute|NasTrashScreen|NasTrashViewModel)\b""").containsMatchIn(code(path)) }
       .toList()
-    assertWithMessage("file che richiamano la pagina del Cestino senza cancello: $callers").that(callers).isEmpty()
-  }
-
-  @Test
-  fun laVecchiaPaginaNonSiPuRichiamareDaFuoriDalModulo() {
-    // `internal`: `:app` non puo' nemmeno nominarla.
-    assertThat(Regex("""internal\s+fun\s+NasTrashRoute\s*\(""").containsMatchIn(code(oldPage))).isTrue()
-    assertThat(Regex("""(?<!internal )fun\s+NasTrashRoute\s*\(""").containsMatchIn(code(oldPage))).isFalse()
+    assertWithMessage("file che richiamano la vecchia pagina del Cestino: $callers").that(callers).isEmpty()
   }
 
   @Test

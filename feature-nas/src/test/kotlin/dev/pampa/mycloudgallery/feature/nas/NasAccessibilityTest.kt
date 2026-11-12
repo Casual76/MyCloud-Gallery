@@ -15,7 +15,6 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolderState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasSpaceState
-import dev.pampa.mycloudgallery.core.nasops.contract.NasTrashState
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.feature.nas.folders.FolderWhere
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersActions
@@ -26,10 +25,6 @@ import dev.pampa.mycloudgallery.feature.nas.operations.NasOperationsScreen
 import dev.pampa.mycloudgallery.feature.nas.operations.operationsUi
 import dev.pampa.mycloudgallery.feature.nas.space.NasSpaceScreen
 import dev.pampa.mycloudgallery.feature.nas.space.SpaceUi
-import dev.pampa.mycloudgallery.feature.nas.trash.NasTrashScreen
-import dev.pampa.mycloudgallery.feature.nas.trash.TrashActions
-import dev.pampa.mycloudgallery.feature.nas.trash.TrashUi
-import dev.pampa.mycloudgallery.feature.nas.trash.key
 import org.junit.Test
 
 /**
@@ -127,21 +122,6 @@ class NasAccessibilityTest : ComposeNasTest() {
 
   private fun hasTextContaining(part: String) = SemanticsMatcher("testo con «$part»") { node ->
     node.config.getOrNull(SemanticsProperties.Text)?.any { it.text.contains(part) } == true
-  }
-
-  @Test
-  fun eliminati_OgniVoceDiceNomeGenerePesoEGiorni() {
-    val items = NasFixtures.trashItems()
-    show {
-      NasTrashScreen(TrashUi(areas = areas, list = NasTrashState.Ready(items, NasFixtures.NOW, true), selecting = true, selection = setOf(items[0].key())), TrashActions(), { 0L }, onBack = {})
-    }
-    assertEveryTargetHasAName("Eliminati")
-    composeRule.onNodeWithContentDescription("IMG_20260921_184233.jpg, ${sz("4,8 MB")}, Restano 29 giorni, Eliminato da questo dispositivo").assertExists()
-    composeRule.onNodeWithContentDescription("Vecchie bozze, cartella, 74 file · ${sz("182 MB")}, Restano 11 giorni, Eliminato da questo dispositivo").assertExists()
-    // Una voce senza record valido lo dice nella sua frase.
-    composeRule.onNode(hasContentDescription("Senza nome", substring = true) and hasContentDescription("Senza record valido", substring = true)).assertExists()
-    val rows = composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected)).fetchSemanticsNodes()
-    assertThat(rows.count { it.config[SemanticsProperties.Selected] }).isEqualTo(1)
   }
 
   @Test

@@ -320,10 +320,11 @@ private fun ClosedRow(op: NasOperationState) {
 
 /** Il segno dello stato nell'angolo della piastrella: in corso, in pausa, in attesa, fatto, fermata, annullata. */
 private fun iconStatus(op: NasOperationState): GalleryIconStatus = when (op) {
-  // CU-33 (fase I): in coda e in attesa del NAS o delle condizioni giuste = la clessidra (riparte da sola); annullata in corso = il trattino.
+  // CU-33 (fase I): in coda e in attesa del NAS o delle condizioni giuste = la clessidra (riparte da sola); annullata = il trattino.
   is NasOperationState.Planned -> GalleryIconStatus.Waiting
   is NasOperationState.Running -> GalleryIconStatus.Running
-  is NasOperationState.Paused -> if (op.reason.code == "user") GalleryIconStatus.Stopped else GalleryIconStatus.Waiting
+  // CS-25: la pausa chiesta dall'utente ha le due barre (la clessidra resta all'attesa che passa da sola).
+  is NasOperationState.Paused -> if (op.reason.code == "user") GalleryIconStatus.Paused else GalleryIconStatus.Waiting
   is NasOperationState.WaitingLocked -> GalleryIconStatus.Attention
   is NasOperationState.Done -> if (op.summary.failed > 0) GalleryIconStatus.Attention else GalleryIconStatus.Done
   is NasOperationState.Failed -> GalleryIconStatus.Problem

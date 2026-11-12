@@ -20,22 +20,17 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTagPrefix
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolderState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasSpaceState
-import dev.pampa.mycloudgallery.core.nasops.contract.NasTrashState
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.feature.nas.folders.FolderWhere
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersActions
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersMode
-import dev.pampa.mycloudgallery.feature.nas.folders.HiddenFiles
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersUiState
+import dev.pampa.mycloudgallery.feature.nas.folders.HiddenFiles
 import dev.pampa.mycloudgallery.feature.nas.folders.NasFoldersScreen
 import dev.pampa.mycloudgallery.feature.nas.operations.NasOperationsScreen
 import dev.pampa.mycloudgallery.feature.nas.operations.operationsUi
 import dev.pampa.mycloudgallery.feature.nas.space.NasSpaceScreen
 import dev.pampa.mycloudgallery.feature.nas.space.SpaceUi
-import dev.pampa.mycloudgallery.feature.nas.trash.NasTrashScreen
-import dev.pampa.mycloudgallery.feature.nas.trash.TrashActions
-import dev.pampa.mycloudgallery.feature.nas.trash.TrashUi
-import dev.pampa.mycloudgallery.feature.nas.trash.key
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -176,35 +171,6 @@ class NasLayoutTest : NasComposeBase() {
 
   // --- Eliminati di recente del NAS ----------------------------------------------------------------------------------------
 
-  private fun trash(selecting: Boolean = false, selection: Set<String> = emptySet()) =
-    TrashUi(areas = areas, list = NasTrashState.Ready(NasFixtures.trashItems(), NasFixtures.NOW, true), selecting = selecting, selection = selection)
-
-  private fun checkTrash(fontScale: Float? = null) {
-    val items = NasFixtures.trashItems()
-    var state by mutableStateOf(trash())
-    show(fontScale = fontScale) {
-      NasTrashScreen(state = state, actions = TrashActions(), monotonicMs = { 0L }, onBack = {})
-    }
-    assertNoOverlaps("Eliminati a riposo")
-    assertTargets("Eliminati a riposo")
-    val before = rowBounds("IMG_20260921_184233.jpg")
-    state = trash(selecting = true, selection = setOf(items[0].key(), items[1].key()))
-    composeRule.waitForIdle()
-    assertWithMessage("La lista non si sposta entrando in selezione").that(rowBounds("IMG_20260921_184233.jpg")).isEqualTo(before)
-    assertNoOverlaps("Eliminati in selezione")
-    assertTargets("Eliminati in selezione")
-    assertBarInThePillsPlace("Eliminati in selezione")
-  }
-
-  @Test
-  fun eliminatiNonHannoCompenetrazioni() = checkTrash()
-
-  @Test
-  fun eliminatiConIlTestoGrande() = checkTrash(fontScale = LARGE_TEXT)
-
-  @Test
-  @Config(qualifiers = TABLET_QUALIFIERS)
-  fun eliminatiSulTablet() = checkTrash()
 
   // --- Spazio NAS e Operazioni in corso ------------------------------------------------------------------------------------------
 
@@ -272,14 +238,6 @@ class NasLayoutTest : NasComposeBase() {
       )
     }
     assertEveryTargetIsBigEnough("Cartelle con avvisi")
-  }
-
-  @Test
-  fun eliminatiOperazioniESpazioHannoBersagliDa48() {
-    show {
-      NasTrashScreen(state = trash(), actions = TrashActions(), monotonicMs = { 0L }, onBack = {})
-    }
-    assertEveryTargetIsBigEnough("Eliminati")
   }
 
   @Test

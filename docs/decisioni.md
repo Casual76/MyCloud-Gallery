@@ -18972,6 +18972,27 @@ Rilievi da `review-fase-I/giro1/` (CG, CU, CS) e regole comuni del TRIAGE.
   cestinato e' gia' uscito: servirebbe una lettura nuova del catalogo che ridia chiave e riferimento di una versione anche fuori dalla Libreria
   (proposta, da decidere). Per ora la piastrella del tipo. «3 media spariti» e «Lavori fermi ... sul NAS» della pagina Backup sono di I3.
 
+#### I4, giro di rifinitura I6 della fase I (12/11)
+
+Voci da `beta/brief-I6-rifiniture.md` (sezione I4), partendo da `bca0f065`.
+- **Pop-up (CU-36):** PNG riregistrati, l'arco nel colore del backup e la clessidra (anche `RG-D/pop-up-risparmio-energetico`, stessa scena).
+- **Clessidra (CS-25):** «Versioni in attesa del computer», «Il telefono si e' riavviato», «Profilo non attivo» e il lavoro fermato da Android con la
+  clessidra; nelle Operazioni del NAS la pausa dell'utente con le due barre, le altre pause con la clessidra. L'orologio dei giorni del cestino resta.
+- **Batteria e VPN (CU-37, CU-34):** la «i» delle righe di Batteria a destra (dove prima c'era la riga sua); «Perche' serve» con la luna del passo;
+  piastrelle della famiglia su «Perche' serve», «A casa niente, fuori la VPN», «Ho fatto: ...»; «Accendi e spegni la VPN da sola» con l'interruttore e
+  la frase dietro la «i». La scheda del QR di WireGuard resta scritta.
+- **Passi dopo Batteria:** indirizzo, account, aree, cartelle, chiave con le piastrelle della famiglia (rete, sicurezza, backup); la riga che cerca la
+  rete senza la frase sotto (la dice TalkBack); la spunta doppia della casa trovata tolta (il segno sta sulla piastrella); «Niente da escludere» con la
+  «i». Flusso, campi, controlli, consenso e avvisi di sicurezza (password, chiave, codice di recupero) invariati.
+- **Forme comuni (CS-26):** Scegli e Ricevi (gli stati con messaggio) su `GalleryFigureState`; la guida della VPN e la scheda piegabile
+  dell'onboarding su `GalleryInfoRow`. **Non fatti:** `ProblemPanel` (titolo e frase devono restare una regione annunciata insieme, il componente non lo
+  da'), `WelcomeScreen` e `LockedScreen` (figura senza titolo proprio: il titolo e' quello della pagina; con il componente se ne aggiungerebbe un secondo).
+- **Cestino del NAS dormiente:** `NasTrashScreen` e `NasTrashViewModel` tolti con i loro test e 41 stringhe orfane; il registro dei Nascosti non ha
+  piu' pagine dormienti; `NasTrashGateTest` controlla che la pagina non ci sia e che nessuno la nomini, e tiene le prove della sezione «Dal NAS».
+- **Strisce della Libreria (CS-27):** a 1x il tasto sta accanto al titolo quando il titolo ci sta intero (fino a due righe, nessuna parola spezzata);
+  a testo grande (oltre 1,15x) sempre sotto.
+- PNG: riregistrati anche quelli di Scegli e Ricevi (`5-P10`, `5-P11`, `7-P10`, `10-P6`) e dell'onboarding (`2-P6`) rimasti indietro dal giro 1.
+
 #### I4, giro di correzione 2 della review della fase I (12/11)
 
 Rilievi da `review-fase-I/giro2/` (CU, CS, CG).

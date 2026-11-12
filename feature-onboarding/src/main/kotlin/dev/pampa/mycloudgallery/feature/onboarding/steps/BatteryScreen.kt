@@ -150,9 +150,11 @@ internal fun BatteryScreen(
     item(key = "why") {
       NoticeCard(
         tone = NoticeTone.Info,
-        icon = Icons.Rounded.Info,
+        icon = Icons.Rounded.Bedtime,
         title = stringResource(R.string.battery_why_title),
         bodyBehindInfo = true,
+        // CU-37, CU-34: il glifo del passo (la luna), non una seconda «i»; la piastrella della famiglia.
+        family = GalleryIconFamily.Backup,
         body = stringResource(R.string.battery_why_detail),
       )
     }
@@ -188,6 +190,7 @@ internal fun BatteryScreen(
               icon = action.icon(),
               checked = action in form.confirmed,
               onCheckedChange = { form.toggle(action) },
+              family = GalleryIconFamily.Backup,
             )
           }
         }
@@ -244,7 +247,8 @@ private fun BatteryRow(
       )
     },
     leadingTile = false,
-    labels = {
+    // CU-37: la «i» a destra, prima della freccia, non su una riga sua.
+    badge = {
       if (verification == Verification.CHECKING) {
         FluidSpinner()
       } else {

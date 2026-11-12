@@ -479,7 +479,8 @@ internal object HiddenSurfaces {
    * Le pagine di Cartelle NAS che mostrano nomi di file ma **non sono raggiungibili** dall'app (R4): la vecchia pagina del Cestino, senza cancello. Il
    * registro le riconosce per nome; `NasTrashGateTest` prova che nessuna rotta le chiama.
    */
-  val dormant: List<String> = listOf("$FEATURE_NAS/trash/NasTrashScreen.kt", "$FEATURE_NAS/trash/NasTrashViewModel.kt")
+  // I6 (fase I): la vecchia pagina del cestino di feature-nas non c'e' piu' (nessuna rotta la raggiungeva); nessuna pagina dormiente.
+  val dormant: List<String> = emptyList()
 
   /**
    * I file che **legano** i contratti (`VisibleMedia`, `HiddenMask`, `WidgetFeed`) al catalogo senza mostrare niente: non sono superfici. Il registro li

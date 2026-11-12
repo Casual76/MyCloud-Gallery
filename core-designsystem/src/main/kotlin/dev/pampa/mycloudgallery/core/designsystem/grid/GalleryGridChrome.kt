@@ -1,5 +1,9 @@
 package dev.pampa.mycloudgallery.core.designsystem.grid
 
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -148,6 +152,11 @@ fun GalleryGridNotice(
 @Composable
 private fun StripBody(title: String, actionLabel: String?, onAction: (() -> Unit)?, modifier: Modifier) {
   val scheme = MaterialTheme.colorScheme
+  val style = MaterialTheme.typography.titleSmall
+  val measurer = rememberTextMeasurer()
+  // CS-27 (fase I): a testo normale il tasto sta accanto al titolo quando il titolo ci sta intero in due righe (nessuna parola spezzata); a testo
+  // grande va sempre sotto.
+  val bigText = LocalDensity.current.fontScale > StripBigTextScale
   SubcomposeLayout(modifier = modifier) { constraints ->
     val width = constraints.maxWidth
     val button = if (actionLabel != null && onAction != null) {
@@ -161,7 +170,8 @@ private fun StripBody(title: String, actionLabel: String?, onAction: (() -> Unit
     }
     val gap = NoticeGap.roundToPx()
     val room = if (button == null) width else width - button.width - gap
-    if (button == null || room >= StripTitleMin.roundToPx()) {
+    val fitsBeside = button == null || (!bigText && room >= StripTitleMin.roundToPx() && fitsWhole(measurer, title, style, room))
+    if (fitsBeside) {
       val text = subcompose("titolo") {
         Text(text = title, style = MaterialTheme.typography.titleSmall, color = scheme.onSurface, maxLines = StripTitleLines, overflow = TextOverflow.Ellipsis)
       }.first().measure(Constraints(maxWidth = room.coerceAtLeast(0)))
@@ -183,8 +193,19 @@ private fun StripBody(title: String, actionLabel: String?, onAction: (() -> Unit
   }
 }
 
+/** Il titolo sta intero in [room] px: al piu' due righe, senza tagli, e nessuna parola piu' larga della riga (niente parole spezzate). */
+private fun fitsWhole(measurer: TextMeasurer, title: String, style: TextStyle, room: Int): Boolean {
+  if (room <= 0) return false
+  val whole = measurer.measure(title, style, constraints = Constraints(maxWidth = room), maxLines = StripTitleLines)
+  if (whole.hasVisualOverflow) return false
+  return title.split(' ').filter { it.isNotEmpty() }.all { word -> measurer.measure(word, style, maxLines = 1, softWrap = false).size.width <= room }
+}
+
 /** Sotto questa larghezza il titolo di una striscia non sta accanto al tasto: il tasto va sotto. */
-private val StripTitleMin: Dp = 96.dp
+private val StripTitleMin: Dp = 56.dp
+
+/** Oltre questa scala del testo il tasto della striscia va sempre sotto. */
+private const val StripBigTextScale = 1.15f
 
 /**
  * Il tasto **"Oggi"** (§2.4, "torna a oggi"): una capsula di vetro che compare quando si e' lontani dai piu' recenti e

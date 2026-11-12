@@ -5,27 +5,19 @@ import dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationSheet
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperationState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasSpace
 import dev.pampa.mycloudgallery.core.nasops.contract.NasSpaceState
-import dev.pampa.mycloudgallery.core.nasops.contract.NasTrashState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpErrorCode
-import dev.pampa.mycloudgallery.core.nasops.contract.OpKind
 import dev.pampa.mycloudgallery.core.nasops.contract.OpRequest
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanOutcome
-import dev.pampa.mycloudgallery.core.nasops.contract.PlanWarning
-import dev.pampa.mycloudgallery.core.nasops.contract.PurgeStop
 import dev.pampa.mycloudgallery.core.nasops.contract.StartOutcome
 import dev.pampa.mycloudgallery.core.nasops.testing.NasOpsTestKit
-import dev.pampa.mycloudgallery.core.nasops.testing.RemoteTrashRecord
 import dev.pampa.mycloudgallery.core.nasops.testing.ScriptedNasOperations
-import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.feature.nas.operations.NasOperationsViewModel
 import dev.pampa.mycloudgallery.feature.nas.operations.operationsUi
 import dev.pampa.mycloudgallery.feature.nas.space.NasSpaceViewModel
-import dev.pampa.mycloudgallery.feature.nas.trash.NasTrashViewModel
-import dev.pampa.mycloudgallery.feature.nas.trash.key
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -102,140 +94,6 @@ class NasOtherViewModelsTest {
     assertThat(ready.details.versionsBytes).isEqualTo(0L)
   }
 
-  // --- Eliminati di recente ----------------------------------------------------------------------------------------------
-
-  private fun TestScope.trashViewModel() = NasTrashViewModel(kit.trash, kit.operations, areas, kit.clocks).also { settle() }
-
-  private suspend fun trashFile(path: String) {
-    kit.putFile("test", path, byteArrayOf(1, 2, 3))
-    kit.run(OpRequest.Trash(listOf(kit.itemOf("test", path))))
-  }
-
-  @Test
-  fun ilCestinoMostraLeVociProprieERipristinareLeRiporta() = runTest(dispatcher) {
-    trashFile("Viaggi/nota.txt")
-    val vm = trashViewModel()
-    val items = vm.state.value.items
-    assertThat(items).hasSize(1)
-    assertThat(items.single().deletableNow).isTrue()
-    assertThat(items.single().restorable).isTrue()
-    assertThat(kit.exists("test", "Viaggi/nota.txt")).isFalse()
-
-    vm.toggle(items.single())
-    assertThat(vm.state.value.canRestore).isTrue()
-    vm.requestRestore()
-    settle()
-    val plan = checkNotNull(vm.state.value.confirm)
-    assertThat(plan.kind).isEqualTo(OpKind.RESTORE)
-    assertThat(plan.requiredConfirmations).isEqualTo(1)
-    vm.confirmed(plan, checkNotNull(ConfirmationSheet(plan).tap(vm.monotonicMs())))
-    settle()
-    assertThat(kit.exists("test", "Viaggi/nota.txt")).isTrue()
-    assertThat(vm.state.value.items).isEmpty()
-    assertThat(vm.state.value.selection).isEmpty()
-  }
-
-  @Test
-  fun eliminareSubitoVuoleDueToccheESoloPerLeVociProprie() = runTest(dispatcher) {
-    trashFile("a.txt")
-    val vm = trashViewModel()
-    val item = vm.state.value.items.single()
-    vm.toggle(item)
-    assertThat(vm.state.value.canPurge).isTrue()
-    vm.requestPurge()
-    settle()
-    val plan = checkNotNull(vm.state.value.confirm)
-    assertThat(plan.kind).isEqualTo(OpKind.PURGE_NOW)
-    assertThat(plan.requiredConfirmations).isEqualTo(2)
-    assertThat(plan.warnings).contains(PlanWarning.PERMANENT_DELETE)
-
-    // Una conferma sola non basta: nessuna operazione e il file resta nel cestino.
-    val sheet = ConfirmationSheet(plan)
-    assertThat(sheet.tap(vm.monotonicMs())).isNull()
-    assertThat(sheet.tapsLeft).isEqualTo(1)
-    assertThat(kit.filesIn("test")).isNotEmpty()
-
-    // R6: il secondo tocco e' un secondo gesto, non il secondo colpo di un doppio tocco.
-    kit.clocks.monotonic += dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationRules.MIN_TAP_GAP_MS
-    val confirmation = checkNotNull(sheet.tap(vm.monotonicMs()))
-    assertThat(confirmation.confirmedSteps).isEqualTo(2)
-    vm.confirmed(plan, confirmation)
-    settle()
-    assertThat(kit.filesIn("test")).isEmpty()
-    assertThat(vm.state.value.notice?.opensOperations).isTrue()
-  }
-
-  @Test
-  fun leVociDegliAltriSiRipristinanoMaNonSiEliminanoSubito() = runTest(dispatcher) {
-    trashFile("a.txt")
-    kit.remoteTrash += RemoteTrashRecord(
-      share = "test-comune", ownerDeviceId = NasOpsTestKit.DEVICE_B, trashId = NasFixtures.trashId(9),
-      originalPath = SharePath.of("ricetta.txt"), size = 10, trashedAtNas = NasFixtures.NOW, author = "Tablet di Mamma",
-    )
-    kit.putFile("test-comune", ".mycloudgallery/trash/${NasOpsTestKit.DEVICE_B}/files/${NasFixtures.trashId(9)}", byteArrayOf(1))
-    val vm = trashViewModel()
-    vm.refresh()
-    settle()
-    val items = vm.state.value.items
-    assertThat(items.map { it.deletableNow }).containsExactly(true, false)
-    // Se tra le scelte c'e' una voce di un altro dispositivo, "Elimina subito" e' spento: il piano non si chiede nemmeno.
-    vm.selectAll()
-    assertThat(vm.state.value.canPurge).isFalse()
-    vm.requestPurge()
-    settle()
-    assertThat(vm.state.value.confirm).isNull()
-    // Ripristinare invece si puo' (qualunque dispositivo con il permesso, D25).
-    assertThat(vm.state.value.canRestore).isTrue()
-  }
-
-  @Test
-  fun unaVoceSenzaRecordValidoSiVedeNonSiRipristinaENonSiElimina() = runTest(dispatcher) {
-    kit.remoteTrash += RemoteTrashRecord(
-      share = "test", ownerDeviceId = NasOpsTestKit.DEVICE_B, trashId = NasFixtures.trashId(8),
-      originalPath = SharePath.of("x.txt"), size = 5, trashedAtNas = NasFixtures.NOW, author = null, valid = false,
-    )
-    kit.putFile("test", ".mycloudgallery/trash/${NasOpsTestKit.DEVICE_B}/files/${NasFixtures.trashId(8)}", byteArrayOf(1))
-    val vm = trashViewModel()
-    vm.refresh()
-    settle()
-    val item = vm.state.value.items.single()
-    assertThat(item.withoutValidRecord).isTrue()
-    assertThat(item.name).isNull()
-    vm.toggle(item)
-    assertThat(vm.state.value.canRestore).isFalse()
-    assertThat(vm.state.value.canPurge).isFalse()
-    vm.requestRestore()
-    vm.requestPurge()
-    settle()
-    assertThat(vm.state.value.confirm).isNull()
-  }
-
-  @Test
-  fun senzaIlNasSiVedonoSoloLeProprieESiModificaNiente() = runTest(dispatcher) {
-    trashFile("a.txt")
-    kit.trash.refresh()
-    val own = kit.trash.items.value
-    assertThat(own).isInstanceOf(NasTrashState.Ready::class.java)
-    val scripted = object : dev.pampa.mycloudgallery.core.nasops.contract.NasTrash {
-      override val items = kotlinx.coroutines.flow.MutableStateFlow<NasTrashState>(
-        NasTrashState.Offline((kit.trash.items.value as NasTrashState.Ready).items.filter { it.deletableNow }),
-      )
-
-      override suspend fun refresh() = Unit
-
-      override suspend fun purgeExpired(budget: kotlin.time.Duration) = dev.pampa.mycloudgallery.core.nasops.contract.PurgeReport(0, 0, emptyMap(), 0, 0, PurgeStop.NAS_UNREACHABLE)
-    }
-    val vm = NasTrashViewModel(scripted, kit.operations, areas, kit.clocks)
-    settle()
-    assertThat(vm.state.value.offline).isTrue()
-    assertThat(vm.state.value.canModify).isFalse()
-    vm.startSelecting()
-    assertThat(vm.state.value.selecting).isFalse()
-    vm.selectAll()
-    assertThat(vm.state.value.canPurge).isFalse()
-    assertThat(vm.state.value.canRestore).isFalse()
-  }
-
   // --- Operazioni in corso -----------------------------------------------------------------------------------------------
 
   @Test
@@ -298,7 +156,4 @@ class NasOtherViewModelsTest {
     assertThat(text.kindOf("Bollette.pdf")).isEqualTo(dev.pampa.mycloudgallery.feature.nas.ui.FileKind.OTHER)
     assertThat(text.kindOf("senza estensione")).isEqualTo(dev.pampa.mycloudgallery.feature.nas.ui.FileKind.OTHER)
   }
-
-  @Suppress("unused")
-  private fun unusedKey() = NasFixtures.trashItems().first().key()
 }

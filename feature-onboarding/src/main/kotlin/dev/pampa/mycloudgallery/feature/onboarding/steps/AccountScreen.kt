@@ -21,12 +21,13 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
-import androidx.compose.material3.Icon
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProblem
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.security.credentials.NasPasswordPolicy
@@ -202,6 +203,7 @@ internal fun AccountScreen(
         NoticeCard(
           tone = NoticeTone.Info,
           icon = Icons.Rounded.Key,
+          family = GalleryIconFamily.Security,
           title = stringResource(R.string.account_generated_title),
           body = stringResource(R.string.account_generated_detail),
         )
@@ -211,7 +213,8 @@ internal fun AccountScreen(
             title = stringResource(R.string.account_generate_title),
             subtitle = stringResource(R.string.account_generate_detail),
             tone = FluidTone.Primary,
-            leading = { Icon(Icons.Rounded.Password, contentDescription = null) },
+            leading = { GalleryIconTile(icon = Icons.Rounded.Password, family = GalleryIconFamily.Security) },
+            leadingTile = false,
             onClick = if (ui.submitting) null else form::generate,
           )
         }

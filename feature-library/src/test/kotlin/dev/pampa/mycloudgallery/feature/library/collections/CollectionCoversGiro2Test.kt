@@ -177,6 +177,28 @@ class CollectionCoversGiro2Test {
     assertThat(covers.faceImage(face, PX)).isNotNull()
   }
 
+  /**
+   * I6 (review CG-I1, 4b): in modalita' modifica la scheda non e' composta e [CollectionCovers.refresh] non gira. Una revoca butta lo stesso le copie
+   * dei volti (le ascolta il proprietario, il ViewModel, con [CollectionCovers.dropRevoked]): nessun volto revocato resta in memoria ne' si disegna.
+   */
+  @Test
+  fun unaRevocaSenzaLaSchedaComposta_buttaLeCopieDeiVolti() = runTest {
+    val gate = Gate()
+    val covers = covers(gate.crops)
+    gate.next.complete(permit())
+    val tab = backgroundScope.launch { covers.refresh(listOf(person), facePx = PX) }
+    backgroundScope.launch { covers.dropRevoked() }
+    runCurrent()
+    assertThat(covers.heldFaces).isEqualTo(1)
+    tab.cancel()
+    runCurrent()
+    assertThat(covers.heldFaces).isEqualTo(1)
+    gate.revoked.value = 1
+    runCurrent()
+    assertWithMessage("la copia revocata non resta in memoria").that(covers.heldFaces).isEqualTo(0)
+    assertThat(covers.faceImage(face, PX)).isNull()
+  }
+
   @Test
   fun unElencoNuovoSullaStessaVistaNonTogliIVolti() = runTest {
     val gate = Gate()

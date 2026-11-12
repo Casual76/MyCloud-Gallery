@@ -33,6 +33,21 @@ class PeopleVisibilityTest {
 
   private fun PeopleRig.mediaOf(face: dev.pampa.mycloudgallery.core.model.FaceLocator): MediaId = world.media.getValue(face.contentKey)
 
+  /** I6 (review CG-I1, 4a): con Persone non attiva qui il cancello dei ritagli rifiuta tutto, anche un volto chiesto con un indirizzo tenuto. */
+  @Test
+  fun conPersoneNonAttiva_ilCancelloDeiRitagliRifiutaTutto() = runBlocking<Unit> {
+    rig().use { r ->
+      val face = r.world.facesOf(r.world.a).first().locator
+      assertThat(r.people.mayShow(face)).isTrue()
+      assertThat(r.people.shownCellsOf(face)).isNotEmpty()
+      r.available.value = false
+      assertThat(r.people.mayShow(face)).isFalse()
+      assertThat(r.people.shownCellsOf(face)).isEmpty()
+      r.available.value = true
+      assertThat(r.people.mayShow(face)).isTrue()
+    }
+  }
+
   @Test
   fun unaPersonaConSoliMediaNascostiNonCompareDaNessunaParte() = runBlocking<Unit> {
     rig().use { r ->

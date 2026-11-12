@@ -269,9 +269,12 @@ class ArchivePeople(
   /**
    * CU-19 (fase H, giro 3): le celle della Libreria visibile che contengono [face] e che si possono mostrare adesso (vuoto = il cancello rifiuta, come
    * [mayShow]). Le Raccolte le tengono accanto al ritaglio: a una vista nuova del catalogo tolgono subito solo i volti la cui foto d'origine non c'e' piu'.
+   * I6 (review CG-I1): con Persone non attiva qui il cancello rifiuta tutto, anche per un volto chiesto con un indirizzo tenuto da prima.
    */
-  suspend fun shownCellsOf(face: FaceLocator): Set<MediaId> =
-    visibility.shown(cells.cellsWith(listOf(face.contentKey))[face.contentKey].orEmpty())
+  suspend fun shownCellsOf(face: FaceLocator): Set<MediaId> {
+    if (!availability.value) return emptySet()
+    return visibility.shown(cells.cellsWith(listOf(face.contentKey))[face.contentKey].orEmpty())
+  }
 
   // --- Proposte "E' la stessa persona?" ---------------------------------------------------------------------------------------------
 

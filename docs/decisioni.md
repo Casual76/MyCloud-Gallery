@@ -19436,3 +19436,32 @@ finale); `[0-9]` anche in `app/build.gradle`, per leggerle uguali.
 
 **Prove.** Vedi il resoconto del giro. Mutazioni, tutte rieseguite in questo giro sul codice nuovo e contate dagli esiti dei log
 (`docs/aggiornamenti-in-app-mutazioni.md`): 69 del codice dell'app (68 cadono; M55 no, perche' l'esito ferma l'attesa in due modi: tolti insieme cade, M72), piu' M71 eseguita due volte e non caduta (uno scorrimento superfluo: la griglia si riancora da sola; tolto); 22 degli strumenti di rilascio (21 cadono; T11b no: il secondo confronto dell'elenco copre una finestra che una prova senza un secondo processo non raggiunge).
+
+### Pacchetto U, giro 3 delle critiche, l'ultimo (12 novembre 2026)
+
+**Le critiche.** Sicurezza (Sol) e interfaccia (Sonnet): tutte e due 8/10, «si' con correzioni piccole», nessun bloccante. Da fare prima della beta
+(decisione dell'orchestratore): US3-1 (fra la lettura del cancello, su IO, e l'ingresso in `installFile` poteva cadere una pausa), US3-2 (un Boolean
+condiviso: con due finestre la pausa di una chiudeva il cancello dell'altra), US3-3 (il ritorno dal permesso non passava dall'ammissione: due ON_RESUME
+ravvicinati facevano due secondi tempi), UU3-1 (l'attesa dei 15 s partiva solo al ritorno davanti: con l'app sempre davanti, «Sto installando» senza
+tempo ne' tasti), US3-4 (L616 troppo assoluto; «circa 39 giorni» era 36).
+
+**Fatto.**
+- US3-1: dopo le verifiche (su IO) `GuardedUpdateInstaller.commit` passa al main e li', in un passo solo, legge il cancello, pubblica «Sto
+  installando» con `trySend` e chiama `installFile`. ON_PAUSE e' un compito dello stesso thread: arriva prima della lettura o dopo l'ingresso.
+- US3-2: `ForegroundGate` e' un insieme di proprietari (un gettone per composizione, cioe' per activity, in `UpdateLifecycleEffect`), uscita idempotente,
+  aperto = insieme non vuoto. L'attesa dell'esito si ferma solo quando non resta nessuno davanti.
+- US3-3: una sola ammissione per il secondo tempo (`launchCommit`): guardia sul lavoro attivo e stato attivo messo subito, prima del primo salvataggio;
+  il ritorno dal permesso passa di li'.
+- UU3-1: arrivati «Sto installando» o «in attesa dell'utente» con l'app davanti, il tempo parte gia' li'; con la finestra di Android aperta l'app e' in
+  pausa e il tempo e' fermo.
+- US3-4: L616 riscritto (le sessioni rimaste non sono per forza dello stesso APK; «nessun esito in 15 s» e' la condizione per riprovare, non la prova
+  che Android abbia smesso; la voce del registro dell'engine resta fino a un esito o alla morte del processo; niente «non blocca» assoluto); i 36
+  giorni in `UpdateRules`, C488 e `docs/aggiornamenti-in-app.md`.
+- Minori: UU3-4 (sull'avviso «Pronta» ha «Dopo» e «Installa», senza la «×» accanto ad «Annulla»), UU3-5 («Android ha bloccato l'installazione»), UU3-6
+  («Chiudi» su un guasto chiude e nasconde senza contare come «Dopo»).
+
+**Lasciati, fra i noti** (`docs/aggiornamenti-in-app.md`): UU3-2 (il salto del fondo della Libreria: un'animazione del margine ricalcolerebbe la griglia
+a ogni fotogramma, non e' senza rischio per la fluidita'; da guardare sul telefono), UU3-3 (la scheda che si accorcia mentre controlla), UU3-7 (l'avviso
+della sola lettura, di una fase precedente), la seconda proposta di UU3-5 (la riga di Play Protect anche dopo un «Annulla» voluto).
+
+**Prove.** Vedi il resoconto del giro. Mutazioni del giro 3 (`docs/aggiornamenti-in-app-mutazioni.md`, sezione «Giro 3»): 25 eseguite, 22 cadono; M55, M79 e M80 non cadono perche' ognuna toglie uno solo di due fermi indipendenti (tolti insieme cadono: M72 e M78); le 15 del giro 2 il cui codice o la cui prova e' cambiato sono fra le 25.

@@ -1,4 +1,4 @@
-# L'aggiornamento dentro l'app (pacchetto U, 12/11/2026; giri 1 e 2 delle critiche)
+# L'aggiornamento dentro l'app (pacchetto U, 12/11/2026; giri 1, 2 e 3 delle critiche)
 
 Richiesta dell'utente del 12/11: i genitori non hanno il Pampa Store e devono poter aggiornare MyCloud Gallery, canale **Stabile** (di serie) o
 **Beta** a scelta, «da internet, come le altre app». Supera D33 («nessun installatore», niente `REQUEST_INSTALL_PACKAGES`) e la regola «nessun host
@@ -34,8 +34,8 @@ senza aprirlo.
    appoggiato **sopra** la barra delle schede della galleria (Libreria, Album, Raccolte): l'icona dell'app con il segno, «Nuova versione»,
    «1.1.0 · 110 MB», «Dopo» e «Aggiorna». Non copre la pillola, non sta sopra il visore ne' sopra le Impostazioni; finche' c'e', il fondo della
    Libreria cresce della sua altezza (giro 2, UU2-4): le foto piu' recenti e il conteggio salgono sopra la scheda (chi e' in fondo resta in fondo).
-2. **«Dopo»** lo rimanda di tre giorni; al terzo «Dopo» di fila tace trenta giorni, poi torna e il conto riparte (giro 2: mai spento per sempre; al piu'
-   tre avvisi in circa 39 giorni, anche se l'elenco alterna due nomi). La versione trovata resta: la voce «Aggiornamenti» sale in cima alle
+2. **«Dopo»** lo rimanda di tre giorni; al terzo «Dopo» di fila tace trenta giorni, poi torna e il conto riparte (giro 2: mai spento per sempre;
+   rispondendo subito «Dopo» gli avvisi cadono ai giorni 0, 3 e 6, poi il 36: al piu' tre avvisi ogni 36 giorni, anche se l'elenco alterna due nomi). La versione trovata resta: la voce «Aggiornamenti» sale in cima alle
    Impostazioni con il segno, anche dopo un riavvio, e la pagina la mostra subito (e, aperta, ricontrolla se sono passate 24 ore).
 3. **«Aggiorna»**: sui dati mobili prima chiede («Scarica lo stesso», il peso una volta). Il consenso vale per quel tentativo.
 4. **Il permesso** «installa app sconosciute», la prima volta: l'interruttore nella figura, «Serve un permesso», «Accendi l'interruttore e torna
@@ -44,22 +44,34 @@ senza aprirlo.
 5. **Lo scaricamento**: l'anello che si riempie (TalkBack lo sente come avanzamento, ogni quarto), «Annulla»; la «×» nasconde l'avviso, lo scaricamento
    continua.
 6. **Pronta**: il file e' controllato (sha256, questa app, la versione annunciata, piu' nuova, stessa firma), e di nuovo subito prima di Android. **Il
-   cancello** (giro 2, C490): solo se, **finiti i controlli**, l'activity dell'app e' RESUMED il file passa ad Android; altrimenti «Pronta da
-   installare» con il segno «tocca qui» (non la spunta di «Aggiornata»), «Installa» e «Annulla». Vale per la fine dello scaricamento, per «Installa» e
-   per il ritorno dal permesso.
+   cancello** (giro 2, C490): solo se, **finiti i controlli**, un'activity dell'app e' RESUMED il file passa ad Android; altrimenti «Pronta da
+   installare» con il segno «tocca qui» (non la spunta di «Aggiornata»), «Installa» e «Annulla» nella pagina, «Dopo» e «Installa» sull'avviso (giro
+   3, UU3-4: niente «×» accanto ad «Annulla», che butta il file). Vale per la fine dello scaricamento, per «Installa» e per il ritorno dal permesso.
+   Giro 3: la lettura del cancello e l'ingresso nella porta sono un passo solo sul main (una pausa non puo' cadere in mezzo); il cancello sa quale
+   activity e' davanti (con due finestre, la pausa di una non chiude l'altra); un tentativo alla volta, anche se tornando dal permesso arrivano due
+   ON_RESUME ravvicinati.
 7. **Passato il cancello**: «Sto installando · L'app si chiude: poi riaprila», poi «Tocca «Aggiorna» nella finestra di Android». Toccato «Aggiorna»,
    la finestra si chiude e l'app torna davanti mentre Android installa: resta **«Sto installando»**, senza tasti (prima tornava «Pronta» con
    «Installa»: un secondo tocco avrebbe aperto un'altra sessione). Se arriva un esito vince: «annullata» (Annulla, o Play Protect) torna «Pronta» con la
    riga «Se Android la blocca, scegli «Installa comunque»»; un guasto ha la sua frase. Se dopo **15 s di app davanti** non e' arrivato niente (la
-   finestra si era chiusa senza scelta, o non si era aperta), «Pronta»: «Installa» riprova **senza riscaricare** (il file si ricontrolla). Il tratto
-   dentro l'engine fra il cancello e la finestra e' un limite dichiarato (`docs/sicurezza.md` L616).
+   finestra si era chiusa senza scelta, o non si era aperta), «Pronta»: «Installa» riprova **senza riscaricare** (il file si ricontrolla). Giro 3
+   (UU3-1): i 15 s corrono anche se l'app non va mai dietro (la finestra non si apre, Android installa senza finestra, schermo diviso o DeX); con la
+   finestra di Android sopra l'app e' in pausa e il tempo e' fermo. «Nessun esito in 15 s» e' solo la condizione per riprovare, non la prova che
+   Android abbia smesso. Il tratto dentro l'engine dopo il cancello e' un limite dichiarato (`docs/sicurezza.md` L616).
 8. **Riaperta** con la versione nuova: l'avviso dice «Aggiornata · 1.1.0», una volta, con «Ok».
 9. **Un guasto**: frasi dell'app, mai dell'engine. «Riprova» solo per la rete, il file rovinato, lo spazio e cio' che non si riconosce (senza
    riscaricare se il file verificato c'e'); per un'altra firma, un'altra app, una versione non piu' nuova, un elenco scritto male: «Chiudi» e
-   «Avvisa chi ti ha dato l'app». Sull'avviso «Chiudi» chiude davvero la scheda (giro 2, UU2-2), come «Dopo».
+   «Avvisa chi ti ha dato l'app». Sull'avviso «Chiudi» chiude davvero la scheda (giro 2, UU2-2) senza contare come «Dopo» (giro 3, UU3-6: torna al
+   prossimo avvio). Il blocco di Android si dice «Android ha bloccato l'installazione».
 10. **Versione fermata** dal manifest dei blocchi: la pagina offre «Aggiorna»; se l'elenco non ha ancora la correzione, la clessidra con «La versione
    nuova arriva presto» e «Controlla adesso» (mai «App aggiornata» sotto «fermata», UU2-7). In sola lettura, «Aggiorna» nell'avviso in alto lo chiude:
    l'avanzamento lo mostra la scheda sopra la pillola (UU2-8).
+
+**Noti, lasciati per la prima beta** (giro 3): il fondo della Libreria salta di colpo quando l'avviso entra o esce (UU3-2: un'animazione del
+margine ricalcolerebbe la griglia della Libreria a ogni fotogramma; da guardare sul telefono); «Controlla adesso» accorcia la scheda finche' controlla
+(UU3-3); l'avviso in alto della sola lettura copre i tasti della Libreria e dice «NAS» (UU3-7, di una fase precedente); dopo un «Annulla» voluto la
+riga di Play Protect («Se Android la blocca…») resta al posto di «L'app si chiude» (UU3-5, la seconda proposta: lasciata cosi'); in schermo diviso,
+se l'app resta RESUMED mentre la finestra di Android e' aperta, dopo 15 s torna «Pronta» (da provare sul Tab S9).
 
 ## La sorgente (decisione dell'utente del 12/11)
 
@@ -193,8 +205,8 @@ Su un telefono che non sia quello di sviluppo, idealmente Android 11-13.
 | `UpdateRulesTest` | sha256 e peso obbligatori, forma della versione, note tagliate prima e pulite, nomi del publisher, indirizzo, checksum, questa app, versione annunciata, versionCode crescente, firma uguale, quali guasti si riprovano, 24 ore, «Dopo» per tre giorni e al terzo trenta, poi il conto riparte (mai per sempre), tentativo recente, numerazione |
 | `GuardedUpdateHttpTest` | host ammessi a ogni salto (un rimando cattivo non si apre), rimandi a mano e niente cache anche sullo scaricamento, 404, tetti (l'elenco anche senza Content-Length), cookie, header, `.part` |
 | `PublisherManifestTest` | l'elenco di `publisher.py` (con lo sha256 della correzione) letto da `EngineAppUpdater.check`; uno di prima, senza, non installa; la prossima beta `1.1.0-beta.01` |
-| `GuardedUpdateInstallerTest` | i due tempi; ogni controllo ferma prima di `installFile` e cancella il file; il ricontrollo prima della sessione; **il cancello con un verificatore sospeso** (thread veri: davanti all'inizio, dietro alla fine → zero `installFile`; e il rovescio); «Sto installando» appena passato; permesso; ogni messaggio dell'engine tradotto; «annullata» torna a «Pronta» |
-| `AppUpdatesTest` | 24 ore, canale, versione ricordata, «Dopo» con i trenta giorni, «Chiudi» su un guasto, nomi alternati, dati mobili per tentativo (Wi-Fi → mobile; consenso dato → permesso), permesso dopo un riavvio, il ciclo di vita che muove il cancello, l'installatore protetto vero con Home durante la verifica, «Sto installando» al ritorno, i 15 s solo con l'app davanti, l'esito che vince, «Riprova» senza riscaricare, «Aggiornata», cache all'avvio |
+| `GuardedUpdateInstallerTest` | i due tempi; ogni controllo ferma prima di `installFile` e cancella il file; il ricontrollo prima della sessione; **il cancello con un verificatore sospeso** (thread veri: davanti all'inizio, dietro alla fine → zero `installFile`; e il rovescio); ON_PAUSE proprio dopo la lettura del cancello, su un «main» vero: il file entra nella porta con il cancello aperto, la pausa passa dopo; «Sto installando» appena passato; permesso; ogni messaggio dell'engine tradotto; «annullata» torna a «Pronta» |
+| `AppUpdatesTest` | 24 ore, canale, versione ricordata, «Dopo» con i trenta giorni, «Chiudi» su un guasto (che non conta come «Dopo»), due finestre A/B e il dispose tardivo, due ritorni ravvicinati dal permesso con un solo commit, i 15 s con l'app sempre davanti e fermi con la finestra di Android aperta, nomi alternati, dati mobili per tentativo (Wi-Fi → mobile; consenso dato → permesso), permesso dopo un riavvio, il ciclo di vita che muove il cancello, l'installatore protetto vero con Home durante la verifica, «Sto installando» al ritorno, i 15 s solo con l'app davanti, l'esito che vince, «Riprova» senza riscaricare, «Aggiornata», cache all'avvio |
 | `UpdateWiringTest` | nessun `EngineHttp` non avvolto: ne' costruito fuori dalla sottoclasse, ne' preso di serie da `AndroidAppUpdateInstaller`, ne' fuori dalla fabbrica; lo stesso cancello all'installatore e ad `AppUpdates`, mosso dal ciclo di vita, mai dall'importanza del processo |
 | `UpdatesScreenTest`, `UpdatePhoneShots`/`UpdateLargeTextShots`/`UpdateTabletShots`/`UpdateTabletLandShots` | la pagina e l'avviso (Robolectric): parole, TalkBack (avanzamento, scelte spente), tasti da 48 dp, nessuna parola dell'engine; screenshot in `docs/screenshots/beta-grafica/U/` |
 | `UAggiornamento*ScreenshotTest` (`:app`) | l'avviso sopra la Libreria vera (che sale sopra la scheda), «Aggiornata», la pagina «versione fermata» con e senza una versione nuova, l'avviso in sola lettura con «Aggiorna», la voce in cima alle Impostazioni, con l'icona vera |
@@ -204,4 +216,4 @@ Su un telefono che non sia quello di sviluppo, idealmente Android 11-13.
 
 **Mutazioni** (giro 2, tutte rieseguite sul codice nuovo): ogni riga di `docs/aggiornamenti-in-app-mutazioni.md` dice la modifica, la prova che cade e
 il comando per rifarla, con l'esito vero di un'esecuzione e i totali contati. Due non cadono e la riga dice perche': M55 (l'esito ferma l'attesa in
-due modi; tolti insieme cade, M72) e T11b (il secondo confronto dell'elenco copre una finestra che le prove non raggiungono).
+due modi; tolti insieme cade, M72) e T11b (il secondo confronto dell'elenco copre una finestra che le prove non raggiungono). Giro 3: 25 mutazioni (le nuove e quelle del giro 2 il cui codice e' cambiato), 22 cadono; M55, M79 e M80 tolgono uno solo di due fermi indipendenti (tolti insieme cadono: M72, M78).

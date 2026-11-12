@@ -166,7 +166,7 @@ $promoNoApk = Invoke-Release (@("-Version", "1.0.0", "-Channel", "stable", "-Tes
 Check "la stable riusa l'APK della beta (stessa impronta) senza ricostruirlo" ($promoNoApk.Code -eq 0 -and $promoNoApk.Text -like "*promozione*" -and $promoNoApk.Text -like "*OK (PROVA)*") (Tail $promoNoApk.Text)
 $otherApk = New-MiniApk $apkDir "altro-apk" (Good @{ Changelog = ($changelog + "`n") })
 Expect-Fail "un APK diverso con il versionCode di uno pubblicato fa fallire" (Invoke-Case $otherApk (New-CaseOverlay "promozione2" @{ "release\versions.txt" = $promo }) "1.0.0" "stable") "riusato"
-Expect-Fail "stable con una versione beta fa fallire" (Invoke-Case $goodApk (New-CaseOverlay "beta-stable" @{ "release\versions.txt" = "1.0.0-beta.1  2  prevista  stable  -  -`n" }) "1.0.0-beta.1" "stable") "senza -beta.N"
+Expect-Fail "stable con una versione beta fa fallire" (Invoke-Case $goodApk (New-CaseOverlay "beta-stable" @{ "release\versions.txt" = "1.0.0-beta.01  2  prevista  stable  -  -`n" }) "1.0.0-beta.01" "stable") "senza -beta.N"
 Expect-Fail "due righe previste fanno fallire" (Invoke-Case $goodApk (New-CaseOverlay "due-previste" @{ "release\versions.txt" = ($versionsBase + "1.1.0  3  prevista  beta  -  -`n") })) "piu' di una riga"
 Expect-Fail "un versions.txt rotto fa fallire" (Invoke-Case $goodApk (New-CaseOverlay "rotto" @{ "release\versions.txt" = "1.0.0 due prevista beta - -`n" })) "versionCode 'due' non valido"
 Expect-Fail "un changelog senza la sezione della versione fa fallire" (Invoke-Case $goodApk (New-CaseOverlay "senza-sezione" @{ "CHANGELOG.md" = "# Novita`n`n## 0.9.0`n`n### Novita'`n- x`n" })) "non ha la sezione"

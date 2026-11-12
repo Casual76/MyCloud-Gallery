@@ -140,7 +140,7 @@ if ($Impronta) {
   exit 0
 }
 
-if (-not $Version -or $Version -notmatch '^\d+\.\d+\.\d+(-beta\.\d+)?$') { throw "serve -Version (1.0.0, oppure 1.1.0-beta.2)" }
+if (-not $Version -or -not (Test-VersionName $Version)) { throw "serve -Version nella forma ammessa (1.0.0, oppure 1.1.0-beta.02: la beta con due cifre, niente v)" }
 if (-not $Channel) { throw "serve -Channel beta oppure stable" }
 $outRoot = Join-Path $script:Root ($(if ($isTest) { "build\release-test" } else { "build\release" }))
 $outDir = Join-Path $outRoot $Version

@@ -59,8 +59,9 @@ def releaseVersion = {
   def rows = file.readLines('UTF-8').collect { it.trim() }.findAll { it && !it.startsWith('#') }
   if (rows.isEmpty()) throw new GradleException("release/versions.txt non ha nessuna riga di versione.")
   def columns = rows.last().split(/\s+/)
-  if (columns.length < 2 || !(columns[0] ==~ /\d+\.\d+\.\d+(-beta\.\d+)?/) || !(columns[1] ==~ /[1-9]\d{0,8}/)) {
-    throw new GradleException("Ultima riga di release/versions.txt non valida: servono '<versione> <versionCode>' (per esempio '1.0.0 1').")
+  // Pacchetto U, giro 1: la forma che l'aggiornamento dentro l'app accetta (UpdateRules.VERSION): la beta con due cifre (1.1.0-beta.02), niente v.
+  if (columns.length < 2 || !(columns[0] ==~ /(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})(-beta\.\d{2})?/) || !(columns[1] ==~ /[1-9]\d{0,8}/)) {
+    throw new GradleException("Ultima riga di release/versions.txt non valida: servono '<versione> <versionCode>' (per esempio '1.0.0 1', '1.1.0-beta.01 2').")
   }
   return [name: columns[0], code: columns[1] as int]
 }.call()

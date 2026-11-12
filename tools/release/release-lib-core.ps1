@@ -101,6 +101,34 @@ function Get-FileSha256([string]$Path) {
   }
 }
 
+# --- I nomi delle versioni (pacchetto U, giro 1: docs/aggiornamenti-in-app.md, "Le versioni") -------------------------------------------------
+# La forma ammessa e' quella che l'aggiornamento dentro l'app accetta (UpdateRules.VERSION in feature-update): tre numeri senza zeri davanti, al piu'
+# quattro cifre l'uno, e per una beta `-beta.` con DUE cifre. Niente `v`, niente `+`, niente quarto numero.
+$script:VersionNamePattern = '^(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})(-beta\.\d{2})?$'
+
+function Test-VersionName([string]$Name) {
+  return ($Name -cmatch $script:VersionNamePattern)
+}
+
+# Il confronto delle versioni dell'app (engine-foundation, EngineVersion.kt `compareVersions`, engine 3.0.4): i numeri prima del primo trattino uno
+# per uno (un pezzo che non e' un numero vale 0, uno che manca vale 0), poi il suffisso: senza suffisso viene DOPO con suffisso, due suffissi si
+# confrontano come testo (per questo beta.10 verrebbe prima di beta.9, e la forma vuole due cifre). Ritorna -1, 0 o 1.
+function Compare-EngineVersion([string]$Left, [string]$Right) {
+  $leftParts = @((($Left -split '-', 2)[0]) -split '\.' | ForEach-Object { $n = 0; if ([int]::TryParse($_.Trim(), [ref]$n)) { $n } else { 0 } })
+  $rightParts = @((($Right -split '-', 2)[0]) -split '\.' | ForEach-Object { $n = 0; if ([int]::TryParse($_.Trim(), [ref]$n)) { $n } else { 0 } })
+  $count = [Math]::Max($leftParts.Count, $rightParts.Count)
+  for ($i = 0; $i -lt $count; $i++) {
+    $l = if ($i -lt $leftParts.Count) { [int]$leftParts[$i] } else { 0 }
+    $r = if ($i -lt $rightParts.Count) { [int]$rightParts[$i] } else { 0 }
+    if ($l -ne $r) { return [Math]::Sign($l - $r) }
+  }
+  $leftSuffix = if ($Left.Contains('-')) { $Left.Substring($Left.IndexOf('-') + 1) } else { "" }
+  $rightSuffix = if ($Right.Contains('-')) { $Right.Substring($Right.IndexOf('-') + 1) } else { "" }
+  if ([string]::IsNullOrWhiteSpace($leftSuffix) -and -not [string]::IsNullOrWhiteSpace($rightSuffix)) { return 1 }
+  if (-not [string]::IsNullOrWhiteSpace($leftSuffix) -and [string]::IsNullOrWhiteSpace($rightSuffix)) { return -1 }
+  return [Math]::Sign([string]::CompareOrdinal($leftSuffix, $rightSuffix))
+}
+
 # --- release/versions.txt (D33) ----------------------------------------------------------------------------------------
 # Una riga: <versione> <codice> <stato> <canale> <data> <sha256>. Ritorna le righe lette e i problemi di forma; le regole sulle
 # versioni (Test-VersionRows) vengono dopo.
@@ -119,7 +147,7 @@ function Read-VersionRows([string]$Path) {
     $columns = @($line -split '\s+')
     if ($columns.Count -ne 6) { $problems.Add("versions.txt riga ${number}: servono sei colonne (versione codice stato canale data sha256)"); continue }
     $row = [pscustomobject]@{ Name = $columns[0]; Code = 0; State = $columns[2]; Channel = $columns[3]; Date = $columns[4]; Sha = $columns[5].ToLowerInvariant(); Line = $number }
-    if ($columns[0] -notmatch '^\d+\.\d+\.\d+(-beta\.\d+)?$') { $problems.Add("versions.txt riga ${number}: versione '$($columns[0])' non valida (1.0.0 oppure 1.1.0-beta.2)"); continue }
+    if (-not (Test-VersionName $columns[0])) { $problems.Add("versions.txt riga ${number}: versione '$($columns[0])' non valida (1.0.0 oppure 1.1.0-beta.02: tre numeri, la beta con due cifre, niente v ne' +)"); continue }
     if ($columns[1] -notmatch '^[1-9]\d{0,8}$') { $problems.Add("versions.txt riga ${number}: versionCode '$($columns[1])' non valido"); continue }
     $row.Code = [int]$columns[1]
     if (@("pubblicata", "prevista") -notcontains $row.State) { $problems.Add("versions.txt riga ${number}: stato '$($row.State)' non valido (pubblicata o prevista)"); continue }
@@ -164,6 +192,15 @@ function Test-VersionRows($Parsed, [string]$Version, [string]$Channel) {
     }
   } elseif ($last.Code -lt $max) {
     $problems.Add("versionCode $($last.Code) piu' basso di uno gia' pubblicato ($max): deve essere maggiore di ogni versione pubblicata")
+  }
+  # Pacchetto U, giro 1: anche il NOME cresce. L'aggiornamento dentro l'app propone una versione solo se il suo nome e' piu' nuovo per il confronto
+  # dell'app (Compare-EngineVersion): un APK nuovo con un nome non piu' nuovo (una 1.0.0-beta.02 dopo la 1.0.0, una 1.0.0 rifatta) non arriverebbe
+  # a nessuno. Il passaggio dello STESSO APK da beta a stable (stesso nome, stesso numero) e' l'unica eccezione.
+  foreach ($other in $published) {
+    if ($other.Code -eq $last.Code) { continue }
+    if ((Compare-EngineVersion $last.Name $other.Name) -le 0) {
+      $problems.Add("versions.txt: il nome $($last.Name) non e' piu' nuovo di $($other.Name), gia' pubblicata: l'aggiornamento dentro l'app non lo proporrebbe (docs/aggiornamenti-in-app.md, Le versioni)")
+    }
   }
   $previous = $null
   foreach ($row in $rows) {

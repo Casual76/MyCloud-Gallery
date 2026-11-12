@@ -4,7 +4,8 @@
 # versionName e versionCode dall'ULTIMA riga (app/build.gradle); tools/release/release.ps1 controlla questo file.
 #
 # Colonne, separate da spazi:
-#   versione   versionName: 1.0.0, oppure 1.1.0-beta.2 per una beta che poi non diventa la stabile
+#   versione   versionName: 1.0.0, oppure 1.1.0-beta.02 per una beta (DUE cifre, niente v: docs/aggiornamenti-in-app.md, "Le versioni");
+#              il nome cresce come il codice (l'aggiornamento dentro l'app propone solo un nome piu' nuovo). Dopo la 1.0.0: 1.1.0-beta.01
 #   codice     versionCode: cresce SEMPRE (di 1 a ogni APK pubblicato), mai riusato. Lo stesso numero puo' stare su due righe solo
 #              per lo stesso identico APK passato da beta a stable (stessa impronta SHA-256, ultima colonna)
 #   stato      pubblicata | prevista

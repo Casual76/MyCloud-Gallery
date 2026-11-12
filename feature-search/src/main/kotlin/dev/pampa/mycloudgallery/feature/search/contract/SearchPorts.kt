@@ -103,12 +103,17 @@ sealed interface AnalysisThumb {
  * chi disegna deve trattare ogni `Shown` nata in una generazione **piu' vecchia** di quella dell'ultimo valore ricevuto come **non piu' autorizzata**
  * (niente byte, niente ThumbHash, niente riferimento: neutra) **subito**, anche se la sta trattenendo per un'animazione. Il pacing riguarda il movimento,
  * mai l'autorizzazione. Il solo avanzare del motore (un media finito) **non** alza la generazione.
+ *
+ * [finished] (XU-9, additivo, di serie 0): quanti media sono usciti dal lavoro da che il processo e' nato (il contatore del motore, `AiLive.finished`).
+ * Cresce di 1 per ogni media finito e **non** si azzera a una generazione nuova: chi disegna lo usa per far avanzare il nastro anche quando due stati
+ * hanno le stesse anteprime (un nastro tutto di caselle neutre). E' un conteggio: non dice quali media.
  */
 data class AnalysisFlow(
   val current: AnalysisThumb?,
   val recent: List<AnalysisThumb>,
   val next: List<AnalysisThumb>,
   val visibilityGeneration: Long = 0L,
+  val finished: Long = 0L,
 ) {
   companion object {
     val EMPTY = AnalysisFlow(null, emptyList(), emptyList())

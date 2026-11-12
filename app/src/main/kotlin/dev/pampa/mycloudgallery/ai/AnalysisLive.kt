@@ -159,6 +159,7 @@ class AppAnalysisLive(
     recent = engine.recent.map { AnalysisThumb.Quiet },
     next = engine.next.map { AnalysisThumb.Quiet },
     visibilityGeneration = number,
+    finished = engine.finished,
   )
 
   private suspend fun resolve(input: Input, number: Long): AnalysisFlow? {
@@ -192,6 +193,7 @@ class AppAnalysisLive(
       recent = engine.recent.map { thumb(it) },
       next = engine.next.map { thumb(it) },
       visibilityGeneration = number,
+      finished = engine.finished,
     )
   }
 

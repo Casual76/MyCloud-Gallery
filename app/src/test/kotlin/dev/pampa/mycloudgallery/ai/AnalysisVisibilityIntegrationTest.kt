@@ -309,10 +309,12 @@ class AnalysisVisibilityIntegrationTest {
 
       // Il motore avanza (un media finito): stessa generazione e nessun fotogramma neutro in mezzo.
       log += ENGINE
-      val ahead = AiLive(current = rig.keyOf.getValue(rig.others.first()), recent = listOf(rig.keyOf.getValue(rig.target)), next = emptyList())
+      val ahead = AiLive(current = rig.keyOf.getValue(rig.others.first()), recent = listOf(rig.keyOf.getValue(rig.target)), next = emptyList(), finished = 7)
       rig.engine.value = ahead
       val advanced = rig.next { f -> rig.shown(f).isNotEmpty() && f.recent.size == 1 }
       assertThat(advanced.visibilityGeneration).isEqualTo(start.visibilityGeneration)
+      // XU-9: il contatore del motore arriva a chi disegna.
+      assertThat(advanced.finished).isEqualTo(7)
       val between = log.dropWhile { it !== ENGINE }.drop(1).filterIsInstance<AnalysisFlow>().filter { it.recent.size == 1 }
       assertThat(between.filter { rig.shown(it).isEmpty() }).isEmpty()
 
@@ -324,6 +326,8 @@ class AnalysisVisibilityIntegrationTest {
       val firstAfter = log.dropWhile { it !== CHANGED }.drop(1).filterIsInstance<AnalysisFlow>().first()
       assertThat(firstAfter.visibilityGeneration).isGreaterThan(advanced.visibilityGeneration)
       assertThat(rig.shown(firstAfter)).isEmpty()
+      // XU-9: anche lo stato neutro porta il contatore, e una generazione nuova non lo azzera.
+      assertThat(firstAfter.finished).isEqualTo(7)
       collector.cancel()
     } finally {
       scope.cancel()

@@ -124,7 +124,7 @@ class AnalysisProviderRealTest {
     val shadow = org.robolectric.Shadows.shadowOf(app)
     val images = "android.permission.READ_MEDIA_IMAGES"
     val videos = "android.permission.READ_MEDIA_VIDEO"
-    shadow.grantPermissions(images, videos)
+    shadow.grantPermissions(images, videos, "android.permission.ACCESS_MEDIA_LOCATION")
     val access = dev.pampa.mycloudgallery.core.mediastore.android.AndroidPhoneAccessReader(app, volumeNames = { setOf("external_primary") })
     val store = NasGalleries.newStore()
     val bytes = AiRig.jpeg(60)
@@ -133,7 +133,10 @@ class AnalysisProviderRealTest {
     rig.enableReading(phone)
     checkNotNull(phone.stack.ai.runStage(5.minutes, AiRunControl.ALWAYS))
     assertThat(phone.stack.search.open()).isTrue()
+    val computed = phone.stack.ai.live.value.recent.single()
+    val computedId = checkNotNull(phone.stack.ai.parts.facts[computed]).mediaId
     phone.stack.search.keys.sync()
+    assertThat(phone.stack.search.keys[computedId]).isNotNull()
     val source = AiModule.analysisLive(phone.stack, phone.test.graph, phone.gallery,
       AlbumsModule.visibleMedia(phone.gallery), GalleryModule.hiddenMask(phone.gallery))
     val observer = CoroutineScope(SupervisorJob() + Dispatchers.Default)

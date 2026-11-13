@@ -80,8 +80,8 @@ class AnalysisVisibilityIntegrationTest {
     spec: WorldSpec,
     scope: CoroutineScope,
     stopTimeoutMillis: Long = AppAnalysisLive.STOP_AFTER_MILLIS,
-    wrapVisible: (VisibleMedia) -> VisibleMedia = { it },
     wrapMask: (HiddenMask) -> HiddenMask = { it },
+    wrapVisible: (VisibleMedia) -> VisibleMedia = { it },
   ): Rig {
     val world = HiddenWorldBuilder.build(context, spec)
     val cells = world.catalog.mediaContentKeysOf(world.ids)

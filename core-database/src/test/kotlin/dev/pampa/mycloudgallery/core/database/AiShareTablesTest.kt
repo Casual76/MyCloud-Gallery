@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.database.entity.AiReplicaDirtyEntity
 import dev.pampa.mycloudgallery.core.database.entity.AiReplicaEntryEntity
 import dev.pampa.mycloudgallery.core.database.entity.AiReplicaHeadEntity
 import dev.pampa.mycloudgallery.core.database.entity.AiReplicaSegmentEntity
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -61,6 +62,19 @@ class AiShareTablesTest : CatalogTestBase() {
     assertThat(publish.shares()).containsExactly("alessio", "nas").inOrder()
     publish.discard("nas", listOf(next))
     assertThat(publish.shares()).containsExactly("alessio")
+  }
+
+  /** Pacchetto XN: l'ultima pubblicazione della testa propria, la piu' recente fra le share; null finche' non ce n'e' nessuna. */
+  @Test
+  fun lUltimaPubblicazioneELaPiuRecenteFraLeShare() = runBlocking<Unit> {
+    assertThat(publish.lastPublishedAt().first()).isNull()
+    publish.saveOwnHead(AiOwnHeadEntity("alessio", 1, "h1", 5_000))
+    assertThat(publish.lastPublishedAt().first()).isEqualTo(5_000L)
+    publish.saveOwnHead(AiOwnHeadEntity("famiglia", 1, "f1", 3_000))
+    assertThat(publish.lastPublishedAt().first()).isEqualTo(5_000L)
+    // Una testa nuova sulla share piu' vecchia la porta avanti.
+    publish.saveOwnHead(AiOwnHeadEntity("famiglia", 2, "f2", 9_000))
+    assertThat(publish.lastPublishedAt().first()).isEqualTo(9_000L)
   }
 
   @Test

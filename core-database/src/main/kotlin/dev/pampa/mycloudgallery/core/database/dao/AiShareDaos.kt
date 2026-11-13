@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.database.entity.AiReplicaDirtyEntity
 import dev.pampa.mycloudgallery.core.database.entity.AiReplicaEntryEntity
 import dev.pampa.mycloudgallery.core.database.entity.AiReplicaHeadEntity
 import dev.pampa.mycloudgallery.core.database.entity.AiReplicaSegmentEntity
+import kotlinx.coroutines.flow.Flow
 
 // I DAO delle tabelle `ai_*` dell'indice condiviso (schema v5, D7, D8, D37): le primitive per gli adattatori Room di `AiPublishStore` e
 // `AiReplicaStore` di core-index (P11), come `IndexPublishDao` e `ReplicaDao` lo sono per la Fase 4. **Una transazione per metodo
@@ -82,6 +83,13 @@ interface AiPublishDao {
 
   @Upsert
   suspend fun saveOwnHead(head: AiOwnHeadEntity)
+
+  /**
+   * Pacchetto XN: l'ultima pubblicazione della testa `ai` propria, su qualunque share (ora del NAS); null = mai. Solo lettura, osservata:
+   * la riga «Sul NAS» del pannello della nuvola si aggiorna a ogni testa nuova senza rileggere niente altro.
+   */
+  @Query("SELECT MAX(published_at) FROM ai_own_head")
+  fun lastPublishedAt(): Flow<Long?>
 
   /** I segmenti elencati dalla testa propria, in ordine di impronta (come nella testa). */
   @Query("SELECT * FROM ai_own_segment WHERE share = :share ORDER BY hash")

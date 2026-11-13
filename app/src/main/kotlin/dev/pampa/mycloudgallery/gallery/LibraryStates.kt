@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.IntentSender
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
+import dev.pampa.mycloudgallery.core.library.contract.LibraryIndexSync
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.library.index.ColumnarTimelineSnapshot
 import dev.pampa.mycloudgallery.core.mediastore.android.AndroidPhoneMediaIntents
@@ -29,10 +30,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -296,6 +299,10 @@ class AppLibraryStates @Inject constructor(
       backup = gallery.backup?.libraryStatus ?: MutableStateFlow(LibraryBackupStatus.Idle),
       // Pacchetto X: l'analisi delle foto nella nuvola (legata all'avvio con gli agganci del viewer).
       analysis = gallery.analysisStatus ?: MutableStateFlow(dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus.Idle),
+      // Pacchetto XN: a quando risale l'ultima sincronizzazione dell'indice dell'analisi con il NAS (la riga «Sul NAS» della sezione dell'analisi).
+      // Letta solo mentre la Libreria la guarda; il valore resta fra un'uscita e l'altra.
+      indexSync = dev.pampa.mycloudgallery.ai.AnalysisIndexSync.flow(gallery.database, gallery.nas)
+        .stateIn(scope, SharingStarted.WhileSubscribed(INDEX_SYNC_STOP_MILLIS), LibraryIndexSync.NotApplicable),
     )
     synchronized(services) { services[state] = gallery.viewerServices }
     return state
@@ -307,5 +314,8 @@ class AppLibraryStates @Inject constructor(
 
     /** Il NAS sintetico (solo debug): non e' una voce del menu "Vista", lo si chiede da Impostazioni → Sviluppo. */
     const val NAS_SYNTHETIC = -1
+
+    /** Pacchetto XN: quanto resta osservata l'ultima sincronizzazione dell'indice dopo che la Libreria smette di guardarla. */
+    const val INDEX_SYNC_STOP_MILLIS = 5_000L
   }
 }

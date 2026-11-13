@@ -379,7 +379,9 @@ private fun LibraryTopChrome(
   val nas = state.nas.collectAsState()
   val backup = state.backup.collectAsState()
   val analysis = state.analysis.collectAsState()
-  val cloudState by remember(network) { derivedStateOf { libraryCloud(network, nas.value, backup.value, analysis.value)?.state } }
+  val indexSync = state.indexSync.collectAsState()
+  // Pacchetto XN (decisione dell'utente): dalla Libreria l'analisi non si vede; il tasto della nuvola e' solo di rete, NAS e backup.
+  val cloudState by remember(network) { derivedStateOf { libraryCloud(network, nas.value, backup.value)?.state } }
   val lastSync = rememberLastSync(nas, backup)
   val cloud = cloudState
   GridTopChrome(
@@ -408,6 +410,7 @@ private fun LibraryTopChrome(
           nas = nas,
           backup = backup,
           analysis = analysis,
+          indexSync = indexSync,
           lastSync = lastSync,
           commands = state.commands,
           actions = cloudActions,

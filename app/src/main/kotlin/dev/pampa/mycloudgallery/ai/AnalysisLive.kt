@@ -18,17 +18,19 @@ import dev.pampa.mycloudgallery.feature.search.contract.AnalysisLiveSource
 import dev.pampa.mycloudgallery.feature.search.contract.AnalysisThumb
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.transformLatest
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
+import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 
 /**
  * Il **cancello di riservatezza** della pagina "Analisi delle foto" (Pacchetto X, corretto da XS-1 del Pacchetto XF): una chiave del
@@ -60,6 +62,21 @@ object AnalysisGate {
 }
 
 /**
+ * **XS3-2**: chi possiede la visibilita' (la Libreria: un "Nascondi", un cestino, un permesso che cambia) segnala il cambio con un **callback**, non con un flusso.
+ * Il callback viene chiamato **prima di tornare a chi cambia**, da qualunque thread; [AppAnalysisLive] lo usa per invalidare il valore condiviso nello stesso
+ * istante (alza la generazione e scrive subito lo stato neutro), senza passare da code, `combine`, ne' dall'attesa della cancellazione di una risoluzione in corso.
+ */
+fun interface VisibilitySignal {
+  /** Registra [onChange]; il [AutoCloseable] restituito la toglie. */
+  fun register(onChange: () -> Unit): AutoCloseable
+
+  companion object {
+    /** Nessun segnale (le prove, o chi non ne ha): resta l'istantanea autorizzata, che e' osservata comunque. */
+    val None: VisibilitySignal = VisibilitySignal { AutoCloseable { } }
+  }
+}
+
+/**
  * Il nastro della pagina "Analisi delle foto": le chiavi del motore ([AiLive]) risolte in anteprime mostrabili ([AnalysisGate] e il filtro
  * finale dei Nascosti), con le stesse richieste di miniatura di Cerca (stessa cache, solo cio' che e' gia' sul dispositivo: D28, D33). Poche
  * decine di voci al massimo, ricalcolate solo quando il motore avanza, la Libreria cambia o cambia cio' che e' nascosto.
@@ -70,88 +87,175 @@ object AnalysisGate {
  * ThumbHash, nessun riferimento per un media che la Libreria esclude. Questo file e' una superficie del registro dei Nascosti
  * (`HiddenSurfaces`, riga `analysis-page`).
  *
- * **XS2-1, la riservatezza non sopravvive alla superficie**:
- * - **nessun replay**: il flusso condiviso si ferma dopo [stopTimeoutMillis] senza osservatori e **subito** dopo torna al valore neutro
- *   (`replayExpirationMillis = 0`): chi rientra nella pagina dopo una revoca, un "Nascondi" o il cestino fatti a flusso fermo non riceve **mai** l'ultimo
- *   valore vecchio, ma il neutro e poi il calcolo di adesso;
- * - **generazione di visibilita'** ([AnalysisFlow.visibilityGeneration]): quando cambia cio' che la Libreria mostra (un evento di [changes], l'istantanea
- *   che diventa o smette di essere disponibile, o che perde un media che stava mostrando) la generazione sale e **nello stesso istante** esce uno stato con
- *   tutte le anteprime `Quiet`, prima di qualunque lettura; chi disegna chiude ogni `Shown` di una generazione piu' vecchia;
- * - **risoluzioni superate rifiutate**: ogni ingresso nuovo **annulla** quella in corso (`transformLatest`): una risoluzione partita prima di una revoca
- *   non puo' emettere dopo. Il solo avanzare del motore non alza la generazione (nessun lampeggio durante il lavoro).
+ * **XS2-1, la riservatezza non sopravvive alla superficie** (e **XS3-2**, l'invalidazione e' sincrona):
+ * - **il valore condiviso e' di questa classe** ([shared], un `MutableStateFlow` scritto **solo sotto lucchetto**), non il risultato di una pipeline: quando chi possiede
+ *   la visibilita' segnala il cambio ([VisibilitySignal], o l'istantanea autorizzata che cambia: la raccolta e' `Unconfined`, parte dentro la scrittura di chi la cambia)
+ *   il callback **alza la generazione e scrive subito lo stato neutro** nel valore condiviso. Chi legge `live.value` o rientra entro lo stop non vede piu' nessuna
+ *   `Shown` della generazione vecchia, **anche con una risoluzione lenta che non coopera** (bloccata su un latch, non su una sospensione): la risoluzione in corso non
+ *   serve ad aspettarla;
+ * - **una risoluzione scrive solo se, sotto lo stesso lucchetto, la generazione e l'istantanea sono ancora le sue**: una risoluzione partita prima di una revoca
+ *   e finita dopo butta il suo risultato, qualunque sia il tempo che ha impiegato;
+ * - **nessun replay**: senza osservatori per [stopTimeoutMillis] il produttore si ferma e il valore condiviso torna **subito** al vuoto ([AnalysisFlow.EMPTY]);
+ *   chi rientra dopo una revoca, un "Nascondi" o il cestino fatti a flusso fermo non riceve mai l'ultimo valore vecchio. Il solo avanzare del motore non alza la
+ *   generazione (nessun lampeggio durante il lavoro) e [AnalysisFlow.finished] non si azzera a una generazione nuova;
+ * - **ordine delle emissioni**: vuoto -> neutro (appena si comincia a guardare) -> risolto.
+ *
+ * **XS3-3**: un errore del produttore (la registrazione del segnale, la lettura) non esce da qui come eccezione senza gestore e non e' ingoiato: si **chiude** (stato
+ * neutro) e si scrive nel log di sistema (solo il tipo).
  *
  * **XS-5**: qui non si toglie nessuna richiesta: la risoluzione delle miniature non decide cosa e' "fatto" (lo decide il ciclo di lavoro con
  * il criterio del calcolo, [AiUrgentSweep]).
  *
- * Il nastro si ricalcola **solo mentre qualcuno lo guarda** (la pagina aperta); il produttore resta attivo ancora [stopTimeoutMillis] dopo l'ultimo
- * osservatore (una pagina che si chiude e si riapre subito non rifa' tutto da capo), poi si ferma e si azzera.
+ * Il nastro si ricalcola **solo mentre qualcuno lo guarda**; il produttore resta attivo ancora [stopTimeoutMillis] dopo l'ultimo osservatore (una pagina che si chiude
+ * e si riapre subito non rifa' tutto da capo), poi si ferma e si azzera. Nota: la cache calda del caricatore di miniature (`PipelineThumbnailLoader`) non e' di questa classe.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalForInheritanceCoroutinesApi::class)
 class AppAnalysisLive(
-  engineLive: StateFlow<AiLive>,
+  private val engineLive: StateFlow<AiLive>,
   private val visible: VisibleMedia,
   private val mask: HiddenMask,
   private val cells: CellKeys,
   private val facts: ContentFacts,
-  scope: CoroutineScope,
-  /** Gli eventi che cambiano cio' che la Libreria mostra **senza** cambiare l'istantanea (un "Nascondi" appena fatto, una revoca): rifanno il nastro. */
-  changes: Flow<Unit> = emptyFlow(),
-  stopTimeoutMillis: Long = STOP_AFTER_MILLIS,
+  private val scope: CoroutineScope,
+  /** Chi possiede la visibilita' segnala qui un "Nascondi" appena fatto, una revoca, il cestino. */
+  private val signal: VisibilitySignal = VisibilitySignal.None,
+  private val stopTimeoutMillis: Long = STOP_AFTER_MILLIS,
 ) : AnalysisLiveSource {
 
-  /** Cio' che arriva al nastro: lo stato del motore, la vista autorizzata e il numero degli eventi di visibilita' visti finora. */
-  private class Input(val engine: AiLive, val snapshot: TimelineSnapshot?, val tick: Int)
+  /** Il valore condiviso: si scrive solo sotto [lock] (generazione e valore stanno sempre insieme). */
+  private val shared = MutableStateFlow(AnalysisFlow.EMPTY)
 
   private val lock = Any()
 
-  /** L'ultima generazione data e cio' che la decide: l'ultimo ingresso e i media che l'ultimo stato emesso mostrava. */
+  // Tutto cio' che segue si legge e si scrive solo sotto [lock].
   private var generation = 0L
+  private var running = false
+  private var observers = 0
+  private var producer: Job? = null
+  private var stopper: Job? = null
   private var lastSnapshot: TimelineSnapshot? = null
-  private var lastTick = -1
-  private var started = false
-  private var shownNow: Set<MediaId> = emptySet()
+  private var snapshotKnown = false
 
-  private var ticks = 0
+  /** Una nuova risoluzione da fare (conflata: ne basta una). */
+  private val retrigger = Channel<Unit>(Channel.CONFLATED)
 
-  override val live: StateFlow<AnalysisFlow> =
-    combine(engineLive, visible.snapshot, changes.onStart { emit(Unit) }.runningTick()) { engine, snapshot, tick -> Input(engine, snapshot, tick) }
-      .transformLatest { input ->
-        val gen = nextGeneration(input)
-        // Cambiata la visibilita': subito tutto neutro, **prima** di qualunque lettura (e mai un valore vecchio dopo).
-        if (gen.changed) emit(neutral(input.engine, gen.number).also { remember(it) })
-        resolve(input, gen.number)?.let { emit(it.also { flow -> remember(flow) }) }
+  /** Lo stato condiviso, con il conto di chi lo guarda: il primo che arriva fa partire il produttore, l'ultimo che se ne va lo ferma dopo [stopTimeoutMillis]. */
+  override val live: StateFlow<AnalysisFlow> = object : StateFlow<AnalysisFlow> by shared {
+    override suspend fun collect(collector: FlowCollector<AnalysisFlow>): Nothing {
+      attach()
+      try {
+        shared.collect(collector)
+      } finally {
+        detach()
       }
-      .stateIn(scope, SharingStarted.WhileSubscribed(stopTimeoutMillis, replayExpirationMillis = 0), AnalysisFlow.EMPTY)
-
-  private fun Flow<Unit>.runningTick(): Flow<Int> = kotlinx.coroutines.flow.flow {
-    collect {
-      val n = synchronized(lock) { ++ticks }
-      emit(n)
     }
   }
 
-  private class Generation(val number: Long, val changed: Boolean)
+  private fun attach() {
+    synchronized(lock) {
+      observers++
+      stopper?.cancel()
+      stopper = null
+      if (!running) startLocked()
+    }
+  }
+
+  private fun detach() {
+    synchronized(lock) {
+      observers--
+      if (observers == 0 && running) {
+        stopper?.cancel()
+        stopper = scope.launch {
+          delay(stopTimeoutMillis)
+          synchronized(lock) { if (observers == 0) stopLocked() }
+        }
+      }
+    }
+  }
+
+  /** Si comincia a guardare: la generazione sale e il valore condiviso diventa subito neutro (con i posti del motore), poi parte il produttore. */
+  private fun startLocked() {
+    running = true
+    generation++
+    lastSnapshot = null
+    snapshotKnown = false
+    shared.value = neutral(engineLive.value, generation)
+    producer = scope.launch { produce() }
+  }
+
+  /** Nessuno guarda piu': il produttore si ferma e il valore condiviso torna al vuoto (nessun replay); una risoluzione ancora in corso non scrivera' piu'. */
+  private fun stopLocked() {
+    running = false
+    producer?.cancel()
+    producer = null
+    stopper = null
+    generation++
+    shared.value = AnalysisFlow.EMPTY
+  }
+
+  private suspend fun produce() {
+    try {
+      val registration = signal.register { onVisibilityChanged() }
+      try {
+        coroutineScope {
+          // Unconfined: la reazione parte dentro la scrittura di chi cambia l'istantanea, non dopo una coda.
+          launch(Dispatchers.Unconfined) { visible.snapshot.collect { onSnapshot(it) } }
+          launch(Dispatchers.Unconfined) { engineLive.collect { retrigger.trySend(Unit) } }
+          retrigger.receiveAsFlow().collectLatest { resolveNow() }
+        }
+      } finally {
+        registration.close()
+      }
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      failClosed(e)
+    }
+  }
+
+  /** XS3-3: un errore del produttore chiude il nastro (neutro) e lascia una riga nel log (solo il tipo); mai un'eccezione senza gestore. */
+  private fun failClosed(e: Exception) {
+    GalleryLog.e(TAG, e) { "nastro dell'analisi: errore (${e.javaClass.simpleName}), chiuso" }
+    synchronized(lock) {
+      if (!running) return
+      generation++
+      shared.value = neutral(engineLive.value, generation)
+    }
+  }
+
+  /** XS3-2: il proprietario della visibilita' ha cambiato qualcosa: **subito** generazione nuova e stato neutro, poi si ricalcola. */
+  private fun onVisibilityChanged() {
+    synchronized(lock) {
+      if (!running) return
+      generation++
+      shared.value = neutral(engineLive.value, generation)
+    }
+    retrigger.trySend(Unit)
+  }
 
   /**
-   * La generazione di visibilita' per [input]: sale al primo ingresso, a ogni evento di [changes], quando l'istantanea autorizzata compare o sparisce, e
-   * quando una nuova istantanea non ha piu' un media che il nastro stava mostrando. Con il solo motore che avanza resta la stessa.
+   * L'istantanea autorizzata e' cambiata. La generazione sale quando compare o sparisce, e quando una nuova istantanea non ha piu' un media che il nastro stava
+   * mostrando; il solo avanzare del motore, o un'istantanea con in piu' altri media, no. Le risoluzioni partite sulla vecchia istantanea non scrivono piu' ([resolveNow]).
    */
-  private fun nextGeneration(input: Input): Generation = synchronized(lock) {
-    val bump = !started ||
-      input.tick != lastTick ||
-      (input.snapshot == null) != (lastSnapshot == null) ||
-      (input.snapshot != null && input.snapshot !== lastSnapshot && shownNow.any { input.snapshot.indexOf(it) < 0 })
-    started = true
-    lastTick = input.tick
-    lastSnapshot = input.snapshot
-    if (bump) generation++
-    Generation(generation, bump)
+  private fun onSnapshot(snapshot: TimelineSnapshot?) {
+    synchronized(lock) {
+      if (!running) return
+      val bump = snapshotKnown && (
+        (snapshot == null) != (lastSnapshot == null) ||
+          (snapshot != null && snapshot !== lastSnapshot && shownIds(shared.value).any { snapshot.indexOf(it) < 0 })
+        )
+      snapshotKnown = true
+      lastSnapshot = snapshot
+      if (bump) {
+        generation++
+        shared.value = neutral(engineLive.value, generation)
+      }
+    }
+    retrigger.trySend(Unit)
   }
 
-  private fun remember(flow: AnalysisFlow) {
-    val ids = (listOfNotNull(flow.current) + flow.recent + flow.next).filterIsInstance<AnalysisThumb.Shown>().mapTo(HashSet()) { it.id }
-    synchronized(lock) { shownNow = ids }
-  }
+  private fun shownIds(flow: AnalysisFlow): Set<MediaId> =
+    (listOfNotNull(flow.current) + flow.recent + flow.next).filterIsInstance<AnalysisThumb.Shown>().mapTo(HashSet()) { it.id }
 
   /** Lo stesso numero di posti dello stato del motore, tutti neutri: nessun byte, nessun ThumbHash, nessun riferimento. */
   private fun neutral(engine: AiLive, number: Long) = AnalysisFlow(
@@ -162,9 +266,23 @@ class AppAnalysisLive(
     finished = engine.finished,
   )
 
-  private suspend fun resolve(input: Input, number: Long): AnalysisFlow? {
-    val engine = input.engine
-    val columnar = input.snapshot as? ColumnarTimelineSnapshot
+  /**
+   * Una risoluzione: legge, **poi scrive solo se sotto il lucchetto** la generazione e l'istantanea sono ancora quelle con cui e' partita. Una lettura lenta o non
+   * cooperativa non ritarda la neutralizzazione (gia' scritta da chi ha segnalato il cambio) e il suo risultato vecchio non arriva mai al valore condiviso: **questa e' l'unica
+   * guardia** (non c'e' un `ensureActive` ridondante prima), cosi' una prova che la toglie cade davvero.
+   */
+  private suspend fun resolveNow() {
+    val start = synchronized(lock) { if (running && snapshotKnown) Start(generation, lastSnapshot, engineLive.value) else null } ?: return
+    val result = resolve(start.engine, start.snapshot, start.generation)
+    synchronized(lock) {
+      if (running && generation == start.generation && lastSnapshot === start.snapshot) shared.value = result
+    }
+  }
+
+  private class Start(val generation: Long, val snapshot: TimelineSnapshot?, val engine: AiLive)
+
+  private suspend fun resolve(engine: AiLive, snapshot: TimelineSnapshot?, number: Long): AnalysisFlow {
+    val columnar = snapshot as? ColumnarTimelineSnapshot
     val keys = LinkedHashSet<ContentKey>()
     engine.current?.let { keys += it }
     keys += engine.recent
@@ -177,9 +295,6 @@ class AppAnalysisLive(
     // 2. Il filtro finale (D22): quali di questi media si possono mostrare adesso. Un errore vale "nessuno" (chiuso).
     val ids = spots.values.mapTo(LinkedHashSet()) { columnar!!.idAt(it) }
     val allowed = if (ids.isEmpty()) emptySet() else finalFilter(ids)
-    // Una risoluzione superata (la visibilita' e' cambiata mentre leggeva) non emette: la annulla `transformLatest`, e qui lo si ricontrolla.
-    currentCoroutineContext().ensureActive()
-    if (synchronized(lock) { generation } != number) return null
     fun thumb(key: ContentKey): AnalysisThumb {
       val at = spots[key] ?: return AnalysisThumb.Quiet
       val snap = columnar ?: return AnalysisThumb.Quiet
@@ -209,5 +324,7 @@ class AppAnalysisLive(
   companion object {
     /** La pagina che si chiude e si riapre subito non rifa' tutto da capo. */
     const val STOP_AFTER_MILLIS: Long = 5_000L
+
+    private const val TAG = "AnalysisLive"
   }
 }

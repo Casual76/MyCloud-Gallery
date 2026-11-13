@@ -251,6 +251,7 @@ internal class ComputeSession(
     // Pacchetto X: i media chiesti adesso dall'utente davanti, dentro questa unita' (i suoi confini non cambiano). XS-4: l'ultimo chiesto
     // per primo; con [only] solo i chiesti.
     var asked = urgentKeys()
+    val askedRun = AskedRun()
     var queue = ordered(claim.items, asked) { it.contentKey }
     var queueKeys = queue.map { it.contentKey }
     var doneInUnit = 0
@@ -290,7 +291,7 @@ internal class ComputeSession(
         if (again != asked) {
           asked = again
           val worked = queue.take(index).mapTo(HashSet()) { it.contentKey }
-          queue = queue.take(index) + ordered(claim.items.filter { it.contentKey !in worked }, asked) { it.contentKey }
+          queue = queue.take(index) + orderedFair(claim.items.filter { it.contentKey !in worked }, asked, askedRun) { it.contentKey }
           queueKeys = queue.map { it.contentKey }
           if (index >= queue.size) break
         }
@@ -317,6 +318,7 @@ internal class ComputeSession(
         lastDone = item.key
         running(queue.size)
       }
+      askedRun.after(batch.map { it.contentKey }, asked)
       index += batch.size
       stageAll(share, staged)
       flush(share, FlushReason.PERIODIC)
@@ -408,6 +410,7 @@ internal class ComputeSession(
     // Pacchetto X: i media chiesti adesso dall'utente davanti anche nelle liste locali (solo telefono, solo buffer). XS-4: l'ultimo chiesto
     // per primo, e le richieste si rileggono al confine del lotto; con [only] solo i chiesti.
     var asked = urgentKeys()
+    val askedRun = AskedRun()
     var usableList = list.filter { usable(it) }
     var chosen = ordered(usableList, asked) { it.contentKey }
     var chosenKeys = chosen.map { it.contentKey }
@@ -434,7 +437,7 @@ internal class ComputeSession(
             usableList = usableList + fresh
             if (share != null) others = others + othersOf(share, fresh.map { it.contentKey })
           }
-          chosen = chosen.take(index) + ordered(usableList.filter { it.contentKey !in worked }, asked) { it.contentKey }
+          chosen = chosen.take(index) + orderedFair(usableList.filter { it.contentKey !in worked }, asked, askedRun) { it.contentKey }
           chosenKeys = chosen.map { it.contentKey }
           if (index >= chosen.size) break
         }
@@ -458,6 +461,7 @@ internal class ComputeSession(
         running(chosen.size)
       }
       if (share != null) stageAll(share, staged)
+      askedRun.after(batch.map { it.contentKey }, asked)
       index += batch.size
       control.checkpoint(AiCheckpoint(share ?: PHONE, null, batch.lastOrNull()?.contentKey?.hex))
       breath()
@@ -496,6 +500,39 @@ internal class ComputeSession(
     asked.forEachIndexed { at, k -> rank[k] = at }
     val picked = if (only) items.filter { key(it) in rank } else items
     return picked.sortedBy { rank[key(it)] ?: Int.MAX_VALUE }
+  }
+
+  /**
+   * XS3-1, equita' del lavoro ordinario **dentro una lista o un'unita'**: conta i lotti di fila fatti **solo** di media chiesti. Con richieste nuove a **ogni** confine di
+   * lotto, "le richieste davanti" da sole rinvierebbero l'ordinario fino al budget, ogni volta. Con questo, dopo [LIMIT] lotti di fila di soli chiesti il lotto dopo e'
+   * fatto di media **ordinari** (se ce ne sono nella lista): garanzia scritta: **almeno un lotto ogni [LIMIT] + 1** (uno ogni tre) va all'ordinario, qualunque sia il ritmo delle richieste.
+   * Non cambia nulla senza richieste (la lista resta la stessa) e con [only] (solo i chiesti) non c'e' ordinario da servire.
+   */
+  private class AskedRun {
+    private var batches = 0
+
+    fun owesOrdinary(): Boolean = batches >= LIMIT
+
+    fun after(batch: List<ContentKey>, asked: List<ContentKey>) {
+      val askedSet = asked.toHashSet()
+      batches = if (asked.isNotEmpty() && batch.isNotEmpty() && batch.all { it in askedSet }) batches + 1 else 0
+    }
+
+    companion object {
+      /** I lotti di soli media chiesti che si possono fare di fila prima di un lotto ordinario. */
+      const val LIMIT: Int = 2
+    }
+  }
+
+  /** [ordered], con il lotto ordinario davanti quando ne e' dovuto uno ([AskedRun]). */
+  private fun <T> orderedFair(items: List<T>, asked: List<ContentKey>, run: AskedRun, key: (T) -> ContentKey): List<T> {
+    val base = ordered(items, asked, key)
+    if (only || asked.isEmpty() || !run.owesOrdinary()) return base
+    val askedSet = asked.toHashSet()
+    val front = base.filter { key(it) !in askedSet }.take(batchSize())
+    if (front.isEmpty()) return base
+    val frontKeys = front.mapTo(HashSet()) { key(it) }
+    return front + base.filter { key(it) !in frontKeys }
   }
 
   /** XS-2/XS-7: un media chiesto che non si e' potuto lavorare; un guasto del registro non ferma mai il calcolo. */

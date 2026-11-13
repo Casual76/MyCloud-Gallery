@@ -38,7 +38,12 @@ import kotlinx.coroutines.flow.conflate
  * `releaseManifestPolicy`), quindi lo dichiara `:app`. Senza il permesso la rete risulta OFFLINE e il
  * lavoro in background non parte: fallisce in modo sicuro.
  */
-class AndroidDeviceStateSource(context: Context) : DeviceStateSource {
+class AndroidDeviceStateSource(
+  context: Context,
+  /** XS3-3: come si registra l'ascoltatore termico (di serie quello di sistema); le prove ne danno uno che rifiuta, per provare che le altre registrazioni si tolgono. */
+  private val addThermalListener: (PowerManager, Executor, PowerManager.OnThermalStatusChangedListener) -> Unit =
+    { pm, executor, listener -> pm.addThermalStatusListener(executor, listener) },
+) : DeviceStateSource {
 
   private val appContext: Context = context.applicationContext ?: context
   private val powerManager: PowerManager? = appContext.getSystemService(PowerManager::class.java)
@@ -148,50 +153,89 @@ class AndroidDeviceStateSource(context: Context) : DeviceStateSource {
               notify()
             }
           }
-        // Solo broadcast di sistema: non servono permessi, e il flag evita che altre app possano
-        // inviarcene di finti.
-        val filter =
-          IntentFilter().apply {
-            addAction(Intent.ACTION_BATTERY_CHANGED)
-            addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+        // XS3-3: ogni registrazione si segna **dopo** che e' riuscita e si toglie con lo stesso conto, anche se una successiva fallisce: una registrazione che
+        // rifiuta (il servizio termico, la rete) lasciava prima il receiver acceso, senza nessuno che lo togliesse.
+        var receiverRegistered = false
+        var thermalListener: PowerManager.OnThermalStatusChangedListener? = null
+        var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+        fun release() {
+          if (receiverRegistered) {
+            receiverRegistered = false
+            try {
+              appContext.unregisterReceiver(receiver)
+            } catch (_: IllegalArgumentException) {
+              // Gia' tolto.
+            }
           }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-          appContext.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-          appContext.registerReceiver(receiver, filter)
+          thermalListener?.let { listener ->
+            thermalListener = null
+            try {
+              powerManager?.removeThermalStatusListener(listener)
+            } catch (_: RuntimeException) {
+              // Il servizio non c'e' piu': non c'e' niente da togliere.
+            }
+          }
+          networkCallback?.let { callback ->
+            networkCallback = null
+            try {
+              connectivity?.unregisterNetworkCallback(callback)
+            } catch (_: RuntimeException) {
+              // Gia' tolta.
+            }
+          }
         }
 
-        val directExecutor = Executor { it.run() }
-        val thermalListener = PowerManager.OnThermalStatusChangedListener { notify() }
-        powerManager?.addThermalStatusListener(directExecutor, thermalListener)
-
-        val networkCallback =
-          object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-              notify()
+        try {
+          // Solo broadcast di sistema: non servono permessi, e il flag evita che altre app possano
+          // inviarcene di finti.
+          val filter =
+            IntentFilter().apply {
+              addAction(Intent.ACTION_BATTERY_CHANGED)
+              addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
             }
-
-            override fun onLost(network: Network) {
-              notify()
-            }
-
-            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-              notify()
-            }
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            appContext.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+          } else {
+            appContext.registerReceiver(receiver, filter)
           }
-        val callbackRegistered =
+          receiverRegistered = true
+
+          val directExecutor = Executor { it.run() }
+          val listener = PowerManager.OnThermalStatusChangedListener { notify() }
+          if (powerManager != null) {
+            addThermalListener(powerManager, directExecutor, listener)
+            thermalListener = listener
+          }
+
+          val callback =
+            object : ConnectivityManager.NetworkCallback() {
+              override fun onAvailable(network: Network) {
+                notify()
+              }
+
+              override fun onLost(network: Network) {
+                notify()
+              }
+
+              override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                notify()
+              }
+            }
           try {
-            connectivity?.registerDefaultNetworkCallback(networkCallback)
-            connectivity != null
+            if (connectivity != null) {
+              connectivity.registerDefaultNetworkCallback(callback)
+              networkCallback = callback
+            }
           } catch (_: SecurityException) {
-            false // senza ACCESS_NETWORK_STATE la rete non si osserva (e risulta offline)
+            // senza ACCESS_NETWORK_STATE la rete non si osserva (e risulta offline)
           }
-
-        awaitClose {
-          appContext.unregisterReceiver(receiver)
-          powerManager?.removeThermalStatusListener(thermalListener)
-          if (callbackRegistered) connectivity?.unregisterNetworkCallback(networkCallback)
+        } catch (t: Throwable) {
+          release()
+          throw t
         }
+
+        awaitClose { release() }
       }
       .conflate()
 

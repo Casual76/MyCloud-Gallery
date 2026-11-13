@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
@@ -72,7 +73,6 @@ import dev.pampa.mycloudgallery.feature.search.contract.AnalysisFlow
 import dev.pampa.mycloudgallery.feature.search.contract.AnalysisThumb
 import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
 import dev.pampa.mycloudgallery.feature.search.ui.SearchDimens
-import dev.pampa.mycloudgallery.feature.search.windowOf
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sign
@@ -230,11 +230,10 @@ internal fun AnalysisLane(
     // XU-15: le miniature nella finestra del caricatore solo per le anteprime che la corsia mostra (quelle del NAS "in arrivo", mai l'originale), e
     // solo quando cambiano quelle mostrate: non a ogni emissione del motore. Sono gia' filtrate dal nastro di adesso (XS2-1).
     val requests = entries.mapNotNull { (it.thumb as? AnalysisThumb.Shown)?.request }
-    LaunchedEffect(requests, thumbnails) {
-      val loader = thumbnails?.loader ?: return@LaunchedEffect
-      val (local, replicaOnly) = windowOf(requests)
-      loader.window(local, replicaOnly)
-    }
+    // XS3-4: con un proprietario, accanto alla finestra della Libreria (mai al suo posto), e rilasciate quando la corsia esce dalla composizione:
+    // niente richieste ne' riprove del caricatore oltre il tempo in cui il nastro e' guardato.
+    LaunchedEffect(requests, thumbnails) { thumbnails?.holdAnalysis(requests) }
+    DisposableEffect(thumbnails) { onDispose { thumbnails?.releaseAnalysis() } }
     val accent = galleryRingColor(GalleryIconFamily.Search)
     val restInk = MaterialTheme.colorScheme.outlineVariant
     val edge = with(density) { (maxWidth / 2 + bleed).toPx() }

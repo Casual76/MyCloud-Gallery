@@ -148,6 +148,9 @@ class FakeIndexPublisher(
 /** La finestra visibile, programmabile dal test. */
 class FakeUnitPriority(initial: Set<Long> = emptySet()) : UnitPriority {
   override val visible: MutableStateFlow<Set<Long>> = MutableStateFlow(initial)
+
+  /** XS3-1: l'insieme completo delle richieste, se la prova lo vuole diverso da [visible] (di serie vuoto: il selettore ci aggiunge sempre [visible]). */
+  override val requested: MutableStateFlow<Set<Long>> = MutableStateFlow(emptySet())
 }
 
 /**

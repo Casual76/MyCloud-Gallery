@@ -92,6 +92,15 @@ class PriorityMonthsTest {
 
   private fun priorityOf(files: List<TestFile>) = FakeUnitPriority().also { it.visible.value = files.map { f -> f.contentKey.short }.toSet() }
 
+  /**
+   * XS3-1: **come il registro vero**: al piu' 16 chiavi passano davanti (`visible`, `AiUrgentFile.priority`), ma le richieste valide sono tutte (`requested`, fino a 64).
+   * Il selettore riceve le due cose; una prova che gli passa tutte le richieste come `visible` non vede il difetto.
+   */
+  private fun priorityLikeRegistry(files: List<TestFile>, turn: Int = 16) = FakeUnitPriority().also {
+    it.visible.value = files.take(turn).map { f -> f.contentKey.short }.toSet()
+    it.requested.value = files.map { f -> f.contentKey.short }.toSet()
+  }
+
   // ---- Primo giro (XS-2): la quota sul prefisso --------------------------------------------------------------------------------
 
   @Test
@@ -123,7 +132,7 @@ class PriorityMonthsTest {
   @Test
   fun conSessantaquattroRichiesteRecentiIlMeseOrdinarioPiuVecchioAvanza() = runTest {
     val w = world(urgentMonths = 64, recentRequests = true, ordinaryMonths = listOf("2010-05"))
-    val claims = claimAll(units(w, alternate = true, quota = PRIORITY), priorityOf(w.urgent))
+    val claims = claimAll(units(w, alternate = true, quota = PRIORITY), priorityLikeRegistry(w.urgent))
     val ordinaryAt = claims.indexOfFirst { it.key.month == "2010-05" }
     assertThat(ordinaryAt).isAtLeast(0)
     assertThat(ordinaryAt).isAtMost(1)
@@ -143,7 +152,7 @@ class PriorityMonthsTest {
     val visitedRequests = ArrayList<String>()
     repeat(ordinaryMonths.size) {
       // La tappa: le richieste sono le stesse (rinnovate) e il budget basta per due unita'.
-      val priority = priorityOf(w.urgent)
+      val priority = priorityLikeRegistry(w.urgent)
       repeat(2) {
         val claim = units.next(share, WorkPass.AI, priority) ?: return@repeat
         if (claim.key.month in ordinaryMonths) {
@@ -160,6 +169,23 @@ class PriorityMonthsTest {
     assertThat(servedOrdinary).containsExactlyElementsIn(ordinaryMonths)
     assertThat(visitedRequests).hasSize(ordinaryMonths.size)
     assertThat(visitedRequests.toSet()).hasSize(ordinaryMonths.size)
+  }
+
+  /**
+   * XS3-1 (il bloccante del giro 3): con **64 richieste** e solo **16** che hanno il turno (come l'uscita del registro vero), gli altri 48 mesi di richieste **non** sono
+   * mesi ordinari: non riempiono la finestra ordinaria e il mese vecchio con il lavoro pronto avanza subito (alla prima o alla seconda chiamata). Mutazione: il selettore che
+   * esclude dalla classe ordinaria solo i mesi di `visible` (cioe' i 16).
+   */
+  @Test
+  fun leRichiesteCheAspettanoIlTurnoNonRiempionoLaFinestraOrdinaria() = runTest {
+    val w = world(urgentMonths = 64, recentRequests = true, ordinaryMonths = listOf("2010-05"))
+    val priority = priorityLikeRegistry(w.urgent)
+    assertThat(priority.visible.value).hasSize(16)
+    assertThat(priority.requested.value).hasSize(64)
+    val units = units(w, alternate = true, quota = PRIORITY)
+    val first = units.next(share, WorkPass.AI, priority)!!
+    val second = units.next(share, WorkPass.AI, priority)!!
+    assertThat(listOf(first, second).map { it.key.month }).contains("2010-05")
   }
 
   /** I mesi di richieste senza lavoro passano in fondo e tornano alla fine del rinvio (30 minuti); senza richieste l'ordine e' quello di sempre. */

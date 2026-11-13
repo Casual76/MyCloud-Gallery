@@ -19548,3 +19548,31 @@ correzione del nastro (XL) e **una sola rilettura pratica**: «funziona, nessun 
   quattro lavori dell'app a batteria molto scarica, indipendentemente dalla soglia (`PhoneSyncWorker`, `LibraryMaintenanceWorker`,
   `FacesNightlyWorker`, widget): invariato per scelta; «Fai ora» e «Analizza ora» non sono fermati dalla soglia (era gia' cosi').
 - Non ancora provato su un telefono vero niente di tutto questo: lo si fa sull'S25 prima di pubblicare.
+
+### Seconda beta pubblicata: 1.1.0-beta.01, canale beta (13 novembre 2026)
+
+**Che cosa e' stato pubblicato.** L'APK firmato con `pampa.jks` costruito dal commit `6d9c69c5` (tag `v1.1.0-beta.01` su `main`), `versionCode` 2,
+109.698.579 byte, SHA-256 `5bc496d1f3548237f3ac2a679f048796f29460fa29b93274330e9d7871de2e40`, stesso certificato della 1.0.0. Release GitHub
+`beta-mycloud-gallery-v1.1.0-beta.01` (asset `mycloud-gallery-1.1.0-beta.01.apk`), elenco `manifest.json` aggiornato da `publisher.py` (commit
+`6783b966`), voce nel Pampa Store. Via libera dell'utente del 13/11 («Si'»).
+
+**Controlli fatti.** Controllo intero (`tools/check.ps1`, senza `-Bench`) verde su `6d9c69c5`: 35 passi a posto, saltato il solo benchmark sul
+dispositivo. Prima di arrivarci: un giro caduto per la code cache della JVM piena (sotto), un errore mio nel changelog visto da `ReleaseNotesTest`
+e corretto, un errore di lint in un file di prova del visore corretto, una prova di tempo degli album (`SmartScaleTest`) caduta a PC carico e verde da
+sola. Passi 0, 1, 2, 4, 5, 6, 7 di `release.ps1` verdi sull'APK firmato senza ricostruirlo; sette passi sul bytecode rieseguiti sull'APK firmato; prova a
+secco del publisher; dopo la pubblicazione `verifica-elenco.ps1 -Canale beta -Versione 1.1.0-beta.01` verde.
+
+**Opzioni della JVM nelle prove (decisioni dell'utente).** Dal 12/11 le prove girano con `-XX:TieredStopAtLevel=1` (cadute riproducibili del
+compilatore C2 del JDK Microsoft 17.0.18). Con quella opzione la code cache e' di 48 MB: con le prove nuove si riempiva, la JVM smetteva di compilare
+e `:app:testDebugUnitTest` superava il suo limite di 20 minuti. Dal 13/11 (si' dell'utente) le prove e il controllo intero aggiungono
+`-XX:ReservedCodeCacheSize=240m`, la misura normale. L'APK firmato si costruisce senza nessuna opzione.
+
+**Sul telefono (S25, installato sopra la 1.0.0, dati tenuti).** Avvio a freddo disegnato in 0,37 s, nessun arresto anomalo; Libreria con lo stesso
+conteggio di prima (nessuna foto vera persa); pannello della nuvola con la sezione dell'analisi e «Sul NAS: oggi alle 19:22»; pagina «Analisi delle
+foto» con «Analizza ora» e il nastro che mostra foto vere; scheda «Batteria» nelle impostazioni del backup, con un interruttore spento e riacceso;
+Aggiornamenti: «Versione 1.1.0-beta.01». **Non visto:** i fantasmi tolti dalla correzione dei media spariti (da riguardare dopo una notte);
+Nascondi/cancella a nastro aperto; la soglia che ferma e fa ripartire davvero un lavoro; l'aggiornamento dentro l'app dalla 1.0.0 (l'S25 e' stato
+aggiornato via cavo: va provato su un altro dispositivo con la 1.0.0 e il canale Beta).
+
+**ECCEZIONE DICHIARATA: benchmark non rifatti al rilascio.** Come per la 1.0.0, il passo 3 di `release.ps1` (`check.ps1 -Bench -BenchStrict` con
+l'S25) non e' stato eseguito, per decisione dell'utente del 13/11 («va bene»). Vale per questa beta; per la prima stabile la decisione va ripresa.

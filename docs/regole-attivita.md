@@ -211,8 +211,11 @@ non è utilizzabile (non avrebbe senso).
   carica (E-P16); `PowerState.chargingPaused` serve solo alla UI.
 * **Soglia batteria** (20%): si applica solo a batteria; `level < soglia` ferma, `level == soglia` no. **Pacchetto B (seconda beta): la soglia si sceglie.** Il livello va da 5% a 80% a passi di 5 (di serie 20%) e vale per due gruppi, accesi o spenti
   dall'utente (`RuleSettings.batteryThresholdForBackup` / `batteryThresholdForAnalysis`, chiavi DataStore `rule.battery.threshold.backup` / `.analysis`, assenti = accesi = come prima):
-  il **backup** (`PHOTO_BACKUP`, `VIDEO_BACKUP`) e l'**analisi delle foto** (`AI_COMPUTE`: vettori, lettura del testo e volti). `INDEX_SYNC`, `PREPARATION` e `HQ_PREVIEWS` servono a tutti e due
-  e **seguono sempre il livello**. Un gruppo spento non ha mai il motivo `BatteryLow`; `UserInitiated` e `VisibleContent` non hanno mai guardato la soglia. Il controllo e' uno solo
+  il **backup** (`PHOTO_BACKUP`, `VIDEO_BACKUP`) e l'**analisi delle foto** (`AI_COMPUTE`: vettori, lettura del testo e volti). `INDEX_SYNC` e `PREPARATION` servono a tutti e due
+  (il primo backup aspetta la scansione e le anteprime, l'analisi le anteprime e l'indice): si fermano per il livello **solo con tutti e due gli interruttori accesi**; `HQ_PREVIEWS` non serve a nessuno dei due e segue il livello
+  **finche' almeno un interruttore e' acceso**; con tutti e due spenti la soglia non ferma niente (`BatteryGroups.activitiesFor`). Un'attivita' a cui la soglia non vale non ha mai il motivo `BatteryLow`; `UserInitiated` e `VisibleContent`
+  non hanno mai guardato la soglia. Una scelta che toglie il blocco (livello abbassato, interruttore spento) sostituisce il lavoro gia' accodato con il vincolo della carica (`BatteryResume`: mai una corsa attiva interrotta).
+  Il livello nuovo e' sempre 5..80 a passi di 5 (`BatteryThresholds`); un valore gia' salvato fuori griglia resta com'e'. Il controllo e' uno solo
   (`GalleryBatteryGuard`) e sta nelle impostazioni del Backup e in quelle dell'analisi; dove un lavoro e' fermo per la batteria le pagine dicono il numero («Batteria sotto il 60%»).
 * **Fascia**: inizio incluso, fine esclusa; a cavallo della mezzanotte `23:00-07:00` contiene `00:00`.
   Per un lavoro in corso la fascia che si chiude dà `Stop`.

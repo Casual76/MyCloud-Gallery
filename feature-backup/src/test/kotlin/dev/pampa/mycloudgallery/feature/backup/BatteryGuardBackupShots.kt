@@ -42,7 +42,7 @@ import org.robolectric.annotation.GraphicsMode
  * `gradlew :feature-backup:recordRoborazziDebug --tests "*BatteryGuardBackup*"` scrive i PNG in `docs/screenshots/beta-grafica/B-soglia-batteria/`. La pagina si compone alta
  * (tutta intera) e il PNG si ritaglia dal titolo «Quando» all'ultima nota: nei normali `testDebugUnitTest` non si scrive niente.
  */
-internal enum class GuardShot(val slug: String, val value: BatteryGuardValue) {
+internal enum class GuardShot(val slug: String, val value: BatteryGuardValue?, val failed: Boolean = false) {
   PREDEFINITO("predefinito-20", BatteryGuardValue(20, forBackup = true, forAnalysis = true)),
   SESSANTA("60-entrambi", BatteryGuardValue(60, forBackup = true, forAnalysis = true)),
   SOLO_BACKUP("solo-backup-35", BatteryGuardValue(35, forBackup = true, forAnalysis = false)),
@@ -50,6 +50,13 @@ internal enum class GuardShot(val slug: String, val value: BatteryGuardValue) {
   SPENTI("entrambi-spenti-20", BatteryGuardValue(20, forBackup = false, forAnalysis = false)),
   MINIMO("minimo-5", BatteryGuardValue(5, forBackup = true, forAnalysis = true)),
   MASSIMO("massimo-80", BatteryGuardValue(80, forBackup = true, forAnalysis = true)),
+
+  // Giro 1 (BS-4, BS-5): il livello vero gia' salvato (33, 0, 100), le impostazioni non ancora lette e il salvataggio non riuscito.
+  FUORI_GRIGLIA("salvato-33", BatteryGuardValue(33, forBackup = true, forAnalysis = true)),
+  ZERO("salvato-0", BatteryGuardValue(0, forBackup = true, forAnalysis = true)),
+  CENTO("salvato-100", BatteryGuardValue(100, forBackup = true, forAnalysis = true)),
+  CARICAMENTO("sto-caricando", null),
+  NON_SALVATO("salvataggio-non-riuscito", BatteryGuardValue(20, forBackup = true, forAnalysis = true), failed = true),
 }
 
 private const val SHOT_DIR = "../docs/screenshots/beta-grafica/B-soglia-batteria"
@@ -80,6 +87,8 @@ internal abstract class BatteryGuardBackupShotsBase(
     rulesAvailable = true,
     editable = true,
     battery = shot.value,
+    batteryLoading = shot.value == null,
+    batterySaveFailed = shot.failed,
   )
 
   @Test

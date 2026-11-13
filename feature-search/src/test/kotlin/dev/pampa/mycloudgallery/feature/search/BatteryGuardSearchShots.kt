@@ -38,7 +38,7 @@ import org.robolectric.annotation.GraphicsMode
  * `gradlew :feature-search:recordRoborazziDebug --tests "*BatteryGuardSearch*"` scrive i PNG in `docs/screenshots/beta-grafica/B-soglia-batteria/` (stessi nomi dell'altra pagina,
  * `impostazioni-analisi-...`); nei normali `testDebugUnitTest` non si scrive niente.
  */
-internal enum class SearchGuardShot(val slug: String, val value: BatteryGuardValue) {
+internal enum class SearchGuardShot(val slug: String, val value: BatteryGuardValue?, val failed: Boolean = false) {
   PREDEFINITO("predefinito-20", BatteryGuardValue(20, forBackup = true, forAnalysis = true)),
   SESSANTA("60-entrambi", BatteryGuardValue(60, forBackup = true, forAnalysis = true)),
   SOLO_BACKUP("solo-backup-35", BatteryGuardValue(35, forBackup = true, forAnalysis = false)),
@@ -46,6 +46,13 @@ internal enum class SearchGuardShot(val slug: String, val value: BatteryGuardVal
   SPENTI("entrambi-spenti-20", BatteryGuardValue(20, forBackup = false, forAnalysis = false)),
   MINIMO("minimo-5", BatteryGuardValue(5, forBackup = true, forAnalysis = true)),
   MASSIMO("massimo-80", BatteryGuardValue(80, forBackup = true, forAnalysis = true)),
+
+  // Giro 1 (BS-4, BS-5): il livello vero gia' salvato (33, 0, 100), le impostazioni non ancora lette e il salvataggio non riuscito.
+  FUORI_GRIGLIA("salvato-33", BatteryGuardValue(33, forBackup = true, forAnalysis = true)),
+  ZERO("salvato-0", BatteryGuardValue(0, forBackup = true, forAnalysis = true)),
+  CENTO("salvato-100", BatteryGuardValue(100, forBackup = true, forAnalysis = true)),
+  CARICAMENTO("sto-caricando", null),
+  NON_SALVATO("salvataggio-non-riuscito", BatteryGuardValue(20, forBackup = true, forAnalysis = true), failed = true),
 }
 
 private const val SHOT_DIR = "../docs/screenshots/beta-grafica/B-soglia-batteria"
@@ -88,6 +95,8 @@ internal abstract class BatteryGuardSearchShotsBase(
         handlers = NoSearchSettingsHandlers,
         onBack = {},
         battery = shot.value,
+        batteryBound = true,
+        batterySaveFailed = shot.failed,
       )
     }
     val name = "impostazioni-analisi-${shot.slug}-${if (dark) "scuro" else "chiaro"}-$device"

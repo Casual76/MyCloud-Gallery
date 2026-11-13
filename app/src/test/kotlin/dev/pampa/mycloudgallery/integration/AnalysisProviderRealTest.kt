@@ -112,4 +112,40 @@ class AnalysisProviderRealTest {
       scope.cancel()
     }
   }
+  @Test
+  @Config(sdk = [34])
+  fun ilProviderRealeNeutralizzaFullParzialeAlRitornoDelRefresh() = realPermissionRefresh(true)
+
+  @Test
+  @Config(sdk = [34])
+  fun ilProviderRealeNeutralizzaFullNessunoAlRitornoDelRefresh() = realPermissionRefresh(false)
+
+  private fun realPermissionRefresh(partial: Boolean) = runBlocking<Unit> {
+    val shadow = org.robolectric.Shadows.shadowOf(app)
+    val images = "android.permission.READ_MEDIA_IMAGES"
+    val videos = "android.permission.READ_MEDIA_VIDEO"
+    shadow.grantPermissions(images, videos)
+    val access = dev.pampa.mycloudgallery.core.mediastore.android.AndroidPhoneAccessReader(app, volumeNames = { setOf("external_primary") })
+    val store = NasGalleries.newStore()
+    val bytes = AiRig.jpeg(60)
+    store.put(AiRig.photoRow(1, "DCIM/mcg-prova/", "IMG_0001.jpg", bytes, rig.time), bytes)
+    val phone = rig.startMounted(rig.mount(rig.foundedDevice(), TestNas.ADMIN_USER, store, accessOverride = access))
+    checkNotNull(phone.stack.ai.runStage(5.minutes, AiRunControl.ALWAYS))
+    assertThat(phone.stack.search.open()).isTrue()
+    phone.stack.search.keys.sync()
+    val source = AiModule.analysisLive(phone.stack, phone.test.graph, phone.gallery,
+      AlbumsModule.visibleMedia(phone.gallery), GalleryModule.hiddenMask(phone.gallery))
+    val observer = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    try {
+      observer.launch { source.live.collect {} }
+      val before = withTimeout(30_000) { source.live.first { it.shownIds().isNotEmpty() } }
+      shadow.denyPermissions(images, videos)
+      if (partial) shadow.grantPermissions("android.permission.READ_MEDIA_VISUAL_USER_SELECTED")
+      phone.gallery.refreshAccess()
+      val immediate = source.live.value
+      assertThat(immediate.visibilityGeneration).isGreaterThan(before.visibilityGeneration)
+      assertThat(immediate.shownIds()).isEmpty()
+    } finally { observer.cancel() }
+  }
+
 }

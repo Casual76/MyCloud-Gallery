@@ -1017,9 +1017,9 @@ class GalleryGraph(
     lifecycle.withLock {
       if (retired && !closeUnusedDatabase) return
       // Fase 5B (P14): le integrazioni revocano subito gli id dei documenti e tornano ai null-object (anche se la galleria non e' mai partita).
-      analysisVisibility.retire()
       shutdownHooks.forEach { hook -> runCatching { hook() } }
       if (coreFlow.value == null && !coreDeferred.isActive && !closeUnusedDatabase) return
+      analysisVisibility.retire()
       val running = synchronized(workLock) {
         retired = true
         runningWork.toList()

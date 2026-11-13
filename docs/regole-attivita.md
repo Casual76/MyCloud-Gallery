@@ -209,7 +209,11 @@ non è utilizzabile (non avrebbe senso).
 * **"In carica" = alimentazione collegata** (`EXTRA_PLUGGED != 0`), non lo stato di carica. Con la Protezione
   batteria Samsung (carica ferma all'80-90% con il cavo, `status = NOT_CHARGING`) il telefono conta come in
   carica (E-P16); `PowerState.chargingPaused` serve solo alla UI.
-* **Soglia batteria** (20%): si applica solo a batteria; `level < soglia` ferma, `level == soglia` no.
+* **Soglia batteria** (20%): si applica solo a batteria; `level < soglia` ferma, `level == soglia` no. **Pacchetto B (seconda beta): la soglia si sceglie.** Il livello va da 5% a 80% a passi di 5 (di serie 20%) e vale per due gruppi, accesi o spenti
+  dall'utente (`RuleSettings.batteryThresholdForBackup` / `batteryThresholdForAnalysis`, chiavi DataStore `rule.battery.threshold.backup` / `.analysis`, assenti = accesi = come prima):
+  il **backup** (`PHOTO_BACKUP`, `VIDEO_BACKUP`) e l'**analisi delle foto** (`AI_COMPUTE`: vettori, lettura del testo e volti). `INDEX_SYNC`, `PREPARATION` e `HQ_PREVIEWS` servono a tutti e due
+  e **seguono sempre il livello**. Un gruppo spento non ha mai il motivo `BatteryLow`; `UserInitiated` e `VisibleContent` non hanno mai guardato la soglia. Il controllo e' uno solo
+  (`GalleryBatteryGuard`) e sta nelle impostazioni del Backup e in quelle dell'analisi; dove un lavoro e' fermo per la batteria le pagine dicono il numero («Batteria sotto il 60%»).
 * **Fascia**: inizio incluso, fine esclusa; a cavallo della mezzanotte `23:00-07:00` contiene `00:00`.
   Per un lavoro in corso la fascia che si chiude dà `Stop`.
 * **Termica**: `SEVERE` o headroom >= 0,95 sospende il background; `LIGHT`/`MODERATE` o headroom >= 0,85
@@ -502,7 +506,7 @@ I segnali "rete di casa", "NAS raggiungibile" e "rete scadente" sono interfacce 
    usare se T-22 mostra che il risparmio Samsung resta acceso in carica).
 8. **Termica**: `SEVERE` sospende il background ma "Fai ora" può scavalcarlo; `CRITICAL` ferma tutto. Ripartenza
    dopo 5 minuti.
-9. **Soglia batteria** solo a batteria (collegato non si applica).
+9. **Soglia batteria** solo a batteria (collegato non si applica). Dalla seconda beta il livello (5-80%) e i due gruppi (backup, analisi) li sceglie l'utente; di serie 20% per tutto, come prima.
 10. **Fascia notte ideale 23:00-07:00**; con il NAS 08-22 di oggi il NAS risulta spento nella fascia.
 11. **Stime**: 0,5%/GB di batteria, fattore radio x2 e il profilo d'uso sono ipotesi, non misure.
 12. **Ciclo dati** con giorno di inizio configurabile (1-28).

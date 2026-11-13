@@ -938,7 +938,7 @@ private fun analysisNoteOf(status: LibraryAnalysisStatus): GalleryFooterNote {
       description = listOfNotNull(stringResource(R.string.library_cloud_analysis_queued), rest.takeIf { status.progressOrNull() == null }).joinToString(". "),
     )
     is LibraryAnalysisStatus.Paused -> {
-      val why = stringResource(analysisWaitRes(status.reason))
+      val why = analysisWaitText(status.reason)
       GalleryFooterNote(
         tone = GalleryFooterTone.Waiting,
         label = stringResource(R.string.library_cloud_analysis_paused),
@@ -967,6 +967,11 @@ private fun problemRes(code: String): Int = when (code) {
 
 /** L'icona dell'analisi delle foto: la foto con la lente (la stessa di Ricerca e modelli e del visore). */
 private val AnalysisGlyph: ImageVector get() = Icons.Rounded.ImageSearch
+
+/** Il motivo per cui l'analisi aspetta, a parole: con la batteria, col livello scelto («Batteria sotto il 60%»). */
+@Composable
+private fun analysisWaitText(reason: LibraryAnalysisWait): String =
+  if (reason == LibraryAnalysisWait.BATTERY) dev.pampa.mycloudgallery.core.designsystem.state.batteryWaitText() else stringResource(analysisWaitRes(reason))
 
 private fun analysisWaitRes(reason: LibraryAnalysisWait): Int = when (reason) {
   LibraryAnalysisWait.NIGHT_WINDOW -> R.string.library_cloud_analysis_wait_window

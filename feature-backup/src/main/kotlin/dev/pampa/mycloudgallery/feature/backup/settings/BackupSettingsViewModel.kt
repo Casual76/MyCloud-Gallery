@@ -8,6 +8,8 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupSettings
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
 import dev.pampa.mycloudgallery.core.backup.contract.DeviceFolder
+import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardPort
+import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupActions
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupCoverPorts
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupRules
@@ -24,7 +26,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -59,6 +63,8 @@ internal data class SettingsUi(
   val editable: Boolean,
   /** L'ultima scelta non si e' salvata (memoria piena, OB-4 della review generale): l'interruttore e' tornato com'era e la nota sotto le sorgenti lo dice. */
   val saveFailed: Boolean = false,
+  /** Pacchetto B: il livello di batteria e i due interruttori (backup, analisi); null = `:app` non ha legato la porta e il controllo non c'e'. */
+  val battery: BatteryGuardValue? = null,
 ) {
   /**
    * Le righe delle sorgenti nell'ordine in cui si mostrano: fotocamera, screenshot, poi le cartelle aggiuntive dalla piu' grande. Una
@@ -82,6 +88,7 @@ class BackupSettingsViewModel @Inject constructor(
   rules: Optional<BackupRules>,
   actions: Optional<BackupActions>,
   coverPorts: Optional<BackupCoverPorts> = Optional.empty(),
+  batteryGuard: Optional<BatteryGuardPort> = Optional.empty(),
 ) : ViewModel() {
 
   /** I3: le copertine delle cartelle (la foto piu' recente, dalla Libreria visibile); null = le piastrelle. */
@@ -92,6 +99,8 @@ class BackupSettingsViewModel @Inject constructor(
   private val rulesPort: BackupRules? = rules.orElse(null)
   private val rulesOrNone: BackupRules = rulesPort ?: NoBackupRules
   private val acts: BackupActions = actions.orElse(NoBackupActions)
+  private val batteryPort: BatteryGuardPort? = batteryGuard.orElse(null)
+  private val batteryFlow: Flow<BatteryGuardValue?> = batteryPort?.value ?: flowOf(null)
 
   private val foldersState = MutableStateFlow<FoldersState>(FoldersState.Loading)
   private val saveFailed = MutableStateFlow(false)
@@ -99,22 +108,25 @@ class BackupSettingsViewModel @Inject constructor(
   private val noFolder: StateFlow<DeviceFolder?> = MutableStateFlow<DeviceFolder?>(null)
 
   internal val state: StateFlow<SettingsUi> = combine(
-    foldersState,
-    port?.sources ?: noSources,
-    port?.deviceFolder ?: noFolder,
-    rulesOrNone.protectNewPhotos,
-    saveFailed,
-  ) { found, chosen, deviceFolder, protect, failed ->
-    SettingsUi(
-      folders = found,
-      chosen = chosen,
-      deviceFolder = deviceFolder,
-      protectNewPhotos = protect,
-      rulesAvailable = rulesPort != null,
-      editable = port != null,
-      saveFailed = failed,
-    )
-  }.stateIn(
+    combine(
+      foldersState,
+      port?.sources ?: noSources,
+      port?.deviceFolder ?: noFolder,
+      rulesOrNone.protectNewPhotos,
+      saveFailed,
+    ) { found, chosen, deviceFolder, protect, failed ->
+      SettingsUi(
+        folders = found,
+        chosen = chosen,
+        deviceFolder = deviceFolder,
+        protectNewPhotos = protect,
+        rulesAvailable = rulesPort != null,
+        editable = port != null,
+        saveFailed = failed,
+      )
+    },
+    batteryFlow,
+  ) { ui, battery -> ui.copy(battery = battery) }.stateIn(
     scope = viewModelScope,
     started = SharingStarted.WhileSubscribed(StopTimeoutMillis),
     initialValue = SettingsUi(
@@ -124,6 +136,7 @@ class BackupSettingsViewModel @Inject constructor(
       protectNewPhotos = rulesOrNone.protectNewPhotos.value,
       rulesAvailable = rulesPort != null,
       editable = port != null,
+      battery = batteryPort?.value?.value,
     ),
   )
 
@@ -158,6 +171,22 @@ class BackupSettingsViewModel @Inject constructor(
       // l'interruttore torna indietro. La nota sotto le sorgenti dice perche', con i componenti che ci sono.
       saveFailed.value = settings.sources.value.sources != next
     }
+  }
+
+  /** Pacchetto B: il livello di batteria sotto cui il backup e l'analisi non partono (a passi di 5; il controllo lo da' gia' sul passo). */
+  fun setBatteryLevel(percent: Int) {
+    val battery = batteryPort ?: return
+    viewModelScope.launch { battery.setLevel(percent) }
+  }
+
+  fun setBatteryForBackup(on: Boolean) {
+    val battery = batteryPort ?: return
+    viewModelScope.launch { battery.setForBackup(on) }
+  }
+
+  fun setBatteryForAnalysis(on: Boolean) {
+    val battery = batteryPort ?: return
+    viewModelScope.launch { battery.setForAnalysis(on) }
   }
 
   /** D34: "Proteggi subito le foto nuove". */

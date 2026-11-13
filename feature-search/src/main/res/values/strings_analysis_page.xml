@@ -32,7 +32,7 @@
     <!-- Il perche' di una pausa: due o tre parole, con la maiuscola (stanno da sole nella riga). -->
     <string name="analysis_wait_window">Fuori dall’orario</string>
     <string name="analysis_wait_charging">Serve la carica</string>
-    <string name="analysis_wait_battery">Batteria scarica</string>
+    <string name="analysis_wait_battery">@string/gallery_wait_battery</string>
     <string name="analysis_wait_power_saver">Risparmio energetico</string>
     <string name="analysis_wait_thermal">Telefono caldo</string>
     <string name="analysis_wait_wifi">Aspetta il Wi-Fi</string>

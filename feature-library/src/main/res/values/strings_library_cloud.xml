@@ -58,7 +58,7 @@
   <string name="library_cloud_analysis_remaining">Restano %1$s foto</string>
   <string name="library_cloud_analysis_wait_window">Fuori dall’orario</string>
   <string name="library_cloud_analysis_wait_charging">Serve la carica</string>
-  <string name="library_cloud_analysis_wait_battery">Batteria scarica</string>
+  <string name="library_cloud_analysis_wait_battery">@string/gallery_wait_battery</string>
   <string name="library_cloud_analysis_wait_power_saver">Risparmio energetico</string>
   <string name="library_cloud_analysis_wait_thermal">Telefono caldo</string>
   <string name="library_cloud_analysis_wait_wifi">Aspetta il Wi-Fi</string>

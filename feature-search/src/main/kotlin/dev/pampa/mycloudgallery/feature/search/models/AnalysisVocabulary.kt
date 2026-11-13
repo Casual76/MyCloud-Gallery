@@ -104,6 +104,11 @@ private fun waitFamily(reason: LibraryAnalysisWait): GalleryIconFamily = when (r
   else -> GalleryIconFamily.System
 }
 
+/** Il motivo per cui l'analisi aspetta, a parole: con la batteria, col livello scelto («Batteria sotto il 60%»), mai «scarica» con la batteria al 55%. */
+@Composable
+internal fun analysisWaitText(reason: LibraryAnalysisWait): String =
+  if (reason == LibraryAnalysisWait.BATTERY) dev.pampa.mycloudgallery.core.designsystem.state.batteryWaitText() else stringResource(analysisWaitRes(reason))
+
 internal fun analysisWaitRes(reason: LibraryAnalysisWait): Int = when (reason) {
   LibraryAnalysisWait.NIGHT_WINDOW -> R.string.analysis_wait_window
   LibraryAnalysisWait.CHARGING -> R.string.analysis_wait_charging
@@ -186,7 +191,7 @@ internal fun analysisLine(status: LibraryAnalysisStatus): AnalysisLine? = when (
     AnalysisLine(stringResource(R.string.analysis_line_remaining, GalleryNumbers.format(it)))
   }
   is LibraryAnalysisStatus.Queued -> AnalysisLine(stringResource(R.string.analysis_line_queued))
-  is LibraryAnalysisStatus.Paused -> AnalysisLine(stringResource(analysisWaitRes(status.reason)), waitGlyph(status.reason))
+  is LibraryAnalysisStatus.Paused -> AnalysisLine(analysisWaitText(status.reason), waitGlyph(status.reason))
   LibraryAnalysisStatus.AllReady -> AnalysisLine(stringResource(R.string.analysis_line_ready))
   LibraryAnalysisStatus.Disabled -> AnalysisLine(stringResource(R.string.analysis_line_disabled))
   is LibraryAnalysisStatus.NotHere -> AnalysisLine(stringResource(R.string.analysis_line_not_here))

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Pacchetto B (seconda beta): il livello di batteria sotto cui il backup e l'analisi delle foto non partono. Un controllo solo (`GalleryBatteryGuard`), nelle impostazioni
+       del Backup e in quelle dell'analisi. Regola dell'utente: «se non sapessi leggere potrei usare l'app?»: la figura (batteria piena fino al livello, cursore, due
+       interruttori con le loro icone) fa il lavoro; le parole sono poche, e lo stato si dice una volta sola. -->
+  <string name="battery_guard_title">Batteria</string>
+  <string name="battery_guard_level">%1$d%%</string>
+  <string name="battery_guard_slider">Livello di batteria</string>
+  <string name="battery_guard_backup">Backup</string>
+  <string name="battery_guard_analysis">Analisi delle foto</string>
+  <string name="battery_guard_on">Acceso</string>
+  <string name="battery_guard_off">Spento</string>
+  <string name="battery_guard_state_both">Backup e analisi si fermano sotto il %1$d%%</string>
+  <string name="battery_guard_state_backup">Il backup si ferma sotto il %1$d%%</string>
+  <string name="battery_guard_state_analysis">L’analisi si ferma sotto il %1$d%%</string>
+  <string name="battery_guard_state_none">Backup e analisi non si fermano</string>
+  <string name="battery_guard_info_label">E con il cavo?</string>
+  <string name="battery_guard_info_detail">Il livello conta solo a batteria: con il cavo collegato il lavoro parte sempre. «Fai ora» e «Analizza adesso» partono comunque. Indice condiviso e anteprime si fermano sempre sotto il livello.</string>
+</resources>

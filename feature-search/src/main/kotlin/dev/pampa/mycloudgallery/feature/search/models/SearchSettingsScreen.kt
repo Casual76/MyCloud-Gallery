@@ -77,6 +77,9 @@ import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.AiWaitReason
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryBatteryGuard
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryBatteryGuardNote
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoButton
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoDetail
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
@@ -96,6 +99,7 @@ import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.core.search.contract.CoverageReason
 import dev.pampa.mycloudgallery.core.search.contract.SearchCoverage
 import dev.pampa.mycloudgallery.feature.search.R
+import dev.pampa.mycloudgallery.core.designsystem.R as DesignR
 import dev.pampa.mycloudgallery.feature.search.contract.AreaKind
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerState
 import dev.pampa.mycloudgallery.feature.search.contract.SearchSettingsState
@@ -127,6 +131,10 @@ fun SearchSettingsScreen(
   probeFailed: Boolean = false,
   probeHot: Boolean = false,
   probeBusy: Boolean = false,
+  battery: BatteryGuardValue? = null,
+  onBatteryLevel: (Int) -> Unit = {},
+  onBatteryForBackup: (Boolean) -> Unit = {},
+  onBatteryForAnalysis: (Boolean) -> Unit = {},
 ) {
   FluidScreen(title = stringResource(R.string.models_title), onBack = onBack) {
     item(key = "coverage") { CoverageHero(state.coverage, explainIndexer = hasIndexer, analysis = state.indexer.analysis, onOpenAnalysis = handlers::onOpenAnalysis) }
@@ -134,6 +142,21 @@ fun SearchSettingsScreen(
       item(key = "indexer-header") { GallerySectionHeader(title = stringResource(R.string.models_section_indexer)) }
       item(key = "areas") { AreaTiles(state.indexer.areasWithoutIndexer) }
       item(key = "indexer") { IndexerBlock(state, measuring, handlers, probeFailed, probeHot, probeBusy) }
+    }
+    // Pacchetto B (seconda beta): il livello di batteria sotto cui l'analisi (e il backup) non partono: lo stesso controllo, identico, delle impostazioni del Backup.
+    if (battery != null) {
+      item(key = "battery-header") { GallerySectionHeader(title = stringResource(DesignR.string.battery_guard_title)) }
+      item(key = "battery") {
+        GalleryBatteryGuard(
+          levelPercent = battery.levelPercent,
+          forBackup = battery.forBackup,
+          forAnalysis = battery.forAnalysis,
+          onLevelChange = onBatteryLevel,
+          onForBackupChange = onBatteryForBackup,
+          onForAnalysisChange = onBatteryForAnalysis,
+        )
+      }
+      item(key = "battery-note") { GalleryBatteryGuardNote() }
     }
     if (hasTextReading) {
       item(key = "reading-header") { GallerySectionHeader(title = stringResource(R.string.models_section_reading)) }

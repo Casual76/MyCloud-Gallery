@@ -7,6 +7,8 @@
        dice che cosa serve («Serve la corrente»), e insieme si legge «In attesa · 312 in coda · Serve la corrente», non «In attesa … In attesa della corrente». -->
   <string name="gallery_wait_charging">Serve la corrente</string>
   <string name="gallery_wait_battery">Batteria sotto la soglia</string>
+  <!-- Pacchetto B (seconda beta): con il livello scelto dall'utente (`LocalBatteryThreshold`) la formula dice il numero vero; senza, resta quella sopra, vera a ogni livello. -->
+  <string name="gallery_wait_battery_at">Batteria sotto il %1$d%%</string>
   <string name="gallery_wait_night_window">Fuori dalla fascia oraria</string>
   <string name="gallery_wait_power_saver">Risparmio energetico attivo</string>
   <string name="gallery_wait_thermal">Il telefono è troppo caldo</string>

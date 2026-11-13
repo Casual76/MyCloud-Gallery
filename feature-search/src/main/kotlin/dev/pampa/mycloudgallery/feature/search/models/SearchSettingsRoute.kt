@@ -13,6 +13,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.pampa.mycloudgallery.core.ai.contract.DeviceProbe
+import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardPort
+import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingState
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingSwitch
 import dev.pampa.mycloudgallery.core.models.contract.ModelId
@@ -27,6 +29,12 @@ import dev.pampa.mycloudgallery.feature.search.contract.TextReadingAccepted
 import dev.pampa.mycloudgallery.feature.search.ui.SearchHost
 import java.util.Optional
 import javax.inject.Inject
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 
 // Le ROTTE della pagina Ricerca e modelli e della pagina di attivazione (Fase 6, P8), per `:app` (P11). Come per Cerca, tutte le porte sono opzionali per
 // Dagger ([dev.pampa.mycloudgallery.feature.search.SearchPortsModule]): una porta non collegata nasconde la sua sezione invece di mostrare una riga che non fa niente (D13).
@@ -40,7 +48,36 @@ class SearchSettingsViewModel @Inject constructor(
   textReading: Optional<TextReadingSwitch>,
   accepted: Optional<TextReadingAccepted>,
   probe: Optional<DeviceProbe>,
+  batteryGuard: Optional<BatteryGuardPort> = Optional.empty(),
 ) : ViewModel() {
+
+  private val batteryPort: BatteryGuardPort? = batteryGuard.orElse(null)
+
+  /** Pacchetto B: il livello di batteria e i due interruttori, gli stessi della pagina del Backup; null = `:app` non ha legato la porta e la sezione non c'e'. */
+  val battery: StateFlow<BatteryGuardValue?> = (batteryPort?.value ?: flowOf(null)).stateIn(
+    scope = viewModelScope,
+    started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+    initialValue = batteryPort?.value?.value,
+  )
+
+  fun setBatteryLevel(percent: Int) {
+    val port = batteryPort ?: return
+    viewModelScope.launch { port.setLevel(percent) }
+  }
+
+  fun setBatteryForBackup(on: Boolean) {
+    val port = batteryPort ?: return
+    viewModelScope.launch { port.setForBackup(on) }
+  }
+
+  fun setBatteryForAnalysis(on: Boolean) {
+    val port = batteryPort ?: return
+    viewModelScope.launch { port.setForAnalysis(on) }
+  }
+
+  private companion object {
+    const val STOP_TIMEOUT_MILLIS = 5_000L
+  }
 
   val controller: SearchSettingsController = SearchSettingsController(
     indexer = indexer.orElse(null),
@@ -105,12 +142,17 @@ fun SearchSettingsRoute(actions: SearchActions, onBack: () -> Unit, viewModel: S
   val probeFailed by controller.probeFailed.collectAsStateWithLifecycle()
   val probeHot by controller.probeHot.collectAsStateWithLifecycle()
   val probeBusy by controller.probeBusy.collectAsStateWithLifecycle()
+  val battery by viewModel.battery.collectAsStateWithLifecycle()
   val handlers = remember(controller, actions) { ActionSettingsHandlers(controller, actions) }
   SearchHost {
     SearchSettingsScreen(
       state = state,
       measuring = measuring,
       probeFailed = probeFailed, probeHot = probeHot, probeBusy = probeBusy,
+      battery = battery,
+      onBatteryLevel = viewModel::setBatteryLevel,
+      onBatteryForBackup = viewModel::setBatteryForBackup,
+      onBatteryForAnalysis = viewModel::setBatteryForAnalysis,
       hasIndexer = controller.hasIndexer,
       hasTextReading = controller.hasTextReading,
       hasModels = controller.hasModels,

@@ -1,6 +1,8 @@
 package dev.pampa.mycloudgallery
 
 import dev.pampa.mycloudgallery.release.ReleaseRoot
+import dev.pampa.mycloudgallery.core.designsystem.state.LocalBatteryThreshold
+import dev.pampa.mycloudgallery.rules.BatteryThresholdViewModel
 import dev.pampa.mycloudgallery.release.ReleaseRootViewModel
 import dev.pampa.mycloudgallery.release.ReleaseUi
 import android.app.Activity
@@ -55,6 +57,7 @@ internal fun AppRoot(
   releaseViewModel: ReleaseRootViewModel = hiltViewModel(),
   updatesViewModel: UpdatesViewModel = hiltViewModel(),
   appIconViewModel: AppIconViewModel = hiltViewModel(),
+  batteryThresholdViewModel: BatteryThresholdViewModel = hiltViewModel(),
 ) {
   // Pacchetto U (giro 1, UU-1/UU-3): il ritorno davanti (dalla pagina del permesso, dalla finestra di Android) riprende l'aggiornamento, anche con l'app bloccata.
   UpdateLifecycleEffect(updatesViewModel)
@@ -120,7 +123,9 @@ internal fun AppRoot(
       null
     }
     val notice: @Composable (Modifier) -> Unit = remember(updatesViewModel) { { modifier -> UpdatePromptHost(updatesViewModel, modifier) } }
-    CompositionLocalProvider(LocalUpdateAppIcon provides appIcon, LocalTabBarNotice provides notice) {
+    // Pacchetto B: il livello di batteria scelto, per dirlo dove un lavoro e' fermo per la batteria («Batteria sotto il 60%», mai «scarica» con la batteria al 55%).
+    val batteryThreshold by batteryThresholdViewModel.percent.collectAsStateWithLifecycle()
+    CompositionLocalProvider(LocalUpdateAppIcon provides appIcon, LocalTabBarNotice provides notice, LocalBatteryThreshold provides batteryThreshold) {
       Box(modifier = Modifier.fillMaxSize()) {
         // In sola lettura l'avviso del manifest ha «Aggiorna» quando c'e' una versione nuova: il tocco la scarica (l'avviso dell'aggiornamento mostra l'anello).
         // Nella pagina «versione fermata» il pannello sa dove sta: senza una versione nuova dice «arriva presto», non «App aggiornata» (giro 2, UU2-7).

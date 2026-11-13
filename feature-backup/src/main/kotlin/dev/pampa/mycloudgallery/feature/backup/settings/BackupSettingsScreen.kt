@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.feature.backup.settings
 
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryBatteryGuard
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryBatteryGuardNote
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -82,6 +84,9 @@ internal class SettingsActions(
   val setProtectNewPhotos: (Boolean) -> Unit = {},
   val openDeviceFolder: () -> Unit = {},
   val reloadFolders: () -> Unit = {},
+  val setBatteryLevel: (Int) -> Unit = {},
+  val setBatteryForBackup: (Boolean) -> Unit = {},
+  val setBatteryForAnalysis: (Boolean) -> Unit = {},
 )
 
 /** Le impostazioni del backup con il loro ViewModel. */
@@ -100,6 +105,9 @@ fun BackupSettingsRoute(
       setProtectNewPhotos = viewModel::setProtectNewPhotos,
       openDeviceFolder = viewModel::openDeviceFolder,
       reloadFolders = viewModel::reloadFolders,
+      setBatteryLevel = viewModel::setBatteryLevel,
+      setBatteryForBackup = viewModel::setBatteryForBackup,
+      setBatteryForAnalysis = viewModel::setBatteryForAnalysis,
     )
   }
   // I3: le copertine delle cartelle; senza la porta, le piastrelle.
@@ -327,8 +335,23 @@ private fun LazyListScope.rulesSection(state: SettingsUi, actions: SettingsActio
         )
         FluidListDivider()
       }
-      WhenRow()
+      // Con il controllo della batteria qui sotto, la sua figura non si ripete fra i segni: restano la notte e il Wi-Fi di casa.
+      WhenRow(showBattery = state.battery == null)
     }
+  }
+  // Pacchetto B (seconda beta): il livello di batteria sotto cui il backup e l'analisi non partono, un controllo solo (lo stesso, identico, nelle impostazioni dell'analisi).
+  state.battery?.let { battery ->
+    item(key = "battery") {
+      GalleryBatteryGuard(
+        levelPercent = battery.levelPercent,
+        forBackup = battery.forBackup,
+        forAnalysis = battery.forAnalysis,
+        onLevelChange = actions.setBatteryLevel,
+        onForBackupChange = actions.setBatteryForBackup,
+        onForAnalysisChange = actions.setBatteryForAnalysis,
+      )
+    }
+    item(key = "battery-note") { GalleryBatteryGuardNote(modifier = Modifier.padding(horizontal = BackupDimens.BlockGap)) }
   }
   item(key = "rules-note") {
     GalleryInfoRow(label = stringResource(R.string.backup_settings_rules_info), detail = stringResource(R.string.backup_settings_rules_note), modifier = Modifier.padding(horizontal = BackupDimens.BlockGap))
@@ -340,12 +363,12 @@ private fun LazyListScope.rulesSection(state: SettingsUi, actions: SettingsActio
  * Prima era la frase «Lo decidono le regole delle attivita'...». Le regole si cambiano in Impostazioni, «Quando lavora l'app».
  */
 @Composable
-private fun WhenRow() {
+private fun WhenRow(showBattery: Boolean = true) {
   val title = stringResource(R.string.backup_settings_when_title)
-  val factors = listOf(
+  val factors = listOfNotNull(
     Triple(Icons.Rounded.Bedtime, GalleryIconFamily.Search, stringResource(R.string.backup_settings_when_night)),
     Triple(Icons.Rounded.Wifi, GalleryIconFamily.Network, stringResource(R.string.backup_settings_when_wifi)),
-    Triple(Icons.Rounded.BatteryChargingFull, GalleryIconFamily.Places, stringResource(R.string.backup_settings_when_battery)),
+    if (showBattery) Triple(Icons.Rounded.BatteryChargingFull, GalleryIconFamily.Places, stringResource(R.string.backup_settings_when_battery)) else null,
   )
   val description = title + ": " + factors.joinToString(", ") { it.third }
   Column(

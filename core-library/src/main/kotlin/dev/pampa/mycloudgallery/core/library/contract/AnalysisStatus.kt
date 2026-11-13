@@ -119,3 +119,21 @@ fun LibraryAnalysisStatus.progressOrNull(): Float? {
   if (ready == null || total == null || total <= 0) return null
   return (ready.toFloat() / total).coerceIn(0f, 1f)
 }
+
+/**
+ * Pacchetto XN (13/11/2026, decisione dell'utente): **a quando risale l'ultima sincronizzazione dell'indice dell'analisi con il NAS**, per la
+ * sezione dell'analisi nel pannello della nuvola. Additivo e separato da [LibraryAnalysisStatus] (che resta com'e'): lo compone `:app` dalla testa
+ * `ai` propria pubblicata sul NAS (`ai_own_head.published_at`, ora del NAS), l'istante che il motore salva gia' a ogni pubblicazione.
+ */
+@Immutable
+sealed interface LibraryIndexSync {
+
+  /** In questa configurazione l'indice non va sul NAS (l'analisi resta sul telefono): la riga non c'e'. */
+  data object NotApplicable : LibraryIndexSync
+
+  /** Potrebbe andare sul NAS, ma non c'e' ancora andato. */
+  data object Never : LibraryIndexSync
+
+  /** L'ultima pubblicazione sul NAS, all'istante [atNasMillis] (ora del NAS). */
+  data class At(val atNasMillis: Long) : LibraryIndexSync
+}

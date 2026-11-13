@@ -21,8 +21,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -270,7 +268,8 @@ class AppAnalysisLive(
 
   /**
    * Una risoluzione: legge, **poi scrive solo se sotto il lucchetto** la generazione e l'istantanea sono ancora quelle con cui e' partita. Una lettura lenta o non
-   * cooperativa non ritarda la neutralizzazione (gia' scritta da chi ha segnalato il cambio) e il suo risultato vecchio non arriva mai al valore condiviso.
+   * cooperativa non ritarda la neutralizzazione (gia' scritta da chi ha segnalato il cambio) e il suo risultato vecchio non arriva mai al valore condiviso: **questa e' l'unica
+   * guardia** (non c'e' un `ensureActive` ridondante prima), cosi' una prova che la toglie cade davvero.
    */
   private suspend fun resolveNow() {
     val start = synchronized(lock) { if (running && snapshotKnown) Start(generation, lastSnapshot, engineLive.value) else null } ?: return
@@ -296,7 +295,6 @@ class AppAnalysisLive(
     // 2. Il filtro finale (D22): quali di questi media si possono mostrare adesso. Un errore vale "nessuno" (chiuso).
     val ids = spots.values.mapTo(LinkedHashSet()) { columnar!!.idAt(it) }
     val allowed = if (ids.isEmpty()) emptySet() else finalFilter(ids)
-    currentCoroutineContext().ensureActive()
     fun thumb(key: ContentKey): AnalysisThumb {
       val at = spots[key] ?: return AnalysisThumb.Quiet
       val snap = columnar ?: return AnalysisThumb.Quiet

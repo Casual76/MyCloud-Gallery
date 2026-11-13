@@ -130,6 +130,7 @@ class AnalysisProviderRealTest {
     val bytes = AiRig.jpeg(60)
     store.put(AiRig.photoRow(1, "DCIM/mcg-prova/", "IMG_0001.jpg", bytes, rig.time), bytes)
     val phone = rig.startMounted(rig.mount(rig.foundedDevice(), TestNas.ADMIN_USER, store, accessOverride = access))
+    rig.enableReading(phone)
     checkNotNull(phone.stack.ai.runStage(5.minutes, AiRunControl.ALWAYS))
     assertThat(phone.stack.search.open()).isTrue()
     phone.stack.search.keys.sync()

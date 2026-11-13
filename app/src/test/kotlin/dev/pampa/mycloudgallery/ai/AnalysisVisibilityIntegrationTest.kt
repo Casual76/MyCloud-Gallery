@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiLive
 import dev.pampa.mycloudgallery.core.database.entity.MediaPersonalEntity
 import dev.pampa.mycloudgallery.core.library.testing.FakeTimelineRepository
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogHiddenMask
+import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
 import dev.pampa.mycloudgallery.core.library.contract.VisibleMedia
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogVisibleMedia
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
@@ -80,6 +81,7 @@ class AnalysisVisibilityIntegrationTest {
     scope: CoroutineScope,
     stopTimeoutMillis: Long = AppAnalysisLive.STOP_AFTER_MILLIS,
     wrapVisible: (VisibleMedia) -> VisibleMedia = { it },
+    wrapMask: (HiddenMask) -> HiddenMask = { it },
   ): Rig {
     val world = HiddenWorldBuilder.build(context, spec)
     val cells = world.catalog.mediaContentKeysOf(world.ids)
@@ -95,7 +97,7 @@ class AnalysisVisibilityIntegrationTest {
     val selection = MutableStateFlow<Set<MediaId>?>(null)
     val visibleTimeline = PartialAccessTimeline(base, selection, access, scope)
     val visible = wrapVisible(CatalogVisibleMedia(world.db, visibleTimeline.snapshot))
-    val mask = CatalogHiddenMask(world.db)
+    val mask = wrapMask(CatalogHiddenMask(world.db))
     val changes = TestVisibilitySignal()
 
     val cellIds = world.libraryCells.toList()
@@ -437,6 +439,64 @@ class AnalysisVisibilityIntegrationTest {
       val after = log.dropWhile { it !== REVOKED }.drop(1).filterIsInstance<AnalysisFlow>()
       assertThat(after).isNotEmpty()
       assertThat(after.filter { rig.shown(it).isNotEmpty() }).isEmpty()
+    } finally {
+      stuck.latch.countDown()
+      watcher.cancel()
+      scope.cancel()
+      rig.world.close()
+    }
+  }
+
+  /**
+   * Il blocco **all'ultimo passo**: il filtro finale e' `visible.visible(ids) - mask.hiddenAmong(ids)`; qui e' la maschera a restare ferma sul latch, dopo aver risposto, e dopo
+   * di lei la risoluzione non ha piu' nessun punto di sospensione. Lo scopo e' provare la guardia **di scrittura**: quando il latch si sblocca la cancellazione non puo'
+   * piu' fermare nulla (nessuna sospensione dopo) e solo il controllo sotto lucchetto (o l'`ensureActive` prima) impedisce di scrivere il risultato vecchio.
+   */
+  private class StuckMask(private val real: HiddenMask) : HiddenMask by real {
+    val armed = java.util.concurrent.atomic.AtomicBoolean(false)
+    val latch = java.util.concurrent.CountDownLatch(1)
+    val entered = kotlinx.coroutines.CompletableDeferred<Unit>()
+
+    override suspend fun hiddenAmong(ids: Collection<MediaId>): Set<MediaId> {
+      val answer = real.hiddenAmong(ids)
+      if (armed.get()) {
+        entered.complete(Unit)
+        latch.await()
+      }
+      return answer
+    }
+  }
+
+  /**
+   * La risoluzione ferma **all'ultimo passo** (nessuna sospensione dopo) non scrive il suo risultato vecchio quando si sblocca: lo impedisce la guardia di scrittura. Mutazione:
+   * togliere insieme il controllo di generazione sotto lucchetto e l'`ensureActive` (ognuno da solo e' ridondante con l'altro: l'`ensureActive` vede la cancellazione che il segnale
+   * ha chiesto, il controllo vede la generazione cambiata).
+   */
+  @Test
+  fun unaRisoluzioneFermaAllUltimoPassoNonScriveIlRisultatoVecchioQuandoSiSblocca() = runBlocking<Unit> {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val watcher = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    lateinit var stuck: StuckMask
+    val rig = rig(WorldSpec.nothingHidden(), scope, wrapMask = { real -> StuckMask(real).also { stuck = it } })
+    try {
+      val log = java.util.concurrent.CopyOnWriteArrayList<Any>()
+      watcher.launch { rig.page.live.collect { log += it } }
+      val resolved = rig.next { f -> rig.target in rig.shown(f) }
+
+      stuck.armed.set(true)
+      rig.engine.value = AiLive(current = rig.keyOf.getValue(rig.others.first()), recent = listOf(rig.keyOf.getValue(rig.target)), next = emptyList())
+      withTimeout(20_000) { stuck.entered.await() }
+
+      log += FIRED
+      rig.changes.fire()
+      assertThat(rig.shown(rig.page.live.value)).isEmpty()
+
+      stuck.armed.set(false)
+      stuck.latch.countDown()
+      kotlinx.coroutines.delay(700)
+      val after = log.dropWhile { it !== FIRED }.drop(1).filterIsInstance<AnalysisFlow>()
+      assertThat(after).isNotEmpty()
+      assertThat(after.filter { rig.shown(it).isNotEmpty() }.map { it.visibilityGeneration }.filter { it <= resolved.visibilityGeneration }).isEmpty()
     } finally {
       stuck.latch.countDown()
       watcher.cancel()

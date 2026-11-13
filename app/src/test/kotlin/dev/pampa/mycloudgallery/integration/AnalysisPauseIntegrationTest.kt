@@ -150,4 +150,41 @@ class AnalysisPauseIntegrationTest {
     withTimeout(10_000) { while (active.get() > 0) kotlinx.coroutines.delay(20) }
     watcherScope.cancel()
   }
+
+  /**
+   * XS3-3: un errore degli ascoltatori di sistema (la registrazione rifiutata) **non esce senza gestore** e non e' ingoiato: una riga nel log, l'ascolto si ferma, e un nuovo
+   * sguardo riprova. Si ascolta l'`uncaughtExceptionHandler` del thread: un'eccezione che esce da uno scope del grafo senza gestore ci passa. Mutazione: togliere il `catch`
+   * dei trigger in `AiGraph` (l'eccezione risale al `launch`).
+   */
+  @Test
+  fun unErroreDegliEventiDellAmbienteNonEsceSenzaGestoreERiprovaAlProssimoSguardo() = runBlocking<Unit> {
+    val uncaught = java.util.concurrent.CopyOnWriteArrayList<Throwable>()
+    val previous = Thread.getDefaultUncaughtExceptionHandler()
+    Thread.setDefaultUncaughtExceptionHandler { _, e -> uncaught += e }
+    val watcherScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Unconfined)
+    try {
+      val attempts = java.util.concurrent.atomic.AtomicInteger()
+      rig.decideOverride = { RuleDecision.Wait(WaitReason.PowerSaver) }
+      rig.triggersOverride = kotlinx.coroutines.flow.flow {
+        attempts.incrementAndGet()
+        throw IllegalStateException("registrazione rifiutata")
+      }
+      val device = rig.founder()
+      val first = watcherScope.launch { device.stack.ai.analysis.collect {} }
+      withTimeout(10_000) { while (attempts.get() < 1) kotlinx.coroutines.delay(20) }
+      kotlinx.coroutines.delay(500)
+      assertThat(uncaught).isEmpty()
+      first.cancel()
+      kotlinx.coroutines.delay(100)
+      // Un nuovo sguardo riprova (l'ascolto non resta rotto per sempre) e l'errore e' di nuovo confinato.
+      val again = watcherScope.launch { device.stack.ai.analysis.collect {} }
+      withTimeout(10_000) { while (attempts.get() < 2) kotlinx.coroutines.delay(20) }
+      kotlinx.coroutines.delay(500)
+      assertThat(uncaught).isEmpty()
+      again.cancel()
+    } finally {
+      watcherScope.cancel()
+      Thread.setDefaultUncaughtExceptionHandler(previous)
+    }
+  }
 }

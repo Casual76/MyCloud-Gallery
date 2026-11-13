@@ -90,7 +90,10 @@ private val ANALYSIS_IDLE: StateFlow<LibraryAnalysisStatus> = kotlinx.coroutines
  * aperta â€” si conta nei numeri ma a schermo e' un segnaposto neutro). Nessuna chiave di contenuto arriva qui.
  */
 sealed interface AnalysisThumb {
-  data class Shown(val id: MediaId, val request: ThumbRequest?, val thumbHash: ThumbHash?, val video: Boolean) : AnalysisThumb
+  data class Shown(val id: MediaId, val request: ThumbRequest?, val thumbHash: ThumbHash?, val video: Boolean) : AnalysisThumb {
+    /** XS3-5: solo il tipo (e se e' un video): mai l'id del media, la versione, il riferimento al telefono o al NAS, ne' il segnaposto sfocato, in nessun dump o log. */
+    override fun toString(): String = "AnalysisThumb.Shown(video=$video)"
+  }
 
   data object Quiet : AnalysisThumb
 }
@@ -115,6 +118,13 @@ data class AnalysisFlow(
   val visibilityGeneration: Long = 0L,
   val finished: Long = 0L,
 ) {
+  /** XS3-5: soli tipi e conteggi (come `AiLive.toString`): quanti posti, quante anteprime mostrabili, la generazione e i media finiti; mai un id, una versione o un riferimento. */
+  override fun toString(): String {
+    val all = listOfNotNull(current) + recent + next
+    return "AnalysisFlow(ora=${if (current != null) "si" else "no"}, fatte=${recent.size}, prossime=${next.size}, " +
+      "mostrate=${all.count { it is AnalysisThumb.Shown }}, generazione=$visibilityGeneration, finiti=$finished)"
+  }
+
   companion object {
     val EMPTY = AnalysisFlow(null, emptyList(), emptyList())
   }
@@ -140,7 +150,23 @@ class SearchThumbnails(
   val loader: ThumbnailLoader,
   val placeholders: PlaceholderCache,
   val refs: SearchRefs,
-)
+) {
+  /**
+   * XS3-4 (Pacchetto XF, giro 3): le miniature del nastro dell'analisi **con un proprietario** ([ANALYSIS_OWNER]), mai al posto della finestra della Libreria (`window`
+   * la sostituirebbe e annullerebbe le celle in volo della griglia). Valgono come richieste "in arrivo" accanto alla finestra e **restano finche' non si rilasciano**:
+   * chi disegna chiama questo quando le miniature mostrate cambiano e [releaseAnalysis] quando la pagina esce dalla composizione, cosi' non restano richieste ne'
+   * ripetizioni (il caricatore riprova dopo 15 s) oltre il tempo in cui il nastro e' guardato. Non svuota la finestra globale.
+   */
+  fun holdAnalysis(requests: List<ThumbRequest>) = loader.keep(ANALYSIS_OWNER, requests)
+
+  /** XS3-4: il nastro dell'analisi non e' piu' guardato: toglie le sue richieste (e le loro riprove). Idempotente. */
+  fun releaseAnalysis() = loader.keep(ANALYSIS_OWNER, emptyList())
+
+  companion object {
+    /** Il proprietario delle richieste del nastro dell'analisi nel caricatore condiviso. */
+    const val ANALYSIS_OWNER: String = "analysis-lane"
+  }
+}
 
 /**
  * I2 (fase I): il volto di una persona per l'anteprima di un suggerimento (Â«per una persona il voltoÂ»). `:app` la lega ai ritagli di feature-people, con

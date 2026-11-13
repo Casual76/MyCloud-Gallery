@@ -11,6 +11,8 @@ import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.rules.NetworkState
 import dev.pampa.mycloudgallery.core.rules.NetworkTransport
 import dev.pampa.mycloudgallery.core.rules.ThermalStatus
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -195,5 +197,36 @@ class AndroidDeviceStateSourceTest {
     val reading = source.read()
 
     assertThat(reading.power.pluggedIn).isTrue()
+  }
+
+  // --- Acquisizione parziale (XS3-3) --------------------------------------------------------------------
+
+  /**
+   * Una registrazione che rifiuta **dopo** quella del receiver non lascia il receiver acceso: l'errore arriva a chi raccoglie, e il receiver registrato prima e' stato tolto.
+   * Mutazione: togliere il rilascio nel ramo dell'errore (il receiver resta registrato senza nessuno che lo tolga).
+   */
+  @Test
+  fun unaRegistrazioneCheRifiutaNonLasciaAcceseQuelleGiaFatte() = kotlinx.coroutines.runBlocking<Unit> {
+    val app = context.applicationContext as android.app.Application
+    val failing = AndroidDeviceStateSource(context) { _, _, _ -> throw IllegalStateException("registrazione rifiutata") }
+    val before = shadowOf(app).registeredReceivers.size
+
+    val failure = runCatching { failing.changes().first() }.exceptionOrNull()
+
+    assertThat(failure).isInstanceOf(IllegalStateException::class.java)
+    assertThat(shadowOf(app).registeredReceivers.size).isEqualTo(before)
+  }
+
+  /** Con tutte le registrazioni riuscite, chi smette di raccogliere le toglie tutte (il rilascio di sempre). */
+  @Test
+  fun chiSmetteDiRaccoglierePulisceTutto() = kotlinx.coroutines.runBlocking<Unit> {
+    val app = context.applicationContext as android.app.Application
+    val ok = AndroidDeviceStateSource(context) { _, _, _ -> Unit }
+    val before = shadowOf(app).registeredReceivers.size
+    val job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined).launch { ok.changes().collect { } }
+    assertThat(shadowOf(app).registeredReceivers.size).isEqualTo(before + 1)
+    job.cancel()
+    job.join()
+    assertThat(shadowOf(app).registeredReceivers.size).isEqualTo(before)
   }
 }

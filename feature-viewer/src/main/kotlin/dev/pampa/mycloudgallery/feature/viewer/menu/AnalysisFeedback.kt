@@ -48,6 +48,14 @@ internal class AnalysisFeedback {
     askedVersion = version
   }
 
+  /** XS3-3: la richiesta di [id] non e' stata accodata: non c'e' niente da aspettare, e nessun riscontro di fine analisi per una richiesta che non e' partita. */
+  fun failedAsk(id: MediaId) {
+    if (askedFor == id) {
+      askedFor = null
+      askedVersion = null
+    }
+  }
+
   /** Il visore e' arrivato su [now]: la richiesta fatta su un'altra foto finisce con la visita a quella foto. */
   fun moved(now: MediaId) {
     if (askedFor != now) askedFor = null

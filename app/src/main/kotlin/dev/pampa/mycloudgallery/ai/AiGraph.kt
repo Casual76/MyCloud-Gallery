@@ -63,10 +63,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
@@ -244,11 +246,7 @@ class AiGraph(
    * meccanismo che c'e' gia' (`UnitPriority.visible`, chiavi ridotte). XS-2: sono al piu' [AiUrgentFile.PRIORITY_KEYS], le meno attese per
    * prime (a turno), e il selettore delle unita' lascia sempre posto ai mesi ordinari (`maxPriorityMonthsPerCall`).
    */
-  private val urgentPriority: UnitPriority = object : UnitPriority {
-    override val visible: StateFlow<Set<Long>> = urgent.priority
-      .map { keys -> keys.mapTo(HashSet()) { it.short } }
-      .stateIn(graphScope, SharingStarted.Eagerly, urgent.priority.value.mapTo(HashSet()) { it.short })
-  }
+  private val urgentPriority: UnitPriority = UrgentUnitPriority(urgent, graphScope)
 
   /**
    * XS-2, XS-5: la pulizia delle richieste fatta dal **ciclo di lavoro** (a inizio e a fine tappa, e quando l'indice avanza): scadute, finite
@@ -415,13 +413,25 @@ class AiGraph(
             emptyFlow()
           } else {
             flow {
-              emit(true)
-              emitAll(triggers.map { false })
+              emit(DecisionTrigger.NOW)
+              emitAll(triggers.map { DecisionTrigger.EVENT })
+            }.catch { e ->
+              // XS3-3: un errore degli ascoltatori di sistema (la registrazione rifiutata, un servizio che manca) non esce da qui senza gestore e non e' ingoiato: una
+              // riga nel log (solo il tipo), l'ascolto si ferma e lo stato dice "non so" (nessun verdetto); ricomincia la prossima volta che qualcuno guarda.
+              if (e is CancellationException) throw e
+              GalleryLog.e(TAG, e) { "eventi dell'ambiente: errore (${e.javaClass.simpleName}), ascolto fermo fino al prossimo sguardo" }
+              emit(DecisionTrigger.FAILED)
             }
           }
-        }.collectLatest { immediate ->
-          if (!immediate) delay(DECISION_CALM_MILLIS)
-          refreshDecision()
+        }.collectLatest { trigger ->
+          when (trigger) {
+            DecisionTrigger.NOW -> refreshDecision()
+            DecisionTrigger.EVENT -> {
+              delay(DECISION_CALM_MILLIS)
+              refreshDecision()
+            }
+            DecisionTrigger.FAILED -> decisionFlow.value = null
+          }
         }
       }
     }
@@ -689,7 +699,12 @@ class AiGraph(
     runCatching { buffer.clear() }
   }
 
+  /** XS3-3: che cosa fa rivalutare il verdetto delle regole: lo sguardo che comincia, un evento dell'ambiente, o il guasto dell'ascolto (-> "non so"). */
+  private enum class DecisionTrigger { NOW, EVENT, FAILED }
+
   companion object {
+    private const val TAG = "AiGraph"
+
     /** `noBackupFilesDir/models`: modelli verificati, parziali, programmi compilati (P3, P4). */
     const val MODELS_DIR = "models"
     const val BUFFER_DIR = "ai-buffer"

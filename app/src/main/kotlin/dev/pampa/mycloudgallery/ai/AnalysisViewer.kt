@@ -4,6 +4,7 @@ import android.content.Context
 import dev.pampa.mycloudgallery.core.ai.compute.UrgentWait
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.AiWaitReason
+import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -23,6 +24,8 @@ import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
@@ -30,6 +33,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
@@ -64,28 +68,56 @@ class AppViewerAnalysis(
     isUnsupported = ::unsupported,
   )
 
+  /** XS3-3: i media la cui ultima richiesta "Analizza adesso" non e' stata accodata (si toglie a ogni nuova richiesta di quel media). */
+  private val askFailures = MutableStateFlow<Set<MediaId>>(emptySet())
+
   override fun observe(id: MediaId): Flow<MediaAnalysis> = flow {
     var resolved: ViewerResolved? = null
     // I segnali che cambiano cio' che si legge dal catalogo e dall'indice, e quelli dell'ambiente (regole): rileggono tutto.
     val heavy = combine(ai.indexer, ai.status, ai.urgent.state, ai.urgent.waits, indexVersion) { _, _, _, _, _ -> true }
-    val environment = (ai.parts.decisionTriggers ?: emptyFlow()).map { true }
+    // XS3-3: un errore degli ascoltatori di sistema (la registrazione rifiutata) non fa cadere lo stato del visore ne' esce senza gestore: una riga nel log (solo il tipo),
+    // gli eventi dell'ambiente finiscono e il resto dei segnali continua.
+    val environment = (ai.parts.decisionTriggers ?: emptyFlow()).map { true }.catch { e ->
+      if (e is CancellationException) throw e
+      GalleryLog.e(TAG, e) { "visore: eventi dell'ambiente: errore (${e.javaClass.simpleName}), ignorati" }
+    }
+    // Una richiesta non accodata (o tolta) riscrive lo stato senza rileggere niente.
+    val failures = askFailures.map { false }
     // XS2-5: la **versione** del media. Il catalogo dice quando un media cambia (una modifica salvata, una nuova versione): senza questo segnale il visore
     // teneva la lettura della versione di prima finche' non cambiava altro.
     val versions = (catalog()?.changes?.filter { id in it.ids } ?: emptyFlow()).map { true }
     // Il media che il motore sta calcolando cambia a ogni media: basta il confronto con la chiave gia' letta, senza rileggere niente.
     val cheap = ai.live.map { it.current }.distinctUntilChanged().map { false }
-    merge(heavy, environment, versions, cheap).collect { reload ->
+    merge(heavy, environment, versions, cheap, failures).collect { reload ->
       val now = if (reload || resolved == null) resolver.resolve(id).also { resolved = it } else resolved!!
-      emit(evaluate(now))
+      val state = evaluate(now)
+      // XS3-3: l'esito della richiesta nello stato (non un crash): vale finche' il media non e' pronto.
+      emit(if (id in askFailures.value && state.kind != MediaAnalysisKind.READY) state.copy(askFailed = true) else state)
     }
   }.distinctUntilChanged()
 
   override fun analyzeNow(id: MediaId) {
     scope.launch {
-      val key = ownKeys(id)?.firstOrNull() ?: return@launch
-      ai.urgent.add(key, id)
-      AiWorkScheduling.analyzeAsked(context)
+      askFailures.update { it - id }
+      try {
+        val key = ownKeys(id)?.firstOrNull() ?: throw AskNotQueued()
+        ai.urgent.add(key, id)
+        AiWorkScheduling.analyzeAsked(context)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        // XS3-3: il catalogo che non ha il media, il lavoro che non si accoda: l'esito e' osservabile da chi ha toccato ([MediaAnalysis.askFailed]) e c'e' una riga nel log.
+        GalleryLog.e(TAG, e) { "analisi chiesta: non accodata (${e.javaClass.simpleName})" }
+        askFailures.update { it + id }
+      }
     }
+  }
+
+  /** Il catalogo non ha (ancora) una chiave per il media: la richiesta non si puo' registrare. */
+  private class AskNotQueued : Exception()
+
+  private companion object {
+    const val TAG = "AppViewerAnalysis"
   }
 
   /** Le chiavi delle versioni del media (la corrente per prima), anche per nascosti e membri di gruppo nel loro visore (VT-1). */

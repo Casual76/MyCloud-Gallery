@@ -64,7 +64,17 @@ enum class MediaAnalysisHold {
  * Lo stato di un media: il suo caso e, se e' stato chiesto ma non parte, perche'. [version] (XS2-5, additivo): un'etichetta opaca della **versione**
  * del media per cui lo stato e' stato letto (null = non si sa); il visore la usa per non mescolare stati e richieste di versioni diverse dello stesso media.
  */
-data class MediaAnalysis(val kind: MediaAnalysisKind, val hold: MediaAnalysisHold? = null, val version: Long? = null) {
+data class MediaAnalysis(
+  val kind: MediaAnalysisKind,
+  val hold: MediaAnalysisHold? = null,
+  val version: Long? = null,
+  /**
+   * XS3-3 (additivo): l'ultima richiesta "Analizza adesso" di **questo media** non e' stata accodata (il catalogo non ha il media, o il lavoro non si e' potuto accodare).
+   * Vero finche' non si chiede di nuovo o il media non e' pronto. Chi disegna puo' dirlo (es. "Non sono riuscito a metterla in coda"); la richiesta, se e' arrivata al
+   * registro, resta e il lavoro di fondo la servira' comunque. Mai un crash.
+   */
+  val askFailed: Boolean = false,
+) {
   companion object {
     val UNKNOWN = MediaAnalysis(MediaAnalysisKind.UNKNOWN)
   }

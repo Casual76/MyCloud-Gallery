@@ -929,6 +929,8 @@ private fun ViewerOverlays(
   val analysisFeedback = remember { AnalysisFeedback() }
   val analysisHaptics = LocalFluidHaptics.current
   LaunchedEffect(currentId) { analysisFeedback.moved(currentId) }
+  // XS3-3: una richiesta che non e' stata accodata non da' nessun riscontro di fine analisi.
+  LaunchedEffect(analysisMedia.askFailed, currentId) { if (analysisMedia.askFailed) analysisFeedback.failedAsk(currentId) }
   LaunchedEffect(analysisMedia.kind, analysisMedia.version, currentId) {
     if (analysisFeedback.completed(currentId, analysisMedia.kind, analysisMedia.version)) analysisHaptics.play(FluidHapticEvent.Tap)
   }

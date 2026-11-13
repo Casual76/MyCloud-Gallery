@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreRow
 import dev.pampa.mycloudgallery.core.mediastore.contract.MetaPriority
 import dev.pampa.mycloudgallery.core.mediastore.contract.MetadataPass
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccess
+import dev.pampa.mycloudgallery.core.mediastore.contract.RereadLedger
 import dev.pampa.mycloudgallery.core.mediastore.contract.RowType
 import dev.pampa.mycloudgallery.core.mediastore.noop.NoMetaPriority
 import dev.pampa.mycloudgallery.core.mediastore.testing.FakeMediaStore
@@ -71,6 +72,7 @@ abstract class PhoneSyncTestBase {
     priority: MetaPriority = NoMetaPriority,
     storageReady: () -> Boolean = { true },
     selectionChanged: () -> Unit = {},
+    rereads: RereadLedger? = null,
   ): DefaultPhoneLibrarySync = DefaultPhoneLibrarySync(
     source = store,
     access = access,
@@ -84,6 +86,7 @@ abstract class PhoneSyncTestBase {
     priority = priority,
     storageReady = storageReady,
     selectionChanged = selectionChanged,
+    rereads = rereads,
   )
 
   protected fun setAccess(media: MediaAccess, mediaLocation: Boolean = true) {

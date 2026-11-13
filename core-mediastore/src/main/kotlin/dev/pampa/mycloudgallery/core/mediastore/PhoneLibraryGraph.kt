@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.MetaPriority
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccessReader
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
 import dev.pampa.mycloudgallery.core.mediastore.contract.RecentlyDeletedSource
+import dev.pampa.mycloudgallery.core.mediastore.contract.RereadLedger
 import dev.pampa.mycloudgallery.core.mediastore.diagnostics.PhoneLibraryDiagnostics
 import dev.pampa.mycloudgallery.core.mediastore.meta.DefaultMetadataPass
 import dev.pampa.mycloudgallery.core.mediastore.noop.NoMetaPriority
@@ -46,6 +47,7 @@ class PhoneLibraryGraph(
   config: PhoneSyncConfig = PhoneSyncConfig(),
   visibilityChanged: () -> Unit = {},
   contentChanged: () -> Unit = {},
+  rereads: RereadLedger? = null,
 ) {
   val source: AndroidMediaStoreSource = AndroidMediaStoreSource(context, visibilityChanged = contentChanged)
 
@@ -82,6 +84,7 @@ class PhoneLibraryGraph(
     priority = priority,
     storageReady = storageReady,
     selectionChanged = visibilityChanged,
+    rereads = rereads,
   )
 
   val runner: DefaultPhoneSyncRunner = DefaultPhoneSyncRunner(sync, metadataPass, priority)

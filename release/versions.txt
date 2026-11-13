@@ -19,3 +19,4 @@
 #
 # versione  codice  stato     canale  data  sha256
 1.0.0  1  pubblicata  beta  2026-11-13  f49880260658b20ab427a2f63bc0c8d25b2437a4e5576e53edc23a29a4e24173
+1.1.0-beta.01  2  prevista  beta  -  -

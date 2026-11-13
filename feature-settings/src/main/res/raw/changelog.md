@@ -4,7 +4,26 @@ Questo file racconta, in italiano semplice, cosa cambia a ogni versione. È anch
 Impostazioni → Informazioni e licenze → "Novità di questa versione" e quello che si legge nel Pampa Store.
 
 Come si scrive (per chi prepara una versione):
-- una sezione per versione, che comincia con `## ` e il numero della versione (per esempio `## 1.0.0`), la più nuova in alto;
+- una sezione per versione, che comincia con `## ` e il numero della versione (per esempio `## 1.1.0-beta.01
+
+### Novità
+- L'analisi delle foto ora si vede: una pagina mostra a che punto è, con un nastro delle foto che l'app sta guardando in quel momento.
+- Dal visore puoi chiedere "Analizza ora" per una foto: passa davanti alle altre.
+- Toccando la nuvola in Libreria vedi anche a che punto è l'analisi e quando è stata salvata l'ultima volta sul NAS.
+- Batteria: scegli sotto quale livello l'app smette di fare il backup, l'analisi delle foto, o tutti e due. Lo trovi nelle impostazioni del backup e in quelle dell'analisi. Se non tocchi niente resta al 20%, come prima.
+
+### Correzioni
+- Le foto cancellate dal telefono non restano più in attesa di essere salvate: il backup arriva al 100%.
+- Quando un lavoro aspetta per la batteria, l'app dice il livello vero, per esempio "Batteria sotto il 60%".
+
+### Sicurezza
+- Una foto che cancelli o nascondi esce anche dal nastro dell'analisi.
+
+### Da sapere
+- È una versione di prova: arriva solo a chi ha scelto "Beta" in Impostazioni → Aggiornamenti.
+- "Fai ora" e "Analizza ora" partono anche sotto il livello di batteria scelto: il livello ferma solo il lavoro che l'app fa da sola.
+
+## 1.0.0`), la più nuova in alto;
 - dentro, fino a quattro titoli, sempre in questo ordine: `### Novità`, `### Correzioni`, `### Sicurezza`, `### Da sapere`;
 - sotto ogni titolo, frasi corte che cominciano con `- `. Niente sigle, niente parole da tecnici: le legge tutta la famiglia;
 - la copia che sta dentro l'app è `feature-settings/src/main/res/raw/changelog.md` e deve essere uguale a questo file (un test lo controlla).

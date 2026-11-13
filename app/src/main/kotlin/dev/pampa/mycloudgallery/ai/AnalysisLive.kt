@@ -278,7 +278,8 @@ class AppAnalysisLive(
     val start = synchronized(lock) { if (running && snapshotKnown && signal.canResolve()) Start(generation, lastSnapshot, engineLive.value) else null } ?: return
     val result = resolve(start.engine, start.snapshot, start.generation)
     synchronized(lock) {
-      if (running && signal.canResolve() && generation == start.generation && lastSnapshot === start.snapshot) shared.value = result
+      if (running && signal.canResolve() && generation == start.generation &&
+        lastSnapshot === start.snapshot && visible.snapshot.value === start.snapshot) shared.value = result
     }
   }
 

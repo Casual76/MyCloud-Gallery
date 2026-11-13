@@ -132,6 +132,9 @@ fun SearchSettingsScreen(
   probeHot: Boolean = false,
   probeBusy: Boolean = false,
   battery: BatteryGuardValue? = null,
+  /** La porta della batteria c'e': la sezione si disegna anche se il valore non e' ancora letto (scheletro, BS-5). */
+  batteryBound: Boolean = battery != null,
+  batterySaveFailed: Boolean = false,
   onBatteryLevel: (Int) -> Unit = {},
   onBatteryForBackup: (Boolean) -> Unit = {},
   onBatteryForAnalysis: (Boolean) -> Unit = {},
@@ -144,16 +147,15 @@ fun SearchSettingsScreen(
       item(key = "indexer") { IndexerBlock(state, measuring, handlers, probeFailed, probeHot, probeBusy) }
     }
     // Pacchetto B (seconda beta): il livello di batteria sotto cui l'analisi (e il backup) non partono: lo stesso controllo, identico, delle impostazioni del Backup.
-    if (battery != null) {
+    if (battery != null || batteryBound) {
       item(key = "battery-header") { GallerySectionHeader(title = stringResource(DesignR.string.battery_guard_title)) }
       item(key = "battery") {
         GalleryBatteryGuard(
-          levelPercent = battery.levelPercent,
-          forBackup = battery.forBackup,
-          forAnalysis = battery.forAnalysis,
+          value = battery,
           onLevelChange = onBatteryLevel,
           onForBackupChange = onBatteryForBackup,
           onForAnalysisChange = onBatteryForAnalysis,
+          saveFailed = batterySaveFailed,
         )
       }
       item(key = "battery-note") { GalleryBatteryGuardNote() }

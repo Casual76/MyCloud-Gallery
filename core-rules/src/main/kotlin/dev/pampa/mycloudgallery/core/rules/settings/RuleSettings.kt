@@ -68,6 +68,12 @@ data class RuleSettings(
     }
   }
 
+  /**
+   * Il livello scelto adesso dall'utente (pacchetto B, BS-4): **le scritture nuove stanno sempre in 5..80 a passi di 5** ([BatteryThresholds.normalize]), qualunque chiamante le faccia. I valori gia' salvati
+   * (da prima che il livello si potesse scegliere: ogni intero 0..100 era ammesso) **non si toccano**: restano quelli che erano e il valutatore li usa cosi' come sono.
+   */
+  fun withBatteryThreshold(percent: Int): RuleSettings = copy(batteryThresholdPercent = BatteryThresholds.normalize(percent))
+
   fun toRuleSet(): RuleSet {
     val base = PresetCatalog.ruleSet(preset, nightWindow)
     val withCustom =
@@ -262,4 +268,17 @@ class DataStoreRuleSettingsStore(private val dataStore: DataStore<Preferences>) 
     val CYCLE_START_DAY = intPreferencesKey("rule.cycle.startday")
     val PROTECT_NEW_PHOTOS = booleanPreferencesKey("rule.backup.protect_new_photos")
   }
+}
+
+/**
+ * I livelli di batteria che l'utente puo' **scegliere** (pacchetto B): da 5% a 80% a passi di 5. Il confine e' qui, nel dominio, non nella porta della pagina. Non e' una regola sui valori **gia' salvati**
+ * (la soglia 0..100 di prima resta valida: [RuleSettings] e il valutatore li accettano e li usano come sono).
+ */
+object BatteryThresholds {
+  const val MIN_PERCENT = 5
+  const val MAX_PERCENT = 80
+  const val STEP = 5
+
+  /** Il livello ammesso piu' vicino a [percent]: 33 -> 35, 32 -> 30, 2 -> 5, 100 -> 80. */
+  fun normalize(percent: Int): Int = (Math.round(percent.toDouble() / STEP).toInt() * STEP).coerceIn(MIN_PERCENT, MAX_PERCENT)
 }

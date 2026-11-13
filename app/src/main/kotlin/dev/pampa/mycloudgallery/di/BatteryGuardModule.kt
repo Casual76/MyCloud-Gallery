@@ -1,14 +1,17 @@
 package dev.pampa.mycloudgallery.di
 
+import android.content.Context
 import dagger.BindsOptionalOf
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardPort
 import dev.pampa.mycloudgallery.core.rules.settings.RuleSettingsStore
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.rules.AppBatteryGuard
+import dev.pampa.mycloudgallery.work.BatteryResume
 import javax.inject.Singleton
 
 /**
@@ -23,6 +26,8 @@ abstract class BatteryGuardModule {
   @BindsOptionalOf abstract fun optionalBatteryGuard(): BatteryGuardPort
 
   companion object {
-    @Provides @Singleton fun batteryGuard(store: RuleSettingsStore, graph: AppGraph): BatteryGuardPort = AppBatteryGuard(store, graph.scope)
+    @Provides @Singleton
+    fun batteryGuard(@ApplicationContext context: Context, store: RuleSettingsStore, graph: AppGraph): BatteryGuardPort =
+      AppBatteryGuard(store, graph.scope, onRelaxed = { relaxed -> BatteryResume.resume(context, relaxed) })
   }
 }

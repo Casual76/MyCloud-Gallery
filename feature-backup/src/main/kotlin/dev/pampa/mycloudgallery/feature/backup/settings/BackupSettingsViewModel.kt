@@ -63,8 +63,12 @@ internal data class SettingsUi(
   val editable: Boolean,
   /** L'ultima scelta non si e' salvata (memoria piena, OB-4 della review generale): l'interruttore e' tornato com'era e la nota sotto le sorgenti lo dice. */
   val saveFailed: Boolean = false,
-  /** Pacchetto B: il livello di batteria e i due interruttori (backup, analisi); null = `:app` non ha legato la porta e il controllo non c'e'. */
+  /** Pacchetto B: il livello di batteria e i due interruttori (backup, analisi) **salvati**; null = non ancora letti ([batteryLoading]) o `:app` non ha legato la porta (il controllo non c'e'). */
   val battery: BatteryGuardValue? = null,
+  /** La porta della batteria c'e' ma le impostazioni non sono ancora state lette: il controllo si vede come scheletro, mai con un 20% finto (BS-5). */
+  val batteryLoading: Boolean = false,
+  /** L'ultima scelta della batteria non si e' salvata (BS-5): il controllo torna al valore salvato e lo dice con la stessa frase delle altre impostazioni. */
+  val batterySaveFailed: Boolean = false,
 ) {
   /**
    * Le righe delle sorgenti nell'ordine in cui si mostrano: fotocamera, screenshot, poi le cartelle aggiuntive dalla piu' grande. Una
@@ -101,6 +105,7 @@ class BackupSettingsViewModel @Inject constructor(
   private val acts: BackupActions = actions.orElse(NoBackupActions)
   private val batteryPort: BatteryGuardPort? = batteryGuard.orElse(null)
   private val batteryFlow: Flow<BatteryGuardValue?> = batteryPort?.value ?: flowOf(null)
+  private val batteryFailed = MutableStateFlow(false)
 
   private val foldersState = MutableStateFlow<FoldersState>(FoldersState.Loading)
   private val saveFailed = MutableStateFlow(false)
@@ -126,7 +131,8 @@ class BackupSettingsViewModel @Inject constructor(
       )
     },
     batteryFlow,
-  ) { ui, battery -> ui.copy(battery = battery) }.stateIn(
+    batteryFailed,
+  ) { ui, battery, failed -> ui.copy(battery = battery, batteryLoading = batteryPort != null && battery == null, batterySaveFailed = failed) }.stateIn(
     scope = viewModelScope,
     started = SharingStarted.WhileSubscribed(StopTimeoutMillis),
     initialValue = SettingsUi(
@@ -137,6 +143,7 @@ class BackupSettingsViewModel @Inject constructor(
       rulesAvailable = rulesPort != null,
       editable = port != null,
       battery = batteryPort?.value?.value,
+      batteryLoading = batteryPort != null && batteryPort.value.value == null,
     ),
   )
 
@@ -174,19 +181,19 @@ class BackupSettingsViewModel @Inject constructor(
   }
 
   /** Pacchetto B: il livello di batteria sotto cui il backup e l'analisi non partono (a passi di 5; il controllo lo da' gia' sul passo). */
-  fun setBatteryLevel(percent: Int) {
-    val battery = batteryPort ?: return
-    viewModelScope.launch { battery.setLevel(percent) }
-  }
+  fun setBatteryLevel(percent: Int) = saveBattery { setLevel(percent) }
 
-  fun setBatteryForBackup(on: Boolean) {
-    val battery = batteryPort ?: return
-    viewModelScope.launch { battery.setForBackup(on) }
-  }
+  fun setBatteryForBackup(on: Boolean) = saveBattery { setForBackup(on) }
 
-  fun setBatteryForAnalysis(on: Boolean) {
+  fun setBatteryForAnalysis(on: Boolean) = saveBattery { setForAnalysis(on) }
+
+  /** BS-5: ogni scelta ha un esito; se non e' riuscita il controllo lo sa ([SettingsUi.batterySaveFailed]) e torna al valore salvato. Una nuova scelta toglie l'avviso. */
+  private fun saveBattery(write: suspend BatteryGuardPort.() -> Boolean) {
     val battery = batteryPort ?: return
-    viewModelScope.launch { battery.setForAnalysis(on) }
+    viewModelScope.launch {
+      batteryFailed.value = false
+      batteryFailed.value = !battery.write()
+    }
   }
 
   /** D34: "Proteggi subito le foto nuove". */

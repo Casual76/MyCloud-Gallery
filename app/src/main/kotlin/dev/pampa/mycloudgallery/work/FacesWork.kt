@@ -208,6 +208,9 @@ object FacesWorkScheduling {
     enqueue(context, ERASE_WORK, policy, request)
   }
 
+  /** La richiesta di un giro del calcolo dei volti **senza vincoli di carica** (pacchetto B, BS-2): la ripresa dopo che una scelta dell'utente ha tolto il blocco della batteria. */
+  fun resumeRequest(): OneTimeWorkRequest = request(user = false)
+
   private fun request(user: Boolean, delayMs: Long = 0, constraints: Constraints = Constraints.NONE, attempt: Int = 0): OneTimeWorkRequest =
     OneTimeWorkRequestBuilder<FacesComputeWorker>()
       .setInputData(workDataOf(KEY_USER to user, RuleWaits.KEY_ATTEMPT to attempt))

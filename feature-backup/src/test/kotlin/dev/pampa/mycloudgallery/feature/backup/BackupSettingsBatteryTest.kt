@@ -18,7 +18,7 @@ import org.junit.Test
  */
 class BackupSettingsBatteryTest : ComposeBackupTallTest() {
 
-  private fun ui(battery: BatteryGuardValue?) = SettingsUi(
+  private fun ui(battery: BatteryGuardValue?, loading: Boolean = false, failed: Boolean = false) = SettingsUi(
     folders = FoldersState.Ready(BackupSamples.phoneFolders),
     chosen = BackupSources.DEFAULT,
     deviceFolder = null,
@@ -26,7 +26,25 @@ class BackupSettingsBatteryTest : ComposeBackupTallTest() {
     rulesAvailable = true,
     editable = true,
     battery = battery,
+    batteryLoading = loading,
+    batterySaveFailed = failed,
   )
+
+  @Test
+  fun bs5_conIlValoreNonAncoraLetto_ilControlloESceletro_nonUnVentiPerCentoFinto() {
+    show { BackupSettingsScreen(state = ui(null, loading = true), actions = SettingsActions(), onBack = {}) }
+
+    composeRule.onNodeWithText("E con il cavo?", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("20%", useUnmergedTree = true).assertDoesNotExist()
+    composeRule.onNodeWithText("Analisi delle foto", useUnmergedTree = true).assertDoesNotExist()
+  }
+
+  @Test
+  fun bs5_unaSceltaNonSalvata_lAvvisoEQuelloDelleAltreImpostazioni() {
+    show { BackupSettingsScreen(state = ui(BatteryGuardValue(20, true, true), failed = true), actions = SettingsActions(), onBack = {}) }
+
+    composeRule.onNodeWithText("Non sono riuscito a salvare la scelta", substring = true, useUnmergedTree = true).assertExists()
+  }
 
   @Test
   fun senzaLaPorta_ilControlloNonCe_eIlSegnoDellaBatteriaResta() {

@@ -73,17 +73,18 @@ class GalleryBatteryGuardTest {
     enabled: Boolean = true,
     onBackup: (Boolean) -> Unit = {},
     onAnalysis: (Boolean) -> Unit = {},
+    loading: Boolean = false,
+    saveFailed: Boolean = false,
   ) {
     composeRule.setContent {
       MyCloudGalleryTheme(settings = EngineSettings()) {
         GalleryBatteryGuard(
-          levelPercent = level,
-          forBackup = forBackup,
-          forAnalysis = forAnalysis,
+          value = if (loading) null else BatteryGuardValue(level, forBackup, forAnalysis),
           onLevelChange = {},
           onForBackupChange = onBackup,
           onForAnalysisChange = onAnalysis,
           enabled = enabled,
+          saveFailed = saveFailed,
         )
       }
     }
@@ -116,14 +117,118 @@ class GalleryBatteryGuardTest {
   }
 
   @Test
-  fun unLivelloFuoriGriglia_siMostraSulPassoPiuVicino() {
+  fun bs4_unLivelloGiaSalvatoFuoriGriglia_siMostraCosiCom_e() {
     show(level = 33)
-    composeRule.onNodeWithText("35%", useUnmergedTree = true).assertExists()
-    show33IsNotShown()
+    composeRule.onNodeWithText("33%", useUnmergedTree = true).assertExists()
+    assertThat(runCatching { composeRule.onNodeWithText("35%", useUnmergedTree = true).assertExists() }.isFailure).isTrue()
   }
 
-  private fun show33IsNotShown() {
-    assertThat(runCatching { composeRule.onNodeWithText("33%", useUnmergedTree = true).assertExists() }.isFailure).isTrue()
+  @Test
+  fun bs4_zeroECento_siMostranoVeri_ConUnaFraseSensata() {
+    show(level = 0)
+    composeRule.onNodeWithText("0%", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("Con lo 0% non si ferma niente", useUnmergedTree = true).assertExists()
+  }
+
+  @Test
+  fun bs4_cento_siMostraCento() {
+    show(level = 100)
+    composeRule.onNodeWithText("100%", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("Sotto questo livello si fermano backup e analisi", useUnmergedTree = true).assertExists()
+  }
+
+  @Test
+  fun bs5_conIlValoreNonAncoraLetto_siVedeLoScheletro_nonUnVentiPerCentoFinto() {
+    show(loading = true)
+    assertThat(runCatching { composeRule.onNodeWithText("20%", useUnmergedTree = true).assertExists() }.isFailure).isTrue()
+    assertThat(runCatching { composeRule.onNodeWithText("Backup", useUnmergedTree = true).assertExists() }.isFailure).isTrue()
+  }
+
+  @Test
+  fun bs5_unSalvataggioNonRiuscito_loDiceConLaFraseDelleAltreImpostazioni() {
+    show(saveFailed = true)
+    composeRule.onNodeWithText("Non sono riuscito a salvare la scelta", substring = true, useUnmergedTree = true).assertExists()
+  }
+
+  @Test
+  fun bs5_senzaErrore_nonDiceNiente() {
+    show(saveFailed = false)
+    assertThat(runCatching { composeRule.onNodeWithText("Non sono riuscito a salvare la scelta", substring = true, useUnmergedTree = true).assertExists() }.isFailure).isTrue()
+  }
+
+  // --- Il gesto sul cursore (BS-4, BS-5): puro, senza grafica ------------------------------------------------------
+
+  @Test
+  fun gesto_unRiscontroVecchio_nonAzzeraIlDitoCheETornatoSulCursore() {
+    val g = BatteryLevelGesture(saved = 20)
+    g.onDrag(40)
+    assertThat(g.onRelease()).isEqualTo(40) // si scrive 40, in volo
+    g.onDrag(60) // il dito e' di nuovo sul cursore prima del riscontro
+    g.onSaved(40) // arriva il riscontro della scelta precedente
+    assertThat(g.shown).isEqualTo(60)
+    assertThat(g.onRelease()).isEqualTo(60)
+    g.onSaved(60)
+    assertThat(g.shown).isEqualTo(60)
+  }
+
+  @Test
+  fun gesto_dueRilasciRavvicinati_siFermaSullUltimo_ancheSeIlPrimoRiscontroArrivaDopo() {
+    val g = BatteryLevelGesture(saved = 20)
+    g.onDrag(40)
+    g.onRelease()
+    g.onDrag(60)
+    g.onRelease() // due scelte in volo: 40 e 60
+    g.onSaved(40) // il riscontro del primo
+    assertThat(g.shown).isEqualTo(60) // la scelta in volo e' l'ultima: non torna a 40
+    g.onSaved(60)
+    assertThat(g.shown).isEqualTo(60)
+  }
+
+  @Test
+  fun gesto_unSalvataggioNonRiuscito_riportaAlValoreSalvato() {
+    val g = BatteryLevelGesture(saved = 20)
+    g.onDrag(60)
+    assertThat(g.onRelease()).isEqualTo(60)
+    assertThat(g.shown).isEqualTo(60)
+    g.onFailed()
+    assertThat(g.shown).isEqualTo(20)
+  }
+
+  @Test
+  fun gesto_unFallimentoMentreIlDitoEDiNuovoSulCursore_nonLoToglie() {
+    val g = BatteryLevelGesture(saved = 20)
+    g.onDrag(60)
+    g.onRelease()
+    g.onDrag(70)
+    g.onFailed()
+    assertThat(g.shown).isEqualTo(70)
+    assertThat(g.onRelease()).isEqualTo(70)
+  }
+
+  @Test
+  fun gesto_rilasciareSulLivelloSalvato_nonScriveNiente() {
+    val g = BatteryLevelGesture(saved = 33)
+    g.onDrag(35)
+    g.onDrag(33)
+    assertThat(g.onRelease()).isNull()
+    assertThat(g.shown).isEqualTo(33)
+  }
+
+  @Test
+  fun gesto_ilLivelloVeroSalvatoFuoriGriglia_restaFinoAUnaScelta() {
+    val g = BatteryLevelGesture(saved = 33)
+    assertThat(g.shown).isEqualTo(33)
+    g.onSaved(33)
+    assertThat(g.shown).isEqualTo(33)
+    g.onSaved(0)
+    assertThat(g.shown).isEqualTo(0)
+  }
+
+  @Test
+  fun gesto_ilSalvatoCambiaDaFuori_senzaDito_siSegue() {
+    val g = BatteryLevelGesture(saved = 20)
+    g.onSaved(45) // l'altra pagina ha scelto 45
+    assertThat(g.shown).isEqualTo(45)
   }
 
   @Test

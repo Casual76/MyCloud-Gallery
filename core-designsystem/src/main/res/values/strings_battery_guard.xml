@@ -14,6 +14,9 @@
   <string name="battery_guard_state_backup">Sotto questo livello si ferma il backup</string>
   <string name="battery_guard_state_analysis">Sotto questo livello si ferma l’analisi</string>
   <string name="battery_guard_state_none">Backup e analisi non si fermano</string>
+  <string name="battery_guard_state_zero">Con lo 0% non si ferma niente</string>
+  <string name="battery_guard_loading">Sto caricando il livello di batteria</string>
+  <string name="battery_guard_save_failed">Non sono riuscito a salvare la scelta: sul telefono non c’è abbastanza spazio. Libera un po’ di memoria e riprova.</string>
   <string name="battery_guard_info_label">E con il cavo?</string>
-  <string name="battery_guard_info_detail">Il livello conta solo a batteria: con il cavo collegato il lavoro parte sempre. «Fai ora» e «Analizza adesso» partono comunque. Indice condiviso e anteprime si fermano sempre sotto il livello.</string>
+  <string name="battery_guard_info_detail">Il livello conta solo a batteria: con il cavo collegato questa soglia non vale, e non vale per «Fai ora» e «Analizza adesso». Indice condiviso e anteprime si fermano sotto il livello solo se backup e analisi sono accesi tutti e due. Android può comunque rinviare i lavori quando la batteria è quasi scarica.</string>
 </resources>

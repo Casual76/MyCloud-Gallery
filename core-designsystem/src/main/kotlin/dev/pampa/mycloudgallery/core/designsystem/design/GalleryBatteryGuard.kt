@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
+import dev.antigravity.fluidengine.ui.fluid.FluidSkeletonList
 import dev.antigravity.fluidengine.ui.fluid.FluidSlider
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
@@ -62,35 +63,43 @@ import kotlin.math.roundToInt
  * **una volta**, sotto il numero, in poche parole. Niente colori, raggi o misure di testo scritti qui: tutto viene dal tema e dall'engine; con il movimento ridotto la
  * batteria cambia di colpo.
  *
- * Con il cavo collegato il livello non conta mai, e «Fai ora» / «Analizza adesso» partono comunque: lo dice la «i» nella pagina che lo ospita, non questo componente.
+ * Col cavo collegato questa soglia non vale, e non vale per «Fai ora» / «Analizza adesso»: lo dice la «i» ([GalleryBatteryGuardNote]), non questo componente.
  *
- * @param levelPercent il livello salvato (5..80 a passi di 5; un valore fuori griglia, ad esempio uno scritto da una versione piu' vecchia, si mostra sul passo piu' vicino
- *   e si salva solo se l'utente muove il cursore).
+ * @param value il livello e i due interruttori **salvati**; null = le impostazioni non sono ancora lette: si vede lo scheletro (mai un 20% finto). Il livello e' quello **vero**
+ *   (BS-4): un valore gia' salvato fuori griglia (33, o 0 e 100) si mostra com'e' finche' l'utente non sceglie; il cursore sta sulla tacca piu' vicina e i numeri dicono il vero.
  * @param onLevelChange il nuovo livello, **solo a dito alzato** (una scrittura sola per scelta, non una per passo).
+ * @param saveFailed l'ultima scelta non si e' salvata (BS-5): il controllo torna al valore salvato e la frase lo dice, come le altre impostazioni.
  */
 @Composable
 fun GalleryBatteryGuard(
-  levelPercent: Int,
-  forBackup: Boolean,
-  forAnalysis: Boolean,
+  value: BatteryGuardValue?,
   onLevelChange: (Int) -> Unit,
   onForBackupChange: (Boolean) -> Unit,
   onForAnalysisChange: (Boolean) -> Unit,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
+  saveFailed: Boolean = false,
 ) {
-  val saved = BatteryGuard.snap(levelPercent)
-  // Mentre il dito e' sul cursore il livello e' quello del dito; a dito alzato torna a essere quello salvato (che nel frattempo ha seguito la scelta).
-  var dragged by remember(saved) { mutableIntStateOf(saved) }
-  val shown = dragged
-  val state = BatteryGuard.stateOf(forBackup, forAnalysis)
+  if (value == null) {
+    FluidListGroup(modifier = modifier) { FluidSkeletonList(rows = LOADING_ROWS, trailing = true, label = stringResource(R.string.battery_guard_loading)) }
+    return
+  }
+  val saved = value.levelPercent
+  // Il gesto vive da se': un riscontro di una scelta precedente (il livello salvato che cambia) non azzera il dito che e' di nuovo sul cursore (BS-5).
+  val gesture = remember { BatteryLevelGesture(saved) }
+  LaunchedEffect(saved) { gesture.onSaved(saved) }
+  LaunchedEffect(saveFailed) { if (saveFailed) gesture.onFailed() }
+  val shown = gesture.shown
+  val state = BatteryGuard.stateOf(value.forBackup, value.forAnalysis)
   // Il numero sta una volta sola, grande, accanto alla batteria: la frase dice solo chi si ferma «sotto questo livello».
   val stateText = stringResource(
-    when (state) {
-      BatteryGuardState.BOTH -> R.string.battery_guard_state_both
-      BatteryGuardState.BACKUP_ONLY -> R.string.battery_guard_state_backup
-      BatteryGuardState.ANALYSIS_ONLY -> R.string.battery_guard_state_analysis
-      BatteryGuardState.NONE -> R.string.battery_guard_state_none
+    when {
+      state == BatteryGuardState.NONE -> R.string.battery_guard_state_none
+      // 0%: nessuna batteria e' sotto zero, quindi niente si ferma (un livello salvato da prima, che il cursore non puo' scegliere).
+      shown <= 0 -> R.string.battery_guard_state_zero
+      state == BatteryGuardState.BOTH -> R.string.battery_guard_state_both
+      state == BatteryGuardState.BACKUP_ONLY -> R.string.battery_guard_state_backup
+      else -> R.string.battery_guard_state_analysis
     },
   )
   val title = stringResource(R.string.battery_guard_title)
@@ -127,11 +136,12 @@ fun GalleryBatteryGuard(
     }
     Box(modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.SliderInset)) {
       FluidSlider(
-        value = shown.toFloat(),
-        onValueChange = { dragged = BatteryGuard.fromSlider(it) },
+        // Il cursore sta sulla scala 5..80: un livello salvato fuori scala (0, 100) lo tiene alla punta, il numero accanto dice il vero.
+        value = shown.coerceIn(BatteryGuard.MIN_PERCENT, BatteryGuard.MAX_PERCENT).toFloat(),
+        onValueChange = { gesture.onDrag(BatteryGuard.fromSlider(it)) },
         valueRange = BatteryGuard.MIN_PERCENT.toFloat()..BatteryGuard.MAX_PERCENT.toFloat(),
         enabled = enabled,
-        onValueChangeFinished = { if (dragged != saved) onLevelChange(dragged) },
+        onValueChangeFinished = { gesture.onRelease()?.let(onLevelChange) },
         // Il cursore va a gradini di 5: ogni passo ha la sua tacca e il suo tocco, non un valore qualunque.
         snapValues = BatteryGuard.levels.map { it.toFloat() },
         snapThreshold = 1f,
@@ -143,7 +153,7 @@ fun GalleryBatteryGuard(
     GuardSwitch(
       label = stringResource(R.string.battery_guard_backup),
       icon = { GalleryIconTile(icon = Icons.Rounded.CloudUpload, family = GalleryIconFamily.Backup) },
-      checked = forBackup,
+      checked = value.forBackup,
       enabled = enabled,
       onChange = onForBackupChange,
     )
@@ -151,16 +161,73 @@ fun GalleryBatteryGuard(
     GuardSwitch(
       label = stringResource(R.string.battery_guard_analysis),
       icon = { GalleryIconTile(icon = Icons.Rounded.ImageSearch, family = GalleryIconFamily.Search) },
-      checked = forAnalysis,
+      checked = value.forAnalysis,
       enabled = enabled,
       onChange = onForAnalysisChange,
     )
+    if (saveFailed) {
+      FluidListDivider()
+      Text(
+        text = stringResource(R.string.battery_guard_save_failed),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.error,
+        modifier = Modifier.fillMaxWidth().padding(Dimens.HeaderPadding),
+      )
+    }
   }
 }
 
 /**
- * La spiegazione che sta dietro la «i» sotto il controllo, la stessa in ogni pagina che lo ospita: col cavo il livello non conta, le richieste dell'utente partono sempre,
- * e le attivita' che servono a tutti e due i gruppi (indice condiviso, miniature e anteprime) seguono sempre il livello.
+ * Il gesto sul cursore (BS-4, BS-5), senza grafica e senza coroutine: **il dito e il valore salvato sono due cose**. Mentre il dito e' sul cursore il livello mostrato e' quello del dito, e un
+ * riscontro del salvataggio di una scelta **precedente** non lo azzera; a dito alzato il livello mostrato e' quello scelto finche' il salvataggio non lo conferma ([onSaved] con lo stesso valore)
+ * o non fallisce ([onFailed]: si torna al valore salvato). Prima il livello mostrato era una funzione del solo valore salvato e un riscontro in ritardo cambiava la chiave dello stato del dito.
+ */
+class BatteryLevelGesture(saved: Int) {
+  private var savedLevel = saved
+  private var dragging = false
+  private var pending: Int? = null
+  private val shownState = mutableIntStateOf(saved)
+
+  /** Il livello da mostrare adesso (il vero, anche fuori griglia, finche' non si sceglie). */
+  val shown: Int get() = shownState.intValue
+
+  fun onDrag(level: Int) {
+    dragging = true
+    shownState.intValue = level
+  }
+
+  /** Il dito si alza: il livello da salvare, o null se e' quello che c'e' gia' (niente da scrivere). */
+  fun onRelease(): Int? {
+    dragging = false
+    val chosen = shownState.intValue
+    return if (chosen == savedLevel) {
+      pending = null
+      null
+    } else {
+      pending = chosen
+      chosen
+    }
+  }
+
+  /** Il livello salvato e' cambiato (un salvataggio riuscito, o l'altra pagina). */
+  fun onSaved(level: Int) {
+    savedLevel = level
+    if (dragging) return
+    if (pending == level) pending = null
+    // Con una scelta ancora in volo (salvata un'altra, piu' vecchia) si resta su quella scelta: il riscontro vecchio non la cancella.
+    if (pending == null) shownState.intValue = level
+  }
+
+  /** L'ultimo salvataggio non e' riuscito: via la scelta in volo, si torna al valore salvato (non si tocca il dito se e' sul cursore). */
+  fun onFailed() {
+    pending = null
+    if (!dragging) shownState.intValue = savedLevel
+  }
+}
+
+/**
+ * La spiegazione che sta dietro la «i» sotto il controllo, la stessa in ogni pagina che lo ospita: col cavo e per le richieste dell'utente questa soglia non vale, i lavori che servono
+ * a tutti e due (indice condiviso, miniature e anteprime) si fermano solo con tutti e due gli interruttori accesi, e Android puo' rinviare i lavori a batteria quasi scarica.
  */
 @Composable
 fun GalleryBatteryGuardNote(modifier: Modifier = Modifier) {
@@ -226,6 +293,7 @@ private fun BatteryGlyph(fraction: Float, modifier: Modifier = Modifier) {
 }
 
 private const val PERCENT = 100f
+private const val LOADING_ROWS = 3
 
 private object Dimens {
   val HeaderPadding = 16.dp
@@ -254,13 +322,15 @@ data class BatteryGuardValue(
  * (una riga che non fa niente e' peggio di nessuna riga). Una sola per tutte le pagine che ospitano il controllo, cosi' mostrano sempre lo stesso stato.
  */
 interface BatteryGuardPort {
-  val value: kotlinx.coroutines.flow.StateFlow<BatteryGuardValue>
+  /** Il valore salvato; null finche' le impostazioni non sono lette («sto caricando», BS-5: mai un 20% e tutto acceso inventati). */
+  val value: kotlinx.coroutines.flow.StateFlow<BatteryGuardValue?>
 
-  suspend fun setLevel(percent: Int)
+  /** Salva il livello (normalizzato al confine del dominio); vero se il valore salvato e' quello chiesto, falso se la scrittura non e' riuscita (BS-5). */
+  suspend fun setLevel(percent: Int): Boolean
 
-  suspend fun setForBackup(on: Boolean)
+  suspend fun setForBackup(on: Boolean): Boolean
 
-  suspend fun setForAnalysis(on: Boolean)
+  suspend fun setForAnalysis(on: Boolean): Boolean
 }
 
 /** Chi si ferma sotto il livello: dai due interruttori. */

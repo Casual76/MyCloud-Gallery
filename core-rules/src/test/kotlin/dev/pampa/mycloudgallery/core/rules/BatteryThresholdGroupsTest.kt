@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.core.rules.BackgroundActivity.INDEX_SYNC
 import dev.pampa.mycloudgallery.core.rules.BackgroundActivity.PHOTO_BACKUP
 import dev.pampa.mycloudgallery.core.rules.BackgroundActivity.PREPARATION
 import dev.pampa.mycloudgallery.core.rules.BackgroundActivity.VIDEO_BACKUP
+import dev.pampa.mycloudgallery.core.rules.settings.BatteryThresholds
 import dev.pampa.mycloudgallery.core.rules.settings.DataStoreRuleSettingsStore
 import dev.pampa.mycloudgallery.core.rules.settings.RuleSettings
 import dev.pampa.mycloudgallery.core.rules.settings.quickPhotosRuleSet
@@ -35,8 +36,8 @@ class BatteryThresholdGroupsTest {
   private val evaluator = RuleEvaluator()
   private val daytime = at(12)
 
-  private fun TestScope.dataStore(): DataStore<Preferences> =
-    PreferenceDataStoreFactory.create(scope = backgroundScope) { File(tmp.root, "rules.preferences_pb") }
+  private fun TestScope.dataStore(file: File = File(tmp.root, "rules.preferences_pb")): DataStore<Preferences> =
+    PreferenceDataStoreFactory.create(scope = backgroundScope) { file }
 
   /** Le regole di "Wi-Fi sempre" (di giorno, anche a batteria, Wi-Fi di casa) con la soglia scelta dai due interruttori. */
   private fun rules(forBackup: Boolean, forAnalysis: Boolean, threshold: Int = 20): RuleSet =
@@ -58,9 +59,22 @@ class BatteryThresholdGroupsTest {
   fun iGruppi_sonoQuelliDellaTabella() {
     assertThat(BatteryGroups.BACKUP).containsExactly(PHOTO_BACKUP, VIDEO_BACKUP)
     assertThat(BatteryGroups.ANALYSIS).containsExactly(AI_COMPUTE)
-    // Le tre che servono a tutti e due i gruppi non stanno in nessuno: seguono sempre il livello.
-    val outside = BackgroundActivity.entries.toSet() - BatteryGroups.BACKUP - BatteryGroups.ANALYSIS
-    assertThat(outside).containsExactly(INDEX_SYNC, PREPARATION, HQ_PREVIEWS)
+    // BS-1: indice condiviso e preparazione servono a tutti e due; le anteprime HQ a nessuno dei due.
+    assertThat(BatteryGroups.SHARED).containsExactly(INDEX_SYNC, PREPARATION)
+    assertThat(BatteryGroups.OPTIONAL).containsExactly(HQ_PREVIEWS)
+    val all = BatteryGroups.BACKUP + BatteryGroups.ANALYSIS + BatteryGroups.SHARED + BatteryGroups.OPTIONAL
+    assertThat(all).containsExactlyElementsIn(BackgroundActivity.entries)
+  }
+
+  @Test
+  fun activitiesFor_leQuattroCombinazioni() {
+    val six = BackgroundActivity.entries.toSet()
+    assertThat(BatteryGroups.activitiesFor(true, true)).containsExactlyElementsIn(six)
+    // Solo il backup: il backup e le anteprime HQ; l'indice e la preparazione servono anche all'analisi, che e' esclusa: non si fermano.
+    assertThat(BatteryGroups.activitiesFor(true, false)).containsExactly(PHOTO_BACKUP, VIDEO_BACKUP, HQ_PREVIEWS)
+    assertThat(BatteryGroups.activitiesFor(false, true)).containsExactly(AI_COMPUTE, HQ_PREVIEWS)
+    // Tutti e due spenti: la soglia non ferma niente.
+    assertThat(BatteryGroups.activitiesFor(false, false)).isEmpty()
   }
 
   @Test
@@ -79,7 +93,8 @@ class BatteryThresholdGroupsTest {
           val applies = when (activity) {
             PHOTO_BACKUP, VIDEO_BACKUP -> forBackup
             AI_COMPUTE -> forAnalysis
-            else -> true
+            INDEX_SYNC, PREPARATION -> forBackup && forAnalysis
+            HQ_PREVIEWS -> forBackup || forAnalysis
           }
           for (plugged in listOf(true, false)) {
             for (level in listOf(5, 19, 20, 21, 80)) {
@@ -144,12 +159,32 @@ class BatteryThresholdGroupsTest {
   }
 
   @Test
-  fun leAttivitaFuoriDaiDueGruppi_seguonoSempreIlLivello_ancheConTuttiEDueSpenti() {
-    val off = rules(forBackup = false, forAnalysis = false)
+  fun bs1_indiceEPreparazione_siFermanoSoloConTuttiEDueGliInterruttoriAccesi() {
+    val low = state(daytime, plugged = false, level = 10)
 
-    for (activity in listOf(INDEX_SYNC, PREPARATION, HQ_PREVIEWS)) {
-      val decision = evaluator.background(activity, off, state(daytime, plugged = false, level = 10))
-      assertWithMessage("$activity").that(decision.blockingReason).isEqualTo(WaitReason.BatteryLow(10, 20))
+    for (activity in listOf(INDEX_SYNC, PREPARATION)) {
+      assertWithMessage("$activity, tutti e due accesi").that(evaluator.background(activity, rules(true, true), low).blockingReason).isEqualTo(WaitReason.BatteryLow(10, 20))
+      assertWithMessage("$activity, backup spento").that(evaluator.background(activity, rules(false, true), low).isRun).isTrue()
+      assertWithMessage("$activity, analisi spenta").that(evaluator.background(activity, rules(true, false), low).isRun).isTrue()
+      assertWithMessage("$activity, tutti e due spenti").that(evaluator.background(activity, rules(false, false), low).isRun).isTrue()
+    }
+  }
+
+  @Test
+  fun bs1_leAnteprimeHq_seguonoIlLivelloFinche_AlmenoUnInterruttoreEAcceso_eConTuttiESpentiNonSiFermaNiente() {
+    val low = state(daytime, plugged = false, level = 10)
+
+    assertThat(evaluator.background(HQ_PREVIEWS, rules(true, true), low).blockingReason).isEqualTo(WaitReason.BatteryLow(10, 20))
+    assertThat(evaluator.background(HQ_PREVIEWS, rules(true, false), low).blockingReason).isEqualTo(WaitReason.BatteryLow(10, 20))
+    assertThat(evaluator.background(HQ_PREVIEWS, rules(false, true), low).blockingReason).isEqualTo(WaitReason.BatteryLow(10, 20))
+    assertThat(evaluator.background(HQ_PREVIEWS, rules(false, false), low).isRun).isTrue()
+  }
+
+  @Test
+  fun bs1_conTuttiEDueSpenti_nessunaDelleSeiAttivitaSiFermaPerLaBatteria() {
+    for (activity in BackgroundActivity.entries) {
+      val decision = evaluator.background(activity, rules(false, false, threshold = 80), state(daytime, plugged = false, level = 1))
+      assertWithMessage("$activity").that(blockedByBattery(decision)).isFalse()
     }
   }
 
@@ -234,7 +269,7 @@ class BatteryThresholdGroupsTest {
 
     val read = store.current()
     assertThat(read).isEqualTo(settings)
-    assertThat(read.toRuleSet().batteryThresholdActivities).containsExactly(AI_COMPUTE, INDEX_SYNC, PREPARATION, HQ_PREVIEWS)
+    assertThat(read.toRuleSet().batteryThresholdActivities).containsExactly(AI_COMPUTE, HQ_PREVIEWS)
   }
 
   @Test
@@ -271,5 +306,56 @@ class BatteryThresholdGroupsTest {
   fun ilRuleSet_rifiutaUnLivelloFuoriDa0a100_comeSempre() {
     org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { RuleSettings(batteryThresholdPercent = 101) }
     org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { RuleSettings(batteryThresholdPercent = -1) }
+  }
+
+  // --- BS-4: i valori gia' salvati restano quelli che erano; le scritture nuove stanno in 5..80 a passi di 5 -----------------------------------------
+
+  @Test
+  fun bs4_ivaloriGiaSalvati_siRileggonoEsattamente_ancheFuoriGriglia() = runTest {
+    for (saved in listOf(0, 1, 33, 81, 100)) {
+      val ds = dataStore(File(tmp.newFolder(), "rules.preferences_pb"))
+      ds.edit { it[intPreferencesKey("rule.battery.threshold")] = saved }
+      assertThat(DataStoreRuleSettingsStore(ds).current().batteryThresholdPercent).isEqualTo(saved)
+    }
+  }
+
+  @Test
+  fun bs4_ilValutatoreUsaIlLivelloVeroSalvato_nonQuelloArrotondato() {
+    val legacy = rules(forBackup = true, forAnalysis = true, threshold = 33)
+
+    // Telefono al 34%: con 33 salvato non si ferma (un livello «35» lo avrebbe fermato); al 32% si ferma e dice 33.
+    assertThat(evaluator.background(PHOTO_BACKUP, legacy, state(daytime, plugged = false, level = 34)).isRun).isTrue()
+    assertThat(evaluator.background(PHOTO_BACKUP, legacy, state(daytime, plugged = false, level = 32)).blockingReason).isEqualTo(WaitReason.BatteryLow(32, 33))
+    // Zero: non ferma mai niente. Cento: ferma tutto cio' che non e' pieno.
+    assertThat(evaluator.background(PHOTO_BACKUP, rules(true, true, threshold = 0), state(daytime, plugged = false, level = 0)).isRun).isTrue()
+    assertThat(evaluator.background(PHOTO_BACKUP, rules(true, true, threshold = 100), state(daytime, plugged = false, level = 99)).blockingReason).isEqualTo(WaitReason.BatteryLow(99, 100))
+  }
+
+  @Test
+  fun bs4_leScrittureNuove_sonoNormalizzateAlConfineDelDominio() {
+    val expected = mapOf(-10 to 5, 0 to 5, 2 to 5, 5 to 5, 7 to 5, 8 to 10, 20 to 20, 22 to 20, 23 to 25, 33 to 35, 78 to 80, 81 to 80, 100 to 80, 400 to 80)
+    for ((input, output) in expected) {
+      assertThat(RuleSettings().withBatteryThreshold(input).batteryThresholdPercent).isEqualTo(output)
+      assertThat(BatteryThresholds.normalize(input)).isEqualTo(output)
+    }
+    // Le altre scelte passano intatte.
+    val before = RuleSettings(preset = Preset.BALANCED, allowRoaming = true)
+    assertThat(before.withBatteryThreshold(33)).isEqualTo(before.copy(batteryThresholdPercent = 35))
+  }
+
+  @Test
+  fun bs4_unaScritturaNuova_nonToccaLoStorico_eIlVecchioValoreRestaFinoAUnaScelta() = runTest {
+    val ds = dataStore()
+    ds.edit { it[intPreferencesKey("rule.battery.threshold")] = 33 }
+    val store = DataStoreRuleSettingsStore(ds)
+
+    // Aprire e rileggere non normalizza niente: 33 resta 33.
+    assertThat(store.current().batteryThresholdPercent).isEqualTo(33)
+    // Cambiare un interruttore non tocca il livello.
+    store.update { it.copy(batteryThresholdForBackup = false) }
+    assertThat(store.current().batteryThresholdPercent).isEqualTo(33)
+    // Una scelta nuova passa dal dominio.
+    store.update { it.withBatteryThreshold(41) }
+    assertThat(store.current().batteryThresholdPercent).isEqualTo(40)
   }
 }

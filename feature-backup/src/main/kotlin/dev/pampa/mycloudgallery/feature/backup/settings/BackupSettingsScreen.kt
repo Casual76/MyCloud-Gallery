@@ -336,19 +336,18 @@ private fun LazyListScope.rulesSection(state: SettingsUi, actions: SettingsActio
         FluidListDivider()
       }
       // Con il controllo della batteria qui sotto, la sua figura non si ripete fra i segni: restano la notte e il Wi-Fi di casa.
-      WhenRow(showBattery = state.battery == null)
+      WhenRow(showBattery = state.battery == null && !state.batteryLoading)
     }
   }
   // Pacchetto B (seconda beta): il livello di batteria sotto cui il backup e l'analisi non partono, un controllo solo (lo stesso, identico, nelle impostazioni dell'analisi).
-  state.battery?.let { battery ->
+  if (state.battery != null || state.batteryLoading) {
     item(key = "battery") {
       GalleryBatteryGuard(
-        levelPercent = battery.levelPercent,
-        forBackup = battery.forBackup,
-        forAnalysis = battery.forAnalysis,
+        value = state.battery,
         onLevelChange = actions.setBatteryLevel,
         onForBackupChange = actions.setBatteryForBackup,
         onForAnalysisChange = actions.setBatteryForAnalysis,
+        saveFailed = state.batterySaveFailed,
       )
     }
     item(key = "battery-note") { GalleryBatteryGuardNote(modifier = Modifier.padding(horizontal = BackupDimens.BlockGap)) }

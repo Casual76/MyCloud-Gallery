@@ -104,8 +104,8 @@ data class MonthlyCaps(val mobileBytes: Long?, val wifiBytes: Long?) {
  * @property batteryThresholdPercent sotto questa soglia, a batteria, le attivita' in background di [batteryThresholdActivities]
  *   si fermano (piano §2: 20%, modificabile). Con l'alimentazione collegata non si applica.
  * @property batteryThresholdActivities le attivita' a cui la soglia si applica. Di serie **tutte** (come prima che la soglia si potesse
- *   scegliere per gruppo): l'utente puo' escludere il backup o l'analisi ([BatteryGroups]). Le attivita' fuori dai due gruppi
- *   seguono sempre la soglia. "Fai ora", il contenuto visibile e l'indice con l'app aperta non guardano mai la soglia.
+ *   scegliere per gruppo): l'utente puo' escludere il backup o l'analisi e le attivita' che servono a loro seguono ([BatteryGroups]).
+ *   "Fai ora", il contenuto visibile e l'indice con l'app aperta non guardano mai la soglia.
  * @property heavyOnlyAtHome le attivita' [ActivityWeight.HEAVY] girano solo sul Wi-Fi di casa
  *   (proposta 1). Il preset Massimo la spegne.
  * @property pauseOnPowerSaver con il risparmio energetico attivo il background sta fermo (E-P10).
@@ -137,21 +137,30 @@ data class RuleSet(
 /**
  * I due gruppi a cui l'utente puo' togliere la soglia della batteria (Pacchetto B, seconda beta): il **backup** e l'**analisi delle foto**.
  *
- * | Gruppo | Attivita' | Perche' |
+ * | Attivita' | La soglia la ferma se... | Perche' |
  * |---|---|---|
- * | [BACKUP] | `PHOTO_BACKUP`, `VIDEO_BACKUP` | il caricamento sul NAS e la sua verifica |
- * | [ANALYSIS] | `AI_COMPUTE` | vettori, lettura del testo e volti girano tutti dentro il Calcolo AI |
- * | nessuno | `INDEX_SYNC`, `PREPARATION`, `HQ_PREVIEWS` | servono sia al backup sia all'analisi (indice condiviso, miniature e anteprime): seguono sempre la soglia |
+ * | [BACKUP] (`PHOTO_BACKUP`, `VIDEO_BACKUP`) | l'interruttore del backup e' acceso | il caricamento sul NAS e la sua verifica |
+ * | [ANALYSIS] (`AI_COMPUTE`) | l'interruttore dell'analisi e' acceso | vettori, lettura del testo e volti girano tutti dentro il Calcolo AI |
+ * | [SHARED] (`INDEX_SYNC`, `PREPARATION`) | **tutti e due** sono accesi | servono sia al backup sia all'analisi (indice condiviso, scansione, miniature e anteprime): se anche uno solo e' spento il gruppo escluso ha cio' che gli serve |
+ * | [OPTIONAL] (`HQ_PREVIEWS`) | **almeno uno** e' acceso | non serve a nessuno dei due: segue il livello finche' la soglia vale per qualcosa |
+ *
+ * Tutti e due accesi = tutte e sei (come prima). Tutti e due spenti = la soglia non ferma niente.
  */
 object BatteryGroups {
   val BACKUP: Set<BackgroundActivity> = setOf(BackgroundActivity.PHOTO_BACKUP, BackgroundActivity.VIDEO_BACKUP)
   val ANALYSIS: Set<BackgroundActivity> = setOf(BackgroundActivity.AI_COMPUTE)
 
-  /** Le attivita' a cui la soglia si applica, dati i due interruttori: tutte meno i gruppi spenti. Tutti e due accesi = tutte (come prima). */
-  fun activitiesFor(forBackup: Boolean, forAnalysis: Boolean): Set<BackgroundActivity> {
-    var all: Set<BackgroundActivity> = BackgroundActivity.entries.toSet()
-    if (!forBackup) all = all - BACKUP
-    if (!forAnalysis) all = all - ANALYSIS
-    return all
+  /** Indice condiviso e preparazione: servono a tutti e due i gruppi (il primo backup aspetta la scansione e le anteprime, l'analisi le anteprime e l'indice). */
+  val SHARED: Set<BackgroundActivity> = setOf(BackgroundActivity.INDEX_SYNC, BackgroundActivity.PREPARATION)
+
+  /** Le anteprime ad alta qualita' per l'offline: non servono ne' al backup ne' all'analisi. */
+  val OPTIONAL: Set<BackgroundActivity> = setOf(BackgroundActivity.HQ_PREVIEWS)
+
+  /** Le attivita' a cui la soglia si applica, dati i due interruttori (tabella sopra). Tutti e due accesi = tutte (come prima); tutti e due spenti = nessuna. */
+  fun activitiesFor(forBackup: Boolean, forAnalysis: Boolean): Set<BackgroundActivity> = buildSet {
+    if (forBackup) addAll(BACKUP)
+    if (forAnalysis) addAll(ANALYSIS)
+    if (forBackup && forAnalysis) addAll(SHARED)
+    if (forBackup || forAnalysis) addAll(OPTIONAL)
   }
 }

@@ -29,7 +29,7 @@ import dev.pampa.mycloudgallery.feature.search.contract.TextReadingAccepted
 import dev.pampa.mycloudgallery.feature.search.ui.SearchHost
 import java.util.Optional
 import javax.inject.Inject
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
@@ -60,19 +60,26 @@ class SearchSettingsViewModel @Inject constructor(
     initialValue = batteryPort?.value?.value,
   )
 
-  fun setBatteryLevel(percent: Int) {
-    val port = batteryPort ?: return
-    viewModelScope.launch { port.setLevel(percent) }
-  }
+  /** La porta c'e' (il controllo si disegna) anche quando il valore non e' ancora letto: allora [battery] e' null e il controllo e' lo scheletro (BS-5). */
+  val batteryBound: Boolean = batteryPort != null
 
-  fun setBatteryForBackup(on: Boolean) {
-    val port = batteryPort ?: return
-    viewModelScope.launch { port.setForBackup(on) }
-  }
+  private val failed = MutableStateFlow(false)
 
-  fun setBatteryForAnalysis(on: Boolean) {
+  /** BS-5: l'ultima scelta della batteria non si e' salvata; il controllo torna al valore salvato e lo dice. */
+  val batterySaveFailed: StateFlow<Boolean> = failed
+
+  fun setBatteryLevel(percent: Int) = save { setLevel(percent) }
+
+  fun setBatteryForBackup(on: Boolean) = save { setForBackup(on) }
+
+  fun setBatteryForAnalysis(on: Boolean) = save { setForAnalysis(on) }
+
+  private fun save(write: suspend BatteryGuardPort.() -> Boolean) {
     val port = batteryPort ?: return
-    viewModelScope.launch { port.setForAnalysis(on) }
+    viewModelScope.launch {
+      failed.value = false
+      failed.value = !port.write()
+    }
   }
 
   private companion object {
@@ -143,6 +150,7 @@ fun SearchSettingsRoute(actions: SearchActions, onBack: () -> Unit, viewModel: S
   val probeHot by controller.probeHot.collectAsStateWithLifecycle()
   val probeBusy by controller.probeBusy.collectAsStateWithLifecycle()
   val battery by viewModel.battery.collectAsStateWithLifecycle()
+  val batterySaveFailed by viewModel.batterySaveFailed.collectAsStateWithLifecycle()
   val handlers = remember(controller, actions) { ActionSettingsHandlers(controller, actions) }
   SearchHost {
     SearchSettingsScreen(
@@ -150,6 +158,8 @@ fun SearchSettingsRoute(actions: SearchActions, onBack: () -> Unit, viewModel: S
       measuring = measuring,
       probeFailed = probeFailed, probeHot = probeHot, probeBusy = probeBusy,
       battery = battery,
+      batteryBound = viewModel.batteryBound,
+      batterySaveFailed = batterySaveFailed,
       onBatteryLevel = viewModel::setBatteryLevel,
       onBatteryForBackup = viewModel::setBatteryForBackup,
       onBatteryForAnalysis = viewModel::setBatteryForAnalysis,

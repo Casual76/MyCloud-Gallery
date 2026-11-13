@@ -94,6 +94,7 @@ class DefaultPhoneLibrarySync(
   private val metadataPass: MetadataPass? = null,
   private val priority: MetaPriority = NoMetaPriority,
   private val storageReady: () -> Boolean = { true },
+  private val selectionChanged: () -> Unit = {},
 ) : PhoneLibrarySync {
 
   private val statusFlow = MutableStateFlow<SyncStatus>(SyncStatus.Idle(atMs = 0))
@@ -106,6 +107,12 @@ class DefaultPhoneLibrarySync(
    * insieme vuoto; con l'accesso completo null (tutto). La Libreria mostra solo questi, senza dedurre assenze.
    */
   val partialSelection: StateFlow<Set<MediaId>?> = selectionFlow.asStateFlow()
+
+  private fun publishSelection(value: Set<MediaId>?) {
+    if (selectionFlow.value == value) return
+    selectionFlow.value = value
+    selectionChanged()
+  }
 
   private val runLock = Mutex()
   private val attachLock = Any()
@@ -223,7 +230,7 @@ class DefaultPhoneLibrarySync(
         // E-P15: permessi ritirati non vuol dire "il telefono e' vuoto". Nessuna lettura, nessuna scrittura.
         pause = PauseReason.NO_PERMISSION
         completed = false
-        selectionFlow.value = emptySet()
+        publishSelection(emptySet())
         return finish()
       }
       mediaLocation = start.mediaLocation
@@ -257,11 +264,11 @@ class DefaultPhoneLibrarySync(
         }
       }
       val chosen = selection
-      selectionFlow.value = when {
+      publishSelection(when {
         chosen != null -> chosen.toSet()
         pause == PauseReason.NO_PERMISSION -> emptySet()
         else -> null
-      }
+      })
       return finish()
     }
 

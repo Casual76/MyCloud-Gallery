@@ -31,7 +31,7 @@ import org.robolectric.annotation.GraphicsMode
  * XS2-1, il **fornitore vero** del nastro: la prova prende `AiModule.analysisLive(...)` (la funzione che Hilt chiama) con lo stack vero (`AiStack`, `AppGraph`,
  * `GalleryGraph` montati come in produzione, motori finti) e con le porte che Hilt le da' (`AlbumsModule.visibleMedia`, `GalleryModule.hiddenMask`), non una
  * ricostruzione della sua topologia (`AnalysisVisibilityIntegrationTest` monta i pezzi a mano). Una foto calcolata davvero dal motore compare sul nastro; un
- * "Nascondi" fatto dalla Libreria vera (`gallery.actions.setHidden`, che avvisa anche `hiddenListeners`) la toglie e la generazione di visibilita' sale. Non copre
+ * "Nascondi" fatto dalla Libreria vera (`gallery.actions.setHidden`, che avvisa anche `analysisVisibility`) la toglie e la generazione di visibilita' sale. Non copre
  * la revoca dei permessi (non c'e' un gancio per il permesso nel montaggio vero): quella e' in `AnalysisVisibilityIntegrationTest`.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -77,7 +77,7 @@ class AnalysisProviderRealTest {
     )
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     try {
-      val listenersBefore = phone.gallery.hiddenListeners.size
+      val listenersBefore = phone.gallery.analysisVisibility.listenerCount
       val watching = scope.launch { source.live.collect {} }
       val before = try {
         withTimeout(30_000) { source.live.first { it.shownIds().isNotEmpty() } }
@@ -98,9 +98,9 @@ class AnalysisProviderRealTest {
         )
       }
       val id = before.shownIds().distinct().single()
-      // Il fornitore ascolta i "Nascondi" della Libreria vera mentre il nastro e' guardato (`hiddenListeners`): senza questo, un "Nascondi" che non cambia l'istantanea
+      // Il fornitore ascolta i "Nascondi" della Libreria vera mentre il nastro e' guardato (`analysisVisibility`): senza questo, un "Nascondi" che non cambia l'istantanea
       // non rifarebbe il nastro. Mutazione: il fornitore che passa un flusso di eventi vuoto.
-      assertThat(phone.gallery.hiddenListeners.size).isEqualTo(listenersBefore + 1)
+      assertThat(phone.gallery.analysisVisibility.listenerCount).isEqualTo(listenersBefore + 1)
 
       // Il "Nascondi" vero della Libreria: la foto esce dal nastro e la generazione sale (chi disegna chiude cio' che aveva).
       phone.gallery.actions.setHidden(setOf(id), true)

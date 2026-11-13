@@ -548,6 +548,7 @@ class GalleryGraph(
         // Fase 7 (P13): copertine e conteggi degli album condivisi senza aspettare il giro dopo.
         onHiddenChanged()
         // Fase 9 (P13): lo scaffale dei ricordi e la notifica in tendina (`prune`, `revalidate`), l'indice dei punti e la mini-mappa, subito.
+        analysisVisibility.changed()
         for (listener in hiddenListeners) listener()
         // Fase 10 (P13, D5): chi deve sapere **quali** media (il widget li svuota subito dalla Home, poi ridisegna).
         for (listener in hiddenIdListeners) listener(ids, on)
@@ -563,6 +564,15 @@ class GalleryGraph(
   var onHiddenChanged: () -> Unit = {}
 
   /** Fase 9 (P13): gli altri che vogliono sapere di un "Nascondi" o "Mostra" fatto qui (ricordi e mappa, `MemoriesModule` e `MapModule`). */
+  val analysisVisibility = AnalysisVisibilityBoundary(
+    authorized = { !retired && (parts.benchSync != null || access.state.value.media == MediaAccess.FULL) && (coreFlow.value?.phone?.access?.state?.value?.media?.let { it == MediaAccess.FULL } != false) && coreFlow.value?.phone?.sync?.partialSelection?.value == null },
+    snapshot = { visibleTimeline.snapshot.value },
+  )
+
+  init {
+    (access as? dev.pampa.mycloudgallery.core.mediastore.android.AndroidPhoneAccessReader)?.onChange { analysisVisibility.changed() }
+  }
+
   val hiddenListeners: MutableList<() -> Unit> = java.util.concurrent.CopyOnWriteArrayList()
 
   /** Fase 10 (P13): chi vuole sapere **quali** media sono stati nascosti o mostrati qui (il widget, `WidgetWiring`). Gli id restano in memoria, mai nei log. */
@@ -1007,6 +1017,7 @@ class GalleryGraph(
     lifecycle.withLock {
       if (retired && !closeUnusedDatabase) return
       // Fase 5B (P14): le integrazioni revocano subito gli id dei documenti e tornano ai null-object (anche se la galleria non e' mai partita).
+      analysisVisibility.retire()
       shutdownHooks.forEach { hook -> runCatching { hook() } }
       if (coreFlow.value == null && !coreDeferred.isActive && !closeUnusedDatabase) return
       val running = synchronized(workLock) {
@@ -1059,7 +1070,9 @@ class GalleryGraph(
       // Fase 7 (P9, E-H2): i familiari vedono ancora cio' che sta nell'area comune; senza NAS non c'e' nessuno da avvisare.
       actions = CatalogLocalMediaActions(catalog, source, repository, if (nas != null) CatalogFamilyExposure(database) else FamilyExposure.None),
       details = CatalogMediaDetailsSource(catalog, database),
-      phone = parts.phone(PhoneInputs(context, database, catalog, extractor, clock, metaPriority)),
+      phone = parts.phone(PhoneInputs(context, database, catalog, extractor, clock, metaPriority,
+        visibilityChanged = { analysisVisibility.changed() },
+        contentChanged = { analysisVisibility.contentChanged() })),
     )
     checkActive()
     coreFlow.value = core

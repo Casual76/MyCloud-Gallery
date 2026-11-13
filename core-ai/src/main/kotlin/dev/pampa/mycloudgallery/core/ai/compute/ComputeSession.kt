@@ -288,7 +288,7 @@ internal class ComputeSession(
       // cio' che non e' ancora stato lavorato, mai quello che e' gia' passato.
       if (index > 0) {
         val again = urgentKeys()
-        if (again != asked) {
+        if (again != asked || asked.isNotEmpty()) {
           asked = again
           val worked = queue.take(index).mapTo(HashSet()) { it.contentKey }
           queue = queue.take(index) + orderedFair(claim.items.filter { it.contentKey !in worked }, asked, askedRun) { it.contentKey }
@@ -421,7 +421,8 @@ internal class ComputeSession(
       if (index > 0) gate()?.let { return it }
       if (index > 0) {
         val again = urgentKeys()
-        if (again != asked) {
+        val changed = again != asked
+        if (changed) {
           asked = again
           val worked = chosen.take(index).mapTo(HashSet()) { it.contentKey }
           // XS2-4: i candidati chiesti che la lista (limitata) non aveva entrano adesso, senza rifare quelli gia' lavorati ne' ripetere quelli gia' in lista.
@@ -437,6 +438,10 @@ internal class ComputeSession(
             usableList = usableList + fresh
             if (share != null) others = others + othersOf(share, fresh.map { it.contentKey })
           }
+        }
+        // La quota si applica a ogni lotto, anche con urgenze immutate in attesa di anteprima.
+        if (asked.isNotEmpty() || changed) {
+          val worked = chosen.take(index).mapTo(HashSet()) { it.contentKey }
           chosen = chosen.take(index) + orderedFair(usableList.filter { it.contentKey !in worked }, asked, askedRun) { it.contentKey }
           chosenKeys = chosen.map { it.contentKey }
           if (index >= chosen.size) break

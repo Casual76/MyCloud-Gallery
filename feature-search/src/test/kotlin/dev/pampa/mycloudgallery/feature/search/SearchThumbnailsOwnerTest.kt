@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.feature.search.contract.SearchRefs
 import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
+import dev.pampa.mycloudgallery.feature.search.models.AnalysisThumbnailLease
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -85,4 +86,40 @@ class SearchThumbnailsOwnerTest {
     thumbnails.releaseAnalysis()
     assertThat(loader.kept.keys).containsExactly("suggerimenti")
   }
+  @Test
+  fun stopRilasciaERipartenzaRiprendeLeUltimeRichiesteSenzaDispose() {
+    val loader = RecordingLoader()
+    val lease = AnalysisThumbnailLease(thumbnails(loader))
+    lease.update(listOf(request(1)))
+    assertThat(loader.kept).isEmpty()
+    lease.started(true)
+    assertThat(loader.kept.values.flatten()).containsExactly(request(1))
+    lease.started(false)
+    assertThat(loader.kept).isEmpty()
+    lease.update(listOf(request(2)))
+    assertThat(loader.kept).isEmpty()
+    lease.started(true)
+    assertThat(loader.kept.values.flatten()).containsExactly(request(2))
+    lease.started(false)
+    lease.started(false)
+    assertThat(loader.kept).isEmpty()
+  }
+
+  @Test
+  fun dueCorsieNonSiSovrascrivonoENonSiRilascianoAVicenda() {
+    val loader = RecordingLoader()
+    val thumbnails = thumbnails(loader)
+    val first = AnalysisThumbnailLease(thumbnails)
+    val second = AnalysisThumbnailLease(thumbnails)
+    first.update(listOf(request(1)))
+    second.update(listOf(request(2)))
+    first.started(true)
+    second.started(true)
+    assertThat(loader.kept).hasSize(2)
+    first.started(false)
+    assertThat(loader.kept.values.flatten()).containsExactly(request(2))
+    second.started(false)
+    assertThat(loader.kept).isEmpty()
+  }
+
 }

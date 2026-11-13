@@ -70,6 +70,7 @@ abstract class PhoneSyncTestBase {
     metadataPass: MetadataPass? = null,
     priority: MetaPriority = NoMetaPriority,
     storageReady: () -> Boolean = { true },
+    selectionChanged: () -> Unit = {},
   ): DefaultPhoneLibrarySync = DefaultPhoneLibrarySync(
     source = store,
     access = access,
@@ -82,6 +83,7 @@ abstract class PhoneSyncTestBase {
     metadataPass = metadataPass,
     priority = priority,
     storageReady = storageReady,
+    selectionChanged = selectionChanged,
   )
 
   protected fun setAccess(media: MediaAccess, mediaLocation: Boolean = true) {

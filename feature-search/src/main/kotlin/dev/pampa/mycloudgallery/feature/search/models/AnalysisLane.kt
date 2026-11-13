@@ -1,5 +1,8 @@
 package dev.pampa.mycloudgallery.feature.search.models
 
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -232,8 +235,20 @@ internal fun AnalysisLane(
     val requests = entries.mapNotNull { (it.thumb as? AnalysisThumb.Shown)?.request }
     // XS3-4: con un proprietario, accanto alla finestra della Libreria (mai al suo posto), e rilasciate quando la corsia esce dalla composizione:
     // niente richieste ne' riprove del caricatore oltre il tempo in cui il nastro e' guardato.
-    LaunchedEffect(requests, thumbnails) { thumbnails?.holdAnalysis(requests) }
-    DisposableEffect(thumbnails) { onDispose { thumbnails?.releaseAnalysis() } }
+    val lease = remember(thumbnails) { AnalysisThumbnailLease(thumbnails) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    SideEffect { lease.update(requests) }
+    DisposableEffect(lease, lifecycle) {
+      val observer = LifecycleEventObserver { _, _ ->
+        lease.started(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+      }
+      lifecycle.addObserver(observer)
+      lease.started(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+      onDispose {
+        lifecycle.removeObserver(observer)
+        lease.started(false)
+      }
+    }
     val accent = galleryRingColor(GalleryIconFamily.Search)
     val restInk = MaterialTheme.colorScheme.outlineVariant
     val edge = with(density) { (maxWidth / 2 + bleed).toPx() }

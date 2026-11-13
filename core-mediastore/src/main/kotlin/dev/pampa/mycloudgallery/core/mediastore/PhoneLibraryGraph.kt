@@ -44,10 +44,12 @@ class PhoneLibraryGraph(
   storageReady: () -> Boolean = { true },
   priority: MetaPriority = NoMetaPriority,
   config: PhoneSyncConfig = PhoneSyncConfig(),
+  visibilityChanged: () -> Unit = {},
+  contentChanged: () -> Unit = {},
 ) {
-  val source: AndroidMediaStoreSource = AndroidMediaStoreSource(context)
+  val source: AndroidMediaStoreSource = AndroidMediaStoreSource(context, visibilityChanged = contentChanged)
 
-  val access: PhoneAccessReader = AndroidPhoneAccessReader(context)
+  val access: PhoneAccessReader = AndroidPhoneAccessReader(context).also { it.onChange(visibilityChanged) }
 
   val stats: PhoneLibraryStats = PhoneLibraryStats()
 
@@ -79,6 +81,7 @@ class PhoneLibraryGraph(
     metadataPass = metadataPass,
     priority = priority,
     storageReady = storageReady,
+    selectionChanged = visibilityChanged,
   )
 
   val runner: DefaultPhoneSyncRunner = DefaultPhoneSyncRunner(sync, metadataPass, priority)

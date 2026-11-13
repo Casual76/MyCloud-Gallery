@@ -29,6 +29,8 @@ class PhoneInputs(
   val extractor: MetadataExtractor,
   val clock: () -> Long,
   val priority: MetaPriority,
+  val visibilityChanged: () -> Unit = {},
+  val contentChanged: () -> Unit = {},
 )
 
 /**
@@ -73,6 +75,8 @@ class PhoneLibrary(
         // E-P2, E-P10, E-P13: prima del primo sblocco l'archivio e' cifrato; la sincronizzazione aspetta.
         storageReady = { userManager?.isUserUnlocked != false },
         priority = inputs.priority,
+        visibilityChanged = inputs.visibilityChanged,
+        contentChanged = inputs.contentChanged,
       )
       return PhoneLibrary(
         sync = graph.sync,

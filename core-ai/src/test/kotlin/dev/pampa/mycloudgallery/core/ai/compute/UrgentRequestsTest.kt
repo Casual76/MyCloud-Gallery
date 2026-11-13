@@ -311,4 +311,58 @@ class UrgentRequestsTest {
     // La richiesta e' finita solo adesso, con il testo letto.
     assertThat(reading.urgentDone).containsExactly(key)
   }
+  @Test
+  fun richiesteImmutateSenzaAnteprimaServonoUnLottoOrdinarioOgniTre() = runTest {
+    val f = TestFamily()
+    val waiting = (1..30).map { f.nas.add(common, concepts = "attesa $it", preview = false) }
+    (1..15).forEach { f.nas.add(common, concepts = "ordinario $it") }
+    val phone = f.anna()
+    phone.restart(AiComputeConfig(batch = 5, reducedBatch = 5))
+    phone.urgentKeys.addAll(waiting)
+    val waitsAtOrdinary = ArrayList<Int>()
+    phone.images.onImage = { waitsAtOrdinary += phone.urgentWaits.size }
+    phone.engine.run(AiScope.Share(common), forever)
+    assertThat(waitsAtOrdinary.take(5)).containsExactly(10, 10, 10, 10, 10).inOrder()
+    assertThat(waitsAtOrdinary.drop(5).take(5)).containsExactly(20, 20, 20, 20, 20).inOrder()
+    assertThat(waitsAtOrdinary.drop(10)).containsExactly(30, 30, 30, 30, 30).inOrder()
+    assertThat(phone.urgentKeys).containsExactlyElementsIn(waiting)
+    assertThat(phone.embedded).isEqualTo(15)
+  }
+
+  @Test
+  fun richiesteImmutateNonConsumanoTuttoIlBudgetPrimaDelPrimoOrdinario() = runTest {
+    val f = TestFamily()
+    val waiting = (1..15).map { f.nas.add(common, concepts = "attesa $it", preview = false) }
+    f.nas.add(common, concepts = "ordinario")
+    val phone = f.anna()
+    phone.restart(AiComputeConfig(batch = 5, reducedBatch = 5))
+    phone.urgentKeys.addAll(waiting)
+    phone.engine.run(AiScope.Share(common), kotlin.time.Duration.parse("1s"))
+    assertThat(phone.embedded).isEqualTo(1)
+    assertThat(phone.urgentWaits).hasSize(10)
+  }
+
+  @Test
+  fun richiesteImmutateInRetryServonoLOrdinarioAncheSuTelefono() = runTest {
+    val f = TestFamily()
+    val phone = f.anna()
+    val keys = (1..45).map { i ->
+      f.nas.newKey().also { phone.phoneMedia[it] = MediaKind.PHOTO to "retry $i" }
+    }
+    val waiting = keys.take(30).toSet()
+    phone.images.onImage = {
+      if (numbersOf(phone.images.order.takeLast(1), "retry").single() <= 30) {
+        phone.images.fake.failNext = dev.pampa.mycloudgallery.core.ai.contract.AiEngineError.OUT_OF_MEMORY
+      }
+    }
+    phone.restart(AiComputeConfig(batch = 5, reducedBatch = 5))
+    phone.urgentKeys.addAll(waiting)
+    phone.engine.run(AiScope.PhoneOnly, forever)
+    val order = numbersOf(phone.images.order, "retry")
+    assertThat(order.drop(10).take(5)).containsExactly(31, 32, 33, 34, 35).inOrder()
+    assertThat(order.drop(25).take(5)).containsExactly(36, 37, 38, 39, 40).inOrder()
+    assertThat(phone.urgentKeys).containsExactlyElementsIn(waiting)
+    assertThat(order).containsNoDuplicates()
+  }
+
 }

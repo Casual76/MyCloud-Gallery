@@ -348,4 +348,17 @@ class AndroidMediaStoreSourceTest {
       return controller.get()
     }
   }
+  @Test
+  fun osservatoreAvvisaPrimaDellaFinestraDiAccorpamento() = runTest {
+    var invalidations = 0
+    var deliveries = 0
+    val observed = AndroidMediaStoreSource(context, visibilityChanged = { invalidations++ })
+    val job = launch { observed.changes().collect { deliveries++ } }
+    runCurrent()
+    context.contentResolver.notifyChange(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL), null)
+    assertThat(invalidations).isEqualTo(1)
+    assertThat(deliveries).isEqualTo(0)
+    job.cancel()
+  }
+
 }

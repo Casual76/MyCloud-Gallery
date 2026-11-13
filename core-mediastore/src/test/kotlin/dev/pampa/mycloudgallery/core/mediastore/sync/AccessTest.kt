@@ -202,4 +202,20 @@ class AccessTest : PhoneSyncTestBase() {
     assertThat(sync.status.value).isEqualTo(SyncStatus.Paused(PauseReason.STORAGE_LOCKED))
     assertThat(store.queries).isEmpty()
   }
+  @Test
+  fun laSelezioneAvvisaIlProprietarioPrimaDiTornare() = runBlocking<Unit> {
+    val row = store.put(photo(1, taken = T0))
+    setAccess(MediaAccess.PARTIAL)
+    store.setSelection(PRIMARY, setOf(1L))
+    var calls = 0
+    val sync = newSync(selectionChanged = { calls++ })
+    sync.syncNow(SyncReason.PERMISSION_CHANGED)
+    assertThat(calls).isEqualTo(1)
+    assertThat(sync.partialSelection.value).containsExactly(mediaAt(row))
+    setAccess(MediaAccess.NONE)
+    sync.syncNow(SyncReason.PERMISSION_CHANGED)
+    assertThat(calls).isEqualTo(2)
+    assertThat(sync.partialSelection.value).isEmpty()
+  }
+
 }

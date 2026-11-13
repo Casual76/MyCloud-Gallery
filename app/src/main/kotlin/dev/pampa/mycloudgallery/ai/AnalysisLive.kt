@@ -70,6 +70,9 @@ fun interface VisibilitySignal {
   /** Registra [onChange]; il [AutoCloseable] restituito la toglie. */
   fun register(onChange: () -> Unit): AutoCloseable
 
+  /** Controllo diretto del proprietario, anche mentre i flussi derivati sono indietro. */
+  fun canResolve(): Boolean = true
+
   companion object {
     /** Nessun segnale (le prove, o chi non ne ha): resta l'istantanea autorizzata, che e' osservata comunque. */
     val None: VisibilitySignal = VisibilitySignal { AutoCloseable { } }
@@ -272,10 +275,10 @@ class AppAnalysisLive(
    * guardia** (non c'e' un `ensureActive` ridondante prima), cosi' una prova che la toglie cade davvero.
    */
   private suspend fun resolveNow() {
-    val start = synchronized(lock) { if (running && snapshotKnown) Start(generation, lastSnapshot, engineLive.value) else null } ?: return
+    val start = synchronized(lock) { if (running && snapshotKnown && signal.canResolve()) Start(generation, lastSnapshot, engineLive.value) else null } ?: return
     val result = resolve(start.engine, start.snapshot, start.generation)
     synchronized(lock) {
-      if (running && generation == start.generation && lastSnapshot === start.snapshot) shared.value = result
+      if (running && signal.canResolve() && generation == start.generation && lastSnapshot === start.snapshot) shared.value = result
     }
   }
 

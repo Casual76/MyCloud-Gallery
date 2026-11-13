@@ -1,6 +1,16 @@
 package dev.pampa.mycloudgallery.ai
 
 import android.app.Application
+import dev.pampa.mycloudgallery.gallery.AnalysisVisibilityBoundary
+import dev.pampa.mycloudgallery.core.mediastore.android.AndroidPhoneAccessReader
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
+import org.robolectric.Shadows.shadowOf
+import java.util.concurrent.Executors
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -80,6 +90,9 @@ class AnalysisVisibilityIntegrationTest {
     spec: WorldSpec,
     scope: CoroutineScope,
     stopTimeoutMillis: Long = AppAnalysisLive.STOP_AFTER_MILLIS,
+    realAccess: AndroidPhoneAccessReader? = null,
+    timelineScope: CoroutineScope = scope,
+    boundaryReady: (AnalysisVisibilityBoundary) -> Unit = {},
     wrapMask: (HiddenMask) -> HiddenMask = { it },
     wrapVisible: (VisibleMedia) -> VisibleMedia = { it },
   ): Rig {
@@ -95,7 +108,8 @@ class AnalysisVisibilityIntegrationTest {
     val base = FakeTimelineRepository(world.snapshot)
     val access = MutableStateFlow(MediaAccess.FULL)
     val selection = MutableStateFlow<Set<MediaId>?>(null)
-    val visibleTimeline = PartialAccessTimeline(base, selection, access, scope)
+    val derivedAccess = realAccess?.state?.map { it.media }?.stateIn(timelineScope, SharingStarted.Eagerly, realAccess.state.value.media) ?: access
+    val visibleTimeline = PartialAccessTimeline(base, selection, derivedAccess, timelineScope)
     val visible = wrapVisible(CatalogVisibleMedia(world.db, visibleTimeline.snapshot))
     val mask = wrapMask(CatalogHiddenMask(world.db))
     val changes = TestVisibilitySignal()
@@ -106,7 +120,13 @@ class AnalysisVisibilityIntegrationTest {
     val shownKeys = (listOf(target) + others).map { keyOf.getValue(it) }
     val engine = AiLive(current = shownKeys.first(), recent = shownKeys.drop(1), next = emptyList())
     val engineFlow = MutableStateFlow(engine)
-    val page = AppAnalysisLive(engineFlow, visible, mask, keys, facts, scope, changes, stopTimeoutMillis)
+    val boundary = realAccess?.let { reader ->
+      AnalysisVisibilityBoundary({ reader.state.value.media == MediaAccess.FULL }, { visibleTimeline.snapshot.value }).also { boundary ->
+        reader.onChange { boundary.changed() }
+        boundaryReady(boundary)
+      }
+    }
+    val page = AppAnalysisLive(engineFlow, visible, mask, keys, facts, scope, boundary ?: changes, stopTimeoutMillis)
     return Rig(world, base, access, selection, changes, page, target, others, scope, engineFlow, keyOf)
   }
 
@@ -511,4 +531,67 @@ class AnalysisVisibilityIntegrationTest {
     val ENGINE = Any()
     val CHANGED = Any()
   }
+  @Test
+  @Config(sdk = [34])
+  fun permessoRealeDaFullAParzialeNeutralizzaPrimaDelleDerivazioni() = realPermissionBoundary(partial = true)
+
+  @Test
+  @Config(sdk = [34])
+  fun permessoRealeDaFullANessunoNeutralizzaPrimaDelleDerivazioni() = realPermissionBoundary(partial = false)
+
+  @Test
+  @Config(sdk = [34])
+  fun contenutoRevocatoNeutralizzaAncheConIstantaneaDerivataFerma() = realPermissionBoundary(false, "content")
+
+  @Test
+  @Config(sdk = [34])
+  fun ritiroNeutralizzaAncheConIstantaneaDerivataFerma() = realPermissionBoundary(false, "retire")
+
+  private fun realPermissionBoundary(partial: Boolean, action: String = "permission") = runBlocking {
+    val app = context.applicationContext as Application
+    val shadow = shadowOf(app)
+    val images = "android.permission.READ_MEDIA_IMAGES"
+    val videos = "android.permission.READ_MEDIA_VIDEO"
+    shadow.grantPermissions(images, videos)
+    val reader = AndroidPhoneAccessReader(app, volumeNames = { emptySet() })
+    val producer = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val derivedDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    val derived = CoroutineScope(SupervisorJob() + derivedDispatcher)
+    val unblock = CountDownLatch(1)
+    var world: BuiltWorld? = null
+    try {
+      lateinit var boundary: AnalysisVisibilityBoundary
+      val rig = rig(WorldSpec.nothingHidden(), producer, realAccess = reader, timelineScope = derived, boundaryReady = { boundary = it })
+      world = rig.world
+      val observer = producer.launch { rig.page.live.collect {} }
+      val shown = rig.next { rig.shown(it).isNotEmpty() }
+      val blocked = CountDownLatch(1)
+      derived.launch { blocked.countDown(); unblock.await(20, TimeUnit.SECONDS) }
+      check(blocked.await(20, TimeUnit.SECONDS))
+      when (action) {
+        "content" -> boundary.contentChanged()
+        "retire" -> boundary.retire()
+        else -> {
+          shadow.denyPermissions(images, videos)
+          if (partial) shadow.grantPermissions("android.permission.READ_MEDIA_VISUAL_USER_SELECTED")
+          reader.refresh()
+        }
+      }
+      val immediate = rig.page.live.value
+      assertThat(immediate.visibilityGeneration).isGreaterThan(shown.visibilityGeneration)
+      assertThat(rig.thumbs(immediate).filterIsInstance<AnalysisThumb.Shown>()).isEmpty()
+      // Il produttore resta Default: neppure un suo nuovo tentativo puo' pubblicare l'istantanea derivata vecchia.
+      rig.engine.value = rig.engine.value.copy(finished = 99)
+      kotlinx.coroutines.delay(100)
+      assertThat(rig.shown(rig.page.live.value)).isEmpty()
+      observer.cancel()
+    } finally {
+      unblock.countDown()
+      producer.cancel()
+      derived.cancel()
+      derivedDispatcher.close()
+      world?.db?.close()
+    }
+  }
+
 }

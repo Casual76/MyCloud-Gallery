@@ -157,10 +157,10 @@ class SearchThumbnails(
    * chi disegna chiama questo quando le miniature mostrate cambiano e [releaseAnalysis] quando la pagina esce dalla composizione, cosi' non restano richieste ne'
    * ripetizioni (il caricatore riprova dopo 15 s) oltre il tempo in cui il nastro e' guardato. Non svuota la finestra globale.
    */
-  fun holdAnalysis(requests: List<ThumbRequest>) = loader.keep(ANALYSIS_OWNER, requests)
+  fun holdAnalysis(requests: List<ThumbRequest>, owner: String = ANALYSIS_OWNER) = loader.keep(owner, requests)
 
   /** XS3-4: il nastro dell'analisi non e' piu' guardato: toglie le sue richieste (e le loro riprove). Idempotente. */
-  fun releaseAnalysis() = loader.keep(ANALYSIS_OWNER, emptyList())
+  fun releaseAnalysis(owner: String = ANALYSIS_OWNER) = loader.keep(owner, emptyList())
 
   companion object {
     /** Il proprietario delle richieste del nastro dell'analisi nel caricatore condiviso. */

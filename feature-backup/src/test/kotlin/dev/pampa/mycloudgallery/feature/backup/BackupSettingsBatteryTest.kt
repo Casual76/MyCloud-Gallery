@@ -1,11 +1,17 @@
 package dev.pampa.mycloudgallery.feature.backup
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.text.TextLayoutResult
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
+import kotlin.math.abs
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
 import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue
 import dev.pampa.mycloudgallery.core.designsystem.design.BatterySaveResult
@@ -77,6 +83,52 @@ class BackupSettingsBatteryTest : ComposeBackupTallTest() {
     composeRule.onNodeWithText("In carica", useUnmergedTree = true).assertExists()
     // E l'analisi che lavora solo in carica dice «Solo in carica» al posto dell'interruttore.
     composeRule.onNodeWithText("Solo in carica", useUnmergedTree = true).assertExists()
+  }
+
+  /** BU-11: nella pagina lo scheletro occupa quanto il controllo vero (dal titolo «Batteria» alla nota «E con il cavo?»): la scheda non salta quando arriva il valore. */
+  @Test
+  fun bu11_loSchelettoEAltoComeIlControllo_nellaPagina() {
+    val loaded = mutableStateOf(false)
+    show {
+      val state = if (loaded.value) ui(BatteryGuardValue(20, true, true)) else ui(null, loading = true)
+      BackupSettingsScreen(state = state, actions = SettingsActions(), onBack = {})
+    }
+    fun span(): Float {
+      val title = composeRule.onAllNodesWithText("Batteria", useUnmergedTree = true).onFirst().fetchSemanticsNode().boundsInRoot.top
+      val note = composeRule.onNodeWithText("E con il cavo?", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
+      return (note - title) / composeRule.density.density
+    }
+
+    val skeleton = span()
+    loaded.value = true
+    composeRule.waitForIdle()
+    val real = span()
+
+    assertWithMessage("scheletro $skeleton dp, controllo $real dp").that(abs(skeleton - real) < 8f).isTrue()
+  }
+
+  /** BU2-3: con tre segni e il testo molto grande nessun nome si taglia (due righe ammesse). */
+  @Test
+  fun bu23_conTreSegniETestoMoltoGrande_nessunNomeSiTaglia() {
+    show(fontScale = 2f) {
+      BackupSettingsScreen(
+        state = ui(BatteryGuardValue(20, true, true, backupOnBattery = true, analysisOnBattery = false, backupNeedsPower = true)),
+        actions = SettingsActions(),
+        onBack = {},
+      )
+    }
+
+    val cut = mutableListOf<String>()
+    for (name in listOf("Notte", "Wi-Fi di casa", "In carica")) {
+      val results = mutableListOf<TextLayoutResult>()
+      val node = composeRule.onNodeWithText(name, useUnmergedTree = true).fetchSemanticsNode()
+      node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+      assertThat(results).isNotEmpty()
+      // Tagliato = il testo ha bisogno di piu' righe di quelle ammesse (due): `didOverflowHeight` (la larghezza del testo centrato non conta).
+      val r = results.first()
+      if (r.didOverflowHeight || r.lineCount > 2) cut += "$name (${r.lineCount} righe)"
+    }
+    assertThat(cut).isEmpty()
   }
 
   @Test

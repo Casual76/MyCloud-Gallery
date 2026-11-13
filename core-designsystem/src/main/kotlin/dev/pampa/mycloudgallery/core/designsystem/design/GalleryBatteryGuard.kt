@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatteryChargingFull
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.ImageSearch
 import androidx.compose.material3.Icon
@@ -37,7 +38,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.LineBreak
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.takeOrElse
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
@@ -76,6 +80,7 @@ import kotlin.math.roundToInt
  * @param onLevelChange il nuovo livello, **solo a dito alzato** (una scrittura sola per scelta, non una per passo).
  * @param saveResult l'esito dell'ultima scrittura (BS2-2), **per richiesta**: ogni esito ha il suo identificativo e il livello chiesto, quindi due fallimenti di fila riportano il controllo al valore salvato
  *   tutte e due le volte, e un esito vecchio non tocca la scelta piu' nuova. Un fallimento dice anche la frase d'avviso, come le altre impostazioni.
+ * @param noteInset il rientro dell'avviso di salvataggio: di serie quello di una nota sotto una scheda; la pagina che mette il titolo della sezione piu' a filo lo passa (BU2-5).
  */
 @Composable
 fun GalleryBatteryGuard(
@@ -86,6 +91,7 @@ fun GalleryBatteryGuard(
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
   saveResult: BatterySaveResult? = null,
+  noteInset: Dp = Dp.Unspecified,
 ) {
   if (value == null) {
     GuardSkeleton(modifier)
@@ -104,7 +110,12 @@ fun GalleryBatteryGuard(
   val stopsBackup = value.forBackup && value.backupOnBattery
   val stopsAnalysis = value.forAnalysis && value.analysisOnBattery
   val state = BatteryGuard.stateOf(stopsBackup, stopsAnalysis)
-  val chargingOnly = !value.backupOnBattery && !value.analysisOnBattery
+  // Chi e' spento dall'utente (BS3-1) non conta come «solo in carica»: la frase dice «solo in carica» se almeno uno e' acceso e nessuno lavora a batteria.
+  val chargingOnly = !value.backupOnBattery && !value.analysisOnBattery && (value.backupEnabled || value.analysisEnabled)
+  // BU2-4: se la frase sopra dice gia' «Lavorano solo in carica» (nessuno lavora a batteria, tutti e due accesi) le righe tengono solo il segno: lo stato non si ripete tre volte.
+  val chargingOnlyBoth = chargingOnly && value.backupEnabled && value.analysisEnabled
+  // BU2-8: con lo 0% non si ferma niente, e nemmeno la clessidra lo dice.
+  val stopping = shown > 0
   // Il livello non decide niente (niente da fermare, o lavorano solo in carica): figura e cursore sfumano, come una riga disattivata.
   val idle = state == BatteryGuardState.NONE
   // Il numero sta una volta sola, grande, accanto alla batteria: la frase dice solo chi si ferma «sotto questo livello».
@@ -124,12 +135,13 @@ fun GalleryBatteryGuard(
   val faded = Modifier.alpha(if (idle) Dimens.UnusedAlpha else 1f)
   // A testo molto grande la batteria sta sopra il testo: la frase va a capo quanto serve e non si taglia mai.
   val stacked = LocalDensity.current.fontScale >= Dimens.StackedFontScale
-  val glyph: @Composable () -> Unit = { BatteryGlyph(fraction = shown / PERCENT, stopping = !idle, modifier = faded) }
+  val glyph: @Composable () -> Unit = { BatteryGlyph(fraction = shown / PERCENT, stopping = !idle && stopping, modifier = faded) }
   val number: @Composable () -> Unit = {
     Text(text = levelWord, style = FluidTextStyles.largeNumeric, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = faded)
   }
   val sentence: @Composable () -> Unit = {
-    Text(text = stateText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    // BU2-6: le righe si bilanciano, mai una parola sola sull'ultima.
+    Text(text = stateText, style = MaterialTheme.typography.bodyMedium.copy(lineBreak = LineBreak.Heading), color = MaterialTheme.colorScheme.onSurfaceVariant)
   }
 
   Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Dimens.NoteGap)) {
@@ -171,38 +183,72 @@ fun GalleryBatteryGuard(
         )
       }
       FluidListDivider()
-      if (value.backupOnBattery) {
-        GuardSwitch(
+      // Per ogni attivita' una resa sola: acceso e a batteria = interruttore «Ferma…»; acceso ma solo in carica = «Solo in carica»; spento dall'utente = «Spento» (BS3-1).
+      // Con il backup solo in carica che resta a batteria per «Proteggi subito» (BU2-2) la piastrella porta lo stesso fulmine di «Proteggi subito le foto nuove».
+      when {
+        !value.backupEnabled -> GuardPlainRow(
+          label = stringResource(R.string.battery_guard_backup_name),
+          icon = { GalleryIconTile(icon = Icons.Rounded.CloudUpload, family = GalleryIconFamily.Backup) },
+          status = stringResource(R.string.battery_guard_off),
+          sign = false,
+          words = true,
+        )
+        value.backupOnBattery -> GuardSwitch(
           label = stringResource(R.string.battery_guard_backup),
-          icon = { GalleryIconTile(icon = Icons.Rounded.CloudUpload, family = GalleryIconFamily.Backup, status = if (value.forBackup) GalleryIconStatus.Waiting else null, statusDescription = null) },
+          icon = {
+            GalleryIconTile(
+              icon = if (value.backupNeedsPower) Icons.Rounded.Bolt else Icons.Rounded.CloudUpload,
+              family = GalleryIconFamily.Backup,
+              status = if (value.forBackup && stopping) GalleryIconStatus.Waiting else null,
+              statusDescription = null,
+            )
+          },
           checked = value.forBackup,
           enabled = enabled,
           onChange = onForBackupChange,
         )
-      } else {
-        GuardChargingOnly(
+        else -> GuardPlainRow(
           label = stringResource(R.string.battery_guard_backup_name),
           icon = { GalleryIconTile(icon = Icons.Rounded.CloudUpload, family = GalleryIconFamily.Backup) },
+          status = stringResource(R.string.battery_guard_only_charging),
+          sign = true,
+          words = !chargingOnlyBoth,
         )
       }
       FluidListDivider()
-      if (value.analysisOnBattery) {
-        GuardSwitch(
+      when {
+        !value.analysisEnabled -> GuardPlainRow(
+          label = stringResource(R.string.battery_guard_analysis_name),
+          icon = { GalleryIconTile(icon = Icons.Rounded.ImageSearch, family = GalleryIconFamily.Search) },
+          status = stringResource(R.string.battery_guard_off),
+          sign = false,
+          words = true,
+        )
+        value.analysisOnBattery -> GuardSwitch(
           label = stringResource(R.string.battery_guard_analysis),
-          icon = { GalleryIconTile(icon = Icons.Rounded.ImageSearch, family = GalleryIconFamily.Search, status = if (value.forAnalysis) GalleryIconStatus.Waiting else null, statusDescription = null) },
+          icon = {
+            GalleryIconTile(
+              icon = Icons.Rounded.ImageSearch,
+              family = GalleryIconFamily.Search,
+              status = if (value.forAnalysis && stopping) GalleryIconStatus.Waiting else null,
+              statusDescription = null,
+            )
+          },
           checked = value.forAnalysis,
           enabled = enabled,
           onChange = onForAnalysisChange,
         )
-      } else {
-        GuardChargingOnly(
+        else -> GuardPlainRow(
           label = stringResource(R.string.battery_guard_analysis_name),
           icon = { GalleryIconTile(icon = Icons.Rounded.ImageSearch, family = GalleryIconFamily.Search) },
+          status = stringResource(R.string.battery_guard_only_charging),
+          sign = true,
+          words = !chargingOnlyBoth,
         )
       }
     }
     if (saveResult?.ok == false) {
-      GalleryWarningNote(text = stringResource(R.string.battery_guard_save_failed), modifier = Modifier.padding(horizontal = Dimens.NoteInset))
+      GalleryWarningNote(text = stringResource(R.string.battery_guard_save_failed), modifier = Modifier.padding(horizontal = noteInset.takeOrElse { Dimens.NoteInset }))
     }
   }
 }
@@ -319,33 +365,26 @@ private fun GuardSwitch(label: String, icon: @Composable () -> Unit, checked: Bo
 }
 
 /**
- * Un'attivita' che con le regole di adesso lavora solo in carica (BU-3): il segno della carica e due parole al posto di un interruttore che non farebbe niente. Con il testo grande ([Dimens.RowStackedFontScale])
- * le due parole vanno **sotto il nome** e il segno resta a destra, cosi' il nome non si spezza su tre righe.
+ * Un'attivita' senza interruttore (BU-3, BS3-1): con le regole di adesso lavora **solo in carica** (il segno della carica e «Solo in carica»), oppure l'utente l'ha **spenta** («Spento», senza segno).
+ * Sempre la resa a due righe (BU2-1): il nome sopra e lo stato sotto, il segno a destra, cosi' il nome non si spezza. Con [words] falso resta solo il segno (la frase del controllo dice gia' lo stato);
+ * per TalkBack la riga dice sempre nome e stato.
  */
 @Composable
-private fun GuardChargingOnly(label: String, icon: @Composable () -> Unit) {
-  val only = stringResource(R.string.battery_guard_only_charging)
-  val stacked = LocalDensity.current.fontScale >= Dimens.RowStackedFontScale
-  val sign: @Composable () -> Unit = {
-    Icon(imageVector = Icons.Rounded.BatteryChargingFull, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(Dimens.ChargingGlyph))
-  }
+private fun GuardPlainRow(label: String, icon: @Composable () -> Unit, status: String, sign: Boolean, words: Boolean) {
   FluidListRow(
     title = label,
-    subtitle = if (stacked) only else "",
+    subtitle = if (words) status else "",
     leading = icon,
     leadingTile = false,
-    badge = {
-      if (stacked) {
-        sign()
-      } else {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.LineGap)) {
-          sign()
-          Text(text = only, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+    badge = if (sign) {
+      {
+        Icon(imageVector = Icons.Rounded.BatteryChargingFull, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(Dimens.ChargingGlyph))
       }
+    } else {
+      null
     },
     disclosure = false,
-    modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "$label: $only" },
+    modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "$label: $status" },
   )
 }
 
@@ -410,14 +449,11 @@ private object Dimens {
   val SkeletonNumberWidth = 72.dp
   val SkeletonNumberHeight = 34.dp
   val SkeletonTrackHeight = 6.dp
-  val SkeletonTrackPadding = 20.dp
+  val SkeletonTrackPadding = 30.dp
   const val SkeletonShortLine = 0.6f
   const val UnusedAlpha = 0.4f
   const val MinFill = 0.07f
   const val StackedFontScale = 1.5f
-
-  /** Da questo ingrandimento del testo «Solo in carica» va sotto il nome dell'attivita'. */
-  const val RowStackedFontScale = 1.15f
 }
 
 /** Chi si ferma sotto il livello: dai due interruttori (gia' filtrati da chi puo' lavorare a batteria). */
@@ -429,6 +465,8 @@ enum class BatteryGuardState { BOTH, BACKUP_ONLY, ANALYSIS_ONLY, NONE }
  * @property backupOnBattery il backup puo' lavorare a batteria con le regole di adesso (BU-3): se no, la riga dice «Solo in carica» e non c'e' un interruttore che non farebbe niente.
  * @property analysisOnBattery lo stesso per l'analisi (con il preset di serie «Notte» no).
  * @property backupNeedsPower il backup normale lavora solo in carica: la pagina del Backup mostra il segno della carica fra «Il backup parte con».
+ * @property backupEnabled il backup e' acceso nelle regole (BS3-1): spento dall'utente la riga dice «Spento», non «Solo in carica».
+ * @property analysisEnabled l'analisi e' accesa nelle regole (BS3-1).
  */
 @androidx.compose.runtime.Immutable
 data class BatteryGuardValue(
@@ -438,6 +476,8 @@ data class BatteryGuardValue(
   val backupOnBattery: Boolean = true,
   val analysisOnBattery: Boolean = true,
   val backupNeedsPower: Boolean = false,
+  val backupEnabled: Boolean = true,
+  val analysisEnabled: Boolean = true,
 )
 
 /**

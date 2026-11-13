@@ -23,5 +23,5 @@
   <string name="battery_guard_loading">Sto caricando il livello di batteria</string>
   <string name="battery_guard_save_failed">Non sono riuscito a salvare la scelta: sul telefono non c’è abbastanza spazio. Libera un po’ di memoria e riprova.</string>
   <string name="battery_guard_info_label">E con il cavo?</string>
-  <string name="battery_guard_info_detail">Col cavo collegato non vale, e nemmeno per «Fai ora» e «Analizza ora». Le anteprime di preparazione si fermano solo se backup e analisi si fermano tutti e due; quelle in alta qualità se ne ferma almeno uno. Con la batteria quasi scarica Android può aspettare comunque.</string>
+  <string name="battery_guard_info_detail">Col cavo collegato non vale, e nemmeno per «Fai ora» e «Analizza ora». Le anteprime di preparazione si fermano solo se si fermano tutti e due; quelle in alta qualità anche se se ne ferma uno solo. Con la batteria quasi scarica Android può aspettare comunque.</string>
 </resources>

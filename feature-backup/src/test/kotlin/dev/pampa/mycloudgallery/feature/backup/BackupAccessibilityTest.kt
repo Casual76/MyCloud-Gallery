@@ -194,6 +194,17 @@ class BackupAccessibilityTest : BackupComposeBase() {
   @Test fun impostazioniConIlPresetNotte() =
     clean("impostazioni, preset Notte") { BackupSettingsScreen(state = settings(battery = nightPreset), actions = SettingsActions(), onBack = {}) }
 
+  private val analysisOff = BatteryGuardValue(20, true, true, backupOnBattery = true, analysisOnBattery = false, backupNeedsPower = false, analysisEnabled = false)
+
+  @Test fun impostazioniConUnaAttivitaSpenta() =
+    clean("impostazioni, analisi spenta") { BackupSettingsScreen(state = settings(battery = analysisOff), actions = SettingsActions(), onBack = {}) }
+
+  @Test
+  fun atfImpostazioniConUnaAttivitaSpenta() {
+    show { BackupSettingsScreen(state = settings(battery = analysisOff), actions = SettingsActions(), onBack = {}) }
+    composeRule.onRoot().checkRoboAccessibility()
+  }
+
   @Test fun impostazioniConIlControlloInCaricamento() =
     clean("impostazioni, livello in caricamento") { BackupSettingsScreen(state = settings(batteryLoading = true), actions = SettingsActions(), onBack = {}) }
 

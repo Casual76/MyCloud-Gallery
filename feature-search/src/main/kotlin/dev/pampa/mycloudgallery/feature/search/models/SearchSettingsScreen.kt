@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.CleaningServices
@@ -78,6 +77,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.AiWaitReason
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeaderDefaults
 import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue
 import dev.pampa.mycloudgallery.core.designsystem.design.BatterySaveResult
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryBatteryGuard
@@ -158,10 +158,11 @@ fun SearchSettingsScreen(
           onForBackupChange = onBatteryForBackup,
           onForAnalysisChange = onBatteryForAnalysis,
           saveResult = batterySaveResult,
+          noteInset = GallerySectionHeaderDefaults.TitleInset,
         )
       }
-      // La nota sta allineata al titolo della sezione (BU-6): lo stesso rientro del titolo (4 dp) e non a filo della scheda.
-      item(key = "battery-note") { GalleryBatteryGuardNote(modifier = Modifier.padding(horizontal = SectionTitleInset)) }
+      // La nota (e l'avviso di salvataggio) stanno allineati al titolo della sezione (BU-6, BU2-5): lo stesso rientro del titolo e non a filo della scheda.
+      item(key = "battery-note") { GalleryBatteryGuardNote(modifier = Modifier.padding(horizontal = GallerySectionHeaderDefaults.TitleInset)) }
     }
     if (hasTextReading) {
       item(key = "reading-header") { GallerySectionHeader(title = stringResource(R.string.models_section_reading)) }
@@ -620,6 +621,5 @@ private fun HistoryBlock(count: Int, handlers: SearchSettingsHandlers) {
 }
 
 private const val PERCENT = 100f
-private val SectionTitleInset = 4.dp
 private const val MIB = 1_048_576L
 private const val HALF_MIB = 524_288L

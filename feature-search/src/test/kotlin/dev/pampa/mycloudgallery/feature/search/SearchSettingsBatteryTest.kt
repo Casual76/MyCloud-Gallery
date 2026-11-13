@@ -118,6 +118,10 @@ class SearchSettingsBatteryTest {
 
   @Test fun atf_presetNotte() = showForAtf(nightPreset)
 
+  @Test
+  fun atf_unaAttivitaSpenta() =
+    showForAtf(BatteryGuardValue(20, true, true, backupOnBattery = true, analysisOnBattery = false, backupNeedsPower = false, analysisEnabled = false))
+
   @Test fun atf_presetNotte_aTestoGrande() = showForAtf(nightPreset, fontScale = 1.3f)
 
   @Test fun atf_entrambiSpenti() = showForAtf(BatteryGuardValue(20, forBackup = false, forAnalysis = false))

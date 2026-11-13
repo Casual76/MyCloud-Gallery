@@ -1,7 +1,14 @@
 package dev.pampa.mycloudgallery.core.designsystem.design
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeaderDefaults
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
@@ -80,6 +87,10 @@ class GalleryBatteryGuardTest {
     backupOnBattery: Boolean = true,
     analysisOnBattery: Boolean = true,
     fontScale: Float = 1f,
+    backupNeedsPower: Boolean = false,
+    backupEnabled: Boolean = true,
+    analysisEnabled: Boolean = true,
+    noteInset: Dp = Dp.Unspecified,
   ) {
     composeRule.setContent {
       MyCloudGalleryTheme(settings = EngineSettings()) {
@@ -87,12 +98,13 @@ class GalleryBatteryGuardTest {
           androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(androidx.compose.ui.platform.LocalDensity.current.density, fontScale),
         ) {
           GalleryBatteryGuard(
-            value = if (loading) null else BatteryGuardValue(level, forBackup, forAnalysis, backupOnBattery, analysisOnBattery),
+            value = if (loading) null else BatteryGuardValue(level, forBackup, forAnalysis, backupOnBattery, analysisOnBattery, backupNeedsPower, backupEnabled, analysisEnabled),
             onLevelChange = {},
             onForBackupChange = onBackup,
             onForAnalysisChange = onAnalysis,
             enabled = enabled,
             saveResult = if (saveFailed) BatterySaveResult(id = 1, level = 60, ok = false) else null,
+            noteInset = noteInset,
           )
         }
       }
@@ -363,7 +375,42 @@ class GalleryBatteryGuardTest {
   fun bu3_senzaNessunoCheLavoriABatteria_laFraseDiceSoloInCarica() {
     show(backupOnBattery = false, analysisOnBattery = false)
     composeRule.onNodeWithText("Lavorano solo in carica", useUnmergedTree = true).assertExists()
-    composeRule.onAllNodesWithText("Solo in carica", useUnmergedTree = true).assertCountEquals(2)
+    // BU2-4: lo stato lo dice la frase, una volta; le due righe tengono nome e segno (le due parole non si ripetono) e per TalkBack dicono nome e stato.
+    composeRule.onAllNodesWithText("Solo in carica", useUnmergedTree = true).assertCountEquals(0)
+    composeRule.onNodeWithContentDescription("Backup: Solo in carica").assertExists()
+    composeRule.onNodeWithContentDescription("Analisi delle foto: Solo in carica").assertExists()
+  }
+
+  // --- BS3-1: spento dall'utente non e' «solo in carica» ---------------------------------------------------------
+
+  @Test
+  fun bs31_unaAttivitaSpenta_dice_Spento_enonSoloInCarica_enonHaUnInterruttore() {
+    show(analysisOnBattery = false, analysisEnabled = false)
+
+    composeRule.onNodeWithContentDescription("Analisi delle foto: Spento").assertExists()
+    composeRule.onAllNodesWithText("Spento", useUnmergedTree = true).assertCountEquals(1)
+    composeRule.onAllNodesWithText("Solo in carica", useUnmergedTree = true).assertCountEquals(0)
+    composeRule.onAllNodesWithText("Ferma l’analisi", useUnmergedTree = true).assertCountEquals(0)
+    composeRule.onNodeWithText("Ferma il backup", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("Sotto questo livello si ferma il backup", useUnmergedTree = true).assertExists()
+  }
+
+  @Test
+  fun bs31_tuttiSpenti_nonDiconoSoloInCarica_ne_ChiSiFerma() {
+    show(backupOnBattery = false, analysisOnBattery = false, backupEnabled = false, analysisEnabled = false)
+
+    composeRule.onNodeWithText("Backup e analisi non si fermano", useUnmergedTree = true).assertExists()
+    composeRule.onAllNodesWithText("Spento", useUnmergedTree = true).assertCountEquals(2)
+    composeRule.onAllNodesWithText("Solo in carica", useUnmergedTree = true).assertCountEquals(0)
+  }
+
+  @Test
+  fun bs31_unoSpentoEUnoSoloInCarica_leDueParoleRestanoSulSoloInCarica() {
+    show(backupOnBattery = false, analysisOnBattery = false, backupEnabled = false)
+
+    composeRule.onNodeWithText("Lavorano solo in carica", useUnmergedTree = true).assertExists()
+    composeRule.onAllNodesWithText("Spento", useUnmergedTree = true).assertCountEquals(1)
+    composeRule.onAllNodesWithText("Solo in carica", useUnmergedTree = true).assertCountEquals(1)
   }
 
   @Test
@@ -375,11 +422,20 @@ class GalleryBatteryGuardTest {
   }
 
   @Test
-  fun bu5_soloInCarica_aTestoNormale_stasullaStessaRigaDelNome() {
+  fun bu21_soloInCarica_stasempreSottoIlNome_ancheATestoNormale() {
     show(analysisOnBattery = false)
     val title = composeRule.onNodeWithText("Analisi delle foto", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
     val only = composeRule.onNodeWithText("Solo in carica", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-    assertThat(only.top).isLessThan(title.bottom)
+    assertThat(only.top).isAtLeast(title.bottom - 1f)
+  }
+
+  @Test
+  fun bu21_ilNomeNonSiSpezza_conSoloInCarica_aTestoNormale() {
+    show(analysisOnBattery = false)
+    val title = composeRule.onNodeWithText("Analisi delle foto", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+    val only = composeRule.onNodeWithText("Solo in carica", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+    // Il nome sta su una riga sola: e' alto come la scritta sotto, non il doppio.
+    assertThat(title.height).isLessThan(only.height * 1.5f)
   }
 
   // --- BU-5: la frase non si taglia, ne' a testo grande ---------------------------------------------------------
@@ -388,6 +444,34 @@ class GalleryBatteryGuardTest {
   fun bu5_aTestoMoltoGrande_laFraseCEIntera() {
     show(fontScale = 2f)
     composeRule.onNodeWithText("Sotto questo livello si fermano backup e analisi", useUnmergedTree = true).assertExists()
+  }
+
+  // --- Giro 3: scheletro, allineamenti ------------------------------------------------------------------------------
+
+  /** BU2-5 / BU2-9: l'avviso di salvataggio sta al rientro che gli passa la pagina (icona 18 dp e 6 dp di spazio), di serie quello di una nota sotto una scheda (12 dp). */
+  @Test
+  fun bu25_l_avvisoStaAlRientroChePassaLaPagina() {
+    show(saveFailed = true, noteInset = 4.dp)
+
+    val left = composeRule.onNodeWithText("Non sono riuscito", substring = true, useUnmergedTree = true).getUnclippedBoundsInRoot().left.value
+    assertThat(left).isWithin(0.5f).of(4f + 18f + 6f)
+  }
+
+  @Test
+  fun bu25_l_avvisoDiSerieStaAlRientroDiUnaNota() {
+    show(saveFailed = true)
+
+    val left = composeRule.onNodeWithText("Non sono riuscito", substring = true, useUnmergedTree = true).getUnclippedBoundsInRoot().left.value
+    assertThat(left).isWithin(0.5f).of(12f + 18f + 6f)
+  }
+
+  /** BU2-9: il rientro che le pagine usano per allineare una nota al titolo di una sezione e' quello del titolo vero dell'engine. */
+  @Test
+  fun bu29_ilRientroDelTitoloDellaSezione_eQuelloDichiarato() {
+    composeRule.setContent { MyCloudGalleryTheme(settings = EngineSettings()) { Box { GallerySectionHeader(title = "Batteria") } } }
+
+    val left = composeRule.onNodeWithText("BATTERIA", useUnmergedTree = true).getUnclippedBoundsInRoot().left.value
+    assertThat(left).isWithin(0.5f).of(GallerySectionHeaderDefaults.TitleInset.value)
   }
 
   // --- BU-4: la pista ----------------------------------------------------------------------------------------

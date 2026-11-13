@@ -36,21 +36,35 @@ class ActivityRulesEngine(
 
   private val lastBatteryStop = MutableStateFlow<Int?>(null)
 
+  /** L'ultimo verdetto di batteria **per attivita'** (BS3-2), in ordine di arrivo: un'attivita' rivalutata senza il motivo della batteria esce di qui. */
+  private val batteryStops = LinkedHashMap<BackgroundActivity, Int>()
+
   /**
-   * **Il livello che ha fermato un lavoro per la batteria** nell'ultimo verdetto di questo motore (pacchetto B, BU-7): il numero che la pagina dice accanto a «Batteria sotto il…».
-   * Viene dal **verdetto** (`WaitReason.BatteryLow` porta gia' livello e soglia), non dall'impostazione di adesso: subito dopo che l'utente ha cambiato il livello, e finche' il lavoro non e'
-   * rivalutato, la frase dice ancora il livello che l'ha fermato e non un numero nuovo accanto a un fermo che non gli corrisponde. Null finche' nessun lavoro e' stato fermato per la batteria:
-   * allora le pagine dicono la frase senza numero.
+   * **Il livello che ha fermato un lavoro per la batteria** (pacchetto B, BU-7): il numero che la pagina dice accanto a «Batteria sotto il…». Viene dal **verdetto** (`WaitReason.BatteryLow` porta gia'
+   * livello e soglia), non dall'impostazione di adesso: subito dopo che l'utente ha cambiato il livello, e finche' il lavoro non e' rivalutato, la frase dice ancora il livello che l'ha fermato.
+   * Si tiene l'**ultimo verdetto di ogni attivita'** in background: quando un'attivita' e' rivalutata e non e' piu' ferma per la batteria (e' ripartita, o la soglia non le vale piu') il suo numero esce,
+   * e se nessuna e' ferma per la batteria il valore e' null e le pagine dicono la frase senza numero (che e' sempre vera). Non lo registrano le richieste dell'utente e i giri che decidono fuori da questo
+   * motore («Proteggi subito le foto nuove»): per quelli vale il numero degli altri verdetti, o la frase senza numero.
    */
   val batteryStopThreshold: StateFlow<Int?> get() = lastBatteryStop
 
-  private fun noteBattery(decision: RuleDecision) {
+  private fun noteBattery(request: WorkRequest, decision: RuleDecision) {
+    val activity = (request as? WorkRequest.Background)?.activity ?: return
+    noteBattery(activity, decision)
+  }
+
+  private fun noteBattery(activity: BackgroundActivity, decision: RuleDecision) {
     val reasons = when (decision) {
       is RuleDecision.Wait -> listOf(decision.reason) + decision.alsoBlockedBy
       is RuleDecision.Stop -> listOf(decision.reason) + decision.alsoBlockedBy
-      else -> return
+      else -> emptyList()
     }
-    reasons.firstNotNullOfOrNull { it as? WaitReason.BatteryLow }?.let { lastBatteryStop.value = it.thresholdPercent }
+    val threshold = reasons.firstNotNullOfOrNull { it as? WaitReason.BatteryLow }?.thresholdPercent
+    synchronized(batteryStops) {
+      batteryStops.remove(activity)
+      if (threshold != null) batteryStops[activity] = threshold
+      lastBatteryStop.value = batteryStops.values.lastOrNull()
+    }
   }
 
   suspend fun evaluate(request: WorkRequest, running: Boolean = false): RuleDecision =
@@ -60,7 +74,7 @@ class ActivityRulesEngine(
       state = stateProvider.current(),
       usage = ledger.currentUsage(),
       running = running,
-    ).also(::noteBattery)
+    ).also { noteBattery(request, it) }
 
   /** Il verdetto di tutte e sei le attivita' in background, per la Diagnostica e per la UI. */
   suspend fun evaluateAll(): Map<BackgroundActivity, RuleDecision> {
@@ -68,7 +82,7 @@ class ActivityRulesEngine(
     val state = stateProvider.current()
     val usage = ledger.currentUsage()
     return BackgroundActivity.entries.associateWith {
-      evaluator.evaluate(WorkRequest.Background(it), rules, state, usage).also(::noteBattery)
+      evaluator.evaluate(WorkRequest.Background(it), rules, state, usage).also { decision -> noteBattery(it, decision) }
     }
   }
 

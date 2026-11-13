@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 
 /**
  * L'avviso piccolo sotto un gruppo di impostazioni (BU-10): **una resa sola** per «non sono riuscito a salvare la scelta» (le cartelle del Backup e il livello di batteria stanno nella stessa pagina):
@@ -24,10 +25,12 @@ import androidx.compose.ui.unit.dp
 fun GalleryWarningNote(text: String, modifier: Modifier = Modifier) {
   Row(
     modifier = modifier.semantics { liveRegion = LiveRegionMode.Polite },
-    horizontalArrangement = Arrangement.spacedBy(6.dp),
+    horizontalArrangement = Arrangement.spacedBy(GalleryDimens.BadgeInset),
     verticalAlignment = Alignment.Top,
   ) {
-    Icon(imageVector = Icons.Rounded.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+    Icon(imageVector = Icons.Rounded.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(Glyph))
     Text(text = text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
   }
 }
+
+private val Glyph = 18.dp

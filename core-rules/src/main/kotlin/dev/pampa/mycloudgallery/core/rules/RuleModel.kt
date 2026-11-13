@@ -101,8 +101,11 @@ data class MonthlyCaps(val mobileBytes: Long?, val wifiBytes: Long?) {
  * Tutte le regole attive: una [ActivityRule] per ognuna delle sei attivita' piu' le impostazioni
  * comuni.
  *
- * @property batteryThresholdPercent sotto questa soglia, a batteria, ogni attivita' in background
- *   si ferma (piano §2: 20%, modificabile). Con l'alimentazione collegata non si applica.
+ * @property batteryThresholdPercent sotto questa soglia, a batteria, le attivita' in background di [batteryThresholdActivities]
+ *   si fermano (piano §2: 20%, modificabile). Con l'alimentazione collegata non si applica.
+ * @property batteryThresholdActivities le attivita' a cui la soglia si applica. Di serie **tutte** (come prima che la soglia si potesse
+ *   scegliere per gruppo): l'utente puo' escludere il backup o l'analisi ([BatteryGroups]). Le attivita' fuori dai due gruppi
+ *   seguono sempre la soglia. "Fai ora", il contenuto visibile e l'indice con l'app aperta non guardano mai la soglia.
  * @property heavyOnlyAtHome le attivita' [ActivityWeight.HEAVY] girano solo sul Wi-Fi di casa
  *   (proposta 1). Il preset Massimo la spegne.
  * @property pauseOnPowerSaver con il risparmio energetico attivo il background sta fermo (E-P10).
@@ -114,6 +117,7 @@ data class RuleSet(
   val batteryThresholdPercent: Int = DEFAULT_BATTERY_THRESHOLD_PERCENT,
   val heavyOnlyAtHome: Boolean = true,
   val pauseOnPowerSaver: Boolean = true,
+  val batteryThresholdActivities: Set<BackgroundActivity> = BackgroundActivity.entries.toSet(),
 ) {
   init {
     require(BackgroundActivity.entries.all { it in rules }) { "Manca la regola di una attivita'." }
@@ -122,7 +126,32 @@ data class RuleSet(
 
   fun ruleFor(activity: BackgroundActivity): ActivityRule = rules.getValue(activity)
 
+  /** Vero se, a batteria e sotto [batteryThresholdPercent], [activity] deve aspettare. */
+  fun batteryThresholdApplies(activity: BackgroundActivity): Boolean = activity in batteryThresholdActivities
+
   companion object {
     const val DEFAULT_BATTERY_THRESHOLD_PERCENT = 20
+  }
+}
+
+/**
+ * I due gruppi a cui l'utente puo' togliere la soglia della batteria (Pacchetto B, seconda beta): il **backup** e l'**analisi delle foto**.
+ *
+ * | Gruppo | Attivita' | Perche' |
+ * |---|---|---|
+ * | [BACKUP] | `PHOTO_BACKUP`, `VIDEO_BACKUP` | il caricamento sul NAS e la sua verifica |
+ * | [ANALYSIS] | `AI_COMPUTE` | vettori, lettura del testo e volti girano tutti dentro il Calcolo AI |
+ * | nessuno | `INDEX_SYNC`, `PREPARATION`, `HQ_PREVIEWS` | servono sia al backup sia all'analisi (indice condiviso, miniature e anteprime): seguono sempre la soglia |
+ */
+object BatteryGroups {
+  val BACKUP: Set<BackgroundActivity> = setOf(BackgroundActivity.PHOTO_BACKUP, BackgroundActivity.VIDEO_BACKUP)
+  val ANALYSIS: Set<BackgroundActivity> = setOf(BackgroundActivity.AI_COMPUTE)
+
+  /** Le attivita' a cui la soglia si applica, dati i due interruttori: tutte meno i gruppi spenti. Tutti e due accesi = tutte (come prima). */
+  fun activitiesFor(forBackup: Boolean, forAnalysis: Boolean): Set<BackgroundActivity> {
+    var all: Set<BackgroundActivity> = BackgroundActivity.entries.toSet()
+    if (!forBackup) all = all - BACKUP
+    if (!forAnalysis) all = all - ANALYSIS
+    return all
   }
 }

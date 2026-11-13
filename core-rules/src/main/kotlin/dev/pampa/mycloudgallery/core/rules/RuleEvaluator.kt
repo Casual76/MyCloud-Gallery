@@ -147,7 +147,8 @@ class RuleEvaluator(private val config: EvaluatorConfig = EvaluatorConfig()) {
     // un distacco brevissimo (falsi distacchi di qualche secondo).
     val plugged = power.pluggedIn || (running && power.unpluggedFor <= config.unplugGrace)
     if (rule.power == PowerPolicy.PLUGGED_ONLY && !plugged) blockers += WaitReason.NeedsPower
-    if (!plugged && power.levelPercent < rules.batteryThresholdPercent) {
+    // Pacchetto B: la soglia vale per le attivita' a cui l'utente non l'ha tolta (backup e analisi si scelgono; le altre la seguono sempre).
+    if (!plugged && rules.batteryThresholdApplies(activity) && power.levelPercent < rules.batteryThresholdPercent) {
       blockers += WaitReason.BatteryLow(power.levelPercent, rules.batteryThresholdPercent)
     }
     if (rules.pauseOnPowerSaver && power.powerSaveMode) blockers += WaitReason.PowerSaver

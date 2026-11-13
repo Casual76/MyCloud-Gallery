@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.MetaPriority
 import dev.pampa.mycloudgallery.core.mediastore.contract.MetadataPass
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccessReader
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneSyncRunner
+import dev.pampa.mycloudgallery.core.mediastore.contract.RereadLedger
 import dev.pampa.mycloudgallery.core.mediastore.sync.DefaultPhoneLibrarySync
 import dev.pampa.mycloudgallery.core.mediastore.sync.DeferredFullHashes
 import dev.pampa.mycloudgallery.core.mediastore.sync.MediaStoreRowLookup
@@ -29,6 +30,10 @@ class PhoneInputs(
   val extractor: MetadataExtractor,
   val clock: () -> Long,
   val priority: MetaPriority,
+  val visibilityChanged: () -> Unit = {},
+  val contentChanged: () -> Unit = {},
+  /** Chi aspetta che la rilettura copra un avviso di Android (il nastro dell'analisi): la sincronizzazione gli dichiara i giri finiti bene. */
+  val rereads: RereadLedger? = null,
 )
 
 /**
@@ -73,6 +78,9 @@ class PhoneLibrary(
         // E-P2, E-P10, E-P13: prima del primo sblocco l'archivio e' cifrato; la sincronizzazione aspetta.
         storageReady = { userManager?.isUserUnlocked != false },
         priority = inputs.priority,
+        visibilityChanged = inputs.visibilityChanged,
+        contentChanged = inputs.contentChanged,
+        rereads = inputs.rereads,
       )
       return PhoneLibrary(
         sync = graph.sync,

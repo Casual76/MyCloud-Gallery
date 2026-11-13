@@ -44,4 +44,27 @@
   <string name="library_cloud_action_wireguard">Apri WireGuard</string>
   <string name="library_cloud_action_password">Inserisci la password</string>
   <string name="library_cloud_action_backup">Apri Backup</string>
+
+  <!-- Pacchetto X, grafica XU: l'analisi delle foto come riga nel pannello (lo stesso stato ridotto della testata di "Ricerca e modelli").
+       Due parole in alto, il perche' sotto; mai "indice". -->
+  <string name="library_cloud_action_analysis">Apri Analisi</string>
+  <string name="library_cloud_analysis_running">Analisi in corso</string>
+  <string name="library_cloud_analysis_queued">Analisi in coda</string>
+  <string name="library_cloud_analysis_queued_line">Parte da sola</string>
+  <string name="library_cloud_analysis_paused">Analisi in pausa</string>
+  <string name="library_cloud_analysis_problem">Analisi ferma</string>
+  <string name="library_cloud_analysis_problem_storage">Memoria quasi piena</string>
+  <string name="library_cloud_analysis_problem_model">Il modello va riscaricato</string>
+  <string name="library_cloud_analysis_remaining">Restano %1$s foto</string>
+  <string name="library_cloud_analysis_wait_window">Fuori dall’orario</string>
+  <string name="library_cloud_analysis_wait_charging">Serve la carica</string>
+  <string name="library_cloud_analysis_wait_battery">Batteria scarica</string>
+  <string name="library_cloud_analysis_wait_power_saver">Risparmio energetico</string>
+  <string name="library_cloud_analysis_wait_thermal">Telefono caldo</string>
+  <string name="library_cloud_analysis_wait_wifi">Aspetta il Wi-Fi</string>
+  <string name="library_cloud_analysis_wait_home_wifi">Aspetta il Wi-Fi di casa</string>
+  <string name="library_cloud_analysis_wait_nas">Il NAS non risponde</string>
+  <string name="library_cloud_analysis_wait_data_cap">Dati del mese finiti</string>
+  <string name="library_cloud_analysis_wait_preparation">Foto in preparazione</string>
+  <string name="library_cloud_analysis_wait_other">Aspetta il momento giusto</string>
 </resources>

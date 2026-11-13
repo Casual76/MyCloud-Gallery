@@ -52,6 +52,8 @@ fun LibraryTab(
   tabBarScroll: NestedScrollConnection? = null,
   onNasStatusClick: () -> Unit = {},
   onBackupStatusClick: () -> Unit = {},
+  /** Pacchetto X: il tocco sulla riga dell'analisi nel pop-up della nuvola (la pagina "Analisi delle foto"). */
+  onAnalysisStatusClick: () -> Unit = {},
   network: LibraryNetworkStatus? = null,
   onNetworkClick: () -> Unit = {},
   search: LibrarySearchLayer? = null,
@@ -66,8 +68,8 @@ fun LibraryTab(
       state = state,
       tabBarScroll = tabBarScroll,
       network = network,
-      cloudActions = remember(onNetworkClick, onNasStatusClick, onBackupStatusClick) {
-        LibraryCloudActions(onNetwork = onNetworkClick, onNas = onNasStatusClick, onBackup = onBackupStatusClick)
+      cloudActions = remember(onNetworkClick, onNasStatusClick, onBackupStatusClick, onAnalysisStatusClick) {
+        LibraryCloudActions(onNetwork = onNetworkClick, onNas = onNasStatusClick, onBackup = onBackupStatusClick, onAnalysis = onAnalysisStatusClick)
       },
       search = search,
     )

@@ -148,7 +148,11 @@ class SimWorkUnits(
     }
   }
 
+  /** Pacchetto XF (XS2-2): come il motore ha finito ogni unita' (per dire al selettore se ha dato lavoro). */
+  val finishes = ArrayList<Pair<WorkUnitKey, UnitOutcome>>()
+
   override suspend fun finish(claim: UnitClaim, outcome: UnitOutcome) {
+    finishes += claim.key to outcome
     active -= claim.key
     if (claim.lease !is UnitLease.Held) return
     val share = claim.key.share

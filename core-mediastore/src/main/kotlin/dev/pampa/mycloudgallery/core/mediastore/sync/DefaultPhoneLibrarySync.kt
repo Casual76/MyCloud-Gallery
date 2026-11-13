@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.MetadataPass
 import dev.pampa.mycloudgallery.core.mediastore.contract.PauseReason
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccessReader
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneLibrarySync
+import dev.pampa.mycloudgallery.core.mediastore.contract.RereadLedger
 import dev.pampa.mycloudgallery.core.mediastore.contract.RowType
 import dev.pampa.mycloudgallery.core.mediastore.contract.RunResult
 import dev.pampa.mycloudgallery.core.mediastore.contract.SyncReason
@@ -94,6 +95,12 @@ class DefaultPhoneLibrarySync(
   private val metadataPass: MetadataPass? = null,
   private val priority: MetaPriority = NoMetaPriority,
   private val storageReady: () -> Boolean = { true },
+  private val selectionChanged: () -> Unit = {},
+  /**
+   * Chi aspetta che la rilettura copra un avviso di Android ([RereadLedger]): il numero d'ordine degli avvisi si legge **all'inizio** di ogni giro,
+   * prima di toccare il MediaStore, e si dichiara alla fine solo se il giro e' finito bene con l'accesso completo. Null = nessuno: il giro e' quello di sempre.
+   */
+  private val rereads: RereadLedger? = null,
 ) : PhoneLibrarySync {
 
   private val statusFlow = MutableStateFlow<SyncStatus>(SyncStatus.Idle(atMs = 0))
@@ -106,6 +113,12 @@ class DefaultPhoneLibrarySync(
    * insieme vuoto; con l'accesso completo null (tutto). La Libreria mostra solo questi, senza dedurre assenze.
    */
   val partialSelection: StateFlow<Set<MediaId>?> = selectionFlow.asStateFlow()
+
+  private fun publishSelection(value: Set<MediaId>?) {
+    if (selectionFlow.value == value) return
+    selectionFlow.value = value
+    selectionChanged()
+  }
 
   private val runLock = Mutex()
   private val attachLock = Any()
@@ -211,7 +224,13 @@ class DefaultPhoneLibrarySync(
     private var selection: MutableSet<MediaId>? = null
     private val ignoredBy = EnumMap<IgnoreReason, Int>(IgnoreReason::class.java)
 
+    /** Il giro comincia con l'accesso completo: solo allora puo' dire di avere riletto tutto il telefono (e dedurre assenze). */
+    private var startedWithFullAccess = false
+
     suspend fun execute(): SyncReport {
+      // Il numero d'ordine degli avvisi di Android **prima di toccare il MediaStore**: un avviso arrivato dopo non e' coperto da questo giro.
+      val ledger = rereads
+      val noticeOrder = ledger?.noticeOrder()
       if (!storageReady()) {
         pause = PauseReason.STORAGE_LOCKED
         completed = false
@@ -223,10 +242,11 @@ class DefaultPhoneLibrarySync(
         // E-P15: permessi ritirati non vuol dire "il telefono e' vuoto". Nessuna lettura, nessuna scrittura.
         pause = PauseReason.NO_PERMISSION
         completed = false
-        selectionFlow.value = emptySet()
+        publishSelection(emptySet())
         return finish()
       }
       mediaLocation = start.mediaLocation
+      startedWithFullAccess = start.media == MediaAccess.FULL
       if (start.media == MediaAccess.PARTIAL) selection = HashSet()
       try {
         val mounted = source.volumes().filter(::isValidMediaStoreVolume).sortedWith(PRIMARY_FIRST)
@@ -257,12 +277,31 @@ class DefaultPhoneLibrarySync(
         }
       }
       val chosen = selection
-      selectionFlow.value = when {
+      publishSelection(when {
         chosen != null -> chosen.toSet()
         pause == PauseReason.NO_PERMISSION -> emptySet()
         else -> null
+      })
+      val report = finish()
+      if (ledger != null && noticeOrder != null) declareReread(ledger, noticeOrder)
+      return report
+    }
+
+    /**
+     * Il giro e' finito **bene** (completo, nessun errore ne' pausa, accesso completo dall'inizio alla fine): chi aspettava un avviso di Android con numero
+     * minore o uguale a [order] puo' contare su questo giro. Il `change_seq` si legge **dopo** l'ultima scrittura del giro. Mai un'eccezione verso il chiamante:
+     * senza dichiarazione chi aspetta resta chiuso fino al giro dopo, che e' il lato sicuro.
+     */
+    private suspend fun declareReread(ledger: RereadLedger, order: Long) {
+      if (!startedWithFullAccess || !completed || failure != null || pause != null) return
+      try {
+        if (access.state.value.media != MediaAccess.FULL) return
+        ledger.rereadFinished(order, catalog.changeSeq())
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        GalleryLog.w(TAG) { "rilettura non dichiarata: ${e.javaClass.simpleName}" }
       }
-      return finish()
     }
 
     private fun finish(): SyncReport {

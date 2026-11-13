@@ -133,6 +133,16 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionsController
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionsState
 import dev.pampa.mycloudgallery.feature.viewer.menu.backupMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.menu.similarMenuEntries
+import dev.antigravity.fluidengine.ui.haptics.FluidHapticEvent
+import dev.antigravity.fluidengine.ui.haptics.LocalFluidHaptics
+import dev.pampa.mycloudgallery.feature.viewer.info.analysisBadge
+import dev.pampa.mycloudgallery.feature.viewer.menu.AnalysisFeedback
+import dev.pampa.mycloudgallery.feature.viewer.menu.AnalysisObserved
+import dev.pampa.mycloudgallery.feature.viewer.menu.MediaAnalysis
+import dev.pampa.mycloudgallery.feature.viewer.menu.observeBound
+import dev.pampa.mycloudgallery.feature.viewer.menu.observedFor
+import dev.pampa.mycloudgallery.feature.viewer.menu.MediaAnalysisKind
+import dev.pampa.mycloudgallery.feature.viewer.menu.analysisMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.menu.everywhereLocations
 import dev.pampa.mycloudgallery.feature.viewer.menu.nasMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.download.DownloadState
@@ -907,6 +917,23 @@ private fun ViewerOverlays(
   val cutout = controller.cutout
   LaunchedEffect(currentId) { cutout.bind(currentId) }
   val canCutout = currentKind != MediaKind.VIDEO && cutout.available
+  // Pacchetto X: lo stato dell'analisi del media aperto (voce ⋮, capsula nelle informazioni). Mai dai Nascosti, come album e mappa.
+  // XS-6: lo stato osservato e' **legato al media** per cui e' nato (mai il valore della foto di prima in attesa della prima emissione) e il
+  // riscontro di fine analisi vale solo per la richiesta fatta in questa visita (`AnalysisFeedback`).
+  val analysisObserved by produceState<AnalysisObserved?>(null, services.analysis, currentId, request.secure) {
+    value = AnalysisObserved(currentId, MediaAnalysis.UNKNOWN)
+    if (request.secure) return@produceState
+    services.analysis?.observeBound(currentId)?.collect { value = it }
+  }
+  val analysisMedia = observedFor(currentId, analysisObserved)
+  val analysisFeedback = remember { AnalysisFeedback() }
+  val analysisHaptics = LocalFluidHaptics.current
+  LaunchedEffect(currentId) { analysisFeedback.moved(currentId) }
+  // XS3-3: una richiesta che non e' stata accodata non da' nessun riscontro di fine analisi.
+  LaunchedEffect(analysisMedia.askFailed, currentId) { if (analysisMedia.askFailed) analysisFeedback.failedAsk(currentId) }
+  LaunchedEffect(analysisMedia.kind, analysisMedia.version, currentId) {
+    if (analysisFeedback.completed(currentId, analysisMedia.kind, analysisMedia.version)) analysisHaptics.play(FluidHapticEvent.Tap)
+  }
   val handlers = ViewerActionHandlers(
     onToggleFavorite = controller::toggleFavorite,
     onToggleHidden = controller::toggleHidden,
@@ -949,6 +976,13 @@ private fun ViewerOverlays(
       onFind = { services.similarSearch.findSimilar(currentId) },
       onExplain = { state.message = ViewerMessage.SimilarUnavailable },
     ),
+    analysisActions = if (request.secure) emptyList() else analysisMenuEntries(resources, analysisMedia) {
+      analysisFeedback.asked(currentId, analysisMedia.version)
+      services.analysis?.analyzeNow(currentId)
+      // Grafica XU, giro 2 (XU-7): dal menu il riscontro si vede: le informazioni si aprono sulla capsula, che dice «Prima in coda · Parte sul
+      // Wi-Fi» (o «Telefono caldo») e poi cambia segno fino a «Pronta per la ricerca».
+      if (!state.infoOpen) controller.toggleInfo()
+    },
     dock = LocalViewerDock.current.entry(secure = request.secure),
     albumActions = albumMenuEntries(
       resources,
@@ -1201,6 +1235,15 @@ private fun ViewerOverlays(
       )
     }
     val backupNote = remember(backupState, onPhone, format) { backupState?.let { backupNote(format, it, onPhone) } }
+    // Pacchetto X: la capsula dell'analisi (mai dai Nascosti); in coda e' lei il tasto "Analizza adesso".
+    val analysisNote = remember(analysisMedia, kind, format) {
+      if (request.secure) null else analysisBadge(format, analysisMedia, video = kind == MediaKind.VIDEO)
+    }
+    val onAnalysisNow: (() -> Unit)? = if (!request.secure && analysisMedia.kind == MediaAnalysisKind.QUEUED) {
+      { analysisFeedback.asked(currentId, analysisMedia.version); services.analysis?.analyzeNow(currentId) }
+    } else {
+      null
+    }
     // La mappa sotto il luogo e i dati, poi le persone, poi le copie (H2).
     // Le facce subito sotto la testa; la mappa, gli album e le copie dopo la scheda dello scatto (giro di correzione 1).
     val extras = remember(placeMapPanel.sections, albumsPanel.sections, similar.sections) {
@@ -1230,6 +1273,8 @@ private fun ViewerOverlays(
             leading = peoplePanel.sections,
             accent = accent,
             backupPending = backupPending,
+            analysis = analysisNote,
+            onAnalysis = onAnalysisNow,
           )
         }
       } else {
@@ -1253,6 +1298,8 @@ private fun ViewerOverlays(
             leading = peoplePanel.sections,
             accent = accent,
             backupPending = backupPending,
+            analysis = analysisNote,
+            onAnalysis = onAnalysisNow,
           )
         }
         // Il video continua ad andare e i suoi comandi stanno sopra il bordo del pannello, e salgono con lui (H2).

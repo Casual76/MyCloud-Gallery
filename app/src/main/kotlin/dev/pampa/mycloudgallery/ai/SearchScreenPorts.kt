@@ -5,6 +5,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.ProbeResult
 import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.family.contract.RolesChange
+import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
 import dev.pampa.mycloudgallery.core.personal.contract.TextReadingChoice
 import dev.pampa.mycloudgallery.core.trust.data.DeviceRole
 import dev.pampa.mycloudgallery.feature.search.contract.AreaKind
@@ -85,6 +86,9 @@ class AppIndexerControl(
 
   override val status: StateFlow<AiStatus> = combine(stack.ai.indexer, stack.ai.status) { on, s -> if (!on) AiStatus.Off else s }
     .stateIn(scope, SharingStarted.Eagerly, if (stack.ai.indexer.value) stack.ai.status.value else AiStatus.Off)
+
+  /** Pacchetto X: lo stato ridotto unico dell'analisi (testata, nuvola e pagina "Analisi delle foto"). */
+  override val analysis: StateFlow<LibraryAnalysisStatus> get() = stack.ai.analysis
 
   private val backlogFlow = MutableStateFlow(IndexerBacklog.NONE)
   override val backlog: StateFlow<IndexerBacklog> get() = backlogFlow

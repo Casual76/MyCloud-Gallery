@@ -45,6 +45,8 @@ import dev.pampa.mycloudgallery.core.models.verify.AndroidFileStatReader
 import dev.pampa.mycloudgallery.core.nas.ops.models.NasModelShelfOpsFactory
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.personal.store.LedgerPersonalStore
+import dev.pampa.mycloudgallery.core.rules.RuleDecision
+import dev.pampa.mycloudgallery.core.rules.WorkRequest
 import dev.pampa.mycloudgallery.core.rules.traffic.TrafficSource
 import dev.pampa.mycloudgallery.core.trust.data.DeviceRole
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
@@ -61,11 +63,15 @@ import dev.pampa.mycloudgallery.work.AiWorkScheduling
 import java.io.File
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -136,6 +142,8 @@ class AiStack(
       textSource = IndexViewerTextSource(search.mediaText, search.index.version.drop(1).map { }.conflate()),
       textReader = textReader,
       similarSearch = SearchViewerSimilar(search.keys, similar) { key -> search.index.hasVectors(key) },
+      // Pacchetto X: "Analizza adesso" dal visore (precedenza nella coda + calcolo come richiesta dell'utente, con le regole).
+      analysis = AppViewerAnalysis(context, catalog, ai, search.index.version, graph.scope),
       selectionSimilar = SearchSelectionSimilar(search.keys, similar) { key -> search.index.hasVectors(key) },
       motionAnimation = dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting { personal.motionAnimation.value },
       motionTraffic = dev.pampa.mycloudgallery.feature.viewer.video.MotionTraffic { bytes, _ ->
@@ -170,6 +178,9 @@ class AiStack(
  */
 object AiWiring {
 
+  /** XS-7: il passare del tempo da solo (apre e chiude la fascia) rilegge il verdetto delle regole ogni 10 minuti. */
+  private const val DECISION_TICK_MILLIS: Long = 10L * 60 * 1000
+
   fun build(
     context: Context,
     graph: AppGraph,
@@ -191,6 +202,9 @@ object AiWiring {
     cutoutWriter: ((relativePath: String) -> PhoneMediaWriter)? = null,
     /** Fase 8 (P13, D26): la ricerca per persona (il ponte di `FacesModule`); di serie nessuna. */
     people: dev.pampa.mycloudgallery.core.search.contract.PeopleLookup = dev.pampa.mycloudgallery.core.search.noop.NoPeopleLookup,
+    /** Solo i test d'integrazione (XS-7): il verdetto delle regole e gli eventi che lo cambiano al posto di quelli del motore vero. */
+    decide: (suspend (WorkRequest) -> RuleDecision?)? = null,
+    decisionTriggers: Flow<Unit>? = null,
   ): AiStack {
     val scope = graph.scope
     val noBackup = context.noBackupFilesDir
@@ -358,6 +372,21 @@ object AiWiring {
         fence = fence,
         account = { graph.account.value?.user },
         releaseCutout = cutout::stop,
+        // Pacchetto X: il motivo vero di una pausa e la risposta a "Analizza adesso" vengono dal motore delle regole di adesso.
+        decide = decide ?: { request -> graph.rulesEngine.evaluate(request, running = false) },
+        // XS-7: il verdetto si rilegge quando cambiano le impostazioni, lo stato del sistema (caldo, rete, carica), i consumi del mese e, di
+        // tanto in tanto, il tempo da solo (apre e chiude la fascia): un evento, una rivalutazione, mai il database.
+        decisionTriggers = decisionTriggers ?: merge(
+          graph.ruleSettings.observe().map { },
+          graph.stateProvider.observe().map { },
+          graph.trafficLedger.observeCurrentUsage().map { },
+          flow {
+            while (true) {
+              delay(DECISION_TICK_MILLIS)
+              emit(Unit)
+            }
+          },
+        ).conflate(),
       ),
     )
 

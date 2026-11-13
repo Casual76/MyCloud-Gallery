@@ -420,10 +420,16 @@ class GalleryGraph(
     val cutoutSaver: dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutSaver? = null,
     /** Correzioni F (TS-4): "Trova simili" dalla selezione della Libreria. Null = l'azione non compare. */
     val selectionSimilar: dev.pampa.mycloudgallery.ai.SearchSelectionSimilar? = null,
+    /** Pacchetto X: "Analizza adesso" e lo stato dell'analisi del media aperto. Null = nessuna voce (D13). */
+    val analysis: dev.pampa.mycloudgallery.feature.viewer.menu.ViewerAnalysis? = null,
   )
 
   @Volatile
   var searchViewer: SearchViewerHooks? = null
+
+  /** Pacchetto X: lo stato ridotto dell'analisi per la riga nel pannello della nuvola. Lo lega l'applicazione con [searchViewer]. */
+  @Volatile
+  var analysisStatus: kotlinx.coroutines.flow.StateFlow<dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus>? = null
 
   /** Fase 6 (P14): la coda dei video delle foto in movimento del NAS (`cacheDir/motion/`), una per processo. */
   val nasMotion: dev.pampa.mycloudgallery.feature.viewer.video.NasMotionSource? by lazy {
@@ -534,17 +540,25 @@ class GalleryGraph(
       }
 
       override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) {
-        val core = core()
-        writing { core.actions.setHidden(ids, on) }
-        nas?.organizer?.personalChanged()
-        // Fase 7 (P9, D22): il widget di prova (solo debug) si ridisegna subito; in release non fa niente.
-        DeveloperTools.hiddenChanged(context)
-        // Fase 7 (P13): copertine e conteggi degli album condivisi senza aspettare il giro dopo.
-        onHiddenChanged()
-        // Fase 9 (P13): lo scaffale dei ricordi e la notifica in tendina (`prune`, `revalidate`), l'indice dei punti e la mini-mappa, subito.
-        for (listener in hiddenListeners) listener()
-        // Fase 10 (P13, D5): chi deve sapere **quali** media (il widget li svuota subito dalla Home, poi ridisegna).
-        for (listener in hiddenIdListeners) listener(ids, on)
+        // XL-3: il nastro dell'analisi chiude **all'inizio** dell'azione (la foto esce dalla Libreria dentro `core.actions.setHidden`, prima di scrivere il catalogo) e
+        // riapre alla sua fine, riuscita o fallita o annullata: una transizione in corso, non un avviso dato a cose fatte.
+        analysisVisibility.transition {
+          val core = core()
+          writing {
+            hiddenWriteHook?.invoke()
+            core.actions.setHidden(ids, on)
+          }
+          nas?.organizer?.personalChanged()
+          // Fase 7 (P9, D22): il widget di prova (solo debug) si ridisegna subito; in release non fa niente.
+          DeveloperTools.hiddenChanged(context)
+          // Fase 7 (P13): copertine e conteggi degli album condivisi senza aspettare il giro dopo.
+          onHiddenChanged()
+          // Fase 9 (P13): lo scaffale dei ricordi e la notifica in tendina (`prune`, `revalidate`), l'indice dei punti e la mini-mappa, subito.
+          analysisVisibility.changed()
+          for (listener in hiddenListeners) listener()
+          // Fase 10 (P13, D5): chi deve sapere **quali** media (il widget li svuota subito dalla Home, poi ridisegna).
+          for (listener in hiddenIdListeners) listener(ids, on)
+        }
       }
 
       // Fase 7 (P9, E-H2): quanti degli elementi nascosti i familiari vedono ancora (area comune, album condivisi).
@@ -552,11 +566,24 @@ class GalleryGraph(
     },
   )
 
+  /** Solo per le prove (XL-3): gira dentro "Nascondi"/"Mostra", dopo il lucchetto e prima di toccare Libreria e catalogo: una scrittura lenta. */
+  @Volatile
+  internal var hiddenWriteHook: (suspend () -> Unit)? = null
+
   /** Fase 7 (P13): dopo un "Nascondi" o "Mostra" fatto qui (lo lega `AlbumsModule`: gli album condivisi ricalcolano copertine e conteggi). */
   @Volatile
   var onHiddenChanged: () -> Unit = {}
 
   /** Fase 9 (P13): gli altri che vogliono sapere di un "Nascondi" o "Mostra" fatto qui (ricordi e mappa, `MemoriesModule` e `MapModule`). */
+  val analysisVisibility = AnalysisVisibilityBoundary(
+    authorized = { !retired && (parts.benchSync != null || access.state.value.media == MediaAccess.FULL) && (coreFlow.value?.phone?.access?.state?.value?.media?.let { it == MediaAccess.FULL } != false) && coreFlow.value?.phone?.sync?.partialSelection?.value == null },
+    snapshot = { visibleTimeline.snapshot.value },
+  )
+
+  init {
+    (access as? dev.pampa.mycloudgallery.core.mediastore.android.AndroidPhoneAccessReader)?.onChange { analysisVisibility.changed() }
+  }
+
   val hiddenListeners: MutableList<() -> Unit> = java.util.concurrent.CopyOnWriteArrayList()
 
   /** Fase 10 (P13): chi vuole sapere **quali** media sono stati nascosti o mostrati qui (il widget, `WidgetWiring`). Gli id restano in memoria, mai nei log. */
@@ -750,6 +777,7 @@ class GalleryGraph(
       textSource = searchViewer?.textSource,
       textReader = searchViewer?.textReader,
       similarSearch = searchViewer?.similarSearch ?: dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerSimilarSearch,
+      analysis = searchViewer?.analysis,
       subjectCutter = searchViewer?.subjectCutter,
       cutoutSaver = searchViewer?.cutoutSaver,
       // Fase 8 (P13): la riga "Persone" nelle info (solo con la porta legata).
@@ -1002,6 +1030,7 @@ class GalleryGraph(
       // Fase 5B (P14): le integrazioni revocano subito gli id dei documenti e tornano ai null-object (anche se la galleria non e' mai partita).
       shutdownHooks.forEach { hook -> runCatching { hook() } }
       if (coreFlow.value == null && !coreDeferred.isActive && !closeUnusedDatabase) return
+      analysisVisibility.retire()
       val running = synchronized(workLock) {
         retired = true
         runningWork.toList()
@@ -1052,7 +1081,11 @@ class GalleryGraph(
       // Fase 7 (P9, E-H2): i familiari vedono ancora cio' che sta nell'area comune; senza NAS non c'e' nessuno da avvisare.
       actions = CatalogLocalMediaActions(catalog, source, repository, if (nas != null) CatalogFamilyExposure(database) else FamilyExposure.None),
       details = CatalogMediaDetailsSource(catalog, database),
-      phone = parts.phone(PhoneInputs(context, database, catalog, extractor, clock, metaPriority)),
+      phone = parts.phone(PhoneInputs(context, database, catalog, extractor, clock, metaPriority,
+        visibilityChanged = { analysisVisibility.changed() },
+        contentChanged = { analysisVisibility.contentChanged() },
+        // XL-1: la rilettura che copre l'avviso e' quella che riapre il nastro (non un'istantanea nuova qualunque).
+        rereads = analysisVisibility)),
     )
     checkActive()
     coreFlow.value = core

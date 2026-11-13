@@ -137,6 +137,8 @@ fun MainScaffold(
   onStatusClick: () -> Unit,
   onOpenSettings: () -> Unit,
   onBackupStatusClick: () -> Unit = {},
+  /** Pacchetto X: la riga dell'analisi nella nuvola porta alla pagina "Analisi delle foto". */
+  onAnalysisStatusClick: () -> Unit = {},
   // NA-9: la capsula del NAS apre i suoi dettagli (la Diagnostica), non l'azione della rete (WireGuard, la password).
   onNasStatusClick: () -> Unit = onStatusClick,
   libraryState: LibraryTabState = rememberEmptyLibraryTabState(),
@@ -291,6 +293,7 @@ fun MainScaffold(
             onNasStatusClick = onNasStatusClick,
             // Fase 5A (D16): la terza voce del piede apre la pagina Backup.
             onBackupStatusClick = onBackupStatusClick,
+            onAnalysisStatusClick = onAnalysisStatusClick,
             // H4: la ricerca dentro la Libreria (i suggerimenti in alto, i risultati al posto della griglia).
             search = libraryLayer,
           )

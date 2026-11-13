@@ -24,6 +24,7 @@ import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsGraphRoute
 import dev.pampa.mycloudgallery.feature.search.contract.SearchActions
 import dev.pampa.mycloudgallery.feature.search.contract.SearchRefs
 import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
+import dev.pampa.mycloudgallery.feature.search.models.AnalysisRoute
 import dev.pampa.mycloudgallery.feature.search.models.SearchSettingsRoute
 import dev.pampa.mycloudgallery.feature.search.models.TextReadingActivationRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsGraphRoute
@@ -42,12 +43,20 @@ import kotlinx.serialization.Serializable
 @Serializable
 data object SearchSettingsPageRoute
 
+/** Pacchetto X: la pagina "Analisi delle foto" (dalla testata di Ricerca e modelli e dal pannello della nuvola). */
+@Serializable
+data object AnalysisPageRoute
+
 /** La pagina di attivazione della lettura del testo (D41): l'unica che costruisce il consenso. */
 @Serializable
 data object TextReadingActivationPageRoute
 
 fun NavGraphBuilder.searchGraph(nav: NavController, actions: SearchActions) {
   composable<SearchSettingsPageRoute> { SearchSettingsRoute(actions = actions, onBack = { nav.popBackStack() }) }
+  composable<AnalysisPageRoute> {
+    val host: SearchHostViewModel = hiltViewModel()
+    AnalysisRoute(actions = actions, thumbnails = host.thumbnails, onBack = { nav.popBackStack() })
+  }
   composable<TextReadingActivationPageRoute> { TextReadingActivationRoute(onClose = { nav.popBackStack() }) }
 }
 
@@ -100,6 +109,8 @@ class AppSearchActions(
   }
 
   override fun openSearchSettings() = nav.navigate(SearchSettingsPageRoute)
+
+  override fun openAnalysis() = nav.navigate(AnalysisPageRoute)
 
   override fun openTextReadingActivation() = nav.navigate(TextReadingActivationPageRoute)
 

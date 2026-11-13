@@ -109,6 +109,15 @@ interface AiCandidates {
   suspend fun forShare(share: String, recipe: Int, limit: Int): List<AiCandidate>
 
   suspend fun phoneOnly(recipe: Int, limit: Int): List<AiCandidate>
+
+  /**
+   * XS-4: come [forShare], ma i candidati chiesti dall'utente ([include], "Analizza adesso") entrano **anche oltre il limite** della lista
+   * (che e' di 2.000 media dal piu' recente). Di serie ignora [include]: chi non ha un limite non ne ha bisogno.
+   */
+  suspend fun forShare(share: String, recipe: Int, limit: Int, include: Set<ContentKey>): List<AiCandidate> = forShare(share, recipe, limit)
+
+  /** XS-4: come [phoneOnly], con i candidati chiesti ([include]) anche oltre il limite. */
+  suspend fun phoneOnly(recipe: Int, limit: Int, include: Set<ContentKey>): List<AiCandidate> = phoneOnly(recipe, limit)
 }
 
 /**
@@ -170,6 +179,32 @@ sealed interface AiStatus {
   data class BufferOnlyDone(val items: Int) : AiStatus
 
   data class Problem(val code: DiagCode) : AiStatus
+}
+
+/**
+ * Il calcolo **mentre scorre**, per la pagina "Analisi delle foto" (Pacchetto X, 12/11/2026): il media di adesso, gli ultimi finiti qui e
+ * i prossimi in coda, per chiave di contenuto. Solo in memoria e mai nei log (le chiavi sono dati, D40): chi mostra risolve le chiavi in
+ * anteprime con il cancello della Libreria (un media che la Libreria non mostrerebbe non si mostra nemmeno qui). A tappa ferma [current]
+ * e [next] sono vuoti e [recent] resta: sono le ultime analizzate su questo dispositivo in questo processo.
+ */
+data class AiLive(
+  val current: ContentKey?,
+  val recent: List<ContentKey>,
+  val next: List<ContentKey>,
+  /** XS-7: quanti media sono usciti dal lavoro da che il processo e' nato (calcolati, gia' fatti da altri o non supportati): un contatore che non si perde se chi guarda salta emissioni. */
+  val finished: Long = 0L,
+) {
+  override fun toString(): String = "AiLive(ora=${if (current != null) "si" else "no"}, fatte=${recent.size}, prossime=${next.size})"
+
+  companion object {
+    val EMPTY = AiLive(null, emptyList(), emptyList())
+
+    /** Quante ultime finite si ricordano (il nastro della pagina non ne mostra di piu'). */
+    const val RECENT: Int = 24
+
+    /** Quante prossime si annunciano. */
+    const val NEXT: Int = 12
+  }
 }
 
 /** La misura breve del dispositivo (D15): 20 immagini sintetiche dell'APK. */

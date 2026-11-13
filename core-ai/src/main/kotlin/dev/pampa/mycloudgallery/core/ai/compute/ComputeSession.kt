@@ -3,8 +3,10 @@ package dev.pampa.mycloudgallery.core.ai.compute
 import dev.pampa.mycloudgallery.core.ai.contract.AiBuffer
 import dev.pampa.mycloudgallery.core.ai.contract.AiCandidate
 import dev.pampa.mycloudgallery.core.ai.contract.AiDiag
+import dev.pampa.mycloudgallery.core.ai.contract.AiLive
 import dev.pampa.mycloudgallery.core.ai.contract.AiRecipe
 import dev.pampa.mycloudgallery.core.ai.contract.AiRunResult
+import dev.pampa.mycloudgallery.core.ai.contract.AiScope
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.AiStop
 import dev.pampa.mycloudgallery.core.ai.contract.AiWaitReason
@@ -40,6 +42,13 @@ internal class ComputeSession(
   private val state: MutableStateFlow<AiStatus>,
   /** IX-7: gli errori passeggeri del motore per chiave, per tutto il processo (li tiene il motore). */
   strikes: MutableMap<ContentKey, Int> = HashMap(),
+  /** Pacchetto X: il calcolo mentre scorre, per la pagina "Analisi delle foto" (solo in memoria, mai nei log). */
+  private val live: MutableStateFlow<AiLive> = MutableStateFlow(AiLive.EMPTY),
+  /**
+   * XS-3: la tappa e' solo per i media chiesti dall'utente ("Analizza adesso"): lavora quelli e si ferma, il resto resta al lavoro in
+   * background con le sue regole. Di serie falso: la tappa lavora tutto, come sempre.
+   */
+  private val only: Boolean = false,
 ) {
   private val start = nanos()
   private val tally = Tally()
@@ -138,6 +147,7 @@ internal class ComputeSession(
     // altre). Una morte del processo le lascia prenotate fino alla scadenza (E-I2): nessun `finally`.
     val ends = ArrayList<Pair<UnitClaim, UnitOutcome>>()
     var stop: AiStop? = null
+    var exhausted = false
     val seen = HashSet<WorkUnitKey>()
     for (round in 0 until config.maxUnitsPerRun) {
       // Le regole si chiedono una volta per lotto: la prima l'ha gia' chiesta l'inizio della tappa.
@@ -152,11 +162,23 @@ internal class ComputeSession(
       } catch (e: IOException) {
         stop = AiStop.NAS_UNREACHABLE
         break
-      } ?: break
+      }
+      if (claim == null) {
+        exhausted = true
+        break
+      }
       if (!seen.add(claim.key)) {
         ends += claim to UnitOutcome.Interrupted("AGAIN")
         break
       }
+      if (only && urgentKeys().toSet().let { askedNow -> claim.items.none { it.contentKey in askedNow } }) {
+        // XS-3: il giro e' solo per i media chiesti. Le unita' che li contengono vengono per prime (priorita' delle urgenze): questa non ne
+        // ha, quindi quelle chieste sono finite. Si lascia subito (nessun lavoro fatto) e la tappa si chiude.
+        ends += claim to UnitOutcome.Completed(0, 0)
+        exhausted = true
+        break
+      }
+      seenKeys += claim.items.map { it.contentKey }
       val end = unit(share, claim)
       when {
         end.lost -> Unit
@@ -164,13 +186,38 @@ internal class ComputeSession(
           ends += end.claim to UnitOutcome.Interrupted(end.stop.name)
           stop = end.stop
         }
+        // XS2-2: un'unita' tentata in cui ogni media e' rimasto in attesa (anteprima non pronta) non ha dato lavoro: chi sceglie le unita' la mette in fondo
+        // per un po', cosi' le richieste non servibili non fermano l'avanzamento.
+        end.computed == 0 && end.failed == 0 && end.waiting > 0 -> ends += end.claim to UnitOutcome.Interrupted(UnitOutcome.Interrupted.STALLED)
         else -> ends += end.claim to UnitOutcome.Completed(end.computed, end.failed)
       }
       if (stop != null) break
     }
     for ((claim, outcome) in ends) safeFinish(claim, outcome)
+    if (exhausted) reportBlocked(share)
     if (stop == AiStop.BUFFER_ONLY) return bufferOnly(share)
     return finish(stop)
+  }
+
+  /** Le chiavi di tutti i media delle unita' prese in questa tappa (per dire quali media chiesti nessuna unita' ha portato). */
+  private val seenKeys = HashSet<ContentKey>()
+
+  /**
+   * XS-4: a fine giro, i media chiesti che [share] contiene e che nessuna unita' presa in questa tappa ha portato stanno in un'unita' che
+   * un altro dispositivo sta lavorando (la prenotazione **non si sottrae**, D13): lo stato dice "in attesa" e la richiesta resta (il
+   * registro la mette dietro agli altri). Un guasto della porta vale come "nessuno".
+   */
+  private suspend fun reportBlocked(share: String) {
+    val asked = urgentKeys()
+    if (asked.isEmpty()) return
+    val mine = try {
+      parts.requestedIn(AiScope.Share(share), asked.toSet())
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      return
+    }
+    for (key in mine) if (key !in seenKeys) reportWaiting(key, UrgentWait.OTHER_DEVICE)
   }
 
   /** D8, F4-D31: le voci in attesa di una share che ora si apre si pubblicano, **senza ricalcolo**. */
@@ -186,13 +233,14 @@ internal class ComputeSession(
     }
   }
 
-  private class UnitEnd(val claim: UnitClaim, val stop: AiStop?, val lost: Boolean, val computed: Int, val failed: Int)
+  private class UnitEnd(val claim: UnitClaim, val stop: AiStop?, val lost: Boolean, val computed: Int, val failed: Int, val waiting: Int = 0)
 
   private suspend fun unit(share: String, first: UnitClaim): UnitEnd {
     var claim = first
     var renewedAt = nanos()
     val computedBefore = tally.computed
     val failedBefore = tally.failed
+    val waitingBefore = tally.waiting
     val keys = claim.items.map { it.contentKey }
     val others = othersOf(share, keys)
     val sources = try {
@@ -200,7 +248,14 @@ internal class ComputeSession(
     } catch (e: IOException) {
       emptyMap()
     }
-    var queue = claim.items
+    // Pacchetto X: i media chiesti adesso dall'utente davanti, dentro questa unita' (i suoi confini non cambiano). XS-4: l'ultimo chiesto
+    // per primo; con [only] solo i chiesti.
+    var asked = urgentKeys()
+    val askedRun = AskedRun()
+    var queue = ordered(claim.items, asked) { it.contentKey }
+    var queueKeys = queue.map { it.contentKey }
+    var doneInUnit = 0
+    showLive(null, queueKeys, -1)
     var index = 0
     var stop: AiStop? = null
     var lastDone: ContentKey? = null
@@ -219,6 +274,7 @@ internal class ComputeSession(
             claim = r.claim
             val still = r.claim.items.mapTo(HashSet()) { it.contentKey }
             queue = queue.take(index) + queue.drop(index).filter { it.contentKey in still }
+            queueKeys = queue.map { it.contentKey }
           }
           KeepAliveResult.Lost -> {
             counters.unitsLost.incrementAndGet()
@@ -226,6 +282,18 @@ internal class ComputeSession(
             return UnitEnd(claim, null, lost = true, 0, 0)
           }
           null -> Unit
+        }
+      }
+      // XS-4: le richieste si rileggono al confine del lotto: arrivata una richiesta (o cambiato l'ordine dei tocchi) si riordina **solo**
+      // cio' che non e' ancora stato lavorato, mai quello che e' gia' passato.
+      if (index > 0) {
+        val again = urgentKeys()
+        if (again != asked || asked.isNotEmpty()) {
+          asked = again
+          val worked = queue.take(index).mapTo(HashSet()) { it.contentKey }
+          queue = queue.take(index) + orderedFair(claim.items.filter { it.contentKey !in worked }, asked, askedRun) { it.contentKey }
+          queueKeys = queue.map { it.contentKey }
+          if (index >= queue.size) break
         }
       }
       val batch = queue.subList(index, minOf(queue.size, index + batchSize()))
@@ -239,15 +307,18 @@ internal class ComputeSession(
       for (item in planned) {
         quickGate()?.let { stop = it }
         if (stop != null) break
+        showLive(item.key, queueKeys, doneInUnit)
         val end = worker.process(share, item, localOnly = false, staged = staged)
         if (end == ItemEnd.MODEL_MISSING) {
           stop = AiStop.MODEL_MISSING
           break
         }
-        tally.count(end, item.key)
+        counted(end, item.key)
+        doneInUnit++
         lastDone = item.key
         running(queue.size)
       }
+      askedRun.after(batch.map { it.contentKey }, asked)
       index += batch.size
       stageAll(share, staged)
       flush(share, FlushReason.PERIODIC)
@@ -257,7 +328,7 @@ internal class ComputeSession(
     }
     flush(share, FlushReason.UNIT_FINISHED)
     evictUnlessKept(tally.finished)
-    return UnitEnd(claim, stop, lost = false, tally.computed - computedBefore, tally.failed - failedBefore)
+    return UnitEnd(claim, stop, lost = false, tally.computed - computedBefore, tally.failed - failedBefore, tally.waiting - waitingBefore)
   }
 
   private suspend fun othersOf(share: String, keys: List<ContentKey>): Map<ContentKey, Set<AiClass>> = try {
@@ -307,10 +378,14 @@ internal class ComputeSession(
    * unita', niente NAS. I risultati vanno nell'outbox e si pubblicano al primo giro con il NAS.
    */
   private suspend fun bufferOnly(share: String): AiRunResult {
-    val list = parts.candidates.forShare(share, recipe.version, config.localBatchLimit)
+    val list = parts.candidates.forShare(share, recipe.version, config.localBatchLimit, urgentKeys().toSet())
     val others = othersOf(share, list.map { it.contentKey })
-    val stop = local(share, list, others) { candidate -> parts.buffer.get(candidate.contentKey, inputClassOf(candidate)) != null }
+    val stop = local(
+      share, list, others,
+      refetch = { asked -> parts.candidates.forShare(share, recipe.version, config.localBatchLimit, asked) },
+    ) { candidate -> parts.buffer.get(candidate.contentKey, inputClassOf(candidate)) != null }
     if (stop != null && stop != AiStop.BUFFER_ONLY) return finish(stop)
+    restLive()
     state.value = AiStatus.BufferOnlyDone(tally.computed)
     return result(AiStop.BUFFER_ONLY)
   }
@@ -319,15 +394,59 @@ internal class ComputeSession(
   suspend fun phoneOnly(): AiRunResult {
     gate()?.let { return finish(it) }
     pruneFinished(null)
-    val list = parts.candidates.phoneOnly(recipe.version, config.localBatchLimit)
-    return finish(local(null, list, emptyMap()) { true })
+    val list = parts.candidates.phoneOnly(recipe.version, config.localBatchLimit, urgentKeys().toSet())
+    return finish(local(null, list, emptyMap(), refetch = { asked -> parts.candidates.phoneOnly(recipe.version, config.localBatchLimit, asked) }) { true })
   }
 
-  private suspend fun local(share: String?, list: List<AiCandidate>, others: Map<ContentKey, Set<AiClass>>, usable: suspend (AiCandidate) -> Boolean): AiStop? {
-    val chosen = list.filter { usable(it) }
+  private suspend fun local(
+    share: String?,
+    list: List<AiCandidate>,
+    initialOthers: Map<ContentKey, Set<AiClass>>,
+    /** XS2-4: la lista di nuovo, con le richieste di adesso: una richiesta sopraggiunta per un candidato **fuori** dalla lista limitata entra da qui. */
+    refetch: suspend (Set<ContentKey>) -> List<AiCandidate>,
+    usable: suspend (AiCandidate) -> Boolean,
+  ): AiStop? {
+    var others = initialOthers
+    // Pacchetto X: i media chiesti adesso dall'utente davanti anche nelle liste locali (solo telefono, solo buffer). XS-4: l'ultimo chiesto
+    // per primo, e le richieste si rileggono al confine del lotto; con [only] solo i chiesti.
+    var asked = urgentKeys()
+    val askedRun = AskedRun()
+    var usableList = list.filter { usable(it) }
+    var chosen = ordered(usableList, asked) { it.contentKey }
+    var chosenKeys = chosen.map { it.contentKey }
+    var doneInList = 0
+    showLive(null, chosenKeys, -1)
     var index = 0
     while (index < chosen.size) {
       if (index > 0) gate()?.let { return it }
+      if (index > 0) {
+        val again = urgentKeys()
+        val changed = again != asked
+        if (changed) {
+          asked = again
+          val worked = chosen.take(index).mapTo(HashSet()) { it.contentKey }
+          // XS2-4: i candidati chiesti che la lista (limitata) non aveva entrano adesso, senza rifare quelli gia' lavorati ne' ripetere quelli gia' in lista.
+          val known = usableList.mapTo(HashSet()) { it.contentKey }
+          val fresh = try {
+            refetch(asked.toSet()).filter { it.contentKey !in known && it.contentKey !in worked && usable(it) }
+          } catch (e: CancellationException) {
+            throw e
+          } catch (e: IOException) {
+            emptyList()
+          }
+          if (fresh.isNotEmpty()) {
+            usableList = usableList + fresh
+            if (share != null) others = others + othersOf(share, fresh.map { it.contentKey })
+          }
+        }
+        // La quota si applica a ogni lotto, anche con urgenze immutate in attesa di anteprima.
+        if (asked.isNotEmpty() || changed) {
+          val worked = chosen.take(index).mapTo(HashSet()) { it.contentKey }
+          chosen = chosen.take(index) + orderedFair(usableList.filter { it.contentKey !in worked }, asked, askedRun) { it.contentKey }
+          chosenKeys = chosen.map { it.contentKey }
+          if (index >= chosen.size) break
+        }
+      }
       val batch = chosen.subList(index, minOf(chosen.size, index + batchSize()))
       val staged = ArrayList<dev.pampa.mycloudgallery.core.index.ai.AiEntry>()
       for (candidate in batch) {
@@ -336,15 +455,18 @@ internal class ComputeSession(
           return it
         }
         val planned = worker.plan(share, candidate.contentKey, candidate.kind, candidate.source, candidate.missing, others[candidate.contentKey].orEmpty(), staged)
+        showLive(candidate.contentKey, chosenKeys, doneInList)
         val end = worker.process(share, planned, localOnly = true, staged = staged)
         if (end == ItemEnd.MODEL_MISSING) {
           if (share != null) stageAll(share, staged)
           return AiStop.MODEL_MISSING
         }
-        tally.count(end, candidate.contentKey)
+        counted(end, candidate.contentKey)
+        doneInList++
         running(chosen.size)
       }
       if (share != null) stageAll(share, staged)
+      askedRun.after(batch.map { it.contentKey }, asked)
       index += batch.size
       control.checkpoint(AiCheckpoint(share ?: PHONE, null, batch.lastOrNull()?.contentKey?.hex))
       breath()
@@ -356,6 +478,112 @@ internal class ComputeSession(
   private fun inputClassOf(candidate: AiCandidate) =
     Planned(candidate.contentKey, candidate.kind, candidate.source, emptySet()).inputClass
 
+  /** Le ultime finite qui (le piu' recenti prima), da una tappa all'altra dello stesso processo. */
+  private val recentKeys: ArrayDeque<ContentKey> = ArrayDeque(live.value.recent)
+
+  /** Quanti media sono usciti dal lavoro da che il processo e' nato (contatore monotono, da una tappa all'altra): chi stima il residuo lo usa, non la testa di [recentKeys]. */
+  private var finishedTotal: Long = live.value.finished
+
+  /** Le urgenze di adesso, **l'ultima chiesta per prima**; un guasto del registro non ferma mai il calcolo (vale come nessuna). */
+  private fun urgentKeys(): List<ContentKey> = try {
+    parts.urgent.urgent().toList()
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    emptyList()
+  }
+
+  /**
+   * Le chiavi urgenti davanti nell'ordine delle richieste (l'ultima toccata per prima, XS-4), il resto nell'ordine di sempre (ordinamento
+   * stabile). Cambia solo l'ordine di lavoro **dentro** questa lista: unita', prenotazioni, cancelli e salvataggi restano identici, e la
+   * ripresa (che e' `AiResults.saved`, non la posizione) non ne sa niente. Senza richieste la lista torna **la stessa** (identica a prima).
+   * Con [only] (XS-3) restano solo i media chiesti.
+   */
+  private fun <T> ordered(items: List<T>, asked: List<ContentKey>, key: (T) -> ContentKey): List<T> {
+    if (asked.isEmpty()) return if (only) emptyList() else items
+    val rank = HashMap<ContentKey, Int>(asked.size * 2)
+    asked.forEachIndexed { at, k -> rank[k] = at }
+    val picked = if (only) items.filter { key(it) in rank } else items
+    return picked.sortedBy { rank[key(it)] ?: Int.MAX_VALUE }
+  }
+
+  /**
+   * XS3-1, equita' del lavoro ordinario **dentro una lista o un'unita'**: conta i lotti di fila fatti **solo** di media chiesti. Con richieste nuove a **ogni** confine di
+   * lotto, "le richieste davanti" da sole rinvierebbero l'ordinario fino al budget, ogni volta. Con questo, dopo [LIMIT] lotti di fila di soli chiesti il lotto dopo e'
+   * fatto di media **ordinari** (se ce ne sono nella lista): garanzia scritta: **almeno un lotto ogni [LIMIT] + 1** (uno ogni tre) va all'ordinario, qualunque sia il ritmo delle richieste.
+   * Non cambia nulla senza richieste (la lista resta la stessa) e con [only] (solo i chiesti) non c'e' ordinario da servire.
+   */
+  private class AskedRun {
+    private var batches = 0
+
+    fun owesOrdinary(): Boolean = batches >= LIMIT
+
+    fun after(batch: List<ContentKey>, asked: List<ContentKey>) {
+      val askedSet = asked.toHashSet()
+      batches = if (asked.isNotEmpty() && batch.isNotEmpty() && batch.all { it in askedSet }) batches + 1 else 0
+    }
+
+    companion object {
+      /** I lotti di soli media chiesti che si possono fare di fila prima di un lotto ordinario. */
+      const val LIMIT: Int = 2
+    }
+  }
+
+  /** [ordered], con il lotto ordinario davanti quando ne e' dovuto uno ([AskedRun]). */
+  private fun <T> orderedFair(items: List<T>, asked: List<ContentKey>, run: AskedRun, key: (T) -> ContentKey): List<T> {
+    val base = ordered(items, asked, key)
+    if (only || asked.isEmpty() || !run.owesOrdinary()) return base
+    val askedSet = asked.toHashSet()
+    val front = base.filter { key(it) !in askedSet }.take(batchSize())
+    if (front.isEmpty()) return base
+    val frontKeys = front.mapTo(HashSet()) { key(it) }
+    return front + base.filter { key(it) !in frontKeys }
+  }
+
+  /** XS-2/XS-7: un media chiesto che non si e' potuto lavorare; un guasto del registro non ferma mai il calcolo. */
+  private fun reportWaiting(key: ContentKey, why: UrgentWait) {
+    try {
+      parts.urgent.waiting(key, why)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      // Una comodita': la richiesta resta com'era.
+    }
+  }
+
+  /** Conta un media, e se e' finito qui toglie la sua urgenza (chi resta "in attesa" la tiene: sara' il primo quando si potra'). */
+  private fun counted(end: ItemEnd, key: ContentKey) {
+    tally.count(end, key)
+    if (end == ItemEnd.COMPUTED) {
+      recentKeys.remove(key)
+      recentKeys.addFirst(key)
+      while (recentKeys.size > AiLive.RECENT) recentKeys.removeLast()
+    }
+    if (end == ItemEnd.WAITING) reportWaiting(key, UrgentWait.PREVIEW)
+    if (end == ItemEnd.RETRY) reportWaiting(key, UrgentWait.RETRY)
+    if (end == ItemEnd.COMPUTED || end == ItemEnd.SKIPPED || end == ItemEnd.FAILED) {
+      finishedTotal++
+      try {
+        parts.urgent.done(key)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        // Una comodita': al giro dopo il media non e' piu' candidato e l'urgenza cade da sola.
+      }
+    }
+  }
+
+  /** Il media di adesso e i prossimi della coda [keys] dopo [currentAt] (la posizione del media di adesso), per la pagina "Analisi". */
+  private fun showLive(current: ContentKey?, keys: List<ContentKey>, currentAt: Int) {
+    val next = if (keys.isEmpty()) emptyList() else keys.subList(minOf(currentAt + 1, keys.size), minOf(keys.size, currentAt + 1 + AiLive.NEXT))
+    live.value = AiLive(current, recentKeys.toList(), next, finishedTotal)
+  }
+
+  /** A tappa ferma: niente media di adesso ne' prossimi; le ultime finite restano (la pagina le mostra ferme). */
+  private fun restLive() {
+    live.value = AiLive(null, recentKeys.toList(), emptyList(), finishedTotal)
+  }
+
   private fun running(total: Int) {
     val done = tally.computed + tally.skipped + tally.failed + tally.waiting
     val seconds = elapsed().inWholeMilliseconds / 1000.0
@@ -365,6 +593,7 @@ internal class ComputeSession(
   }
 
   private fun finish(stop: AiStop?): AiRunResult {
+    restLive()
     state.value = if (stop == null) AiStatus.Idle(null) else AiComputeEngine.waitingFor(stop)
     return result(stop)
   }

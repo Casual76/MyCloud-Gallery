@@ -200,6 +200,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
       )
     }
     // Fase 6 (P11): testo dal vivo, "Trova simili" e foto in movimento nel viewer, prima di qualunque schermata.
+    // Pacchetto X: lo stato dell'analisi per la riga nel pannello della nuvola della Libreria.
+    gallery.analysisStatus = ai.ai.analysis
     gallery.searchViewer = AvvioTrace.section("MCG:app:viewerAi") {
       ai.viewerHooks(graph, gallery, CutoutShareEnv(integrations.shareCache, integrations.uris, integrations.shareHolder, integrations.revoker))
     }

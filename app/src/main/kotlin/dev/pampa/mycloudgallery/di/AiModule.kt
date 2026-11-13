@@ -26,6 +26,13 @@ import dev.pampa.mycloudgallery.core.search.contract.Suggestions
 import dev.pampa.mycloudgallery.core.search.contract.Today
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerControl
 import dev.pampa.mycloudgallery.feature.search.contract.TextReadingAccepted
+import dev.pampa.mycloudgallery.ai.AppAnalysisLive
+import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
+import dev.pampa.mycloudgallery.core.library.contract.VisibleMedia
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.conflate
+import dev.pampa.mycloudgallery.feature.search.contract.AnalysisLiveSource
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.graph.GalleryStopper
@@ -86,6 +93,18 @@ object AiModule {
   @Singleton
   fun indexerControl(@ApplicationContext context: Context, stack: AiStack, graph: AppGraph): IndexerControl =
     AppIndexerControl(stack, graph.scope, java.io.File(context.noBackupFilesDir, AppIndexerControl.PROBE_FILE)) { AiWorkScheduling.indexNow(context) }
+
+  /**
+   * Pacchetto X: il nastro della pagina "Analisi delle foto" (le chiavi del motore dietro il cancello della Libreria). XS-1 (Pacchetto XF): la
+   * sorgente e' la vista **autorizzata** ([VisibleMedia], che e' `visibleTimeline`: con l'accesso parziale o revocato non c'e') e il filtro
+   * finale e' quello condiviso ([HiddenMask]), mai l'istantanea di base (`repository.snapshot`), che conserva elementi che la Libreria non
+   * mostra. Un "Nascondi" fatto qui rifa' il nastro anche prima che l'istantanea cambi.
+   */
+  @Provides
+  @Singleton
+  fun analysisLive(stack: AiStack, graph: AppGraph, gallery: GalleryGraph, visible: VisibleMedia, mask: HiddenMask): AnalysisLiveSource {
+    return AppAnalysisLive(stack.ai.live, visible, mask, stack.search.keys, stack.ai.parts.facts, graph.scope, gallery.analysisVisibility)
+  }
 
   @Provides @Singleton fun deviceProbe(stack: AiStack, graph: AppGraph): DeviceProbe {
     return dev.pampa.mycloudgallery.core.ai.runtime.SingleFlightDeviceProbe(

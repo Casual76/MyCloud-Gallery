@@ -62,6 +62,8 @@ internal class RecordingSettingsHandlers : SearchSettingsHandlers {
   override fun onOpenDiagnostics() { calls += "diagnostics" }
 
   override fun onFreeSpace() { calls += "freeSpace" }
+
+  override fun onOpenAnalysis() { calls += "openAnalysis" }
 }
 
 /** Le miniature locali della Libreria sintetica; ogni riferimento chiesto al caricatore finisce in [asked]. */

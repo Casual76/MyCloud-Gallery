@@ -1,6 +1,9 @@
-package dev.pampa.mycloudgallery.feature.search.contract
+﻿package dev.pampa.mycloudgallery.feature.search.contract
 
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
+import dev.pampa.mycloudgallery.core.model.ThumbHash
+import dev.pampa.mycloudgallery.core.imaging.contract.ThumbRequest
+import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.imaging.contract.PlaceholderCache
@@ -9,7 +12,7 @@ import dev.pampa.mycloudgallery.core.library.contract.SelectionModel
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import kotlinx.coroutines.flow.StateFlow
 
-// Le PORTE di Cerca e della pagina Ricerca e modelli (Fase 6, P8; docs/fase6-progetto.md §1.1, §1.5, D15, D41, D48). feature-search non
+// Le PORTE di Cerca e della pagina Ricerca e modelli (Fase 6, P8; docs/fase6-progetto.md Â§1.1, Â§1.5, D15, D41, D48). feature-search non
 // vede core-personal ne' core-family (Phase6ArchitectureTest): le scelte personali e il ruolo del dispositivo le legge e le scrive `:app` (P11)
 // dietro queste interfacce, sopra `SearchPersonalSettings` e `RolesSettings`. Tutte **opzionali per Dagger** ([SearchPortsModule]): senza
 // legatura la ricerca funziona da sola, con il suo comportamento di riposo (ricerca vuota, lettura spenta). L'ordine dei risultati non e' piu' una scelta:
@@ -50,6 +53,12 @@ interface IndexerControl {
 
   val status: StateFlow<AiStatus>
 
+  /**
+   * Pacchetto X: lo stato dell'analisi **ridotto** per la testata e la pagina "Analisi delle foto" (un solo stato per tutti i posti, con
+   * il motivo vero di una pausa). Di serie niente da dire, per i montaggi che non lo legano.
+   */
+  val analysis: StateFlow<LibraryAnalysisStatus> get() = ANALYSIS_IDLE
+
   val backlog: StateFlow<IndexerBacklog>
 
   val space: StateFlow<IndexSpace>
@@ -71,6 +80,65 @@ interface IndexerControl {
   fun saveProbe(result: dev.pampa.mycloudgallery.core.ai.contract.ProbeResult) = Unit
 }
 
+/** Lo stato ridotto quando nessuno lo lega: niente da dire. */
+private val ANALYSIS_IDLE: StateFlow<LibraryAnalysisStatus> = kotlinx.coroutines.flow.MutableStateFlow(LibraryAnalysisStatus.Idle)
+
+/**
+ * Un media nel nastro della pagina "Analisi delle foto" (Pacchetto X), **gia' passato dal cancello** in `:app`: o si puo' mostrare
+ * ([Shown], con la richiesta di miniatura locale e il segnaposto sfocato, come in Cerca) o non si mostra affatto ([Quiet]: un media
+ * che la Libreria in questo momento non mostrerebbe â€” nascosto, in un album protetto, nel cestino, revocato mentre la pagina e'
+ * aperta â€” si conta nei numeri ma a schermo e' un segnaposto neutro). Nessuna chiave di contenuto arriva qui.
+ */
+sealed interface AnalysisThumb {
+  data class Shown(val id: MediaId, val request: ThumbRequest?, val thumbHash: ThumbHash?, val video: Boolean) : AnalysisThumb {
+    /** XS3-5: solo il tipo (e se e' un video): mai l'id del media, la versione, il riferimento al telefono o al NAS, ne' il segnaposto sfocato, in nessun dump o log. */
+    override fun toString(): String = "AnalysisThumb.Shown(video=$video)"
+  }
+
+  data object Quiet : AnalysisThumb
+}
+
+/**
+ * Il calcolo mentre scorre, per la pagina: il media di adesso, gli ultimi finiti, i prossimi in coda.
+ *
+ * [visibilityGeneration] (XS2-1, additivo, di serie 0): il **numero d'ordine di cio' che la Libreria mostra** (permessi, selezione, nascosti, cestino).
+ * `:app` lo alza a **ogni** cambio di visibilita' e, nello stesso istante, emette uno stato con **tutte le anteprime `Quiet`** della nuova generazione:
+ * chi disegna deve trattare ogni `Shown` nata in una generazione **piu' vecchia** di quella dell'ultimo valore ricevuto come **non piu' autorizzata**
+ * (niente byte, niente ThumbHash, niente riferimento: neutra) **subito**, anche se la sta trattenendo per un'animazione. Il pacing riguarda il movimento,
+ * mai l'autorizzazione. Il solo avanzare del motore (un media finito) **non** alza la generazione.
+ *
+ * [finished] (XU-9, additivo, di serie 0): quanti media sono usciti dal lavoro da che il processo e' nato (il contatore del motore, `AiLive.finished`).
+ * Cresce di 1 per ogni media finito e **non** si azzera a una generazione nuova: chi disegna lo usa per far avanzare il nastro anche quando due stati
+ * hanno le stesse anteprime (un nastro tutto di caselle neutre). E' un conteggio: non dice quali media.
+ */
+data class AnalysisFlow(
+  val current: AnalysisThumb?,
+  val recent: List<AnalysisThumb>,
+  val next: List<AnalysisThumb>,
+  val visibilityGeneration: Long = 0L,
+  val finished: Long = 0L,
+) {
+  /** XS3-5: soli tipi e conteggi (come `AiLive.toString`): quanti posti, quante anteprime mostrabili, la generazione e i media finiti; mai un id, una versione o un riferimento. */
+  override fun toString(): String {
+    val all = listOfNotNull(current) + recent + next
+    return "AnalysisFlow(ora=${if (current != null) "si" else "no"}, fatte=${recent.size}, prossime=${next.size}, " +
+      "mostrate=${all.count { it is AnalysisThumb.Shown }}, generazione=$visibilityGeneration, finiti=$finished)"
+  }
+
+  companion object {
+    val EMPTY = AnalysisFlow(null, emptyList(), emptyList())
+  }
+}
+
+/**
+ * Da dove la pagina "Analisi delle foto" prende il nastro: le chiavi del motore risolte in `:app` nelle celle che la Libreria mostra
+ * **adesso** (stesso cancello delle altre pagine). Miniature solo da cio' che e' gia' sul dispositivo (D28, D33): gli stessi
+ * [SearchThumbnails] di Cerca. **Opzionale**: senza, la pagina mostra solo lo stato.
+ */
+interface AnalysisLiveSource {
+  val live: StateFlow<AnalysisFlow>
+}
+
 /**
  * Da dove Cerca prende le miniature: **solo cio' che e' gia' sul dispositivo** (D28, D33). Il telefono da' la sua miniatura; un media che sta solo sul NAS
  * (sul tablet, quasi tutti) ha la sua **nella replica locale** (preparata da chi l'ha caricato) e, se manca, quella provvisoria letta al rilevamento: mai una
@@ -82,10 +150,26 @@ class SearchThumbnails(
   val loader: ThumbnailLoader,
   val placeholders: PlaceholderCache,
   val refs: SearchRefs,
-)
+) {
+  /**
+   * XS3-4 (Pacchetto XF, giro 3): le miniature del nastro dell'analisi **con un proprietario** ([ANALYSIS_OWNER]), mai al posto della finestra della Libreria (`window`
+   * la sostituirebbe e annullerebbe le celle in volo della griglia). Valgono come richieste "in arrivo" accanto alla finestra e **restano finche' non si rilasciano**:
+   * chi disegna chiama questo quando le miniature mostrate cambiano e [releaseAnalysis] quando la pagina esce dalla composizione, cosi' non restano richieste ne'
+   * ripetizioni (il caricatore riprova dopo 15 s) oltre il tempo in cui il nastro e' guardato. Non svuota la finestra globale.
+   */
+  fun holdAnalysis(requests: List<ThumbRequest>, owner: String = ANALYSIS_OWNER) = loader.keep(owner, requests)
+
+  /** XS3-4: il nastro dell'analisi non e' piu' guardato: toglie le sue richieste (e le loro riprove). Idempotente. */
+  fun releaseAnalysis(owner: String = ANALYSIS_OWNER) = loader.keep(owner, emptyList())
+
+  companion object {
+    /** Il proprietario delle richieste del nastro dell'analisi nel caricatore condiviso. */
+    const val ANALYSIS_OWNER: String = "analysis-lane"
+  }
+}
 
 /**
- * I2 (fase I): il volto di una persona per l'anteprima di un suggerimento («per una persona il volto»). `:app` la lega ai ritagli di feature-people, con
+ * I2 (fase I): il volto di una persona per l'anteprima di un suggerimento (Â«per una persona il voltoÂ»). `:app` la lega ai ritagli di feature-people, con
  * **il cancello dei volti** delle Raccolte: il ritaglio arriva solo se il volto sta in una foto mostrabile adesso, e porta quelle foto ([SearchFace.origins]),
  * cosi' la ricerca non lo disegna se nessuna e' piu' nella Libreria visibile (una foto nascosta un attimo fa). **Opzionale**: senza, le persone hanno il
  * segno della persona.

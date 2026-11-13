@@ -20,6 +20,7 @@ import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.ImageSearch
 import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Sync
@@ -40,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -73,12 +75,16 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoGlyph
 import dev.pampa.mycloudgallery.core.designsystem.design.glyph
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryStatusMark
 import dev.pampa.mycloudgallery.core.designsystem.icon.glyph
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRing
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRingDefaults
 import dev.pampa.mycloudgallery.core.designsystem.media.galleryRingColor
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
+import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
+import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisWait
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
+import dev.pampa.mycloudgallery.core.library.contract.progressOrNull
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.library.text.GalleryDates
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
@@ -168,6 +174,9 @@ internal sealed interface CloudItem {
   data class Nas(val status: LibraryNasStatus, override val state: GalleryCloudState) : CloudItem
 
   data class Backup(val status: LibraryBackupStatus, override val state: GalleryCloudState) : CloudItem
+
+  /** Pacchetto X: l'analisi delle foto (una riga di lavoro nel pannello; non alza da sola il glifo, salvo un problema). */
+  data class Analysis(val status: LibraryAnalysisStatus, override val state: GalleryCloudState) : CloudItem
 }
 
 /**
@@ -216,14 +225,16 @@ internal data class LibraryCloud(
  * Lo stato e' il piu' grave delle voci, in quest'ordine: allarme, senza rete, attenzione, in pausa, in corso, in attesa, salvato. La
  * pausa sta sopra i lavori in corso: finche' dura le foto nuove non si salvano, e solo l'utente la toglie.
  */
-internal fun libraryCloud(network: LibraryNetworkStatus?, nas: LibraryNasStatus, backup: LibraryBackupStatus): LibraryCloud? {
+internal fun libraryCloud(network: LibraryNetworkStatus?, nas: LibraryNasStatus, backup: LibraryBackupStatus, analysis: LibraryAnalysisStatus = LibraryAnalysisStatus.Idle): LibraryCloud? {
   val backupItem = backupItem(backup)
   // CU-1 (fase I): con le recinzioni accese il NAS pubblica solo in locale **e** il backup vero non e' acceso: e' una pausa sola, detta una volta. Se il
   // backup e' gia' in pausa (la recinzione, o la pausa dell'utente) il NAS non aggiunge una seconda voce.
   val nasItem = nasItem(nas)?.takeUnless { nas == LibraryNasStatus.LocalOnly && backupItem?.state == GalleryCloudState.Paused }
-  val items = listOfNotNull(network?.let(::networkItem), nasItem, backupItem)
+  val items = listOfNotNull(network?.let(::networkItem), nasItem, backupItem, analysisItem(analysis))
   if (items.isEmpty()) return null
-  val state = items.maxBy { severityRank(it.state) }.state
+  // Pacchetto X: il glifo resta la salute di rete, NAS e backup; l'analisi lo alza solo per un problema (attenzione), o se e' l'unica voce.
+  val healthItems = items.filter { it !is CloudItem.Analysis || it.state == GalleryCloudState.Attention }.ifEmpty { items }
+  val state = healthItems.maxBy { severityRank(it.state) }.state
   val problems = items.filter { it.state.isProblem }.sortedByDescending { severityRank(it.state) }
   val activity = items.filter { it.state == GalleryCloudState.Syncing } + items.filter { it.state == GalleryCloudState.Waiting }
   return LibraryCloud(
@@ -239,6 +250,14 @@ internal fun libraryCloud(network: LibraryNetworkStatus?, nas: LibraryNasStatus,
 /** L'ultima sincronizzazione che gli stati dicono adesso: la piu' recente fra "NAS aggiornato" e "tutto al sicuro". */
 internal fun lastSyncOf(nas: LibraryNasStatus, backup: LibraryBackupStatus): Long? =
   listOfNotNull((nas as? LibraryNasStatus.UpToDate)?.atNasMillis, (backup as? LibraryBackupStatus.AllSafe)?.atNasMillis).maxOrNull()
+
+/** Pacchetto X: l'analisi entra nel pannello solo quando ha qualcosa da dire (in corso, in coda, in pausa, un problema). */
+private fun analysisItem(status: LibraryAnalysisStatus): CloudItem? = when (status) {
+  is LibraryAnalysisStatus.Running -> CloudItem.Analysis(status, GalleryCloudState.Syncing)
+  is LibraryAnalysisStatus.Queued, is LibraryAnalysisStatus.Paused -> CloudItem.Analysis(status, GalleryCloudState.Waiting)
+  is LibraryAnalysisStatus.Problem -> CloudItem.Analysis(status, GalleryCloudState.Attention)
+  else -> null
+}
 
 private fun networkItem(status: LibraryNetworkStatus): CloudItem? = when (status.severity) {
   LibraryNetworkSeverity.Fine -> null
@@ -297,6 +316,8 @@ internal class LibraryCloudActions(
   val onNetwork: () -> Unit,
   val onNas: () -> Unit,
   val onBackup: () -> Unit,
+  /** Pacchetto X: il tocco sulla riga dell'analisi (la pagina "Analisi delle foto"). */
+  val onAnalysis: () -> Unit = {},
 )
 
 /**
@@ -310,13 +331,14 @@ internal fun LibraryCloudButton(
   network: LibraryNetworkStatus?,
   nas: State<LibraryNasStatus>,
   backup: State<LibraryBackupStatus>,
+  analysis: State<LibraryAnalysisStatus> = remember { mutableStateOf(LibraryAnalysisStatus.Idle) },
   lastSync: State<Long?>,
   commands: LibraryCommands,
   actions: LibraryCloudActions,
   modifier: Modifier = Modifier,
 ) {
   // Cio' che TalkBack dice dopo lo stato: il problema piu' grave o, in pausa, che cosa e' in pausa.
-  val problem by remember(network) { derivedStateOf { libraryCloud(network, nas.value, backup.value)?.withAction?.firstOrNull() } }
+  val problem by remember(network) { derivedStateOf { libraryCloud(network, nas.value, backup.value, analysis.value)?.withAction?.firstOrNull() } }
   val title = cloudTitle(state, savedByBackup = backup.value is LibraryBackupStatus.AllSafe)
   val headline = problem?.let { item -> noteOf(item).let { note -> if (note.label.equals(title, ignoreCase = true)) note.detail else note.label } }
   val description = if (headline == null) {
@@ -329,7 +351,7 @@ internal fun LibraryCloudButton(
     modifier = modifier,
     trigger = { open -> GalleryChromeCloudButton(state = state, contentDescription = description, onClick = open) },
   ) { close ->
-    val cloud = remember(network) { derivedStateOf { libraryCloud(network, nas.value, backup.value) } }.value
+    val cloud = remember(network) { derivedStateOf { libraryCloud(network, nas.value, backup.value, analysis.value) } }.value
     if (cloud != null) {
       LibraryCloudPanel(cloud = cloud, lastSyncNasMillis = lastSync.value, commands = commands, actions = actions, close = close)
     }
@@ -410,7 +432,7 @@ internal fun LibraryCloudPanel(
       )
     }
     for (item in cloud.activity) {
-      ActivityRow(note = noteOf(item), gauge = gaugeOf(item), onClick = {
+      ActivityRow(note = noteOf(item), gauge = gaugeOf(item), mark = markOf(item), family = familyOf(item), onClick = {
         close()
         actionOf(item, actions)()
       })
@@ -525,6 +547,17 @@ private fun gaugeOf(item: CloudItem): CloudGauge? = when (item) {
     }
     else -> null
   }
+  // Grafica XU: il conto solo mentre analizza; in coda o in pausa la riga dice lo stato e il perche' (l'anello tiene comunque il percento).
+  is CloudItem.Analysis -> (item.status as? LibraryAnalysisStatus.Running)?.let { s ->
+    val ready = s.ready
+    val total = s.total
+    if (ready != null && total != null && total > 0) {
+      // Giro 2 (XU-1): solo il conto vero; niente minuti (il motore stima solo il mese in lavorazione, non tutto il lavoro).
+      CloudGauge(AnalysisGlyph, ofTotal(GalleryNumbers.format(ready), GalleryNumbers.format(total)), null)
+    } else {
+      null
+    }
+  }
   is CloudItem.Network -> null
 }
 
@@ -540,10 +573,17 @@ private fun etaText(etaMillis: Long?): String? = etaMillis?.let { withEta(null, 
  * freccia. Per TalkBack una descrizione sola, la frase intera di prima.
  */
 @Composable
-private fun ActivityRow(note: GalleryFooterNote, gauge: CloudGauge?, onClick: () -> Unit) {
+private fun ActivityRow(
+  note: GalleryFooterNote,
+  gauge: CloudGauge?,
+  onClick: () -> Unit,
+  mark: GalleryIconStatus? = null,
+  family: GalleryIconFamily = GalleryIconFamily.Backup,
+) {
   val ink = MaterialTheme.colorScheme.onSurface
-  // CU-30: lo stesso avanzamento ha lo stesso colore ovunque, quello del backup.
-  val accent = galleryRingColor(GalleryIconFamily.Backup)
+  // CU-30: lo stesso avanzamento ha lo stesso colore ovunque, quello del backup; l'analisi ha la tinta della ricerca (giro 2, XU-2), come la sua
+  // testata, cosi' sotto «Tutto al sicuro» non sembra un backup che corre.
+  val accent = galleryRingColor(family)
   val spoken = note.description ?: listOfNotNull(note.label, note.detail).joinToString(". ")
   Row(
     modifier = Modifier
@@ -573,6 +613,16 @@ private fun ActivityRow(note: GalleryFooterNote, gauge: CloudGauge?, onClick: ()
           GalleryProgressRing(progress = 0f, modifier = Modifier.fillMaxSize(), color = accent, strokeWidth = GaugeStroke)
           Icon(imageVector = note.glyph ?: Icons.Rounded.HourglassTop, contentDescription = null, tint = accent, modifier = Modifier.size(GaugeGlyph))
         }
+      }
+      // Grafica XU: il segno di stato appoggiato sull'anello, come nella testata dell'analisi (solo per le voci che lo passano).
+      if (mark != null) {
+        GalleryStatusMark(
+          status = mark,
+          size = RowMark,
+          ring = MaterialTheme.colorScheme.surfaceContainerHigh,
+          contentDescription = null,
+          modifier = Modifier.align(Alignment.BottomEnd).offset(x = RowMarkOverhang, y = RowMarkOverhang),
+        )
       }
     }
     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(LineGapTight)) {
@@ -737,6 +787,7 @@ private fun noteOf(item: CloudItem): GalleryFooterNote = when (item) {
   )
   is CloudItem.Nas -> checkNotNull(nasFooterNote(item.status))
   is CloudItem.Backup -> checkNotNull(backupFooterNote(item.status))
+  is CloudItem.Analysis -> analysisNoteOf(item.status)
 }
 
 @Composable
@@ -749,10 +800,26 @@ private fun actionLabel(item: CloudItem): String = stringResource(
     }
     is CloudItem.Nas -> R.string.library_cloud_action_diagnostics
     is CloudItem.Backup -> R.string.library_cloud_action_backup
+    is CloudItem.Analysis -> R.string.library_cloud_action_analysis
   },
 )
 
 /** Il segno del tasto sotto un problema: la Diagnostica lo stetoscopio, WireGuard la VPN, la password la chiave, il backup la nuvola. */
+/** La tinta dell'anello di una riga di lavoro: il backup per tutte, la ricerca per l'analisi (XU-2). */
+private fun familyOf(item: CloudItem): GalleryIconFamily = if (item is CloudItem.Analysis) GalleryIconFamily.Search else GalleryIconFamily.Backup
+
+/** Il segno di stato sull'anello di una riga di lavoro: per ora solo l'analisi (lo stesso vocabolario della sua testata). */
+private fun markOf(item: CloudItem): GalleryIconStatus? = when (item) {
+  is CloudItem.Analysis -> when (val s = item.status) {
+    is LibraryAnalysisStatus.Running -> GalleryIconStatus.Running
+    is LibraryAnalysisStatus.Queued -> GalleryIconStatus.Waiting
+    is LibraryAnalysisStatus.Paused -> if (s.reason == LibraryAnalysisWait.PREPARATION) GalleryIconStatus.Waiting else GalleryIconStatus.Paused
+    is LibraryAnalysisStatus.Problem -> GalleryIconStatus.Problem
+    else -> null
+  }
+  else -> null
+}
+
 private fun actionGlyph(item: CloudItem): ImageVector = when (item) {
   is CloudItem.Network -> when (item.status.action) {
     LibraryNetworkAction.DIAGNOSTICS -> Icons.Rounded.MonitorHeart
@@ -761,6 +828,7 @@ private fun actionGlyph(item: CloudItem): ImageVector = when (item) {
   }
   is CloudItem.Nas -> Icons.Rounded.MonitorHeart
   is CloudItem.Backup -> Icons.Rounded.Backup
+  is CloudItem.Analysis -> AnalysisGlyph
 }
 
 /** Vero se la frase dice le stesse parole del tasto (a meno di maiuscole e punto finale): sotto la capsula non si ripete. */
@@ -770,6 +838,7 @@ private fun actionOf(item: CloudItem, actions: LibraryCloudActions): () -> Unit 
   is CloudItem.Network -> actions.onNetwork
   is CloudItem.Nas -> actions.onNas
   is CloudItem.Backup -> actions.onBackup
+  is CloudItem.Analysis -> actions.onAnalysis
 }
 
 /** "Oggi alle 03:12", "12 ottobre 2026 alle 03:12": un istante in ora del NAS, mostrato come ora di casa. */
@@ -836,3 +905,83 @@ internal const val ActivityRowTag: String = "nuvola-lavoro"
 internal const val SpaceRowTag: String = "nuvola-spazio"
 internal const val ProblemDetailTag: String = "nuvola-frase"
 internal const val PauseTitleTag: String = "nuvola-titolo-pausa"
+
+/**
+ * Pacchetto X, grafica XU: la riga dell'analisi nel pannello. In corso: l'anello con il percento, il conto delle pronte e il tempo (come il backup);
+ * in coda o in pausa: due parole e il perche' in una riga, l'anello che tiene il percento e il segno dello stato sull'arco. L'icona e' quella
+ * dell'analisi (la foto con la lente), la stessa della pagina "Analisi delle foto" e del visore.
+ */
+@Composable
+private fun analysisNoteOf(status: LibraryAnalysisStatus): GalleryFooterNote {
+  val remaining = when (status) {
+    is LibraryAnalysisStatus.Running -> status.remaining
+    is LibraryAnalysisStatus.Queued -> status.remaining
+    is LibraryAnalysisStatus.Paused -> status.remaining
+    else -> null
+  }
+  val rest = remaining?.takeIf { it > 0 }?.let { stringResource(R.string.library_cloud_analysis_remaining, GalleryNumbers.format(it)) }
+  return when (status) {
+    is LibraryAnalysisStatus.Running -> GalleryFooterNote(
+      tone = GalleryFooterTone.Working,
+      label = stringResource(R.string.library_cloud_analysis_running),
+      glyph = AnalysisGlyph,
+      detail = rest,
+      progress = status.progressOrNull(),
+      busy = status.progressOrNull() == null,
+    )
+    is LibraryAnalysisStatus.Queued -> GalleryFooterNote(
+      tone = GalleryFooterTone.Waiting,
+      label = stringResource(R.string.library_cloud_analysis_queued),
+      glyph = AnalysisGlyph,
+      detail = stringResource(R.string.library_cloud_analysis_queued_line),
+      progress = status.progressOrNull(),
+      description = listOfNotNull(stringResource(R.string.library_cloud_analysis_queued), rest.takeIf { status.progressOrNull() == null }).joinToString(". "),
+    )
+    is LibraryAnalysisStatus.Paused -> {
+      val why = stringResource(analysisWaitRes(status.reason))
+      GalleryFooterNote(
+        tone = GalleryFooterTone.Waiting,
+        label = stringResource(R.string.library_cloud_analysis_paused),
+        glyph = AnalysisGlyph,
+        detail = why,
+        progress = status.progressOrNull(),
+        description = listOfNotNull(stringResource(R.string.library_cloud_analysis_paused), why, rest.takeIf { status.progressOrNull() == null }).joinToString(". "),
+      )
+    }
+    // Giro 2 (XU-6): la capsula dice il perche' corto («Memoria quasi piena»), il tasto sotto dove si risolve; un codice senza perche' corto
+    // resta «Analisi ferma».
+    is LibraryAnalysisStatus.Problem -> GalleryFooterNote(
+      tone = GalleryFooterTone.Attention,
+      label = stringResource(problemRes(status.code)),
+      glyph = AnalysisGlyph,
+    )
+    else -> GalleryFooterNote(tone = GalleryFooterTone.Calm, label = stringResource(R.string.library_cloud_analysis_queued), glyph = AnalysisGlyph)
+  }
+}
+
+private fun problemRes(code: String): Int = when (code) {
+  "AI_STORAGE_LOW", "AI_MODEL_NO_SPACE", "AI_KILLED_MEMORY" -> R.string.library_cloud_analysis_problem_storage
+  "AI_MODEL_FETCH_FAILED", "AI_MODEL_MISMATCH", "AI_MODEL_MISSING" -> R.string.library_cloud_analysis_problem_model
+  else -> R.string.library_cloud_analysis_problem
+}
+
+/** L'icona dell'analisi delle foto: la foto con la lente (la stessa di Ricerca e modelli e del visore). */
+private val AnalysisGlyph: ImageVector get() = Icons.Rounded.ImageSearch
+
+private fun analysisWaitRes(reason: LibraryAnalysisWait): Int = when (reason) {
+  LibraryAnalysisWait.NIGHT_WINDOW -> R.string.library_cloud_analysis_wait_window
+  LibraryAnalysisWait.CHARGING -> R.string.library_cloud_analysis_wait_charging
+  LibraryAnalysisWait.BATTERY -> R.string.library_cloud_analysis_wait_battery
+  LibraryAnalysisWait.POWER_SAVER -> R.string.library_cloud_analysis_wait_power_saver
+  LibraryAnalysisWait.THERMAL -> R.string.library_cloud_analysis_wait_thermal
+  LibraryAnalysisWait.WIFI -> R.string.library_cloud_analysis_wait_wifi
+  LibraryAnalysisWait.HOME_WIFI -> R.string.library_cloud_analysis_wait_home_wifi
+  LibraryAnalysisWait.NAS -> R.string.library_cloud_analysis_wait_nas
+  LibraryAnalysisWait.DATA_CAP -> R.string.library_cloud_analysis_wait_data_cap
+  LibraryAnalysisWait.PREPARATION -> R.string.library_cloud_analysis_wait_preparation
+  LibraryAnalysisWait.ANDROID_LIMIT, LibraryAnalysisWait.PROFILE, LibraryAnalysisWait.OTHER -> R.string.library_cloud_analysis_wait_other
+}
+
+/** Il segno di stato sull'anello di una riga di lavoro, e quanto sporge oltre l'anello. */
+private val RowMark: Dp = 18.dp
+private val RowMarkOverhang: Dp = 3.dp

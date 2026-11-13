@@ -241,6 +241,9 @@ class LibraryTabState(
   val debug: LibraryDebugHooks? = null,
   val nas: StateFlow<LibraryNasStatus> = MutableStateFlow(LibraryNasStatus.Idle),
   val backup: StateFlow<LibraryBackupStatus> = MutableStateFlow(LibraryBackupStatus.Idle),
+  /** Pacchetto X: lo stato dell'analisi delle foto, una riga nel pannello della nuvola. Di default niente da dire. */
+  val analysis: StateFlow<dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus> =
+    MutableStateFlow(dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus.Idle),
 ) {
   /** Quante foto e quanti video ci sono nella vista (il riepilogo in fondo). Si ricontano a ogni vista nuova. */
   var photoCount: Int by mutableIntStateOf(photoCount)

@@ -138,6 +138,12 @@ class NasAiRuntime(
   val rules: IndexWriteRules,
 ) {
   companion object {
+    /** XS-2: al piu' cosi' tanti mesi con media chiesti passano davanti nella finestra del calcolo (la finestra e' di 48 mesi). */
+    const val PRIORITY_MONTHS: Int = 16
+
+    /** XS2-2: i mesi delle richieste e quelli ordinari sono due classi servite a turno (solo per il calcolo AI; la preparazione resta nell'ordine di sempre). */
+    const val ALTERNATE_PRIORITY: Boolean = true
+
     fun build(
       hooks: NasAiHooks,
       sync: AiShareSync,
@@ -182,6 +188,10 @@ class NasAiRuntime(
         rules = rules,
         // PR-3: un'unita' con risultati ancora nell'outbox non si rilascia (un altro indicizzatore li rifarebbe).
         unpublished = publisher::hasPending,
+        // XS-2: i mesi con media chiesti dall'utente non riempiono mai la finestra: il resto e' dei mesi ordinari.
+        maxPriorityMonthsPerCall = PRIORITY_MONTHS,
+        // XS2-2: i mesi delle richieste e quelli ordinari sono due classi servite a turno: il lavoro ordinario ha servizio vero a ogni tappa.
+        alternatePriority = ALTERNATE_PRIORITY,
       )
       // R5: le anteprime di questo dispositivo sono proprie; quelle degli altri arrivano al buffer con share e dispositivo.
       val fetcher = IndexAnalysisFetcher(remote, replicaStore, hooks.traffic, local = blobs, selfDevice = identity.deviceId)

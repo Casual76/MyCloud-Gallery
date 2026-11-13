@@ -371,6 +371,14 @@ internal object HiddenSurfaces {
       alsoProvedBy = listOf("SmartPeopleTest", "SmartPeoplePropertyTest", "SmartPeopleInterpreterTest", "SmartUpkeepPeopleTest"),
     ),
 
+    // --- Pacchetto X e XF (XS-1): la pagina "Analisi delle foto". Il nastro delle anteprime del calcolo passa dalla vista autorizzata della Libreria (`visibleTimeline`, che con
+    // l'accesso parziale o revocato non c'e') e dal filtro finale condiviso (`VisibleMedia`, `HiddenMask`): mai un nascosto, mai un media che la Libreria esclude, nemmeno uno nascosto un attimo fa ---
+    SurfaceEntry(
+      id = "analysis-page", title = "Analisi delle foto: il nastro delle anteprime del calcolo (mai un nascosto, mai un media che la Libreria esclude: XS-1)", row = SpecRow.SEARCH,
+      owner = "X", backing = Backing.PRODUCTION, sources = listOf("app/src/main/kotlin/dev/pampa/mycloudgallery/ai/AnalysisLive.kt"),
+      probe = RealAnalysisProbes.analysis, live = true, alsoProvedBy = listOf("AnalysisVisibilityIntegrationTest", "AnalysisGateAndUrgentTest"),
+    ),
+
     // --- Il codice vero di P6, P7 e P9 (i ricordi): integrazione del 30/10. Il motore vero e le schermate vere sul catalogo vero; dopo la pubblicazione il catalogo nasconde
     // alcuni elementi (senza che l'istantanea e lo scaffale lo sappiano) e ogni superficie deve toglierli (E-MEM5, E-H8, E-H10, D31) -------------------------------------------------------
     SurfaceEntry(
@@ -510,6 +518,8 @@ internal object HiddenSurfaces {
     // `GalleryModule` lega `HiddenMask` per le schermate di feature-memories e feature-map, che la chiedono **senza `Optional`** (R3, 31/10: prima stava in `AlbumsModule`
     // dietro tre `@BindsOptionalOf`, che compilano anche senza legame; `HiddenMaskWiringTest`).
     "app/src/main/kotlin/dev/pampa/mycloudgallery/di/GalleryModule.kt",
+    // Pacchetto XF (XS-1): `AiModule` passa `VisibleMedia` e `HiddenMask` (e mai l'istantanea di base) al nastro della pagina "Analisi delle foto" (superficie `analysis-page`); non mostra niente.
+    "app/src/main/kotlin/dev/pampa/mycloudgallery/di/AiModule.kt",
     "app/src/main/kotlin/dev/pampa/mycloudgallery/memories/MemoriesWiring.kt",
     "app/src/main/kotlin/dev/pampa/mycloudgallery/memories/MemoriesScreenPorts.kt",
     "app/src/main/kotlin/dev/pampa/mycloudgallery/map/MapGraph.kt",

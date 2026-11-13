@@ -43,6 +43,9 @@ object RuleWaits {
   /** La prima riprova col risparmio energetico acceso; poi il ritardo cresce. */
   val POWER_SAVER_RETRY: Duration = 15.minutes
 
+  /** La prima riprova di una richiesta dell'utente ferma dal tetto dei dati; poi il ritardo cresce fino a [MAX_RETRY]. */
+  val OVER_CAP_RETRY: Duration = 30.minutes
+
   /** Il tetto dei ritardi che crescono: mai piu' di un risveglio l'ora per un'attesa che non cambia, mai ore prima di accorgersi che e' finita. */
   val MAX_RETRY: Duration = 1.hours
 
@@ -80,6 +83,12 @@ object RuleWaits {
     is WaitReason.Thermal -> growing(THERMAL_RETRY, attempt, cap)
     else -> null
   }
+
+  /**
+   * XS2-3: "Analizza adesso" con il **tetto** dei dati raggiunto su una rete gia' buona: il Wi-Fi non cambia niente, quindi non si riaccoda subito. Ritenta
+   * a 30 minuti, poi 60 (il tetto dei ritardi): al piu' un'ora per accorgersi del reset del ciclo o di un'impostazione cambiata.
+   */
+  fun overCap(attempt: Int, cap: Duration = MAX_RETRY): FollowUp = growing(OVER_CAP_RETRY, attempt, cap)
 
   /** [first] al primo tentativo, poi il doppio a ogni attesa di fila, fino a [cap]. */
   private fun growing(first: Duration, attempt: Int, cap: Duration): FollowUp {

@@ -36,8 +36,18 @@ class AndroidPhoneAccessReader(
 
   override val state: StateFlow<PhoneAccess> = flow.asStateFlow()
 
+  private val listeners = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
+
+  fun onChange(listener: () -> Unit): AutoCloseable {
+    listeners += listener
+    return AutoCloseable { listeners -= listener }
+  }
+
   override fun refresh() {
-    flow.value = read()
+    val next = read()
+    val changed = next != flow.value
+    flow.value = next
+    if (changed) listeners.forEach { it() }
   }
 
   private fun read(): PhoneAccess {

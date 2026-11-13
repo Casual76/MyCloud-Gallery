@@ -49,6 +49,24 @@ class LeasedWorkUnits(
    * fallimento dichiarato da questo stesso dispositivo, o di un'altra famiglia, vale come prima). Null = come prima.
    */
   private val ownDecoderFamily: String? = null,
+  /**
+   * XS-2 (Pacchetto XF): al piu' cosi' tanti mesi **con media prioritari** ([UnitPriority.visible]: sullo schermo, o chiesti dall'utente con
+   * "Analizza adesso") stanno davanti nella finestra di [maxMonthsPerCall]; il resto della finestra e' **sempre** dei mesi ordinari, nell'ordine
+   * di sempre. Cosi' dei mesi urgenti che non si possono servire (anteprime non ancora pronte, media di un altro dispositivo) non riempiono la
+   * finestra e il lavoro ordinario avanza a ogni tappa. Di serie come [maxMonthsPerCall] (nessun tetto in piu': il comportamento di prima).
+   */
+  private val maxPriorityMonthsPerCall: Int = maxMonthsPerCall,
+  /**
+   * XS2-2 (Pacchetto XF, secondo giro): una quota sul prefisso non basta. Con [alternatePriority] i mesi che appartengono alle **richieste**
+   * ([UnitPriority.visible]) e i mesi **ordinari** sono **due classi separate** (un mese di richiesta non e' mai anche nella lista degli ordinari) e le
+   * chiamate le servono **a turno** quando ci sono richieste: a ogni tappa il lavoro ordinario ha servizio vero (un'unita' ogni due), anche se e' il mese piu'
+   * vecchio e anche con 64 richieste in 64 mesi recenti che non si riescono a servire. Dentro la classe delle richieste, un mese le cui unita' hanno
+   * finito **senza dare lavoro** ([UnitOutcome.Interrupted] con [UnitOutcome.Interrupted.STALLED]) passa dietro agli altri per [STALL_BACKOFF_NANOS], fra una chiamata
+   * e l'altra e fra una tappa e l'altra dello stesso processo: l'avanzamento oltre i mesi gia' tentati. Di serie falso: l'ordine di sempre (la preparazione).
+   */
+  private val alternatePriority: Boolean = false,
+  /** L'orologio monotono per la memoria dei mesi senza lavoro. */
+  private val clock: () -> Long = System::nanoTime,
 ) : WorkUnits {
 
   /** Contatori per la Diagnostica (`INDEX_LEASES_CONTENDED` e affini): solo numeri. */
@@ -70,14 +88,96 @@ class LeasedWorkUnits(
   /** Le unita' prese da questo processo e non ancora finite: non si prendono due volte. */
   private val active = HashMap<WorkUnitKey, UnitClaim>()
 
+  /** I mesi delle richieste che hanno finito senza dare lavoro, per (share, passaggio, mese), con l'ora (monotona) in cui e' successo. Solo in memoria. */
+  private val stalled = HashMap<Triple<String, WorkPass, String>, Long>()
+
+  /** Le unita' prese per un mese di richieste (a loro la memoria dei mesi senza lavoro si applica). */
+  private val requestClaims = HashSet<WorkUnitKey>()
+
+  /** Alternanza: dopo un'unita' di una richiesta, la prossima chiamata prova prima i mesi ordinari (e viceversa). */
+  @Volatile private var preferOrdinary = false
+
   override suspend fun next(share: String, pass: WorkPass, priority: UnitPriority): UnitClaim? {
     val visible = priority.visible.value
     if (published.refresh(share) is RemoteResult.Failed) stats.refreshFailures.incrementAndGet()
-    val months = LinkedHashSet<String>()
-    if (visible.isNotEmpty()) months += source.monthsOf(share, pass, visible)
-    months += source.months(share, pass)
+    val requested = if (visible.isNotEmpty()) source.monthsOf(share, pass, visible) else emptyList()
+    val ordered = source.months(share, pass)
     val leasing = rules.blockFor(share) == null && identity.writableRegistry() != null
-    for (month in months.take(maxMonthsPerCall)) {
+    if (!alternatePriority) {
+      val months = LinkedHashSet<String>()
+      months += requested.take(maxPriorityMonthsPerCall)
+      months += ordered
+      return claimFrom(share, pass, months.take(maxMonthsPerCall), leasing, visible, requested.toHashSet())
+    }
+    // XS3-1: la classe delle richieste e' fatta da **tutte** le richieste ([UnitPriority.requested]), non solo da quelle che hanno il turno ([visible]: al piu' 16 nel
+    // registro vero). Se la classe ordinaria escludesse solo i mesi delle richieste che hanno il turno, gli altri mesi di richieste (fino a 64) riempirebbero la finestra
+    // dei mesi ordinari e il mese vecchio con il lavoro pronto resterebbe fuori.
+    val everyRequest = priority.requested.value + visible
+    val allRequested = when {
+      everyRequest.isEmpty() -> emptyList()
+      everyRequest == visible -> requested
+      else -> source.monthsOf(share, pass, everyRequest)
+    }
+    val requestedSet = allRequested.toHashSet()
+    // Due classi: i mesi delle richieste (quelli senza lavoro per ultimi) e i mesi ordinari **senza** i mesi di nessuna richiesta; gli altri mesi di richieste
+    // oltre la quota stanno in fondo alla classe degli ordinari (si servono se non c'e' altro).
+    val priorityMonths = deferStalled(share, pass, requested).take(maxPriorityMonthsPerCall)
+    val inQuota = priorityMonths.toHashSet()
+    val leftover = deferStalled(share, pass, allRequested.filter { it !in inQuota }).take(maxPriorityMonthsPerCall)
+    val ordinaryOnly = if (requestedSet.isEmpty()) ordered else ordered.filter { it !in requestedSet }
+    val ordinaryMonths = ordinaryOnly.take(maxMonthsPerCall) + leftover
+    val ordinaryFirst = requestedSet.isNotEmpty() && preferOrdinary
+    val classes = if (ordinaryFirst) listOf(ordinaryMonths to false, priorityMonths to true) else listOf(priorityMonths to true, ordinaryMonths to false)
+    for ((months, isPriority) in classes) {
+      if (months.isEmpty()) continue
+      val claim = claimFrom(share, pass, months, leasing, visible, requestedSet) ?: continue
+      if (requestedSet.isNotEmpty()) preferOrdinary = isPriority
+      return claim
+    }
+    return null
+  }
+
+  /** [months] con quelli che hanno finito senza dare lavoro (e non ancora scaduti) in fondo, nell'ordine in cui erano. */
+  private fun deferStalled(share: String, pass: WorkPass, months: List<String>): List<String> {
+    if (months.isEmpty()) return months
+    val now = clock()
+    val (idle, fresh) = months.partition { month ->
+      synchronized(lock) { stalled[stallKey(share, pass, month)]?.let { now - it in 0 until STALL_BACKOFF_NANOS } == true }
+    }
+    return fresh + idle
+  }
+
+  private fun stallKey(share: String, pass: WorkPass, month: String) = Triple(share.lowercase(java.util.Locale.ROOT), pass, month)
+
+  private fun stallKey(key: WorkUnitKey) = stallKey(key.share, key.pass, key.month)
+
+  /** Cio' che l'esito di un'unita' di una richiesta dice del suo mese: senza lavoro lo mette in fondo, con lavoro lo riabilita. */
+  private fun noteOutcome(claim: UnitClaim, outcome: UnitOutcome) {
+    synchronized(lock) {
+      if (claim.key !in requestClaims) return
+      val key = stallKey(claim.key)
+      when {
+        outcome is UnitOutcome.Interrupted && outcome.code == UnitOutcome.Interrupted.STALLED -> {
+          stalled[key] = clock()
+          if (stalled.size > MAX_STALLED) {
+            val now = clock()
+            stalled.entries.removeAll { now - it.value !in 0 until STALL_BACKOFF_NANOS }
+          }
+        }
+        outcome is UnitOutcome.Completed && outcome.prepared > 0 -> stalled.remove(key)
+      }
+    }
+  }
+
+  private suspend fun claimFrom(
+    share: String,
+    pass: WorkPass,
+    months: List<String>,
+    leasing: Boolean,
+    visible: Set<Long>,
+    requestedSet: Set<String>,
+  ): UnitClaim? {
+    for (month in months) {
       val all = source.monthItems(share, pass, month).sortedBy { it.contentKey.hex }
       val progress = published.progress(share, all.filter { it.missing.isNotEmpty() }.map { it.contentKey })
       val candidates = all.chunked(TrustLimits.WORK_UNIT_MAX_ITEMS).withIndex().mapNotNull { (part, items) ->
@@ -104,7 +204,10 @@ class LeasedWorkUnits(
           }
         } ?: continue
         val claim = UnitClaim(candidate.key, candidate.items, lease)
-        synchronized(lock) { active[claim.key] = claim }
+        synchronized(lock) {
+          active[claim.key] = claim
+          if (month in requestedSet) requestClaims += claim.key
+        }
         return claim
       }
     }
@@ -145,6 +248,7 @@ class LeasedWorkUnits(
   }
 
   override suspend fun finish(claim: UnitClaim, outcome: UnitOutcome) {
+    noteOutcome(claim, outcome)
     forget(claim.key)
     if (claim.lease !is UnitLease.Held) return
     val waiting = unpublished?.invoke(claim.key.share, claim.items.mapTo(HashSet()) { it.contentKey }) ?: false
@@ -176,6 +280,17 @@ class LeasedWorkUnits(
   }
 
   private fun forget(key: WorkUnitKey) {
-    synchronized(lock) { active.remove(key) }
+    synchronized(lock) {
+      active.remove(key)
+      requestClaims.remove(key)
+    }
+  }
+
+  private companion object {
+    /** Un mese di richieste che ha finito senza dare lavoro passa dietro agli altri per 30 minuti. */
+    const val STALL_BACKOFF_NANOS: Long = 30L * 60 * 1_000_000_000
+
+    /** Quanti mesi senza lavoro si ricordano al piu'. */
+    const val MAX_STALLED: Int = 512
   }
 }

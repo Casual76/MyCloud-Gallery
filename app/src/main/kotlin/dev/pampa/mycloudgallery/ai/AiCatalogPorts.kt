@@ -241,6 +241,21 @@ class CatalogAiWorkCatalog(
   override suspend fun monthsOf(share: String, visible: Set<Long>): List<String> =
     rows(share).filter { it.first.short in visible }.map { monthOf(it.second.localDay) }.distinct().sortedDescending()
 
+  /**
+   * XS-4: i candidati chiesti ([keys]) che stanno in [share] con classi ancora da fare, qualunque sia il loro mese: la lista limitata del calcolo
+   * solo-buffer non li avrebbe se fossero oltre il limite.
+   */
+  suspend fun candidatesOf(share: String, keys: Set<ContentKey>, wantsText: Boolean): List<AiCandidate> {
+    val mine = rows(share).filter { it.first in keys }
+    if (mine.isEmpty()) return emptyList()
+    val settled = settled(share, mine.map { it.first })
+    val wanted = if (wantsText) setOf(AiClass.VEC, AiClass.OCR) else setOf(AiClass.VEC)
+    return mine.mapNotNull { (key, row) ->
+      val missing = wanted - settled[key].orEmpty()
+      if (missing.isEmpty()) null else AiCandidate(key, row.kind, MediaSource.OTHER, missing)
+    }
+  }
+
   override suspend fun monthMedia(share: String, month: String): List<WorkItem> = rows(share).mapNotNull { (key, row) ->
     if (monthOf(row.localDay) != month) return@mapNotNull null
     val path = runCatching { SharePath.parseMediaPath(row.path.value) }.getOrNull() ?: return@mapNotNull null
@@ -278,7 +293,33 @@ class CatalogAiCandidates(
   private val work: CatalogAiWorkCatalog,
   private val readingHere: () -> Boolean,
   private val phone: AppAiPhone? = null,
+  /** XS-4: il media che l'utente ha toccato per chiedere una chiave (per ritrovare un media del solo telefono oltre il limite della lista). */
+  private val mediaOfRequest: (ContentKey) -> MediaId? = { null },
 ) : AiCandidates {
+  /**
+   * XS-4: la lista di sempre (dal piu' recente, al piu' [limit]) con in piu' i candidati chiesti ([include]) che stanno nella share e che la
+   * lista non ha, **anche oltre il limite**: un media chiesto non resta fuori solo perche' e' vecchio.
+   */
+  override suspend fun forShare(share: String, recipe: Int, limit: Int, include: Set<ContentKey>): List<AiCandidate> {
+    val base = forShare(share, recipe, limit)
+    if (include.isEmpty()) return base
+    val have = base.mapTo(HashSet()) { it.contentKey }
+    val missingKeys = include.filterTo(HashSet()) { it !in have }
+    if (missingKeys.isEmpty()) return base
+    val extra = work.candidatesOf(share, missingKeys, readingHere())
+    return if (extra.isEmpty()) base else base + extra
+  }
+
+  /** XS-4: i media del solo telefono di sempre, e i chiesti che la pagina (limitata) non ha, ritrovati per il media che l'utente ha toccato. */
+  override suspend fun phoneOnly(recipe: Int, limit: Int, include: Set<ContentKey>): List<AiCandidate> {
+    val base = phoneOnly(recipe, limit)
+    val owner = phone ?: return base
+    if (include.isEmpty()) return base
+    val have = base.mapTo(HashSet()) { it.contentKey }
+    val extra = include.filter { it !in have }.mapNotNull { key -> mediaOfRequest(key)?.let { owner.candidateOf(it, key, readingHere()) } }
+    return if (extra.isEmpty()) base else base + extra
+  }
+
   override suspend fun forShare(share: String, recipe: Int, limit: Int): List<AiCandidate> {
     val months = work.months(share)
     val out = ArrayList<AiCandidate>()

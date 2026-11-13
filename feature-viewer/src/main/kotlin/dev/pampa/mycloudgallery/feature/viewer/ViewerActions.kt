@@ -108,6 +108,8 @@ internal fun viewerMenuEntries(
   onText: (() -> Unit)? = null,
   onCutout: (() -> Unit)? = null,
   similarActions: List<GalleryMenuEntry> = emptyList(),
+  /** Pacchetto X: la voce "Analizza adesso" (solo se il media e' in coda); vedi `analysisMenuEntries`. */
+  analysisActions: List<GalleryMenuEntry> = emptyList(),
   albumActions: List<GalleryMenuEntry> = emptyList(),
   /** Fase 10 (P5, D13 (5)): "Affianca alla Libreria" / "Schermo intero", solo da finestra ampia con il viewer aperto dalla Libreria. */
   dock: ViewerDockEntry? = null,
@@ -156,6 +158,7 @@ internal fun viewerMenuEntries(
     addAll(nasActions)
     addAll(backupActions)
     addAll(similarActions)
+    addAll(analysisActions)
     addAll(albumActions)
     add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_action_info), handlers.onInfo, Icons.Rounded.Info))
   })

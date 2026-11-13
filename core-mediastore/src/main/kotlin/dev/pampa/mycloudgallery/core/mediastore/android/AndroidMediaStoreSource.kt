@@ -63,6 +63,7 @@ class AndroidMediaStoreSource(
       PackageManager.PERMISSION_GRANTED
   },
   private val changeWindow: Duration = 1500.milliseconds,
+  private val visibilityChanged: () -> Unit = {},
 ) : MediaStoreSource, MediaStoreRowLookup {
 
   private val appContext = context.applicationContext
@@ -195,6 +196,7 @@ class AndroidMediaStoreSource(
   override fun changes(): Flow<Unit> = callbackFlow {
     val observer = object : ContentObserver(null) {
       override fun onChange(selfChange: Boolean) {
+        visibilityChanged()
         trySend(Unit)
       }
     }

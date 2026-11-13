@@ -294,6 +294,8 @@ class AppLibraryStates @Inject constructor(
       nas = gallery.nas?.libraryStatus ?: MutableStateFlow(LibraryNasStatus.Idle),
       // Fase 5A (§1.5, D16): lo stato del backup per il piede (terza voce); senza backup resta Idle (il piede non dice niente).
       backup = gallery.backup?.libraryStatus ?: MutableStateFlow(LibraryBackupStatus.Idle),
+      // Pacchetto X: l'analisi delle foto nella nuvola (legata all'avvio con gli agganci del viewer).
+      analysis = gallery.analysisStatus ?: MutableStateFlow(dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus.Idle),
     )
     synchronized(services) { services[state] = gallery.viewerServices }
     return state

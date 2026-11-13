@@ -37,13 +37,14 @@ internal object NasGalleries {
     store: FakeMediaStore = newStore(),
     /** Lo stato della famiglia che la galleria vede (di serie quello del dispositivo): le prove di un processo appena nato ci mettono un passaggio per "non configurato" (D-7). */
     setup: dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository = device.graph.setup,
+    accessOverride: dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccessReader? = null,
   ): GalleryGraph {
-    val access = FakePhoneAccessReader(PhoneAccess(MediaAccess.FULL, mediaLocation = true, volumes = setOf(PRIMARY)))
+    val access = accessOverride ?: FakePhoneAccessReader(PhoneAccess(MediaAccess.FULL, mediaLocation = true, volumes = setOf(PRIMARY)))
     fun phone(inputs: PhoneInputs): PhoneLibrary {
       val reads = RoomPhoneCatalogReads(inputs.database)
       val stats = PhoneLibraryStats()
       val meta = DefaultMetadataPass(store, store, access, inputs.catalog, reads, inputs.extractor, clock = inputs.clock, stats = stats)
-      val sync = DefaultPhoneLibrarySync(store, access, inputs.catalog, reads, clock = inputs.clock, stats = stats, metadataPass = meta, priority = inputs.priority)
+      val sync = DefaultPhoneLibrarySync(store, access, inputs.catalog, reads, clock = inputs.clock, stats = stats, metadataPass = meta, priority = inputs.priority, selectionChanged = inputs.visibilityChanged, rereads = inputs.rereads)
       return PhoneLibrary(
         sync = sync,
         access = access,

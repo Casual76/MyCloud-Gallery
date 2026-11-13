@@ -31,6 +31,12 @@ import dev.pampa.mycloudgallery.core.trust.data.VecBody
 /** Il motore delle immagini che conta le immagini calcolate per contenuto (byte) e fa avanzare l'orologio finto. */
 class CountingEmbedder(private val inner: FakeImageEmbedder = FakeImageEmbedder(), private val tick: () -> Unit = {}) : ImageEmbedder {
   val perImage = HashMap<String, Int>()
+
+  /** Pacchetto X: l'ordine con cui le immagini sono state calcolate (i loro byte come testo). */
+  val order = ArrayList<String>()
+
+  /** Pacchetto XF: un gancio chiamato dopo ogni immagine (con quante ne ha calcolate il motore finora): una richiesta che arriva a tappa in corso. */
+  var onImage: (Int) -> Unit = {}
   override val backend get() = inner.backend
 
   /** Revisione A (IX-7): gli errori del motore delle prossime chiamate, in ordine (vuoto = nessuno). */
@@ -41,7 +47,9 @@ class CountingEmbedder(private val inner: FakeImageEmbedder = FakeImageEmbedder(
     images.forEach {
       val k = String(it.jpeg, Charsets.UTF_8)
       perImage[k] = (perImage[k] ?: 0) + 1
+      order += k
       tick()
+      onImage(order.size)
     }
     return inner.embed(images)
   }
@@ -96,6 +104,25 @@ class SimDevice(
 
   /** Fase 8 (D17): chi tiene ancora le anteprime del buffer (di serie nessuno, come nella Fase 6). */
   var keepers: dev.pampa.mycloudgallery.core.ai.contract.BufferKeepers = dev.pampa.mycloudgallery.core.ai.contract.BufferKeepers.NONE
+
+  /** Pacchetto X: le urgenze ("Analizza adesso") di questo dispositivo: l'insieme e le chiavi uscite con `done`. */
+  val urgentKeys = LinkedHashSet<ContentKey>()
+  val urgentDone = ArrayList<ContentKey>()
+
+  /** Pacchetto XF: i media chiesti incontrati ma non lavorati, con il perche' (XS-2, XS-4, XS-7). */
+  val urgentWaits = ArrayList<Pair<ContentKey, UrgentWait>>()
+  private val urgentPort = object : AiUrgentKeys {
+    /** L'ultima chiesta per prima (le richieste si aggiungono in fondo a [urgentKeys]). */
+    override fun urgent(): Set<ContentKey> = urgentKeys.toList().asReversed().toCollection(LinkedHashSet())
+
+    override fun done(key: ContentKey) {
+      if (urgentKeys.remove(key)) urgentDone += key
+    }
+
+    override fun waiting(key: ContentKey, why: UrgentWait) {
+      urgentWaits += key to why
+    }
+  }
   var freeBytes: Long = Long.MAX_VALUE
   var clock = 0L
   val images = CountingEmbedder(FakeImageEmbedder()) { clock += 1_000_000_000L }
@@ -129,6 +156,17 @@ class SimDevice(
       val miss = wanted() - results.saved(k, recipe)
       if (miss.isEmpty()) null else AiCandidate(k, v.first, MediaSource.CAMERA, miss)
     }.take(limit)
+
+    /** XS-4: la lista limitata e, in piu', i chiesti che il limite lasciava fuori. */
+    override suspend fun phoneOnly(recipe: Int, limit: Int, include: Set<ContentKey>): List<AiCandidate> {
+      val base = phoneOnly(recipe, limit)
+      val have = base.mapTo(HashSet()) { it.contentKey }
+      val extra = phoneMedia.filterKeys { it in include && it !in have }.mapNotNull { (k, v) ->
+        val miss = wanted() - results.saved(k, recipe)
+        if (miss.isEmpty()) null else AiCandidate(k, v.first, MediaSource.CAMERA, miss)
+      }
+      return base + extra
+    }
   }
 
   /** Revisione A (R5): risultati e corpi che ricordano la provenienza, al posto di quelli finti (null = quelli finti). */
@@ -194,6 +232,13 @@ class SimDevice(
       unsupported = AiUnsupported { key, cls -> unsupported += key to cls },
       freeSpace = AiFreeSpace { freeBytes },
       keepers = keepers,
+      urgent = urgentPort,
+      requestedIn = { scope, keys ->
+        when (scope) {
+          is dev.pampa.mycloudgallery.core.ai.contract.AiScope.Share -> keys.filterTo(HashSet()) { it in nas.of(scope.share).media }
+          dev.pampa.mycloudgallery.core.ai.contract.AiScope.PhoneOnly -> keys.filterTo(HashSet()) { it in phoneMedia }
+        }
+      },
     )
     engine = AiComputeEngine(parts, recipe, config, nanos = { clock }, pause = { pauses?.add(it) })
   }

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- XS-3 (Pacchetto XF): "Analizza adesso" su dati mobili, roaming o con il tetto superato non parte da sola e non apre nessun foglio: aspetta il Wi-Fi. -->
+    <string name="analysis_hold_wifi">Parte sul Wi-Fi</string>
+</resources>

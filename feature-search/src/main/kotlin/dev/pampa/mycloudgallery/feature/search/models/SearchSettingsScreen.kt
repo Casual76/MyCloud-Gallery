@@ -65,7 +65,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.fluidPressable
+import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -125,7 +129,7 @@ fun SearchSettingsScreen(
   probeBusy: Boolean = false,
 ) {
   FluidScreen(title = stringResource(R.string.models_title), onBack = onBack) {
-    item(key = "coverage") { CoverageHero(state.coverage, explainIndexer = hasIndexer) }
+    item(key = "coverage") { CoverageHero(state.coverage, explainIndexer = hasIndexer, analysis = state.indexer.analysis, onOpenAnalysis = handlers::onOpenAnalysis) }
     if (hasIndexer) {
       item(key = "indexer-header") { GallerySectionHeader(title = stringResource(R.string.models_section_indexer)) }
       item(key = "areas") { AreaTiles(state.indexer.areasWithoutIndexer) }
@@ -151,7 +155,7 @@ fun SearchSettingsScreen(
  * e «niente esce da qui» dall'anello, cio' che vuol dire analizzare dall'interruttore.
  */
 @Composable
-private fun CoverageHero(coverage: SearchCoverage, explainIndexer: Boolean) {
+private fun CoverageHero(coverage: SearchCoverage, explainIndexer: Boolean, analysis: LibraryAnalysisStatus, onOpenAnalysis: () -> Unit) {
   val resources = LocalResources.current
   var explaining by remember { mutableStateOf(false) }
   val searchHue = galleryRingColor(GalleryIconFamily.Search)
@@ -178,7 +182,28 @@ private fun CoverageHero(coverage: SearchCoverage, explainIndexer: Boolean) {
     is SearchCoverage.ModelMissing -> Triple(null, stringResource(R.string.models_coverage_missing_short), sizeText(coverage.sizeBytes))
   }
   FluidListGroup {
-    Box(modifier = Modifier.fillMaxWidth()) {
+    if (analysis != LibraryAnalysisStatus.Idle) {
+      // Grafica XU: con l'analisi legata la testata e' quella dell'analisi (sorella del Backup): lo stesso anello della copertura, il segno dello stato
+      // sull'arco, due parole e una riga; toccata apre la pagina "Analisi delle foto". La «i» e le sue frasi restano quelle della copertura.
+      AnalysisHero(
+        status = analysis,
+        // XU2-1 (giro 4): con «Tutto pronto» l'anello e' quello della pagina (pieno, verde, l'icona dell'analisi, nessun percento): mai un «99%»
+        // accanto alla spunta. Che cosa la ricerca non conosce ancora (non supportate, aree senza indicizzatore) lo dicono le righe qui sotto.
+        ring = if (analysis == LibraryAnalysisStatus.AllReady) allReadyRing(sentence + " " + subtitle) else coverageRing(coverage, fraction, sentence + " " + subtitle),
+        onOpen = onOpenAnalysis,
+        corner = {
+          GalleryInfoButton(
+            label = stringResource(R.string.models_coverage_info),
+            open = explaining,
+            onToggle = { explaining = !explaining },
+            modifier = Modifier.align(Alignment.TopEnd).padding(SearchDimens.TightGap),
+          )
+        },
+        below = {
+          GalleryInfoDetail(text = sentence + note + indexer + "\n\n" + subtitle, visible = explaining, modifier = Modifier.fillMaxWidth())
+        },
+      )
+    } else Box(modifier = Modifier.fillMaxWidth()) {
       Column(modifier = Modifier.fillMaxWidth().padding(SearchDimens.HeroPadding), horizontalAlignment = Alignment.CenterHorizontally) {
         GalleryProgressRing(
           progress = fraction,
@@ -225,6 +250,24 @@ private fun CoverageHero(coverage: SearchCoverage, explainIndexer: Boolean) {
       }
     }
   }
+}
+
+/** L'anello della testata dell'analisi in Ricerca e modelli: la copertura (gli stessi numeri di prima), con il percento e «pronte / totale» dentro. */
+@Composable
+private fun coverageRing(coverage: SearchCoverage, fraction: Float, description: String): AnalysisRing = when (coverage) {
+  is SearchCoverage.Partial -> AnalysisRing(
+    progress = fraction,
+    busy = false,
+    percent = analysisPercent(coverage.covered, coverage.total),
+    ready = GalleryNumbers.format(coverage.covered),
+    total = stringResource(R.string.models_count_of_total, GalleryNumbers.format(coverage.total)),
+    glyph = AnalysisGlyph,
+    done = false,
+    description = description,
+  )
+  SearchCoverage.Complete -> AnalysisRing(1f, false, analysisPercent(1, 1), null, null, AnalysisGlyph, done = true, description = description)
+  is SearchCoverage.Updating -> AnalysisRing(fraction, false, coverage.percent, null, null, AnalysisGlyph, done = false, description = description)
+  is SearchCoverage.ModelMissing -> AnalysisRing(0f, false, null, null, null, Icons.Rounded.Download, done = false, description = description)
 }
 
 /** Un motivo di cio' che la ricerca non conosce ancora: il suo segno, due parole, il numero. TalkBack dice la frase intera. */
@@ -335,14 +378,16 @@ private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handler
   val resources = LocalResources.current
   val title = stringResource(R.string.models_indexer_switch)
   val detail = stringResource(R.string.models_indexer_detail)
-  var details by remember { mutableStateOf(false) }
   val problem = (indexer.status as? AiStatus.Problem)?.code
   val probeRetry = probeFailed && !probeHot && !probeBusy &&
     state.models.models.any { it.id == dev.pampa.mycloudgallery.core.models.contract.ModelCatalog.INDEX_440M.id && it.state is dev.pampa.mycloudgallery.core.models.contract.ModelState.Ready }
   val actions = buildList {
     problem?.let { code -> SearchCodes.actions(code).forEach { add(IndexerAction.Code(it)) } }
     if (probeRetry) add(IndexerAction.RetryProbe)
-    add(IndexerAction.IndexNow)
+    // XU2-4 e XU-12 (giro 4): con lo stato dell'analisi legato, «Analizza ora» c'e' solo dove una richiesta la fa davvero partire, con la stessa
+    // regola della pagina "Analisi delle foto" ([analyzeNowShown]): non in corso, non con tutto pronto, non su un altro dispositivo, non spenta,
+    // non con il NAS o il Wi-Fi che mancano. Senza stato legato (`Idle`: la ricerca non lo da') resta il tasto di sempre.
+    if (indexer.analysis == LibraryAnalysisStatus.Idle || analyzeNowShown(indexer.analysis)) add(IndexerAction.IndexNow)
   }
   // Finita l'analisi, «Fatto» basta: la riga della misura direbbe la stessa cosa («Niente da analizzare»). Lo stato si dice una volta.
   val allDone = indexer.toAnalyze <= 0 && !measuring && !probeFailed && !probeHot && !probeBusy &&
@@ -366,40 +411,19 @@ private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handler
         contentDescription = "$title. $detail"
       },
     )
-    if (indexer.indexer) {
+    // Pacchetto X: lo stato si dice una volta, nella testata (e nella pagina "Analisi delle foto"); qui resta la misura.
+    if (indexer.indexer && !allDone) {
       FluidListDivider()
-      StatusRow(indexer.status, resources, onOpen = { details = true })
-      if (!allDone) {
-        FluidListDivider()
-        MeasureRow(indexer, measuring, probeFailed, probeHot, probeBusy, resources)
-      }
+      MeasureRow(indexer, measuring, probeFailed, probeHot, probeBusy, resources)
     }
   }
   if (state.offerRemoveIndexModel) RemoveIndexModelSheet(handlers)
   if (indexer.indexer) {
-    val primary = actions.first()
-    Row(modifier = Modifier.padding(top = SearchDimens.TightGap, start = GalleryDimens.Gutter, end = GalleryDimens.Gutter)) {
-      ActionButton(primary.label(), primary.icon(), onClick = { primary.run(handlers) })
-    }
-  }
-  if (details) {
-    val sentences = listOf(
-      statusText(resources, indexer.status),
-      when {
-        probeHot -> resources.getString(R.string.models_probe_hot)
-        probeBusy -> resources.getString(R.string.models_probe_busy)
-        probeFailed -> resources.getString(R.string.models_probe_failed)
-        else -> listOf(estimateText(resources, indexer.toAnalyze, indexer.nights, measuring), probeText(resources, indexer, measuring)).filter { it.isNotEmpty() }.joinToString(". ")
-      },
-    ).filter { it.isNotEmpty() }.joinToString("\n\n")
-    ChoiceSheet(
-      title = stringResource(R.string.models_section_indexer),
-      message = sentences,
-      onDismiss = { details = false },
-      icon = Icons.Rounded.Memory,
+    Column(
+      modifier = Modifier.padding(top = SearchDimens.TightGap, start = GalleryDimens.Gutter, end = GalleryDimens.Gutter),
+      verticalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
     ) {
-      // Tutte le azioni, la principale compresa: qui si leggono con il loro perche'.
-      actions.forEach { action -> ActionButton(action.label(), action.icon(), onClick = { details = false; action.run(handlers) }, fill = true) }
+      actions.forEach { action -> ActionButton(action.label(), action.icon(), onClick = { action.run(handlers) }) }
     }
   }
 }
@@ -441,71 +465,6 @@ internal fun codeActionIcon(action: CodeAction): ImageVector = when (action) {
   CodeAction.RETRY -> Icons.Rounded.Refresh
 }
 
-/**
- * Il segno di uno stato dell'analisi (le regole comuni del giro 1): **in corso** = il chip con `Running`; **fatto** = `Done`; **in pausa** per una
- * condizione (le regole, la rete, il NAS, lo spazio, il caldo) = il segno del perche' con `Paused`; **in attesa** che le foto siano preparate o della
- * prossima tappa = la clessidra, e solo quella; in corso il segno del tempo che scorre (accanto c'e' quanto manca); il modello che manca = la freccia con `Attention`; spento = `Stopped`; un problema = `Problem`.
- */
-internal fun statusSign(status: AiStatus): Triple<ImageVector, GalleryIconFamily, GalleryIconStatus?> = when (status) {
-  // Il tempo che scorre: la riga dice quanto manca; il chip resta all'interruttore, subito sopra (un segno non si ripete).
-  is AiStatus.Running -> Triple(Icons.Rounded.Timelapse, GalleryIconFamily.Search, GalleryIconStatus.Running)
-  is AiStatus.Idle, is AiStatus.BufferOnlyDone -> Triple(Icons.Rounded.Memory, GalleryIconFamily.Search, GalleryIconStatus.Done)
-  is AiStatus.Waiting -> when (status.reason) {
-    AiWaitReason.PREPARATION, AiWaitReason.NEXT_STAGE -> Triple(Icons.Rounded.HourglassTop, GalleryIconFamily.System, null)
-    AiWaitReason.RULES -> Triple(Icons.AutoMirrored.Rounded.Rule, GalleryIconFamily.Backup, GalleryIconStatus.Paused)
-    AiWaitReason.NO_NETWORK -> Triple(Icons.Rounded.WifiOff, GalleryIconFamily.Network, GalleryIconStatus.Paused)
-    AiWaitReason.NAS_UNREACHABLE -> Triple(Icons.Rounded.CloudOff, GalleryIconFamily.Network, GalleryIconStatus.Paused)
-    AiWaitReason.STORAGE_LOW -> Triple(Icons.Rounded.SdStorage, GalleryIconFamily.System, GalleryIconStatus.Paused)
-    AiWaitReason.HOT -> Triple(Icons.Rounded.Thermostat, GalleryIconFamily.System, GalleryIconStatus.Paused)
-  }
-  AiStatus.ModelMissing -> Triple(Icons.Rounded.Download, GalleryIconFamily.Search, GalleryIconStatus.Attention)
-  AiStatus.Off -> Triple(Icons.Rounded.Memory, GalleryIconFamily.Search, GalleryIconStatus.Stopped)
-  is AiStatus.Problem -> Triple(Icons.Rounded.Warning, GalleryIconFamily.Danger, GalleryIconStatus.Problem)
-}
-
-/**
- * Che cosa fa adesso questo telefono, in una riga: il segno dello stato e due parole (in corso: il tempo che manca). Il tocco apre le frasi intere e le
- * azioni ([IndexerBlock]). TalkBack dice la frase intera.
- */
-@Composable
-private fun StatusRow(status: AiStatus, resources: Resources, onOpen: () -> Unit) {
-  val sentence = statusText(resources, status)
-  val openLabel = stringResource(R.string.models_details)
-  val (glyph, family, mark) = statusSign(status)
-  val title = when (status) {
-    is AiStatus.Running -> status.etaMinutes?.let { stringResource(R.string.models_eta_short, it) } ?: stringResource(R.string.models_status_running_short)
-    is AiStatus.Idle -> stringResource(R.string.models_status_done_short)
-    is AiStatus.BufferOnlyDone -> stringResource(R.string.models_status_buffer_short, GalleryNumbers.format(status.items))
-    is AiStatus.Waiting -> stringResource(waitLabel(status.reason))
-    AiStatus.ModelMissing -> stringResource(R.string.models_status_model_missing_short)
-    AiStatus.Off -> stringResource(R.string.models_status_off_short)
-    is AiStatus.Problem -> SearchCodes.message(resources, status.code)
-  }
-  FluidListRow(
-    title = title,
-    subtitle = "",
-    leading = { GalleryIconTile(icon = glyph, family = family, status = mark, statusDescription = null) },
-    leadingTile = false,
-    disclosure = true,
-    titleMaxLines = 3,
-    onClick = onOpen,
-    modifier = Modifier.clearAndSetSemantics {
-      contentDescription = sentence
-      role = Role.Button
-      onClick(label = openLabel) { onOpen(); true }
-    },
-  )
-}
-
-private fun waitLabel(reason: AiWaitReason): Int = when (reason) {
-  AiWaitReason.RULES -> R.string.models_wait_rules_short
-  AiWaitReason.NO_NETWORK -> R.string.models_wait_network_short
-  AiWaitReason.NAS_UNREACHABLE -> R.string.models_wait_nas_short
-  AiWaitReason.STORAGE_LOW -> R.string.models_wait_storage_short
-  AiWaitReason.HOT -> R.string.models_wait_hot_short
-  AiWaitReason.PREPARATION -> R.string.models_wait_preparation_short
-  AiWaitReason.NEXT_STAGE -> R.string.models_wait_next_stage_short
-}
 
 /**
  * La misura del dispositivo come segno (I2): in corso (`Running`), caldo (in pausa), occupata (la clessidra), non riuscita, o fatta (le foto al secondo)
@@ -526,8 +485,9 @@ private fun MeasureRow(indexer: IndexerState, measuring: Boolean, probeFailed: B
     probeBusy -> stringResource(R.string.models_probe_busy_short) to ""
     probeFailed -> stringResource(R.string.models_probe_failed_short) to ""
     indexer.toAnalyze <= 0 -> stringResource(R.string.models_nothing_short) to ""
+    // XU2-8 (giro 4): con la testata dell'analisi in cima il conto delle foto da analizzare e' gia' li' (anello e pagina): qui solo le notti.
     indexer.nights != null -> pluralStringResource(R.plurals.models_nights_short, indexer.nights, indexer.nights) to
-      stringResource(R.string.models_to_analyze_short, GalleryNumbers.format(indexer.toAnalyze))
+      if (indexer.analysis != LibraryAnalysisStatus.Idle) "" else stringResource(R.string.models_to_analyze_short, GalleryNumbers.format(indexer.toAnalyze))
     else -> stringResource(R.string.models_to_analyze_short, GalleryNumbers.format(indexer.toAnalyze)) to ""
   }
   val speed = if (!measuring && !probeHot && !probeBusy && !probeFailed && probe != null) {
@@ -586,28 +546,6 @@ internal fun runCodeAction(action: CodeAction, handlers: SearchSettingsHandlers)
   CodeAction.DOWNLOAD_NOW, CodeAction.RETRY -> handlers.onIndexNow()
 }
 
-/** Lo stato del calcolo in una frase (TalkBack): solo numeri e codici, mai nomi (D40). */
-internal fun statusText(resources: Resources, status: AiStatus): String = when (status) {
-  AiStatus.Off -> resources.getString(R.string.models_status_off)
-  AiStatus.ModelMissing -> resources.getString(R.string.models_status_model_missing)
-  is AiStatus.Idle -> resources.getString(R.string.models_status_idle)
-  is AiStatus.Running -> status.etaMinutes?.let {
-    resources.getString(R.string.models_status_running_eta, GalleryNumbers.format(status.done), GalleryNumbers.format(status.total), it)
-  } ?: resources.getString(R.string.models_status_running, GalleryNumbers.format(status.done), GalleryNumbers.format(status.total))
-  is AiStatus.Waiting -> resources.getString(
-    when (status.reason) {
-      AiWaitReason.RULES -> R.string.models_status_waiting_rules
-      AiWaitReason.NO_NETWORK -> R.string.models_status_waiting_network
-      AiWaitReason.NAS_UNREACHABLE -> R.string.models_status_waiting_nas
-      AiWaitReason.STORAGE_LOW -> R.string.models_status_waiting_storage
-      AiWaitReason.HOT -> R.string.models_status_waiting_hot
-      AiWaitReason.PREPARATION -> R.string.models_status_waiting_preparation
-      AiWaitReason.NEXT_STAGE -> R.string.models_status_next_stage
-    },
-  )
-  is AiStatus.BufferOnlyDone -> resources.getString(R.string.models_status_buffer_only, GalleryNumbers.format(status.items))
-  is AiStatus.Problem -> SearchCodes.message(resources, status.code)
-}
 
 /** "Analizzare N media richiede circa K notti" (D15): dalla misura e dal lavoro vero che resta. */
 internal fun estimateText(resources: Resources, toAnalyze: Int, nights: Int?, measuring: Boolean = false): String = when {

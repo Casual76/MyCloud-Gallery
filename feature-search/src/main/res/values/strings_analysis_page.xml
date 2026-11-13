@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pacchetto X, grafica XU (12/11): la testata dell'analisi (sorella di quella del Backup) e la pagina "Analisi delle foto".
+         Si dice "analizzare le foto", mai "indice". Lo stato si dice una volta: un'etichetta di due parole e al piu' una riga. -->
+    <string name="analysis_page_title">Analisi delle foto</string>
+    <string name="analysis_open">Apri l’analisi delle foto</string>
+
+    <!-- L'etichetta della testata (grande, sotto l'anello). -->
+    <string name="analysis_hero_running">In corso</string>
+    <string name="analysis_hero_queued">In coda</string>
+    <string name="analysis_hero_paused">In pausa</string>
+    <string name="analysis_hero_waiting">In attesa</string>
+    <string name="analysis_hero_ready">Tutto pronto</string>
+    <string name="analysis_hero_model">Serve un download</string>
+    <string name="analysis_hero_problem">Analisi ferma</string>
+    <string name="analysis_hero_disabled">Spenta</string>
+    <string name="analysis_hero_not_here">Su un altro dispositivo</string>
+
+    <!-- La riga sotto l'etichetta. -->
+    <string name="analysis_line_remaining">Restano %1$s</string>
+    <string name="analysis_line_queued">Parte da sola</string>
+    <string name="analysis_line_ready">Niente da analizzare qui</string>
+    <string name="analysis_line_disabled">Si riaccende dalle impostazioni</string>
+    <string name="analysis_line_not_here">Qui arrivano i risultati</string>
+    <string name="analysis_line_model">Il modello per cercare nelle foto</string>
+    <string name="analysis_line_open">Guarda l’analisi</string>
+    <string name="analysis_problem_storage">Memoria quasi piena</string>
+    <string name="analysis_problem_model">Il modello va riscaricato</string>
+    <string name="analysis_percent">%1$d%%</string>
+    <string name="analysis_ring_description">%1$d%% pronte: %2$s su %3$s</string>
+
+    <!-- Il perche' di una pausa: due o tre parole, con la maiuscola (stanno da sole nella riga). -->
+    <string name="analysis_wait_window">Fuori dall’orario</string>
+    <string name="analysis_wait_charging">Serve la carica</string>
+    <string name="analysis_wait_battery">Batteria scarica</string>
+    <string name="analysis_wait_power_saver">Risparmio energetico</string>
+    <string name="analysis_wait_thermal">Telefono caldo</string>
+    <string name="analysis_wait_wifi">Aspetta il Wi-Fi</string>
+    <string name="analysis_wait_home_wifi">Aspetta il Wi-Fi di casa</string>
+    <string name="analysis_wait_nas">Il NAS non risponde</string>
+    <string name="analysis_wait_data_cap">Dati del mese finiti</string>
+    <string name="analysis_wait_preparation">Foto in preparazione</string>
+    <string name="analysis_wait_android">Riprende al prossimo giro</string>
+    <string name="analysis_wait_profile">Profilo non attivo</string>
+    <string name="analysis_wait_other">Aspetta il momento giusto</string>
+
+    <!-- Il nastro (TalkBack: le anteprime non hanno testo a vista). -->
+    <string name="analysis_lane_photo">Adesso guarda una foto</string>
+    <string name="analysis_lane_video">Adesso guarda un video</string>
+    <string name="analysis_lane_hidden">Adesso guarda una foto che qui non si mostra</string>
+    <plurals name="analysis_lane_done">
+        <item quantity="one">%1$d appena fatta</item>
+        <item quantity="other">%1$d appena fatte</item>
+    </plurals>
+    <plurals name="analysis_lane_next">
+        <item quantity="one">%1$d in arrivo</item>
+        <item quantity="other">%1$d in arrivo</item>
+    </plurals>
+    <plurals name="analysis_lane_rest">
+        <item quantity="one">L’ultima analizzata</item>
+        <item quantity="other">Le ultime %1$d analizzate</item>
+    </plurals>
+    <string name="analysis_quiet_description">Foto non mostrata</string>
+    <string name="analysis_photo_description">Foto</string>
+    <string name="analysis_video_description">Video</string>
+
+    <!-- Le frasi intere per TalkBack (la testata e la riga di Ricerca e modelli). -->
+    <string name="analysis_remaining">Restano %1$s foto</string>
+    <string name="analysis_sentence_running">Sta analizzando le foto adesso. %1$s</string>
+    <string name="analysis_sentence_queued">Le foto da analizzare sono in coda. %1$s</string>
+    <string name="analysis_sentence_paused">L’analisi è in pausa: %1$s. Riprende da sola.</string>
+    <string name="analysis_sentence_ready">Su questo dispositivo non resta niente da analizzare.</string>
+    <string name="analysis_sentence_not_here">Questo dispositivo non analizza le foto: le analizza un altro dispositivo.</string>
+    <string name="analysis_sentence_model_missing">Manca il modello di analisi su questo dispositivo.</string>
+    <string name="analysis_sentence_problem">L’analisi è ferma: %1$s</string>
+    <string name="analysis_sentence_disabled">L’analisi delle foto è spenta nelle impostazioni.</string>
+</resources>

@@ -7,7 +7,6 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreRow
 import dev.pampa.mycloudgallery.core.model.FileStamp
 import dev.pampa.mycloudgallery.core.model.LocationKey
 import dev.pampa.mycloudgallery.core.model.LocationState
-import dev.pampa.mycloudgallery.core.model.LocationType
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.WorkStage
 import dev.pampa.mycloudgallery.core.model.WorkStatus
@@ -24,7 +23,7 @@ class PhonePlace(val relativePath: String, val displayName: String) {
 /**
  * Pacchetto F (FS-1): una posizione del telefono per il confronto degli `_ID`: [present] o assente, l'`_ID` in cache con la versione del
  * MediaStore con cui e' stato letto ([msVersion]: un `_ID` di un'altra versione non dice niente, E-P22), il posto e [lastSeenAt] come l'ha
- * letto la fotografia (FS3-6: si segna assente solo se e' ancora tutto cosi').
+ * letto la fotografia, con [observationRevision] persistita per ogni nuova osservazione (FS4-1: si segna assente solo se e' ancora tutto cosi').
  */
 class PhonePosition(
   val key: LocationKey,
@@ -33,12 +32,13 @@ class PhonePosition(
   val msVersion: String?,
   val place: PhonePlace,
   val lastSeenAt: Long,
+  val observationRevision: Long = 0,
 ) {
   /** L'`_ID` in cache, se vale per la versione [current] del MediaStore. */
   fun idFor(current: String): Long? = mediaStoreId?.takeIf { msVersion == current }
 
   /** Come l'ha letta la fotografia: il confronto atomico prima di segnarla assente. */
-  fun observed(): ObservedPhonePosition = ObservedPhonePosition(key, mediaStoreId, msVersion, lastSeenAt)
+  fun observed(): ObservedPhonePosition = ObservedPhonePosition(key, mediaStoreId, msVersion, lastSeenAt, observationRevision)
 
   override fun toString(): String = "PhonePosition(present=$present)"
 }
@@ -91,18 +91,7 @@ class RoomPhoneCatalogReads(private val database: GalleryDatabase) : PhoneCatalo
   private val work get() = database.workStateDao()
 
   override suspend fun positionsAtMediaStoreRow(volume: String, id: Long, msVersion: String): List<PhonePosition> =
-    locations.byMediaStoreId(volume, id)
-      .filter { it.locationType == LocationType.PHONE.code && it.mediaStoreVersion == msVersion && it.state == LocationState.PRESENT.code }
-      .map {
-        PhonePosition(
-          key = LocationKey(it.locationKey),
-          present = true,
-          mediaStoreId = it.mediaStoreId,
-          msVersion = it.mediaStoreVersion,
-          place = PhonePlace(it.relativePath.orEmpty(), it.displayName.orEmpty()),
-          lastSeenAt = it.lastSeenAt,
-        )
-      }
+    locations.phonePositionsAtRow(volume, id, msVersion).map(::position)
 
   override suspend fun presentInFolder(folderKey: String, limit: Int): List<PhonePosition> =
     locations.phonePresentInFolder(folderKey, limit).map(::position)
@@ -120,6 +109,7 @@ class RoomPhoneCatalogReads(private val database: GalleryDatabase) : PhoneCatalo
     msVersion = row.mediaStoreVersion,
     place = PhonePlace(row.relativePath.orEmpty(), row.displayName.orEmpty()),
     lastSeenAt = row.lastSeenAt,
+    observationRevision = row.observationRevision,
   )
 
   override suspend fun storedStamp(key: LocationKey): FileStamp? {

@@ -32,6 +32,7 @@ class PhonePositionRow(
   @ColumnInfo(name = "relative_path") val relativePath: String?,
   @ColumnInfo(name = "display_name") val displayName: String?,
   @ColumnInfo(name = "last_seen_at") val lastSeenAt: Long,
+  @ColumnInfo(name = "observation_revision") val observationRevision: Long = 0,
 ) {
   override fun toString(): String = "PhonePositionRow($state)"
 }
@@ -241,21 +242,31 @@ interface LocationDao {
    * confronto degli `_ID` con il MediaStore: chi manca, chi ha un `_ID` di un'altra versione, chi e' assente e ricompare. Solo lettura.
    */
   @Query(
-    "SELECT location_key, state, media_store_id, media_store_version, relative_path, display_name, last_seen_at FROM media_location " +
+    "SELECT location_key, state, media_store_id, media_store_version, relative_path, display_name, last_seen_at, " +
+      "COALESCE((SELECT value FROM catalog_meta WHERE `key` = 'phone_observation_revision:' || location_key), 0) AS observation_revision FROM media_location " +
       "WHERE location_type = 'phone' AND volume = :volume AND state IN ('present', 'absent')",
   )
   suspend fun phonePositionsOnVolume(volume: String): List<PhonePositionRow>
 
+  @Query(
+    "SELECT location_key, state, media_store_id, media_store_version, relative_path, display_name, last_seen_at, " +
+      "COALESCE((SELECT value FROM catalog_meta WHERE `key` = 'phone_observation_revision:' || location_key), 0) AS observation_revision FROM media_location " +
+      "WHERE location_type = 'phone' AND volume = :volume AND media_store_id = :id AND media_store_version = :version AND state = 'present'",
+  )
+  suspend fun phonePositionsAtRow(volume: String, id: Long, version: String): List<PhonePositionRow>
+
   /** Pacchetto F (FS3-1): fino a [limit] posizioni presenti del telefono nella cartella [folderKey], in ordine di chiave (i vivi di controllo). */
   @Query(
-    "SELECT location_key, state, media_store_id, media_store_version, relative_path, display_name, last_seen_at FROM media_location " +
+    "SELECT location_key, state, media_store_id, media_store_version, relative_path, display_name, last_seen_at, " +
+      "COALESCE((SELECT value FROM catalog_meta WHERE `key` = 'phone_observation_revision:' || location_key), 0) AS observation_revision FROM media_location " +
       "WHERE folder_key = :folderKey AND location_type = 'phone' AND state = 'present' ORDER BY location_key LIMIT :limit",
   )
   suspend fun phonePresentInFolder(folderKey: String, limit: Int): List<PhonePositionRow>
 
   /** Pacchetto F (FS3-1): fino a [limit] posizioni presenti del telefono del [volume], in ordine di chiave (i vivi di controllo). */
   @Query(
-    "SELECT location_key, state, media_store_id, media_store_version, relative_path, display_name, last_seen_at FROM media_location " +
+    "SELECT location_key, state, media_store_id, media_store_version, relative_path, display_name, last_seen_at, " +
+      "COALESCE((SELECT value FROM catalog_meta WHERE `key` = 'phone_observation_revision:' || location_key), 0) AS observation_revision FROM media_location " +
       "WHERE location_type = 'phone' AND volume = :volume AND state = 'present' ORDER BY location_key LIMIT :limit",
   )
   suspend fun phonePresentOnVolume(volume: String, limit: Int): List<PhonePositionRow>

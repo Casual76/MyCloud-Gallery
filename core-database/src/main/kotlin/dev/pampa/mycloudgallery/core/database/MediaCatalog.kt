@@ -329,7 +329,8 @@ class MediaCatalog(
 
   /**
    * Pacchetto F (FS3-6): segna assenti, in **una** transazione, le posizioni del telefono che sono ancora esattamente come le ha lette la
-   * fotografia del confronto: presenti, stesso `_ID` in cache, stessa versione del MediaStore, stesso `last_seen_at`. Una posizione toccata
+   * fotografia del confronto: presenti, stesso `_ID` in cache, stessa versione del MediaStore, stesso `last_seen_at`
+   * e stessa revisione persistita dell'osservazione. Una posizione toccata
    * nel frattempo (riletta, salvata dall'app, ricollegata a un'altra riga) resta com'e', qualunque cosa dica l'orologio: l'ordine non si deduce
    * dai millisecondi. Quante ne ha segnate.
    */
@@ -340,6 +341,7 @@ class MediaCatalog(
       val entity = locationDao.byKey(o.key.value) ?: continue
       if (entity.locationType != LocationType.PHONE.code || entity.state != LocationState.PRESENT.code) continue
       if (entity.mediaStoreId != o.mediaStoreId || entity.mediaStoreVersion != o.mediaStoreVersion || entity.lastSeenAt != o.lastSeenAtMillis) continue
+      if ((metaDao.get(PHONE_OBSERVATION_REVISION_PREFIX + o.key.value) ?: 0L) != o.observationRevision) continue
       locationDao.update(LocationRules.vanished(entity.toDomain(), now).toEntity())
       tx.touch(mediaOf(LocationId(entity.locationId)))
       marked++
@@ -837,6 +839,7 @@ class MediaCatalog(
     require(stamp.size == version.fingerprint.size) { "La copia ha una dimensione diversa dalla versione." }
     require(verifiedAtMillis == null || version.fingerprint.fullHash != null) { "Si verifica solo contro un hash completo noto." }
     val existing = locationDao.byKey(location.key.value)
+    advancePhoneObservation(location)
     val id = if (existing == null) {
       locationDao.insert(locationEntity(0, versionId, location, stamp, LocationState.PRESENT, null, verifiedAtMillis, now))
     } else {
@@ -860,6 +863,7 @@ class MediaCatalog(
       verifiedAtMillis = verifiedAtMillis,
       lastSeenAtMillis = clock(),
     )
+    advancePhoneObservation(to)
     locationDao.update(moved.toEntity())
     val mediaId = mediaOf(locationId)
     tx.touch(mediaId)
@@ -2122,7 +2126,10 @@ class MediaCatalog(
     val decision = if (whenUndecided == WhenUndecided.KEEP_SEPARATE) keepSeparate(decided) else decided
     val target = apply(tx, decision, observation, seenAt ?: clock())
     // Una posizione del telefono registrata presente: se il media era "perso prima del backup" non lo e' piu' (refreshDerived).
-    if (target != null && observation.location is Location.Phone) tx.phoneSeen += target.second.value
+    if (target != null && observation.location is Location.Phone) {
+      advancePhoneObservation(observation.location)
+      tx.phoneSeen += target.second.value
+    }
     if (whenUndecided == WhenUndecided.KEEP_SEPARATE && target != null && !fingerprintAdopted) {
       undecidedCandidates(decided)?.let { groupProbableDuplicates(tx, target.first, observation, it) }
     }
@@ -2221,6 +2228,15 @@ class MediaCatalog(
     return true
   }
 
+  /** Contatore per chiave, nella stessa transazione della scrittura. Non si elimina: evita ABA anche dopo una ricreazione. */
+  private suspend fun advancePhoneObservation(location: Location) {
+    if (location !is Location.Phone) return
+    val key = PHONE_OBSERVATION_REVISION_PREFIX + location.key.value
+    val previous = metaDao.get(key) ?: 0L
+    check(previous < Long.MAX_VALUE) { "Revisione osservazione esaurita" }
+    metaDao.put(key, previous + 1)
+  }
+
   private suspend fun confirmOne(tx: Tx, phone: Location.Phone, stamp: FileStamp, seenAt: Long, ignoreGeneration: Boolean): Boolean {
     val entity = locationDao.byKey(phone.key.value) ?: return false
     val before = entity.toDomain()
@@ -2234,6 +2250,7 @@ class MediaCatalog(
       lastSeenAtMillis = seenAt,
     )
     locationDao.update(after.toEntity())
+    advancePhoneObservation(phone)
     tx.phoneSeen += entity.locationId
     if (before.location != after.location || before.state != after.state) {
       val mediaId = mediaOf(before.id)
@@ -2467,6 +2484,7 @@ class MediaCatalog(
     plan.changedLocations.forEach { location ->
       val updated = observed[location.id]?.let { location.copy(location = it, lastSeenAtMillis = seenAt ?: location.lastSeenAtMillis) }
         ?: location
+      advancePhoneObservation(updated.location)
       locationDao.update(updated.toEntity())
     }
     mediaDao.setCurrentVersion(before.id.value, plan.media.currentVersionId.value, now)

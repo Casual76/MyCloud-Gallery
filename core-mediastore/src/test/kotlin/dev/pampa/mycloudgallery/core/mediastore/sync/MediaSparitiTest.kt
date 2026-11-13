@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.mediastore.sync
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.database.AttachedCopy
 import dev.pampa.mycloudgallery.core.database.CatalogBackupKind
 import dev.pampa.mycloudgallery.core.database.CatalogSource
@@ -76,6 +77,114 @@ class MediaSparitiTest : PhoneSyncTestBase() {
     pointCheck = pointCheck,
     fileProbe = fileProbe,
   )
+
+  // FS4-1: nuova osservazione DOPO il negativo del disco, prima del lotto; stessi ID, versione e timestamp della riga.
+  private suspend fun collisioneDopoLaProva(confirm: Boolean) {
+    val rows = photos(1L..3L)
+    newSync().syncNow(SyncReason.APP_START)
+    val key = placeOf(rows[1]).key
+    val before = db.locationDao().byKey(key.value)!!
+    val fingerprint = catalog.media(mediaAt(rows[1])!!)!!.versions.single { it.id.value == before.versionId }.fingerprint
+    // Simula anche una posizione preesistente all'aggiornamento, priva della nuova chiave meta.
+    if (confirm) db.catalogMetaDao().delete(dev.pampa.mycloudgallery.core.database.PHONE_OBSERVATION_REVISION_PREFIX + key.value)
+    val revision = reads.phonePositions(PRIMARY).single { it.key == key }.observationRevision
+    store.deletedFilesEmptyForApps = true
+    store.remove(PRIMARY, 2)
+    var negative = false
+    var saved = false
+    val probe = object : PhoneFileProbe {
+      override suspend fun exists(volume: String, place: PhonePlace): Boolean? = store.exists(volume, place).also {
+        if (place == PhonePlace(rows[1].relativePath, rows[1].displayName) && it == false) negative = true
+      }
+    }
+    val source = object : MediaStoreSource by store {
+      override suspend fun generation(volume: String): Long? {
+        if (negative && !saved) {
+          saved = true
+          val other = MediaCatalog(db, ME, zone = { ROME }) { before.lastSeenAt }
+          val location = rows[1].phoneLocation(store.version(volume))
+          val stamp = FileStamp(before.size, before.modifiedAt, before.generation)
+          if (confirm) {
+            assertThat(other.confirmPresent(location, stamp, before.lastSeenAt)).isTrue()
+          } else {
+            other.record(Observation(location, stamp, fingerprint, MediaKind.PHOTO, MediaSource.OTHER))
+          }
+          val after = db.locationDao().byKey(key.value)!!
+          assertThat(after.lastSeenAt).isEqualTo(before.lastSeenAt)
+          assertThat(after.mediaStoreId).isEqualTo(before.mediaStoreId)
+          assertThat(after.mediaStoreVersion).isEqualTo(before.mediaStoreVersion)
+          assertThat(after.versionId).isEqualTo(before.versionId)
+          assertThat(reads.phonePositions(PRIMARY).single { it.key == key }.observationRevision).isGreaterThan(revision)
+        }
+        return store.generation(volume)
+      }
+    }
+    val sync = syncOn(source, fileProbe = probe)
+    advance(3 * MINUTE)
+    sync.syncNow(SyncReason.FOREGROUND)
+    advance(wait)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(0)
+    assertThat(saved).isTrue()
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+  }
+
+  @Test
+  fun f5RecordConTimestampIdEVersioneIdenticiDopoLaProvaRestaPresente() = runBlocking<Unit> {
+    collisioneDopoLaProva(confirm = false)
+  }
+
+  @Test
+  fun f5ConfirmConTimestampIdEVersioneIdenticiDopoLaProvaRestaPresente() = runBlocking<Unit> {
+    collisioneDopoLaProva(confirm = true)
+  }
+
+  @Test
+  fun f5UnknownSuUnVolumeESuccessoSuUnAltroConservaIlRetry() = runBlocking<Unit> {
+    store.addVolume(SD)
+    access.set(PhoneAccess(MediaAccess.FULL, mediaLocation = true, volumes = linkedSetOf(PRIMARY, SD)))
+    val rows = photos(1L..3L)
+    val sd = store.put(photo(4, taken = T0, volume = SD))
+    val fast = config.copy(absenceConfirmAfter = 200.milliseconds, quickReconcileEvery = 100.milliseconds,
+      absenceRecheckMargin = 50.milliseconds, absenceUnknownRetry = 800.milliseconds)
+    var readable = false
+    var unknownSeen = false
+    val probe = object : PhoneFileProbe {
+      override suspend fun exists(volume: String, place: PhonePlace): Boolean? {
+        if (volume == PRIMARY && place.displayName == rows[1].displayName && !readable) {
+          unknownSeen = true
+          return null
+        }
+        return store.exists(volume, place)
+      }
+    }
+    val sync = DefaultPhoneLibrarySync(source = store, access = access, catalog = catalog, reads = reads,
+      clock = System::currentTimeMillis, monotonicMs = { System.nanoTime() / 1_000_000 },
+      dispatchers = InlineDispatchers, config = fast, fileProbe = probe)
+    sync.syncNow(SyncReason.APP_START)
+    // REPORTED sul secondo volume: verra' confermato dopo UNKNOWN sul primo.
+    store.remove(PRIMARY, 2)
+    delay(150)
+    sync.syncNow(SyncReason.FOREGROUND)
+    assertThat(unknownSeen).isTrue()
+    delay(300)
+    store.remove(SD, 4)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    try {
+      sync.attach(scope)
+      withTimeout(15_000) {
+        while (!unknownSeen || stateAt(sd) != LocationState.ABSENT) delay(10)
+      }
+      assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+      readable = true
+      // Nessun evento o syncNow: soltanto il timer puo' riprovare.
+      withTimeout(15_000) {
+        while (stateAt(rows[1]) != LocationState.ABSENT) delay(20)
+      }
+    } finally {
+      sync.detach()
+      scope.cancel()
+    }
+  }
 
   private fun photos(ids: LongRange): List<MediaStoreRow> = ids.map { store.put(photo(it, taken = T0 + it * MINUTE)) }
 

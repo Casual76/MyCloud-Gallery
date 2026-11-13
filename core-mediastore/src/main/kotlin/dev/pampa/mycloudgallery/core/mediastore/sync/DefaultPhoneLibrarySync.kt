@@ -140,7 +140,7 @@ class DefaultPhoneLibrarySync(
   @Volatile private var nextConfirmAtMono: Long? = null
 
   /** FS3-7: il prossimo tentativo in primo piano dopo una conferma finita in "non so" (orologio monotono), con il suo limite di frequenza. */
-  private var unknownRetryAtMono: Long? = null
+  private val unknownRetryAtMono = HashMap<LocationKey, Long>()
 
   /**
    * Un'annotazione. [firstAt] (orologio di riferimento, su disco) dice da quando manca anche fra un processo e l'altro; [firstMono] (orologio
@@ -707,7 +707,7 @@ class DefaultPhoneLibrarySync(
         // Vista solo in questo giro: la prova e' in un giro dopo.
         if (s.seenRun >= runNumber) maxOf(matureAt, nowMono + 1) else matureAt
       }.filter { it > nowMono }.minOrNull()
-      val next = listOfNotNull(ready, unknownRetryAtMono?.takeIf { it > nowMono }).minOrNull()
+      val next = listOfNotNull(ready, unknownRetryAtMono.values.filter { it > nowMono }.minOrNull()).minOrNull()
       nextConfirmAtMono = next?.let { maxOf(it, nowMono + every) }
     }
 
@@ -737,7 +737,7 @@ class DefaultPhoneLibrarySync(
         if (evidence == Evidence.REPORTED) noteReported(volume, version, candidates)
         return
       }
-      unknownRetryAtMono = null
+      candidates.forEach { unknownRetryAtMono.remove(it.key) }
       var pending = candidates
       repeat(2) {
         val generation = source.generation(volume)
@@ -759,7 +759,7 @@ class DefaultPhoneLibrarySync(
         if (!trusted) absencesBlocked++
         val proven = if (trusted) gone.filter { answers[it] == false } else emptyList()
         val unsure = gone.filter { answers[it] == null || (answers[it] == false && !trusted) }
-        if (unsure.isNotEmpty()) retryAfterUnknown()
+        if (unsure.isNotEmpty()) retryAfterUnknown(unsure)
         if (evidence == Evidence.REPORTED) noteReported(volume, version, unsure)
         // Dopo l'ultima lettura (controllo puntuale, disco): accesso completo, stesso volume, stessa versione. Se no il giro non e' concluso.
         if (!stillFullAccess() || !stillSameVolume(volume, version)) {
@@ -777,7 +777,7 @@ class DefaultPhoneLibrarySync(
         return
       }
       // La generazione non sta ferma: niente si scrive adesso, si riprova.
-      retryAfterUnknown()
+      retryAfterUnknown(pending)
       if (evidence == Evidence.REPORTED) noteReported(volume, version, pending)
     }
 
@@ -790,7 +790,7 @@ class DefaultPhoneLibrarySync(
             true
           }
           source.generation(volume) != generation -> {
-            retryAfterUnknown()
+            retryAfterUnknown(proven.drop(index * config.vanishCap))
             true
           }
           else -> false
@@ -842,8 +842,9 @@ class DefaultPhoneLibrarySync(
     }
 
     /** FS3-7: una prova finita in "non so" (o con la generazione che non sta ferma) si riprova in primo piano, non prima del limite. */
-    private fun retryAfterUnknown() {
-      unknownRetryAtMono = monotonicMs() + config.absenceUnknownRetry.inWholeMilliseconds
+    private fun retryAfterUnknown(positions: List<PhonePosition>) {
+      val at = monotonicMs() + config.absenceUnknownRetry.inWholeMilliseconds
+      positions.forEach { unknownRetryAtMono[it.key] = at }
     }
 
     /** FS3-3: una cancellazione detta dal MediaStore senza prova attuale entra fra le annotazioni, vista adesso in questo processo. */
@@ -897,6 +898,7 @@ class DefaultPhoneLibrarySync(
 
     private suspend fun forgetSuspects(volume: String, keys: Collection<LocationKey>) {
       val noted = suspects[volume] ?: return
+      keys.forEach { unknownRetryAtMono.remove(it) }
       val removed = keys.mapNotNull { key -> noted.remove(key)?.let { key to PhoneSuspect(it.firstAt, it.msVersion) } }.toMap()
       if (removed.isNotEmpty()) catalog.updatePhoneSuspects(volume, emptyMap(), removed)
     }
@@ -909,7 +911,7 @@ class DefaultPhoneLibrarySync(
     private suspend fun forgetAllSuspects() {
       suspects.clear()
       nextConfirmAtMono = null
-      unknownRetryAtMono = null
+      unknownRetryAtMono.clear()
       if (!suspectsOnDisk) return
       try {
         catalog.clearPhoneSuspects()

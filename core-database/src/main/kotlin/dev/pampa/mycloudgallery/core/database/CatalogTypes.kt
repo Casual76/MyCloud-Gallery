@@ -56,6 +56,9 @@ data class CatalogChange(
  */
 data class PhoneSuspect(val firstAtMillis: Long, val msVersion: String)
 
+/** Prefisso delle revisioni per posizione in catalog_meta (nessuna modifica dello schema). */
+const val PHONE_OBSERVATION_REVISION_PREFIX = "phone_observation_revision:"
+
 /**
  * Pacchetto F (FS3-6): una posizione del telefono come l'ha letta la fotografia di un confronto: si segna assente solo se nel catalogo e' ancora
  * esattamente cosi' ([MediaCatalog.markPhoneVanishedIfUnchanged]).
@@ -65,6 +68,7 @@ data class ObservedPhonePosition(
   val mediaStoreId: Long?,
   val mediaStoreVersion: String?,
   val lastSeenAtMillis: Long,
+  val observationRevision: Long = 0,
 )
 
 data class MediaStoreCursor(

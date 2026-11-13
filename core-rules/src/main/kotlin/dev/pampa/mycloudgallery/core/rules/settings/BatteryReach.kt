@@ -11,11 +11,15 @@ import dev.pampa.mycloudgallery.core.rules.PowerPolicy
  *   qualunque preset, [quickPhotosRuleSet]).
  * @property analysisOnBattery l'analisi (Calcolo AI, con vettori, testo e volti) puo' lavorare a batteria.
  * @property backupNeedsPower il backup normale (le foto) lavora solo in carica: la pagina del Backup lo dice con il segno della carica fra «Il backup parte con».
+ * @property backupEnabled almeno una delle attivita' del backup (foto, video) e' accesa nelle regole (BS3-1): spenta dall'utente non e' «solo in carica», e' spenta.
+ * @property analysisEnabled il Calcolo AI e' acceso nelle regole (BS3-1).
  */
 data class BatteryReach(
   val backupOnBattery: Boolean,
   val analysisOnBattery: Boolean,
   val backupNeedsPower: Boolean,
+  val backupEnabled: Boolean,
+  val analysisEnabled: Boolean,
 )
 
 fun RuleSettings.batteryReach(): BatteryReach {
@@ -26,5 +30,7 @@ fun RuleSettings.batteryReach(): BatteryReach {
     backupOnBattery = normalBackup || quickPhotosRuleSet() != null,
     analysisOnBattery = onBattery(BackgroundActivity.AI_COMPUTE),
     backupNeedsPower = !onBattery(BackgroundActivity.PHOTO_BACKUP),
+    backupEnabled = rules.ruleFor(BackgroundActivity.PHOTO_BACKUP).enabled || rules.ruleFor(BackgroundActivity.VIDEO_BACKUP).enabled,
+    analysisEnabled = rules.ruleFor(BackgroundActivity.AI_COMPUTE).enabled,
   )
 }

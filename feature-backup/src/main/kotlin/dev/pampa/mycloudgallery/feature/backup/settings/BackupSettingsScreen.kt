@@ -44,6 +44,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -384,11 +385,12 @@ private fun WhenRow(guardBound: Boolean = false, needsPower: Boolean = false) {
     verticalArrangement = Arrangement.spacedBy(BackupDimens.CardGap),
   ) {
     Text(text = title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+    // Una colonna per segno, tutte larghe uguale (BU2-3): con tre segni e il testo grande il nome va a capo (due righe) e non si taglia.
+    Row(modifier = Modifier.fillMaxWidth()) {
       factors.forEach { (icon, family, label) ->
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(BackupDimens.LineGap)) {
+        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(BackupDimens.LineGap)) {
           GalleryIconTile(icon = icon, family = family, size = BackupDimens.RowCover)
-          Text(text = label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+          Text(text = label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, textAlign = TextAlign.Center)
         }
       }
     }

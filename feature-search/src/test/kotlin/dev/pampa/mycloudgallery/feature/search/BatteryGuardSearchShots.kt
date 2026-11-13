@@ -59,6 +59,10 @@ internal enum class SearchGuardShot(val slug: String, val value: BatteryGuardVal
   NOTTE_DI_SERIE("notte-di-serie-20", BatteryGuardValue(20, forBackup = true, forAnalysis = true, backupOnBattery = true, analysisOnBattery = false, backupNeedsPower = true)),
   SOLO_IN_CARICA_BACKUP("backup-solo-in-carica", BatteryGuardValue(20, forBackup = true, forAnalysis = true, backupOnBattery = false, analysisOnBattery = true, backupNeedsPower = true)),
   NESSUNO_ABATTERIA("nessuno-a-batteria", BatteryGuardValue(20, forBackup = true, forAnalysis = true, backupOnBattery = false, analysisOnBattery = false, backupNeedsPower = true)),
+
+  // Giro 3 (BS3-1): un'attivita' spenta dall'utente dice «Spento», non «Solo in carica».
+  ANALISI_SPENTA("analisi-spenta", BatteryGuardValue(20, forBackup = true, forAnalysis = true, backupOnBattery = true, analysisOnBattery = false, backupNeedsPower = false, analysisEnabled = false)),
+  BACKUP_SPENTO("backup-spento", BatteryGuardValue(20, forBackup = true, forAnalysis = true, backupOnBattery = false, analysisOnBattery = true, backupNeedsPower = true, backupEnabled = false)),
 }
 
 private const val SHOT_DIR = "../docs/screenshots/beta-grafica/B-soglia-batteria"
@@ -167,7 +171,7 @@ internal class BatteryGuardSearchDoubleTextShots(shot: SearchGuardShot, dark: Bo
   companion object {
     @JvmStatic
     @ParameterizedRobolectricTestRunner.Parameters(name = "{0} scuro={1}")
-    fun data(): List<Array<Any>> = every(listOf(SearchGuardShot.PREDEFINITO, SearchGuardShot.SPENTI))
+    fun data(): List<Array<Any>> = every(listOf(SearchGuardShot.PREDEFINITO, SearchGuardShot.SPENTI, SearchGuardShot.NOTTE_DI_SERIE))
   }
 }
 

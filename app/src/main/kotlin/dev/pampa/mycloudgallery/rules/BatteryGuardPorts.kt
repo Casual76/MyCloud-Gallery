@@ -53,6 +53,8 @@ class AppBatteryGuard(
           backupOnBattery = reach.backupOnBattery,
           analysisOnBattery = reach.analysisOnBattery,
           backupNeedsPower = reach.backupNeedsPower,
+          backupEnabled = reach.backupEnabled,
+          analysisEnabled = reach.analysisEnabled,
         )
       }
       .distinctUntilChanged()

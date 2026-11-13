@@ -218,6 +218,18 @@ class BatteryGuardPortTest {
   }
 
   @Test
+  fun bs31_leAttivitaSpente_laPortaDiceCheSonoSpente_nonSoloInCarica() = runTest {
+    val port = AppBatteryGuard(FakeStore(RuleSettings(preset = Preset.WIFI_ALWAYS, disabledActivities = setOf(BackgroundActivity.AI_COMPUTE))), backgroundScope)
+    runCurrent()
+
+    val v = port.value.value!!
+    assertThat(v.analysisEnabled).isFalse()
+    assertThat(v.analysisOnBattery).isFalse()
+    assertThat(v.backupEnabled).isTrue()
+    assertThat(v.backupOnBattery).isTrue()
+  }
+
+  @Test
   fun cambiandoPreset_laPortaSegue() = runTest {
     val store = FakeStore(RuleSettings())
     val port = AppBatteryGuard(store, backgroundScope)

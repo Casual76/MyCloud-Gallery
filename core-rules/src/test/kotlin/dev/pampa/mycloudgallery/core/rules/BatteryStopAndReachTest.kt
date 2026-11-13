@@ -64,8 +64,50 @@ class BatteryStopAndReachTest {
     rig.settings.save(RuleSettings(preset = Preset.WIFI_ALWAYS, batteryThresholdPercent = 40))
     assertThat(rig.engine.batteryStopThreshold.value).isEqualTo(60)
 
-    // La rivalutazione: ora il lavoro parte (55 >= 40) e non c'e' un verdetto di batteria nuovo; il numero resta quello dell'ultimo fermo, che nessuna pagina mostra piu' (il motivo e' sparito).
+    // La rivalutazione: ora il lavoro parte (55 >= 40) e il suo fermo per la batteria non c'e' piu': il numero esce (BS3-2), la frase senza numero e' sempre vera.
     assertThat(rig.engine.evaluate(WorkRequest.Background(BackgroundActivity.PHOTO_BACKUP)).isRun).isTrue()
+    assertThat(rig.engine.batteryStopThreshold.value).isNull()
+  }
+
+  @Test
+  fun bs32_ilNumeroVecchioNonRestaDopoIlRicalcoloDiTutti() = runTest {
+    val rig = rig()
+    rig.settings.save(RuleSettings(preset = Preset.WIFI_ALWAYS, batteryThresholdPercent = 60))
+    rig.engine.evaluateAll()
+    assertThat(rig.engine.batteryStopThreshold.value).isEqualTo(60)
+
+    // Il livello scende a 30 e il telefono e' al 55%: nessuna attivita' e' piu' ferma per la batteria, nessun numero.
+    rig.settings.save(RuleSettings(preset = Preset.WIFI_ALWAYS, batteryThresholdPercent = 30))
+    rig.engine.evaluateAll()
+
+    assertThat(rig.engine.batteryStopThreshold.value).isNull()
+  }
+
+  @Test
+  fun bs32_ilNumeroRestaFinche_UnAltroLavoroEAncoraFermo() = runTest {
+    val rig = rig()
+    rig.settings.save(RuleSettings(preset = Preset.WIFI_ALWAYS, batteryThresholdPercent = 60))
+    rig.engine.evaluate(WorkRequest.Background(BackgroundActivity.AI_COMPUTE))
+    rig.engine.evaluate(WorkRequest.Background(BackgroundActivity.PHOTO_BACKUP))
+    assertThat(rig.engine.batteryStopThreshold.value).isEqualTo(60)
+
+    // Il backup riparte (livello 40), ma il calcolo AI non e' stato rivalutato: il suo fermo e' ancora quello del 60.
+    rig.settings.save(RuleSettings(preset = Preset.WIFI_ALWAYS, batteryThresholdPercent = 40))
+    assertThat(rig.engine.evaluate(WorkRequest.Background(BackgroundActivity.PHOTO_BACKUP)).isRun).isTrue()
+    assertThat(rig.engine.batteryStopThreshold.value).isEqualTo(60)
+
+    rig.engine.evaluate(WorkRequest.Background(BackgroundActivity.AI_COMPUTE))
+    assertThat(rig.engine.batteryStopThreshold.value).isNull()
+  }
+
+  @Test
+  fun bs32_unaRichiestaDellUtente_nonTogliIlNumeroDiUnAltroLavoroFermo() = runTest {
+    val rig = rig()
+    rig.settings.save(RuleSettings(preset = Preset.WIFI_ALWAYS, batteryThresholdPercent = 60))
+    rig.engine.evaluate(WorkRequest.Background(BackgroundActivity.PHOTO_BACKUP))
+
+    rig.engine.evaluate(WorkRequest.UserInitiated(BackgroundActivity.PHOTO_BACKUP, confirmed = true))
+
     assertThat(rig.engine.batteryStopThreshold.value).isEqualTo(60)
   }
 
@@ -136,5 +178,33 @@ class BatteryStopAndReachTest {
 
     assertThat(reach.analysisOnBattery).isFalse()
     assertThat(reach.backupOnBattery).isTrue()
+  }
+
+  // --- BS3-1: spenta dall'utente non e' «solo in carica» ------------------------------------------------------------
+
+  @Test
+  fun bs31_unaAttivitaSpenta_nonEAccesa_eIlBackupResta() {
+    val reach = RuleSettings(preset = Preset.WIFI_ALWAYS, disabledActivities = setOf(BackgroundActivity.AI_COMPUTE)).batteryReach()
+
+    assertThat(reach.analysisEnabled).isFalse()
+    assertThat(reach.analysisOnBattery).isFalse()
+    assertThat(reach.backupEnabled).isTrue()
+  }
+
+  @Test
+  fun bs31_ilBackupSpento_quandoSonoSpentiLeFotoEiVideo() {
+    val reach = RuleSettings(preset = Preset.WIFI_ALWAYS, disabledActivities = setOf(BackgroundActivity.PHOTO_BACKUP, BackgroundActivity.VIDEO_BACKUP)).batteryReach()
+
+    assertThat(reach.backupEnabled).isFalse()
+    assertThat(reach.backupOnBattery).isFalse()
+    assertThat(reach.analysisEnabled).isTrue()
+  }
+
+  @Test
+  fun bs31_conLeRegoleDiSerie_tuttoEAcceso() {
+    val reach = RuleSettings().batteryReach()
+
+    assertThat(reach.backupEnabled).isTrue()
+    assertThat(reach.analysisEnabled).isTrue()
   }
 }

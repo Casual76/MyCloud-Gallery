@@ -176,6 +176,9 @@ object AiWorkScheduling {
     continueCompute(context, user, follow.delay.inWholeMilliseconds, follow.constraints(), follow.attempt, onlyAsked)
   }
 
+  /** La richiesta di un giro del calcolo **senza vincoli di carica** (pacchetto B, BS-2): la ripresa dopo che una scelta dell'utente ha tolto il blocco della batteria. Stesso lavoro delle novita'. */
+  fun resumeRequest(): OneTimeWorkRequest = computeRequest(user = false)
+
   private fun computeRequest(
     user: Boolean,
     delayMs: Long = 0,

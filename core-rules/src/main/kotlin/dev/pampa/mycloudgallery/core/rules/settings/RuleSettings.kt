@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.rules.ActivityRule
 import dev.pampa.mycloudgallery.core.rules.AllowedNetwork
 import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
+import dev.pampa.mycloudgallery.core.rules.BatteryGroups
 import dev.pampa.mycloudgallery.core.rules.MonthlyCaps
 import dev.pampa.mycloudgallery.core.rules.NightWindows
 import dev.pampa.mycloudgallery.core.rules.PowerPolicy
@@ -30,6 +31,9 @@ import kotlinx.coroutines.flow.map
  * batteria, i tetti, e per "Personalizzato" le regole di ogni attivita'. [toRuleSet] le trasforma
  * nelle [RuleSet] che il valutatore usa.
  *
+ * @property batteryThresholdForBackup la soglia della batteria vale per il backup (foto e video). Acceso di default: come prima che si potesse scegliere.
+ * @property batteryThresholdForAnalysis la soglia vale per l'analisi delle foto (vettori, testo, volti). Acceso di default. Con tutti e due spenti la soglia
+ *   resta solo per le attivita' fuori dai due gruppi ([BatteryGroups]).
  * @property capsOverride tetti scelti dall'utente; null = quelli del preset.
  * @property disabledActivities attivita' spente (vale con qualunque preset: es. anteprime HQ quando la
  *   qualita' non e' "Alta").
@@ -54,6 +58,8 @@ data class RuleSettings(
   val customHeavyOnlyAtHome: Boolean = true,
   val billingCycleStartDay: Int = 1,
   val protectNewPhotos: Boolean = true,
+  val batteryThresholdForBackup: Boolean = true,
+  val batteryThresholdForAnalysis: Boolean = true,
 ) {
   init {
     require(batteryThresholdPercent in 0..100) { "La soglia della batteria e' una percentuale." }
@@ -61,6 +67,12 @@ data class RuleSettings(
       "Il giorno di inizio del ciclo va da 1 a ${BillingCycle.MAX_START_DAY}."
     }
   }
+
+  /**
+   * Il livello scelto adesso dall'utente (pacchetto B, BS-4): **le scritture nuove stanno sempre in 5..80 a passi di 5** ([BatteryThresholds.normalize]), qualunque chiamante le faccia. I valori gia' salvati
+   * (da prima che il livello si potesse scegliere: ogni intero 0..100 era ammesso) **non si toccano**: restano quelli che erano e il valutatore li usa cosi' come sono.
+   */
+  fun withBatteryThreshold(percent: Int): RuleSettings = copy(batteryThresholdPercent = BatteryThresholds.normalize(percent))
 
   fun toRuleSet(): RuleSet {
     val base = PresetCatalog.ruleSet(preset, nightWindow)
@@ -84,6 +96,7 @@ data class RuleSettings(
       caps = capsOverride ?: withCustom.caps,
       batteryThresholdPercent = batteryThresholdPercent,
       pauseOnPowerSaver = pauseOnPowerSaver,
+      batteryThresholdActivities = BatteryGroups.activitiesFor(batteryThresholdForBackup, batteryThresholdForAnalysis),
     )
   }
 }
@@ -156,6 +169,9 @@ class DataStoreRuleSettingsStore(private val dataStore: DataStore<Preferences>) 
         prefs[CYCLE_START_DAY]?.takeIf { it in 1..BillingCycle.MAX_START_DAY }
           ?: defaults.billingCycleStartDay,
       protectNewPhotos = prefs[PROTECT_NEW_PHOTOS] ?: defaults.protectNewPhotos,
+      // Pacchetto B: chiavi nuove e additive; senza di esse (chi aggiorna) la soglia vale per tutto, come prima.
+      batteryThresholdForBackup = prefs[BATTERY_FOR_BACKUP] ?: defaults.batteryThresholdForBackup,
+      batteryThresholdForAnalysis = prefs[BATTERY_FOR_ANALYSIS] ?: defaults.batteryThresholdForAnalysis,
     )
   }
 
@@ -180,6 +196,8 @@ class DataStoreRuleSettingsStore(private val dataStore: DataStore<Preferences>) 
     prefs[CUSTOM_HEAVY_AT_HOME] = s.customHeavyOnlyAtHome
     prefs[CYCLE_START_DAY] = s.billingCycleStartDay
     prefs[PROTECT_NEW_PHOTOS] = s.protectNewPhotos
+    prefs[BATTERY_FOR_BACKUP] = s.batteryThresholdForBackup
+    prefs[BATTERY_FOR_ANALYSIS] = s.batteryThresholdForAnalysis
     BackgroundActivity.entries.forEach { activity ->
       val rule = s.customRules[activity]
       if (rule == null) prefs.remove(ruleKey(activity)) else prefs[ruleKey(activity)] = encodeRule(rule)
@@ -238,6 +256,8 @@ class DataStoreRuleSettingsStore(private val dataStore: DataStore<Preferences>) 
     val NIGHT_START = intPreferencesKey("rule.night.start")
     val NIGHT_END = intPreferencesKey("rule.night.end")
     val BATTERY_THRESHOLD = intPreferencesKey("rule.battery.threshold")
+    val BATTERY_FOR_BACKUP = booleanPreferencesKey("rule.battery.threshold.backup")
+    val BATTERY_FOR_ANALYSIS = booleanPreferencesKey("rule.battery.threshold.analysis")
     val CAPS_OVERRIDE = booleanPreferencesKey("rule.caps.override")
     val CAP_MOBILE = longPreferencesKey("rule.caps.mobile")
     val CAP_WIFI = longPreferencesKey("rule.caps.wifi")
@@ -248,4 +268,17 @@ class DataStoreRuleSettingsStore(private val dataStore: DataStore<Preferences>) 
     val CYCLE_START_DAY = intPreferencesKey("rule.cycle.startday")
     val PROTECT_NEW_PHOTOS = booleanPreferencesKey("rule.backup.protect_new_photos")
   }
+}
+
+/**
+ * I livelli di batteria che l'utente puo' **scegliere** (pacchetto B): da 5% a 80% a passi di 5. Il confine e' qui, nel dominio, non nella porta della pagina. Non e' una regola sui valori **gia' salvati**
+ * (la soglia 0..100 di prima resta valida: [RuleSettings] e il valutatore li accettano e li usano come sono).
+ */
+object BatteryThresholds {
+  const val MIN_PERCENT = 5
+  const val MAX_PERCENT = 80
+  const val STEP = 5
+
+  /** Il livello ammesso piu' vicino a [percent]: 33 -> 35, 32 -> 30, 2 -> 5, 100 -> 80. */
+  fun normalize(percent: Int): Int = (Math.round(percent.toDouble() / STEP).toInt() * STEP).coerceIn(MIN_PERCENT, MAX_PERCENT)
 }

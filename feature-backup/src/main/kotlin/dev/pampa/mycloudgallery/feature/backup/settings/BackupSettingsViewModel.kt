@@ -8,6 +8,9 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupSettings
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
 import dev.pampa.mycloudgallery.core.backup.contract.DeviceFolder
+import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardPort
+import dev.pampa.mycloudgallery.core.designsystem.design.BatterySaveResult
+import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupActions
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupCoverPorts
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupRules
@@ -24,7 +27,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -59,7 +64,16 @@ internal data class SettingsUi(
   val editable: Boolean,
   /** L'ultima scelta non si e' salvata (memoria piena, OB-4 della review generale): l'interruttore e' tornato com'era e la nota sotto le sorgenti lo dice. */
   val saveFailed: Boolean = false,
+  /** Pacchetto B: il livello di batteria e i due interruttori (backup, analisi) **salvati**; null = non ancora letti ([batteryLoading]) o `:app` non ha legato la porta (il controllo non c'e'). */
+  val battery: BatteryGuardValue? = null,
+  /** La porta della batteria c'e' ma le impostazioni non sono ancora state lette: il controllo si vede come scheletro, mai con un 20% finto (BS-5). */
+  val batteryLoading: Boolean = false,
+  /** L'esito dell'ultima scrittura della batteria, **per richiesta** (BS2-2): se non e' riuscita il controllo torna al valore salvato e lo dice con la stessa frase delle altre impostazioni. */
+  val batterySaveResult: BatterySaveResult? = null,
 ) {
+  /** L'ultima scelta della batteria non si e' salvata. */
+  val batterySaveFailed: Boolean get() = batterySaveResult?.ok == false
+
   /**
    * Le righe delle sorgenti nell'ordine in cui si mostrano: fotocamera, screenshot, poi le cartelle aggiuntive dalla piu' grande. Una
    * cartella gia' scelta che il telefono non elenca piu' (E-B12) resta in lista, cosi' si puo' togliere.
@@ -82,6 +96,7 @@ class BackupSettingsViewModel @Inject constructor(
   rules: Optional<BackupRules>,
   actions: Optional<BackupActions>,
   coverPorts: Optional<BackupCoverPorts> = Optional.empty(),
+  batteryGuard: Optional<BatteryGuardPort> = Optional.empty(),
 ) : ViewModel() {
 
   /** I3: le copertine delle cartelle (la foto piu' recente, dalla Libreria visibile); null = le piastrelle. */
@@ -92,6 +107,10 @@ class BackupSettingsViewModel @Inject constructor(
   private val rulesPort: BackupRules? = rules.orElse(null)
   private val rulesOrNone: BackupRules = rulesPort ?: NoBackupRules
   private val acts: BackupActions = actions.orElse(NoBackupActions)
+  private val batteryPort: BatteryGuardPort? = batteryGuard.orElse(null)
+  private val batteryFlow: Flow<BatteryGuardValue?> = batteryPort?.value ?: flowOf(null)
+  private val batteryResult = MutableStateFlow<BatterySaveResult?>(null)
+  private var batteryRequests = 0L
 
   private val foldersState = MutableStateFlow<FoldersState>(FoldersState.Loading)
   private val saveFailed = MutableStateFlow(false)
@@ -99,22 +118,26 @@ class BackupSettingsViewModel @Inject constructor(
   private val noFolder: StateFlow<DeviceFolder?> = MutableStateFlow<DeviceFolder?>(null)
 
   internal val state: StateFlow<SettingsUi> = combine(
-    foldersState,
-    port?.sources ?: noSources,
-    port?.deviceFolder ?: noFolder,
-    rulesOrNone.protectNewPhotos,
-    saveFailed,
-  ) { found, chosen, deviceFolder, protect, failed ->
-    SettingsUi(
-      folders = found,
-      chosen = chosen,
-      deviceFolder = deviceFolder,
-      protectNewPhotos = protect,
-      rulesAvailable = rulesPort != null,
-      editable = port != null,
-      saveFailed = failed,
-    )
-  }.stateIn(
+    combine(
+      foldersState,
+      port?.sources ?: noSources,
+      port?.deviceFolder ?: noFolder,
+      rulesOrNone.protectNewPhotos,
+      saveFailed,
+    ) { found, chosen, deviceFolder, protect, failed ->
+      SettingsUi(
+        folders = found,
+        chosen = chosen,
+        deviceFolder = deviceFolder,
+        protectNewPhotos = protect,
+        rulesAvailable = rulesPort != null,
+        editable = port != null,
+        saveFailed = failed,
+      )
+    },
+    batteryFlow,
+    batteryResult,
+  ) { ui, battery, result -> ui.copy(battery = battery, batteryLoading = batteryPort != null && battery == null, batterySaveResult = result) }.stateIn(
     scope = viewModelScope,
     started = SharingStarted.WhileSubscribed(StopTimeoutMillis),
     initialValue = SettingsUi(
@@ -124,6 +147,8 @@ class BackupSettingsViewModel @Inject constructor(
       protectNewPhotos = rulesOrNone.protectNewPhotos.value,
       rulesAvailable = rulesPort != null,
       editable = port != null,
+      battery = batteryPort?.value?.value,
+      batteryLoading = batteryPort != null && batteryPort.value.value == null,
     ),
   )
 
@@ -158,6 +183,23 @@ class BackupSettingsViewModel @Inject constructor(
       // l'interruttore torna indietro. La nota sotto le sorgenti dice perche', con i componenti che ci sono.
       saveFailed.value = settings.sources.value.sources != next
     }
+  }
+
+  /** Pacchetto B: il livello di batteria sotto cui il backup e l'analisi non partono (a passi di 5; il controllo lo da' gia' sul passo). */
+  fun setBatteryLevel(percent: Int) = saveBattery(level = percent) { setLevel(percent) }
+
+  fun setBatteryForBackup(on: Boolean) = saveBattery(level = null) { setForBackup(on) }
+
+  fun setBatteryForAnalysis(on: Boolean) = saveBattery(level = null) { setForAnalysis(on) }
+
+  /**
+   * BS-5, BS2-2: ogni scelta ha un esito **per richiesta** ([BatterySaveResult]: identificativo, livello chiesto, riuscita). Due fallimenti di fila sono due esiti diversi (l'identificativo cambia) e il controllo
+   * riporta tutte e due le volte la scelta in volo al valore salvato; l'esito di una richiesta vecchia non tocca la piu' nuova.
+   */
+  private fun saveBattery(level: Int?, write: suspend BatteryGuardPort.() -> Boolean) {
+    val battery = batteryPort ?: return
+    val id = ++batteryRequests
+    viewModelScope.launch { batteryResult.value = BatterySaveResult(id = id, level = level, ok = battery.write()) }
   }
 
   /** D34: "Proteggi subito le foto nuove". */

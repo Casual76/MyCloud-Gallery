@@ -24,6 +24,7 @@
   <string name="backup_settings_when_night">Notte</string>
   <string name="backup_settings_when_wifi">Wi-Fi di casa</string>
   <string name="backup_settings_when_battery">Batteria</string>
+  <string name="backup_settings_when_charging">In carica</string>
   <string name="backup_settings_rules_note">La protezione delle foto nuove vale solo per le foto della fotocamera, pesa pochi MB, non riguarda i video e non usa mai i dati mobili.</string>
   <string name="backup_settings_rules_info">Che cosa protegge</string>
 

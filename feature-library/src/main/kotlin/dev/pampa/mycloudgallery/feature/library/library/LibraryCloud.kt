@@ -983,7 +983,7 @@ private fun analysisRowOf(status: LibraryAnalysisStatus): AnalysisRow {
       Triple(stringResource(R.string.library_cloud_analysis_queued), count ?: stringResource(R.string.library_cloud_analysis_queued_line), GalleryIconStatus.Waiting)
     is LibraryAnalysisStatus.Paused -> Triple(
       stringResource(R.string.library_cloud_analysis_paused),
-      stringResource(analysisWaitRes(status.reason)),
+      analysisWaitText(status.reason),
       if (status.reason == LibraryAnalysisWait.PREPARATION) GalleryIconStatus.Waiting else GalleryIconStatus.Paused,
     )
     else -> Triple(stringResource(R.string.library_cloud_analysis_all_ready), null, GalleryIconStatus.Done)
@@ -1079,6 +1079,11 @@ private fun problemRes(code: String): Int = when (code) {
 
 /** L'icona dell'analisi delle foto: la foto con la lente (la stessa di Ricerca e modelli e del visore). */
 private val AnalysisGlyph: ImageVector get() = Icons.Rounded.ImageSearch
+
+/** Il motivo per cui l'analisi aspetta, a parole: con la batteria, col livello scelto («Batteria sotto il 60%»). */
+@Composable
+private fun analysisWaitText(reason: LibraryAnalysisWait): String =
+  if (reason == LibraryAnalysisWait.BATTERY) dev.pampa.mycloudgallery.core.designsystem.state.batteryWaitText() else stringResource(analysisWaitRes(reason))
 
 private fun analysisWaitRes(reason: LibraryAnalysisWait): Int = when (reason) {
   LibraryAnalysisWait.NIGHT_WINDOW -> R.string.library_cloud_analysis_wait_window

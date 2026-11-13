@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Pacchetto B (seconda beta): il livello di batteria sotto cui il backup e l'analisi delle foto non partono. Un controllo solo (`GalleryBatteryGuard`), nelle impostazioni
+       del Backup e in quelle dell'analisi. Regola dell'utente: «se non sapessi leggere potrei usare l'app?»: la figura (batteria piena fino al livello, cursore, due
+       interruttori con le loro icone) fa il lavoro; le parole sono poche, e lo stato si dice una volta sola. -->
+  <string name="battery_guard_title">Batteria</string>
+  <string name="battery_guard_level">%1$d%%</string>
+  <string name="battery_guard_slider">Livello di batteria</string>
+  <string name="battery_guard_backup">Ferma il backup</string>
+  <string name="battery_guard_analysis">Ferma l’analisi</string>
+  <string name="battery_guard_backup_name">Backup</string>
+  <string name="battery_guard_analysis_name">Analisi delle foto</string>
+  <string name="battery_guard_only_charging">Solo in carica</string>
+  <string name="battery_guard_on">Acceso</string>
+  <string name="battery_guard_off">Spento</string>
+  <string name="battery_guard_state_both">Sotto questo livello si fermano backup e analisi</string>
+  <string name="battery_guard_state_backup">Sotto questo livello si ferma il backup</string>
+  <string name="battery_guard_state_analysis">Sotto questo livello si ferma l’analisi</string>
+  <string name="battery_guard_state_none">Backup e analisi non si fermano</string>
+  <string name="battery_guard_state_zero">Non si ferma niente</string>
+  <string name="battery_guard_state_full">A batteria non parte niente</string>
+  <string name="battery_guard_state_charging">Lavorano solo in carica</string>
+  <string name="battery_guard_loading">Sto caricando il livello di batteria</string>
+  <string name="battery_guard_save_failed">Non sono riuscito a salvare la scelta: sul telefono non c’è abbastanza spazio. Libera un po’ di memoria e riprova.</string>
+  <string name="battery_guard_info_label">E con il cavo?</string>
+  <string name="battery_guard_info_detail">Col cavo collegato non vale, e nemmeno per «Fai ora» e «Analizza ora». Le anteprime di preparazione si fermano solo se backup e analisi si fermano tutti e due; quelle in alta qualità se ne ferma almeno uno. Con la batteria quasi scarica Android può aspettare comunque.</string>
+</resources>

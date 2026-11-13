@@ -75,6 +75,7 @@ import dev.pampa.mycloudgallery.feature.backup.first.LargeFirstBackup
 import dev.pampa.mycloudgallery.feature.backup.first.heroResumeRes
 import dev.pampa.mycloudgallery.feature.backup.first.searchText
 import dev.pampa.mycloudgallery.feature.backup.first.waitTitleRes
+import dev.pampa.mycloudgallery.feature.backup.first.waitTitleText
 import dev.pampa.mycloudgallery.feature.backup.BackupDimens
 import dev.pampa.mycloudgallery.feature.backup.R
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
@@ -207,7 +208,7 @@ internal fun heroModel(status: BackupStatus, actions: BackupPageActions, share: 
   is BackupStatus.Waiting -> HeroModel(
     mark = GalleryIconStatus.Waiting,
     label = stringResource(R.string.backup_hero_waiting),
-    line = stringResource(R.string.backup_hero_waiting_line, BackupText.count(status.items), stringResource(waitRes(status.reason))),
+    line = stringResource(R.string.backup_hero_waiting_line, BackupText.count(status.items), waitText(status.reason)),
     actions = listOf(HeroAction(stringResource(R.string.backup_do_now), Icons.Rounded.CloudUpload, actions.backupNow)),
     calmAction = true,
   )
@@ -281,7 +282,7 @@ private fun searchHero(summary: BackupSummary, actions: BackupPageActions): Hero
     held != null -> HeroModel(
       mark = GalleryIconStatus.Waiting,
       label = label,
-      line = heroResumeRes(held)?.let { stringResource(it, stringResource(waitTitleRes(held))) } ?: stringResource(waitTitleRes(held)),
+      line = heroResumeRes(held)?.let { stringResource(it, waitTitleText(held)) } ?: waitTitleText(held),
       actions = see,
       calmAction = true,
     )
@@ -358,6 +359,11 @@ private fun heroStep(step: BackupSetupStep): HeroStep = when (step) {
   BackupSetupStep.DEVICE_FOLDER -> HeroStep(Icons.Rounded.FolderShared, GalleryIconFamily.Backup, stringResource(R.string.backup_step_device_folder))
   BackupSetupStep.MEDIA_PERMISSION -> HeroStep(Icons.Rounded.PhotoLibrary, GalleryIconFamily.Photos, stringResource(R.string.backup_step_media_permission))
 }
+
+/** Il motivo per cui il backup aspetta, a parole: con la batteria, col livello scelto («Batteria sotto il 60%»), mai «scarica» con la batteria al 55%. */
+@Composable
+internal fun waitText(reason: WaitReason): String =
+  if (reason == WaitReason.BATTERY) dev.pampa.mycloudgallery.core.designsystem.state.batteryWaitText() else stringResource(waitRes(reason))
 
 internal fun waitRes(reason: WaitReason): Int = when (reason) {
   WaitReason.CHARGING -> R.string.backup_wait_charging
@@ -525,7 +531,8 @@ private fun HeroTexts(label: String, line: String?, detail: String?) {
           open = open,
           onToggle = { open = !open },
           openState = openState,
-          closedState = closedState,
+          closedState = closedState,
+
         )
       }
     }

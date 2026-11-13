@@ -195,7 +195,7 @@ private fun SearchRow(existing: ExistingCopiesState) {
     FluidListRow(
       title = when {
         held == WaitReason.NEXT_RUN -> stringResource(R.string.backup_first_search_paused)
-        held != null -> stringResource(waitTitleRes(held))
+        held != null -> waitTitleText(held)
         scanning && seen > 0 && total != null && total >= seen -> stringResource(R.string.backup_first_search_count_of, BackupText.count(seen), BackupText.count(total))
         scanning && seen > 0 -> BackupText.count(seen)
         else -> stringResource(R.string.backup_first_searching)
@@ -318,6 +318,10 @@ private fun CompareRow(count: Int, held: WaitReason?) {
  * Fase I (BF-8): perche' un lavoro e' fermo adesso, con **la formula comune** (`gallery_wait_*` di core-designsystem: la stessa del piede e dei titoli della
  * Diagnostica). [WaitReason.NEXT_RUN] e i motivi che il backup non nomina non arrivano qui (li dice la riga della pausa).
  */
+@Composable
+internal fun waitTitleText(reason: WaitReason): String =
+  if (reason == WaitReason.BATTERY) dev.pampa.mycloudgallery.core.designsystem.state.batteryWaitText() else stringResource(waitTitleRes(reason))
+
 internal fun waitTitleRes(reason: WaitReason): Int = when (reason) {
   WaitReason.CHARGING -> DesignR.string.gallery_wait_charging
   WaitReason.WIFI -> DesignR.string.gallery_wait_wifi

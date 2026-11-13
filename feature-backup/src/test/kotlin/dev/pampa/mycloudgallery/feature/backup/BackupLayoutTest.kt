@@ -104,6 +104,24 @@ class BackupLayoutTest : ComposeBackupTallTest() {
     assertBounds("impostazioni 1,3x")
   }
 
+  /** Pacchetto B: con il controllo del livello di batteria, cose da toccare da 48 dp, dentro lo schermo e senza sovrapposizioni, a testo 1x e 1,3x. */
+  @Test
+  fun leImpostazioniConIlLivelloDellaBatteria_SuTelefonoAUnoEATreDecimi() {
+    val ui = SettingsUi(
+      folders = FoldersState.Ready(BackupSamples.phoneFolders),
+      chosen = BackupSources.DEFAULT,
+      deviceFolder = null,
+      protectNewPhotos = true,
+      rulesAvailable = true,
+      editable = true,
+      battery = dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue(levelPercent = 60, forBackup = true, forAnalysis = false),
+    )
+    show { BackupSettingsScreen(state = ui, actions = SettingsActions(), onBack = {}) }
+    assertBounds("impostazioni con la batteria 1x")
+    setFontScale(LARGE_TEXT)
+    assertBounds("impostazioni con la batteria 1,3x")
+  }
+
   @Test
   fun laScelta_DellaCartella_SuTelefonoAUnoEATreDecimi() {
     val ui = mutableStateOf<FolderUi>(FolderUi.Choose(BackupSamples.deviceFolder, BackupSamples.existingFolderProposal.existing, BackupSamples.existingFolderProposal.alternative))

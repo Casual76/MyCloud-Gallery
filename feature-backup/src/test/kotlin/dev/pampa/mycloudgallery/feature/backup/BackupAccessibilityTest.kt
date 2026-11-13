@@ -16,6 +16,8 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupSummary
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.backup.contract.StopBy
 import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
+import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue
+import dev.pampa.mycloudgallery.core.designsystem.design.BatterySaveResult
 import dev.pampa.mycloudgallery.core.designsystem.testing.A11yAssertions
 import dev.pampa.mycloudgallery.core.designsystem.testing.A11yConfig
 import dev.pampa.mycloudgallery.feature.backup.first.FirstBackupSheet
@@ -63,13 +65,21 @@ class BackupAccessibilityTest : BackupComposeBase() {
     FirstBackupSheet(visible = true, summary = summary, onTonight = {}, onNow = {}, onDismissRequest = {})
   }
 
-  private fun settings(folders: FoldersState = FoldersState.Ready(BackupSamples.phoneFolders)) = SettingsUi(
+  private fun settings(
+    folders: FoldersState = FoldersState.Ready(BackupSamples.phoneFolders),
+    battery: BatteryGuardValue? = null,
+    batteryLoading: Boolean = false,
+    saveFailed: Boolean = false,
+  ) = SettingsUi(
     folders = folders,
     chosen = BackupSources(setOf(BackupSource.Camera, BackupSource.Screenshots, BackupSamples.phoneFolders.last().source)),
     deviceFolder = BackupSamples.deviceFolder,
     protectNewPhotos = true,
     rulesAvailable = true,
     editable = true,
+    battery = battery,
+    batteryLoading = batteryLoading,
+    batterySaveResult = if (saveFailed) BatterySaveResult(id = 1, level = 60, ok = false) else null,
   )
 
   /** Mostra [content] e controlla le regole a testo 1,0 e poi a 2,0 sulla stessa scena (la base ha la scala come stato). */
@@ -116,6 +126,10 @@ class BackupAccessibilityTest : BackupComposeBase() {
 
   @Test fun impostazioni() = clean("impostazioni") { BackupSettingsScreen(state = settings(), actions = SettingsActions(), onBack = {}) }
 
+  /** Pacchetto B: il controllo del livello di batteria nelle impostazioni (batteria, cursore, due interruttori), a testo 1,0 e 2,0. */
+  @Test fun impostazioniConIlLivelloDellaBatteria() =
+    clean("impostazioni, livello di batteria") { BackupSettingsScreen(state = settings(battery = BatteryGuardValue(35, true, false)), actions = SettingsActions(), onBack = {}) }
+
   @Test
   fun impostazioniCartelleNonLeggibili() =
     clean("impostazioni, cartelle non leggibili") { BackupSettingsScreen(state = settings(FoldersState.Unavailable), actions = SettingsActions(), onBack = {}) }
@@ -147,6 +161,72 @@ class BackupAccessibilityTest : BackupComposeBase() {
   @Test
   fun atfPaginaInCorso() {
     show { Page(page(running)) }
+    composeRule.onRoot().checkRoboAccessibility()
+  }
+
+  @Test
+  fun atfImpostazioniConIlLivelloDellaBatteria() {
+    show { BackupSettingsScreen(state = settings(battery = BatteryGuardValue(35, true, false)), actions = SettingsActions(), onBack = {}) }
+    composeRule.onRoot().checkRoboAccessibility()
+  }
+
+  /** Con tutti e due gli interruttori spenti la batteria e il numero sfumano: devono restare leggibili per il controllo automatico. */
+  @Test
+  fun atfImpostazioniConIlLivelloDellaBatteriaESpenti() {
+    show { BackupSettingsScreen(state = settings(battery = BatteryGuardValue(20, false, false)), actions = SettingsActions(), onBack = {}) }
+    composeRule.onRoot().checkRoboAccessibility()
+  }
+
+  @Test
+  fun atfImpostazioniConIlLivelloDellaBatteriaESpentiAlBuio() {
+    show(dark = true) { BackupSettingsScreen(state = settings(battery = BatteryGuardValue(20, false, false)), actions = SettingsActions(), onBack = {}) }
+    composeRule.onRoot().checkRoboAccessibility()
+  }
+
+  // --- Giro 2: gli stati nuovi del controllo (righe «Solo in carica», scheletro, avviso di salvataggio) a testo 1,0 e 2,0 e per l'ATF ----------
+
+  private val onlyCharging = BatteryGuardValue(20, true, true, backupOnBattery = false, analysisOnBattery = false, backupNeedsPower = true)
+  private val nightPreset = BatteryGuardValue(20, true, true, backupOnBattery = true, analysisOnBattery = false, backupNeedsPower = true)
+
+  @Test fun impostazioniConIlControlloSoloInCarica() =
+    clean("impostazioni, nessuno lavora a batteria") { BackupSettingsScreen(state = settings(battery = onlyCharging), actions = SettingsActions(), onBack = {}) }
+
+  @Test fun impostazioniConIlPresetNotte() =
+    clean("impostazioni, preset Notte") { BackupSettingsScreen(state = settings(battery = nightPreset), actions = SettingsActions(), onBack = {}) }
+
+  @Test fun impostazioniConIlControlloInCaricamento() =
+    clean("impostazioni, livello in caricamento") { BackupSettingsScreen(state = settings(batteryLoading = true), actions = SettingsActions(), onBack = {}) }
+
+  @Test fun impostazioniConIlSalvataggioNonRiuscito() =
+    clean("impostazioni, salvataggio non riuscito") { BackupSettingsScreen(state = settings(battery = BatteryGuardValue(20, true, true), saveFailed = true), actions = SettingsActions(), onBack = {}) }
+
+  @Test
+  fun atfImpostazioniConIlControlloSoloInCarica() {
+    show { BackupSettingsScreen(state = settings(battery = onlyCharging), actions = SettingsActions(), onBack = {}) }
+    composeRule.onRoot().checkRoboAccessibility()
+  }
+
+  @Test
+  fun atfImpostazioniConIlControlloSoloInCaricaAlBuio() {
+    show(dark = true) { BackupSettingsScreen(state = settings(battery = onlyCharging), actions = SettingsActions(), onBack = {}) }
+    composeRule.onRoot().checkRoboAccessibility()
+  }
+
+  @Test
+  fun atfImpostazioniConIlPresetNotte() {
+    show { BackupSettingsScreen(state = settings(battery = nightPreset), actions = SettingsActions(), onBack = {}) }
+    composeRule.onRoot().checkRoboAccessibility()
+  }
+
+  @Test
+  fun atfImpostazioniConIlControlloInCaricamento() {
+    show { BackupSettingsScreen(state = settings(batteryLoading = true), actions = SettingsActions(), onBack = {}) }
+    composeRule.onRoot().checkRoboAccessibility()
+  }
+
+  @Test
+  fun atfImpostazioniConIlSalvataggioNonRiuscito() {
+    show(dark = true) { BackupSettingsScreen(state = settings(battery = BatteryGuardValue(20, true, true), saveFailed = true), actions = SettingsActions(), onBack = {}) }
     composeRule.onRoot().checkRoboAccessibility()
   }
 

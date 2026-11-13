@@ -94,7 +94,7 @@ internal fun backupFooterNote(status: LibraryBackupStatus): GalleryFooterNote? =
       label = stringResource(R.string.backup_footer_queued, GalleryNumbers.format(status.items)),
       // CU-33: l'attesa e' la clessidra, sempre.
       glyph = Icons.Rounded.HourglassTop,
-      detail = stringResource(waitRes(status.wait)),
+      detail = backupWaitText(status.wait),
     )
   }
   // Giro 2 (BF2-4): chiesto adesso e accettato, il motore non l'ha ancora preso: «Sto partendo» come la pagina e le Impostazioni, mai «0 di N».
@@ -155,7 +155,7 @@ private fun searchNote(status: LibraryBackupStatus.Comparing): GalleryFooterNote
       tone = GalleryFooterTone.Waiting,
       label = stringResource(R.string.backup_footer_comparing_paused),
       glyph = Icons.Rounded.HourglassTop,
-      detail = stringResource(waitRes(wait)),
+      detail = backupWaitText(wait),
     )
     seen != null -> GalleryFooterNote(
       tone = GalleryFooterTone.Working,
@@ -209,6 +209,11 @@ private fun footerNote(problem: FooterProblem, count: Int): GalleryFooterNote {
     detail = stringResource(problem.detail),
   )
 }
+
+/** Il motivo per cui il backup aspetta, a parole: con la batteria, col livello scelto («Batteria sotto il 60%»). */
+@Composable
+private fun backupWaitText(wait: LibraryBackupWait): String =
+  if (wait == LibraryBackupWait.BATTERY) dev.pampa.mycloudgallery.core.designsystem.state.batteryWaitText() else stringResource(waitRes(wait))
 
 private fun waitRes(wait: LibraryBackupWait): Int = when (wait) {
   LibraryBackupWait.CHARGING -> R.string.backup_footer_wait_charging

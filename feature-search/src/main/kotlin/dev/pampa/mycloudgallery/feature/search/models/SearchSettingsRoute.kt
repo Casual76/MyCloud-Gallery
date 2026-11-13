@@ -13,6 +13,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.pampa.mycloudgallery.core.ai.contract.DeviceProbe
+import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardPort
+import dev.pampa.mycloudgallery.core.designsystem.design.BatterySaveResult
+import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingState
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingSwitch
 import dev.pampa.mycloudgallery.core.models.contract.ModelId
@@ -27,6 +30,12 @@ import dev.pampa.mycloudgallery.feature.search.contract.TextReadingAccepted
 import dev.pampa.mycloudgallery.feature.search.ui.SearchHost
 import java.util.Optional
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 
 // Le ROTTE della pagina Ricerca e modelli e della pagina di attivazione (Fase 6, P8), per `:app` (P11). Come per Cerca, tutte le porte sono opzionali per
 // Dagger ([dev.pampa.mycloudgallery.feature.search.SearchPortsModule]): una porta non collegata nasconde la sua sezione invece di mostrare una riga che non fa niente (D13).
@@ -40,7 +49,42 @@ class SearchSettingsViewModel @Inject constructor(
   textReading: Optional<TextReadingSwitch>,
   accepted: Optional<TextReadingAccepted>,
   probe: Optional<DeviceProbe>,
+  batteryGuard: Optional<BatteryGuardPort> = Optional.empty(),
 ) : ViewModel() {
+
+  private val batteryPort: BatteryGuardPort? = batteryGuard.orElse(null)
+
+  /** Pacchetto B: il livello di batteria e i due interruttori, gli stessi della pagina del Backup; null = `:app` non ha legato la porta e la sezione non c'e'. */
+  val battery: StateFlow<BatteryGuardValue?> = (batteryPort?.value ?: flowOf(null)).stateIn(
+    scope = viewModelScope,
+    started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+    initialValue = batteryPort?.value?.value,
+  )
+
+  /** La porta c'e' (il controllo si disegna) anche quando il valore non e' ancora letto: allora [battery] e' null e il controllo e' lo scheletro (BS-5). */
+  val batteryBound: Boolean = batteryPort != null
+
+  private val result = MutableStateFlow<BatterySaveResult?>(null)
+  private var requests = 0L
+
+  /** BS-5, BS2-2: l'esito dell'ultima scrittura **per richiesta** (identificativo, livello chiesto, riuscita): se non e' riuscita il controllo torna al valore salvato e lo dice. */
+  val batterySaveResult: StateFlow<BatterySaveResult?> = result
+
+  fun setBatteryLevel(percent: Int) = save(level = percent) { setLevel(percent) }
+
+  fun setBatteryForBackup(on: Boolean) = save(level = null) { setForBackup(on) }
+
+  fun setBatteryForAnalysis(on: Boolean) = save(level = null) { setForAnalysis(on) }
+
+  private fun save(level: Int?, write: suspend BatteryGuardPort.() -> Boolean) {
+    val port = batteryPort ?: return
+    val id = ++requests
+    viewModelScope.launch { result.value = BatterySaveResult(id = id, level = level, ok = port.write()) }
+  }
+
+  private companion object {
+    const val STOP_TIMEOUT_MILLIS = 5_000L
+  }
 
   val controller: SearchSettingsController = SearchSettingsController(
     indexer = indexer.orElse(null),
@@ -105,12 +149,20 @@ fun SearchSettingsRoute(actions: SearchActions, onBack: () -> Unit, viewModel: S
   val probeFailed by controller.probeFailed.collectAsStateWithLifecycle()
   val probeHot by controller.probeHot.collectAsStateWithLifecycle()
   val probeBusy by controller.probeBusy.collectAsStateWithLifecycle()
+  val battery by viewModel.battery.collectAsStateWithLifecycle()
+  val batterySaveResult by viewModel.batterySaveResult.collectAsStateWithLifecycle()
   val handlers = remember(controller, actions) { ActionSettingsHandlers(controller, actions) }
   SearchHost {
     SearchSettingsScreen(
       state = state,
       measuring = measuring,
       probeFailed = probeFailed, probeHot = probeHot, probeBusy = probeBusy,
+      battery = battery,
+      batteryBound = viewModel.batteryBound,
+      batterySaveResult = batterySaveResult,
+      onBatteryLevel = viewModel::setBatteryLevel,
+      onBatteryForBackup = viewModel::setBatteryForBackup,
+      onBatteryForAnalysis = viewModel::setBatteryForAnalysis,
       hasIndexer = controller.hasIndexer,
       hasTextReading = controller.hasTextReading,
       hasModels = controller.hasModels,

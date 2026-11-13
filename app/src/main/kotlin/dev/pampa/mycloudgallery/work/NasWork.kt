@@ -240,6 +240,14 @@ object NasWorkScheduling {
       .build()
 }
 
+/**
+ * **Il lotto di preparazione ha lasciato altro da fare?** (pacchetto B, BS-3). Il tempo del lotto ([PrepStop.BUDGET]) **e lo stop delle regole** ([PrepStop.RULES]: la batteria sotto il livello, la
+ * fascia che si chiude...) lasciano lavoro: `StagedRun` li rivaluta e dice `Stopped` con il motivo, e da li' si riprende (`RuleWaits`, in carica per la batteria). Prima lo stop delle regole
+ * contava come lavoro finito: la tappa diventava `Finished` e nessuna ripresa partiva. Gli altri esiti ([PrepStop.NO_WORK], [PrepStop.UNAVAILABLE], ...) restano come prima. Pura, provata su JVM.
+ */
+internal fun preparationHasMore(stopped: dev.pampa.mycloudgallery.core.prepare.contract.PrepStop?): Boolean =
+  stopped == dev.pampa.mycloudgallery.core.prepare.contract.PrepStop.BUDGET || stopped == dev.pampa.mycloudgallery.core.prepare.contract.PrepStop.RULES
+
 /** Fase I (punto 7): che cosa fa un lavoro del NAS dopo una tappa. Pura, provata su JVM. */
 sealed interface NasFollowUp {
   /** Finito, niente da fare, o una conferma che chiede la pagina: niente. */
@@ -343,7 +351,7 @@ class NasStages(private val graph: AppGraph, private val nas: NasGraph, private 
       val result = graph.quietly { nas.prepare(SLICE, control, priority) } ?: return@run BatchResult(hasMore = false)
       scope.record(result.bytesRead)
       nas.flushOutbox()
-      BatchResult(hasMore = result.stoppedBy == dev.pampa.mycloudgallery.core.prepare.contract.PrepStop.BUDGET)
+      BatchResult(hasMore = preparationHasMore(result.stoppedBy))
     })
     if (outcome is StageOutcome.Finished) prepBeat.beat(graph.platform.deviceNow())
     return outcome

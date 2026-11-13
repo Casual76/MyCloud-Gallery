@@ -1,0 +1,28 @@
+{
+  "app": {
+    "id": "mycloud-gallery",
+    "name": "MyCloud Gallery",
+    "description": "Le foto del telefono e del NAS di casa in un posto solo, con backup, ricerca e album.",
+    "packageName": "dev.pampa.mycloudgallery",
+    "iconUrl": "",
+    "category": "General",
+    "developer": "Pampa",
+    "screenshots": [],
+    "repository": {
+      "repoOwner": "Casual76",
+      "repoName": "MyCloud-Gallery",
+      "manifestPath": "manifest.json",
+      "ref": "main"
+    },
+    "beta": {
+      "version": "1.0.0",
+      "releaseDate": "2026-11-13",
+      "changelog": "Novità:\n- Le foto e i video del telefono e quelli del NAS di casa stanno insieme in un posto solo.\n- Il backup sul NAS: le foto nuove si mettono al sicuro quando il telefono è carico e in rete di casa. \"Libera spazio\" parte solo se lo chiedi, dopo aver controllato che sul NAS ci sia una copia intatta.\n- La ricerca: scrivi cosa cerchi e l'app trova le foto. Tutto sul telefono, senza internet.\n- Gli album: i tuoi, quelli che si riempiono da soli (viaggi, luoghi, persone) e quelli da condividere con la famiglia.\n- Le persone: l'app può riconoscere i volti e raggrupparli, ma solo se lo accendi tu, per te.\n- I ricordi (\"Un anno fa\", i viaggi, il meglio del mese) e la mappa con le foto, con la notifica discreta dei ricordi.\n- Il widget per la schermata Home: il ricordo di oggi, oppure foto a caso.\n- Sul tablet: due finestre insieme, i pannelli affiancati, la tastiera e il mouse. Puoi trascinare una foto in un'altra app e un file dentro l'app.\n- Per chi usa TalkBack o testi grandi: ogni schermata si legge a voce e ogni foto ha la sua descrizione.\n- Questa pagina: \"Novità di questa versione\".\n- Gli aggiornamenti dentro l'app, da Impostazioni → Aggiornamenti: \"Stabile\" (di serie) oppure \"Beta\", che arriva prima. Quando c'è una versione nuova l'app lo dice una volta, e si aggiorna con un tocco.\n\nCorrezioni:\n- È la prima versione per la famiglia: non c'è niente da correggere rispetto a prima.\n\nSicurezza:\n- Gli aggiornamenti arrivano da internet, dalla pagina delle versioni dell'app. Prima di installarne uno l'app controlla che il file sia proprio quello pubblicato e che abbia la stessa firma dell'app che hai già; Android fa lo stesso controllo sulla firma.\n- Chi amministra può fermare una versione che dà problemi: l'app smette di scrivere sul NAS finché non la aggiorni, ma le tue foto restano dove sono.\n- Le foto nascoste non compaiono mai nel widget, e il widget non mostra mai nomi di persone. Il titolo di un ricordo può dire dove è stato.\n- Con il blocco dell'app acceso, il widget mostra solo le foto che sono anche nel telefono.\n\nDa sapere:\n- Prima la versione di prova: per due settimane solo sui dispositivi di chi amministra. Poi arriva a tutta la famiglia insieme.\n- Ogni telefono o tablet nuovo deve essere approvato da chi amministra, prima di vedere le foto del NAS.\n- Il NAS non sostituisce una copia fuori casa: per le foto più care serve anche un disco esterno.",
+      "releaseTag": "beta-mycloud-gallery-v1.0.0",
+      "apkAsset": "mycloud-gallery-1.0.0.apk",
+      "sizeBytes": 109409653,
+      "sha256": "f49880260658b20ab427a2f63bc0c8d25b2437a4e5576e53edc23a29a4e24173"
+    },
+    "history": []
+  }
+}

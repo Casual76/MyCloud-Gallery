@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.backup.settings
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryBatteryGuard
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryBatteryGuardNote
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoRow
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryWarningNote
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,6 +62,7 @@ import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIcons
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.feature.backup.BackupDimens
+import dev.pampa.mycloudgallery.core.designsystem.R as DesignR
 import dev.pampa.mycloudgallery.feature.backup.R
 import dev.pampa.mycloudgallery.feature.backup.page.SourceCover
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupCoverWindow
@@ -181,7 +183,7 @@ private fun LazyListScope.sourcesSection(state: SettingsUi, actions: SettingsAct
       else -> null
     }
     if (problem != null) {
-      BackupNote(stringResource(problem))
+      GalleryWarningNote(text = stringResource(problem), modifier = Modifier.padding(horizontal = BackupDimens.BlockGap))
     } else {
       GalleryInfoRow(label = stringResource(R.string.backup_settings_sources_info), detail = stringResource(R.string.backup_settings_sources_note), modifier = Modifier.padding(horizontal = BackupDimens.BlockGap))
     }
@@ -335,25 +337,27 @@ private fun LazyListScope.rulesSection(state: SettingsUi, actions: SettingsActio
         )
         FluidListDivider()
       }
-      // Con il controllo della batteria qui sotto, la sua figura non si ripete fra i segni: restano la notte e il Wi-Fi di casa.
-      WhenRow(showBattery = state.battery == null && !state.batteryLoading)
+      // Con il controllo della batteria qui sotto la sua figura non si ripete fra i segni: restano la notte e il Wi-Fi di casa, e «in carica» **finche' il backup normale lavora solo in carica** (BU-3).
+      WhenRow(guardBound = state.battery != null || state.batteryLoading, needsPower = state.battery?.backupNeedsPower == true)
     }
   }
-  // Pacchetto B (seconda beta): il livello di batteria sotto cui il backup e l'analisi non partono, un controllo solo (lo stesso, identico, nelle impostazioni dell'analisi).
+  // «Che cosa protegge» spiega «Proteggi subito le foto nuove», sopra: sta subito sotto la sua scheda (BU-6).
+  item(key = "rules-note") {
+    GalleryInfoRow(label = stringResource(R.string.backup_settings_rules_info), detail = stringResource(R.string.backup_settings_rules_note), modifier = Modifier.padding(horizontal = BackupDimens.BlockGap))
+  }
+  // Pacchetto B (seconda beta): il livello di batteria sotto cui il backup e l'analisi non partono, un controllo solo (lo stesso, identico, nelle impostazioni dell'analisi), con il suo titolo.
   if (state.battery != null || state.batteryLoading) {
+    item(key = "battery-title") { BackupSectionTitle(stringResource(DesignR.string.battery_guard_title)) }
     item(key = "battery") {
       GalleryBatteryGuard(
         value = state.battery,
         onLevelChange = actions.setBatteryLevel,
         onForBackupChange = actions.setBatteryForBackup,
         onForAnalysisChange = actions.setBatteryForAnalysis,
-        saveFailed = state.batterySaveFailed,
+        saveResult = state.batterySaveResult,
       )
     }
     item(key = "battery-note") { GalleryBatteryGuardNote(modifier = Modifier.padding(horizontal = BackupDimens.BlockGap)) }
-  }
-  item(key = "rules-note") {
-    GalleryInfoRow(label = stringResource(R.string.backup_settings_rules_info), detail = stringResource(R.string.backup_settings_rules_note), modifier = Modifier.padding(horizontal = BackupDimens.BlockGap))
   }
 }
 
@@ -362,12 +366,17 @@ private fun LazyListScope.rulesSection(state: SettingsUi, actions: SettingsActio
  * Prima era la frase «Lo decidono le regole delle attivita'...». Le regole si cambiano in Impostazioni, «Quando lavora l'app».
  */
 @Composable
-private fun WhenRow(showBattery: Boolean = true) {
+private fun WhenRow(guardBound: Boolean = false, needsPower: Boolean = false) {
   val title = stringResource(R.string.backup_settings_when_title)
   val factors = listOfNotNull(
     Triple(Icons.Rounded.Bedtime, GalleryIconFamily.Search, stringResource(R.string.backup_settings_when_night)),
     Triple(Icons.Rounded.Wifi, GalleryIconFamily.Network, stringResource(R.string.backup_settings_when_wifi)),
-    if (showBattery) Triple(Icons.Rounded.BatteryChargingFull, GalleryIconFamily.Places, stringResource(R.string.backup_settings_when_battery)) else null,
+    // Senza il controllo il segno della batteria di sempre; con il controllo «in carica», se il backup normale lavora solo in carica (con «Notte», di serie).
+    when {
+      !guardBound -> Triple(Icons.Rounded.BatteryChargingFull, GalleryIconFamily.Places, stringResource(R.string.backup_settings_when_battery))
+      needsPower -> Triple(Icons.Rounded.BatteryChargingFull, GalleryIconFamily.Places, stringResource(R.string.backup_settings_when_charging))
+      else -> null
+    },
   )
   val description = title + ": " + factors.joinToString(", ") { it.third }
   Column(

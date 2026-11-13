@@ -1,13 +1,14 @@
 package dev.pampa.mycloudgallery.rules
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardPort
 import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue
 import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
 import dev.pampa.mycloudgallery.core.rules.settings.RuleSettings
 import dev.pampa.mycloudgallery.core.rules.settings.RuleSettingsStore
+import dev.pampa.mycloudgallery.core.rules.settings.batteryReach
+import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.work.BatteryResume
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -42,7 +43,18 @@ class AppBatteryGuard(
 
   override val value: StateFlow<BatteryGuardValue?> =
     store.observe()
-      .map<_, BatteryGuardValue?> { BatteryGuardValue(it.batteryThresholdPercent, it.batteryThresholdForBackup, it.batteryThresholdForAnalysis) }
+      .map<_, BatteryGuardValue?> { settings ->
+        // BU-3: chi puo' lavorare a batteria con le regole di adesso (con «Notte» l'analisi no): il controllo non mostra un interruttore che non farebbe niente.
+        val reach = settings.batteryReach()
+        BatteryGuardValue(
+          levelPercent = settings.batteryThresholdPercent,
+          forBackup = settings.batteryThresholdForBackup,
+          forAnalysis = settings.batteryThresholdForAnalysis,
+          backupOnBattery = reach.backupOnBattery,
+          analysisOnBattery = reach.analysisOnBattery,
+          backupNeedsPower = reach.backupNeedsPower,
+        )
+      }
       .distinctUntilChanged()
       .stateIn(scope, SharingStarted.Eagerly, null)
 
@@ -87,18 +99,12 @@ class AppBatteryGuard(
 }
 
 /**
- * Il livello scelto, per la radice dell'app: lo fornisce a `LocalBatteryThreshold`, cosi' ogni posto in cui un lavoro e' fermo per la batteria dice il numero vero
- * («Batteria sotto il 60%») e non «Batteria scarica» con la batteria al 55%. Null finche' le impostazioni non sono lette: allora vale la frase senza numero.
+ * Il livello **che ha fermato** il lavoro, per la radice dell'app (BU-7): lo fornisce a `LocalBatteryThreshold`, cosi' ogni posto in cui un lavoro e' fermo per la batteria dice il numero vero
+ * («Batteria sotto il 60%») e non «Batteria scarica» con la batteria al 55%. Il numero e' quello del **verdetto** del motore delle regole (`ActivityRulesEngine.batteryStopThreshold`: il motivo
+ * `BatteryLow` porta gia' livello e soglia), non l'impostazione di adesso: subito dopo che l'utente cambia il livello, e finche' il lavoro non e' rivalutato, la frase non dice un numero nuovo accanto a un
+ * fermo che non gli corrisponde. Null finche' nessun lavoro e' stato fermato per la batteria: allora vale la frase senza numero.
  */
 @HiltViewModel
-class BatteryThresholdViewModel @Inject constructor(store: RuleSettingsStore) : ViewModel() {
-  val percent: StateFlow<Int?> =
-    store.observe()
-      .map<_, Int?> { it.batteryThresholdPercent }
-      .distinctUntilChanged()
-      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(StopTimeoutMillis), null)
-
-  private companion object {
-    const val StopTimeoutMillis = 5_000L
-  }
+class BatteryThresholdViewModel @Inject constructor(graph: AppGraph) : ViewModel() {
+  val percent: StateFlow<Int?> = graph.rulesEngine.batteryStopThreshold
 }

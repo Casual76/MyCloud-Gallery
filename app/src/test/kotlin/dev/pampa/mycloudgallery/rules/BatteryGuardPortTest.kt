@@ -203,4 +203,31 @@ class BatteryGuardPortTest {
 
     assertThat(resumed).isEmpty()
   }
+
+  // --- BU-3: la porta dice chi puo' lavorare a batteria ---------------------------------------------------------
+
+  @Test
+  fun conNotte_laPortaDice_l_analisiSoloInCarica_ilBackupSoloPerProteggiSubito() = runTest {
+    val port = AppBatteryGuard(FakeStore(RuleSettings()), backgroundScope)
+    runCurrent()
+
+    val v = port.value.value!!
+    assertThat(v.analysisOnBattery).isFalse()
+    assertThat(v.backupOnBattery).isTrue()
+    assertThat(v.backupNeedsPower).isTrue()
+  }
+
+  @Test
+  fun cambiandoPreset_laPortaSegue() = runTest {
+    val store = FakeStore(RuleSettings())
+    val port = AppBatteryGuard(store, backgroundScope)
+    runCurrent()
+
+    store.update { it.copy(preset = Preset.WIFI_ALWAYS) }
+    runCurrent()
+
+    val v = port.value.value!!
+    assertThat(v.analysisOnBattery).isTrue()
+    assertThat(v.backupNeedsPower).isFalse()
+  }
 }

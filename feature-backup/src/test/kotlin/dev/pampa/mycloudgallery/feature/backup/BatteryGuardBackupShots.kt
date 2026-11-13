@@ -17,6 +17,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
 import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue
+import dev.pampa.mycloudgallery.core.designsystem.design.BatterySaveResult
 import dev.pampa.mycloudgallery.core.designsystem.state.LocalBatteryThreshold
 import dev.pampa.mycloudgallery.feature.backup.page.BackupPageActions
 import dev.pampa.mycloudgallery.feature.backup.page.BackupPageScreen
@@ -57,6 +58,11 @@ internal enum class GuardShot(val slug: String, val value: BatteryGuardValue?, v
   CENTO("salvato-100", BatteryGuardValue(100, forBackup = true, forAnalysis = true)),
   CARICAMENTO("sto-caricando", null),
   NON_SALVATO("salvataggio-non-riuscito", BatteryGuardValue(20, forBackup = true, forAnalysis = true), failed = true),
+
+  // Giro 2 (BU-3): chi lavora solo in carica dice «Solo in carica» al posto dell'interruttore. `notte-di-serie` e' la situazione vera del preset di serie: l'analisi solo in carica, il backup solo per «Proteggi subito».
+  NOTTE_DI_SERIE("notte-di-serie-20", BatteryGuardValue(20, forBackup = true, forAnalysis = true, backupOnBattery = true, analysisOnBattery = false, backupNeedsPower = true)),
+  SOLO_IN_CARICA_BACKUP("backup-solo-in-carica", BatteryGuardValue(20, forBackup = true, forAnalysis = true, backupOnBattery = false, analysisOnBattery = true, backupNeedsPower = true)),
+  NESSUNO_ABATTERIA("nessuno-a-batteria", BatteryGuardValue(20, forBackup = true, forAnalysis = true, backupOnBattery = false, analysisOnBattery = false, backupNeedsPower = true)),
 }
 
 private const val SHOT_DIR = "../docs/screenshots/beta-grafica/B-soglia-batteria"
@@ -76,7 +82,7 @@ internal abstract class BatteryGuardBackupShotsBase(
   private val shot: GuardShot,
   private val dark: Boolean,
   private val device: String,
-  private val large: Boolean,
+  private val scale: Float?,
 ) : BackupComposeBase() {
 
   private fun ui() = SettingsUi(
@@ -88,12 +94,12 @@ internal abstract class BatteryGuardBackupShotsBase(
     editable = true,
     battery = shot.value,
     batteryLoading = shot.value == null,
-    batterySaveFailed = shot.failed,
+    batterySaveResult = if (shot.failed) BatterySaveResult(id = 1, level = 60, ok = false) else null,
   )
 
   @Test
   fun capture() {
-    show(dark = dark, fontScale = if (large) LARGE_TEXT else null) {
+    show(dark = dark, fontScale = scale) {
       val covers = remember { I3Covers.covers() }
       CompositionLocalProvider(LocalBackupCovers provides covers) { BackupSettingsScreen(state = ui(), actions = SettingsActions(), onBack = {}) }
     }
@@ -118,7 +124,7 @@ internal abstract class BatteryGuardBackupShotsBase(
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = Application::class, qualifiers = "w360dp-h2000dp-xhdpi")
-internal class BatteryGuardBackupPhoneShots(shot: GuardShot, dark: Boolean) : BatteryGuardBackupShotsBase(shot, dark, "telefono", large = false) {
+internal class BatteryGuardBackupPhoneShots(shot: GuardShot, dark: Boolean) : BatteryGuardBackupShotsBase(shot, dark, "telefono", scale = null) {
   companion object {
     @JvmStatic
     @ParameterizedRobolectricTestRunner.Parameters(name = "{0} scuro={1}")
@@ -130,7 +136,7 @@ internal class BatteryGuardBackupPhoneShots(shot: GuardShot, dark: Boolean) : Ba
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = Application::class, qualifiers = "w1280dp-h1800dp-xhdpi")
-internal class BatteryGuardBackupTabletShots(shot: GuardShot, dark: Boolean) : BatteryGuardBackupShotsBase(shot, dark, "tablet", large = false) {
+internal class BatteryGuardBackupTabletShots(shot: GuardShot, dark: Boolean) : BatteryGuardBackupShotsBase(shot, dark, "tablet", scale = null) {
   companion object {
     @JvmStatic
     @ParameterizedRobolectricTestRunner.Parameters(name = "{0} scuro={1}")
@@ -143,7 +149,20 @@ internal class BatteryGuardBackupTabletShots(shot: GuardShot, dark: Boolean) : B
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = Application::class, qualifiers = "w360dp-h2800dp-xhdpi")
 internal class BatteryGuardBackupLargeTextShots(shot: GuardShot, dark: Boolean) :
-  BatteryGuardBackupShotsBase(shot, dark, "telefono-testo-grande", large = true) {
+  BatteryGuardBackupShotsBase(shot, dark, "telefono-testo-grande", scale = LARGE_TEXT) {
+  companion object {
+    @JvmStatic
+    @ParameterizedRobolectricTestRunner.Parameters(name = "{0} scuro={1}")
+    fun data(): List<Array<Any>> = every(listOf(GuardShot.PREDEFINITO, GuardShot.SPENTI, GuardShot.NOTTE_DI_SERIE))
+  }
+}
+
+/** Il testo a 2x (il massimo di Samsung): la frase non si taglia (BU-5). */
+@RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(application = Application::class, qualifiers = "w360dp-h4400dp-xhdpi")
+internal class BatteryGuardBackupDoubleTextShots(shot: GuardShot, dark: Boolean) :
+  BatteryGuardBackupShotsBase(shot, dark, "telefono-testo-2x", scale = 2f) {
   companion object {
     @JvmStatic
     @ParameterizedRobolectricTestRunner.Parameters(name = "{0} scuro={1}")

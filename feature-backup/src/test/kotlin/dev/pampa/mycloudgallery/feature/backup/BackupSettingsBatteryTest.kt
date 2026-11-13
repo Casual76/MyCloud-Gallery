@@ -1,10 +1,14 @@
 package dev.pampa.mycloudgallery.feature.backup
 
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
 import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue
+import dev.pampa.mycloudgallery.core.designsystem.design.BatterySaveResult
 import dev.pampa.mycloudgallery.feature.backup.settings.BackupSettingsScreen
 import dev.pampa.mycloudgallery.feature.backup.testing.BackupSamples
 import dev.pampa.mycloudgallery.feature.backup.settings.FoldersState
@@ -27,7 +31,7 @@ class BackupSettingsBatteryTest : ComposeBackupTallTest() {
     editable = true,
     battery = battery,
     batteryLoading = loading,
-    batterySaveFailed = failed,
+    batterySaveResult = if (failed) BatterySaveResult(id = 1, level = 60, ok = false) else null,
   )
 
   @Test
@@ -36,7 +40,7 @@ class BackupSettingsBatteryTest : ComposeBackupTallTest() {
 
     composeRule.onNodeWithText("E con il cavo?", useUnmergedTree = true).assertExists()
     composeRule.onNodeWithText("20%", useUnmergedTree = true).assertDoesNotExist()
-    composeRule.onNodeWithText("Analisi delle foto", useUnmergedTree = true).assertDoesNotExist()
+    composeRule.onNodeWithText("Ferma l’analisi", useUnmergedTree = true).assertDoesNotExist()
   }
 
   @Test
@@ -60,9 +64,30 @@ class BackupSettingsBatteryTest : ComposeBackupTallTest() {
 
     composeRule.onNodeWithText("60%", useUnmergedTree = true).assertExists()
     composeRule.onNodeWithText("Sotto questo livello si ferma il backup", useUnmergedTree = true).assertExists()
-    composeRule.onNodeWithText("Analisi delle foto", useUnmergedTree = true).assertExists()
-    // La figura della batteria non e' piu' fra i segni «Il backup parte con»: il controllo e' la riga della batteria.
-    composeRule.onNodeWithText("Batteria", useUnmergedTree = true).assertDoesNotExist()
+    composeRule.onNodeWithText("Ferma l’analisi", useUnmergedTree = true).assertExists()
+    // La figura della batteria non e' piu' fra i segni «Il backup parte con»: resta solo il titolo della sezione «Batteria» (una volta), e senza il backup solo in carica nessun segno «In carica».
+    composeRule.onAllNodesWithText("Batteria", useUnmergedTree = true).assertCountEquals(1)
+    composeRule.onNodeWithText("In carica", useUnmergedTree = true).assertDoesNotExist()
+  }
+
+  @Test
+  fun bu3_conIlBackupNormaleSoloInCarica_fraIlBackupPartConCeIlSegnoInCarica() {
+    show { BackupSettingsScreen(state = ui(BatteryGuardValue(20, true, true, backupOnBattery = true, analysisOnBattery = false, backupNeedsPower = true)), actions = SettingsActions(), onBack = {}) }
+
+    composeRule.onNodeWithText("In carica", useUnmergedTree = true).assertExists()
+    // E l'analisi che lavora solo in carica dice «Solo in carica» al posto dell'interruttore.
+    composeRule.onNodeWithText("Solo in carica", useUnmergedTree = true).assertExists()
+  }
+
+  @Test
+  fun bu6_laNotaChe_CosaProtegge_stasubitoSottoLaSuaScheda_primaDelTitoloBatteria() {
+    show { BackupSettingsScreen(state = ui(BatteryGuardValue(20, true, true)), actions = SettingsActions(), onBack = {}) }
+
+    val protects = composeRule.onNodeWithText("Che cosa protegge", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
+    val title = composeRule.onAllNodesWithText("Batteria", useUnmergedTree = true).onFirst().fetchSemanticsNode().boundsInRoot.top
+    val cable = composeRule.onNodeWithText("E con il cavo?", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
+    assertThat(protects).isLessThan(title)
+    assertThat(title).isLessThan(cable)
   }
 
   @Test
@@ -74,8 +99,8 @@ class BackupSettingsBatteryTest : ComposeBackupTallTest() {
     )
     show { BackupSettingsScreen(state = ui(BatteryGuardValue(20, forBackup = true, forAnalysis = false)), actions = actions, onBack = {}) }
 
-    composeRule.onNodeWithText("Analisi delle foto", useUnmergedTree = true).performClick()
-    composeRule.onNodeWithText("Backup", useUnmergedTree = true).performClick()
+    composeRule.onNodeWithText("Ferma l’analisi", useUnmergedTree = true).performClick()
+    composeRule.onNodeWithText("Ferma il backup", useUnmergedTree = true).performClick()
 
     assertThat(seen).containsExactly("analisi=true", "backup=false").inOrder()
   }

@@ -15,6 +15,7 @@ import androidx.work.testing.WorkManagerTestInitHelper
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
 import dev.pampa.mycloudgallery.core.rules.WaitReason
+import dev.pampa.mycloudgallery.core.rules.WorkRequest
 import dev.pampa.mycloudgallery.core.rules.settings.RuleSettings
 import java.time.LocalDateTime
 import kotlinx.coroutines.runBlocking
@@ -114,17 +115,107 @@ class BatteryResumeTest {
     val relaxed = BackgroundActivity.entries.toSet()
     val requests = BatteryResume.targets(relaxed).map { it.name to it.request() }
 
-    assertThat(requests.map { it.first }).containsExactly(
+    assertThat(requests.map { it.first }).containsAtLeast(
       BackupWorkScheduling.Kind.PHOTOS.workName,
+      BackupWorkScheduling.Kind.QUICK.workName,
       BackupWorkScheduling.Kind.VIDEOS.workName,
       AiWorkScheduling.COMPUTE_NEXT_WORK,
       FacesWorkScheduling.COMPUTE_NEXT_WORK,
+      "nas-scan-wait-power",
+      "nas-index-sync-wait-power",
+      "nas-preparation-wait-power",
+      "nas-hq-previews-wait-power",
     )
     for ((name, request) in requests) {
       assertThat(request.workSpec.constraints.requiresCharging()).isFalse()
       assertThat(request.workSpec.initialDelay).isEqualTo(0L)
       assertThat(name).isNotEmpty()
     }
+  }
+
+  /** BS2-1: tutti i nomi che usano un'attivita' liberata; le richieste fatte a mano non ci sono mai. */
+  @Test
+  fun bs21_ogniAttivitaLiberata_haITuoiNomi_eLeRichiesteDellUtenteNonCisono() {
+    fun names(vararg a: BackgroundActivity) = BatteryResume.targets(a.toSet()).map { it.name }
+
+    assertThat(names(BackgroundActivity.PHOTO_BACKUP)).containsExactly(BackupWorkScheduling.Kind.PHOTOS.workName, BackupWorkScheduling.Kind.QUICK.workName)
+    assertThat(names(BackgroundActivity.VIDEO_BACKUP)).containsExactly(BackupWorkScheduling.Kind.VIDEOS.workName)
+    assertThat(names(BackgroundActivity.AI_COMPUTE)).containsExactly(AiWorkScheduling.COMPUTE_NEXT_WORK, FacesWorkScheduling.COMPUTE_NEXT_WORK)
+    assertThat(names(BackgroundActivity.PREPARATION)).containsExactly("nas-preparation-wait-power")
+    assertThat(names(BackgroundActivity.HQ_PREVIEWS)).containsExactly("nas-hq-previews-wait-power")
+    assertThat(names(BackgroundActivity.INDEX_SYNC)).containsAtLeast("nas-scan-wait-power", "nas-index-sync-wait-power")
+    // Mai le richieste fatte a mano: «Salva sul NAS» (file ricevuti), la ripresa dell'utente, «Fai ora», «Indicizza ora».
+    val all = BatteryResume.targets(BackgroundActivity.entries.toSet()).map { it.name }
+    assertThat(all).containsNoneOf(
+      BackupWorkScheduling.Kind.INCOMING.workName,
+      BackupWorkScheduling.Kind.INCOMING_RETRY.workName,
+      BackupWorkScheduling.Kind.USER_RESUME.workName,
+      AiWorkScheduling.COMPUTE_NOW_WORK,
+      AiWorkScheduling.COMPUTE_ASKED_WORK,
+      FacesWorkScheduling.COMPUTE_NOW_WORK,
+    )
+  }
+
+  /** BS2-1: «Proteggi subito le foto nuove» (con «Notte» il suo lavoro e' l'unico che lavora a batteria) in attesa della carica viene liberato. */
+  @Test
+  fun bs21_proteggiSubito_conNotte_inAttesaDellaCarica_vieneSostituito() = runBlocking<Unit> {
+    BackupWorkScheduling.afterWait(context, BackupWorkScheduling.Kind.QUICK, low, now = now)
+    val name = BackupWorkScheduling.Kind.QUICK.workName
+    assertThat(states(name)).containsExactly(WorkInfo.State.ENQUEUED)
+    val old = ids(name).single()
+
+    // Preset «Notte» (di serie): il livello scende da 60 a 50.
+    val relaxed = BatteryResume.relaxed(RuleSettings(batteryThresholdPercent = 60), RuleSettings(batteryThresholdPercent = 50))
+    assertThat(relaxed).contains(BackgroundActivity.PHOTO_BACKUP)
+    BatteryResume.resume(context, relaxed)
+
+    assertThat(ids(name)).hasSize(1)
+    assertThat(ids(name)).doesNotContain(old)
+  }
+
+  /** BS2-1: un prerequisito del NAS gia' in attesa della carica (scansione/indice, preparazione) viene liberato quando il Backup si spegne. */
+  @Test
+  fun bs21_unPrerequisitoDelNas_giaInAttesaDellaCarica_vieneSostituito() = runBlocking<Unit> {
+    val scan = NasWorkScheduling.waitName(NasWorkScheduling.SCAN_WAIT_WORK, low)
+    val prep = NasWorkScheduling.waitName(NasWorkScheduling.PREP_WAIT_WORK, low)
+    NasWorkScheduling.afterWait(context, NasWorkScheduling.SCAN_WAIT_WORK, NasScanWorker::class.java, low, androidx.work.Data.EMPTY, now)
+    NasWorkScheduling.afterWait(context, NasWorkScheduling.PREP_WAIT_WORK, PreparationWorker::class.java, low, androidx.work.Data.EMPTY, now)
+    assertThat(states(scan)).containsExactly(WorkInfo.State.ENQUEUED)
+    assertThat(states(prep)).containsExactly(WorkInfo.State.ENQUEUED)
+    val oldScan = ids(scan).single()
+    val oldPrep = ids(prep).single()
+
+    // Backup spento: il prerequisito condiviso (BS-1) non e' piu' fermato per il livello.
+    BatteryResume.resume(context, BatteryResume.relaxed(RuleSettings(), RuleSettings(batteryThresholdForBackup = false)))
+
+    assertThat(ids(scan)).doesNotContain(oldScan)
+    assertThat(ids(prep)).doesNotContain(oldPrep)
+    // La ripresa nuova non chiede piu' la carica (il vecchio la chiedeva), e mantiene il resto: e' ancora in attesa solo della rete dei lavori del NAS, che il WorkManager di prova non ha.
+    assertThat(manager.getWorkInfosForUniqueWork(scan).get().single().constraints.requiresCharging()).isFalse()
+    assertThat(manager.getWorkInfosForUniqueWork(prep).get().single().constraints.requiresCharging()).isFalse()
+  }
+
+  /** BS2-1: la sostituzione toglie solo la carica; le altre regole decidono come sempre. Con «Notte» il backup normale a mezzogiorno resta fermo dalla fascia. */
+  @Test
+  fun bs21_laSostituzioneNonSaltaLeAltreRegole_ilValutatoreDecideComeSempre() {
+    val rules = RuleSettings().toRuleSet() // preset «Notte»
+    val state = dev.pampa.mycloudgallery.core.rules.SystemState(
+      now = LocalDateTime.of(2026, 10, 13, 12, 0),
+      power = dev.pampa.mycloudgallery.core.rules.PowerState(pluggedIn = false, levelPercent = 55),
+      network = dev.pampa.mycloudgallery.core.rules.NetworkState(dev.pampa.mycloudgallery.core.rules.NetworkTransport.WIFI, isHome = true),
+      nasReachable = true,
+      roles = dev.pampa.mycloudgallery.core.rules.DeviceRoles(indexer = true, preparer = true),
+      androidLimits = dev.pampa.mycloudgallery.core.rules.AndroidLimits(),
+      appInForeground = false,
+      profileActive = true,
+      nasFrozen = null,
+    )
+    val usage = dev.pampa.mycloudgallery.core.rules.traffic.CycleUsage(dev.pampa.mycloudgallery.core.rules.traffic.BillingCycle(java.time.YearMonth.of(2026, 10)))
+    val decision = dev.pampa.mycloudgallery.core.rules.RuleEvaluator().evaluate(WorkRequest.Background(BackgroundActivity.PHOTO_BACKUP, writesToNas = true), rules, state, usage)
+
+    // La corsa liberata rivaluta: con «Notte» a mezzogiorno il backup normale aspetta la fascia (non parte), come prima.
+    assertThat(decision).isInstanceOf(dev.pampa.mycloudgallery.core.rules.RuleDecision.Wait::class.java)
+    assertThat((decision as dev.pampa.mycloudgallery.core.rules.RuleDecision.Wait).reason).isInstanceOf(WaitReason.OutsideWindow::class.java)
   }
 
   @Test
@@ -137,19 +228,23 @@ class BatteryResumeTest {
 
   // --- La funzione che decide ---------------------------------------------------------------------------------
 
+  private fun queued(state: WorkInfo.State, charging: Boolean = true) = BatteryResume.Queued(state, charging)
+
   @Test
-  fun unaCorsaAttiva_nonSiInterrompeMai() {
-    assertThat(BatteryResume.plan(listOf(WorkInfo.State.RUNNING))).isEqualTo(BatteryResume.Plan.Leave)
+  fun unaCorsaAttiva_nonSiSostituisce() {
+    assertThat(BatteryResume.plan(listOf(queued(WorkInfo.State.RUNNING)))).isEqualTo(BatteryResume.Plan.Leave)
     // Anche con un lavoro dopo in attesa dietro di lei: la corsa che gira rivaluta da sola le regole a ogni lotto.
-    assertThat(BatteryResume.plan(listOf(WorkInfo.State.RUNNING, WorkInfo.State.ENQUEUED))).isEqualTo(BatteryResume.Plan.Leave)
+    assertThat(BatteryResume.plan(listOf(queued(WorkInfo.State.RUNNING), queued(WorkInfo.State.ENQUEUED)))).isEqualTo(BatteryResume.Plan.Leave)
   }
 
   @Test
-  fun unLavoroInAttesa_siSostituisce_eNienteInAttesa_nonSiFaNiente() {
-    assertThat(BatteryResume.plan(listOf(WorkInfo.State.ENQUEUED))).isEqualTo(BatteryResume.Plan.Replace)
-    assertThat(BatteryResume.plan(listOf(WorkInfo.State.BLOCKED))).isEqualTo(BatteryResume.Plan.Replace)
+  fun soloCioCheAspettaLaCarica_siSostituisce() {
+    assertThat(BatteryResume.plan(listOf(queued(WorkInfo.State.ENQUEUED)))).isEqualTo(BatteryResume.Plan.Replace)
+    assertThat(BatteryResume.plan(listOf(queued(WorkInfo.State.BLOCKED)))).isEqualTo(BatteryResume.Plan.Replace)
+    // Un'attesa per la rete o per la fascia (nessun vincolo di carica) non si tocca.
+    assertThat(BatteryResume.plan(listOf(queued(WorkInfo.State.ENQUEUED, charging = false)))).isEqualTo(BatteryResume.Plan.Leave)
     assertThat(BatteryResume.plan(emptyList())).isEqualTo(BatteryResume.Plan.Leave)
-    assertThat(BatteryResume.plan(listOf(WorkInfo.State.SUCCEEDED, WorkInfo.State.CANCELLED, WorkInfo.State.FAILED))).isEqualTo(BatteryResume.Plan.Leave)
+    assertThat(BatteryResume.plan(listOf(queued(WorkInfo.State.SUCCEEDED), queued(WorkInfo.State.CANCELLED), queued(WorkInfo.State.FAILED)))).isEqualTo(BatteryResume.Plan.Leave)
   }
 
   @Test

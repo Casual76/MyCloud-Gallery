@@ -50,7 +50,7 @@ class SearchSettingsBatteryTest {
     show(battery = null)
 
     rule.onNodeWithText("E con il cavo?", useUnmergedTree = true).assertDoesNotExist()
-    rule.onNodeWithText("Analisi delle foto", useUnmergedTree = true).assertDoesNotExist()
+    rule.onNodeWithText("Ferma l’analisi", useUnmergedTree = true).assertDoesNotExist()
   }
 
   @Test
@@ -70,7 +70,7 @@ class SearchSettingsBatteryTest {
       onAnalysis = { seen += "analisi=$it" },
     )
 
-    rule.onNodeWithText("Analisi delle foto", useUnmergedTree = true).performClick()
+    rule.onNodeWithText("Ferma l’analisi", useUnmergedTree = true).performClick()
 
     assertThat(seen).containsExactly("analisi=false")
   }

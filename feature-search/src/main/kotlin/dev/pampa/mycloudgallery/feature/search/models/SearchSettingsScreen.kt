@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.CleaningServices
@@ -78,6 +79,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.AiWaitReason
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue
+import dev.pampa.mycloudgallery.core.designsystem.design.BatterySaveResult
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryBatteryGuard
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryBatteryGuardNote
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryInfoButton
@@ -134,7 +136,7 @@ fun SearchSettingsScreen(
   battery: BatteryGuardValue? = null,
   /** La porta della batteria c'e': la sezione si disegna anche se il valore non e' ancora letto (scheletro, BS-5). */
   batteryBound: Boolean = battery != null,
-  batterySaveFailed: Boolean = false,
+  batterySaveResult: BatterySaveResult? = null,
   onBatteryLevel: (Int) -> Unit = {},
   onBatteryForBackup: (Boolean) -> Unit = {},
   onBatteryForAnalysis: (Boolean) -> Unit = {},
@@ -155,10 +157,11 @@ fun SearchSettingsScreen(
           onLevelChange = onBatteryLevel,
           onForBackupChange = onBatteryForBackup,
           onForAnalysisChange = onBatteryForAnalysis,
-          saveFailed = batterySaveFailed,
+          saveResult = batterySaveResult,
         )
       }
-      item(key = "battery-note") { GalleryBatteryGuardNote() }
+      // La nota sta allineata al titolo della sezione (BU-6): lo stesso rientro del titolo (4 dp) e non a filo della scheda.
+      item(key = "battery-note") { GalleryBatteryGuardNote(modifier = Modifier.padding(horizontal = SectionTitleInset)) }
     }
     if (hasTextReading) {
       item(key = "reading-header") { GallerySectionHeader(title = stringResource(R.string.models_section_reading)) }
@@ -617,5 +620,6 @@ private fun HistoryBlock(count: Int, handlers: SearchSettingsHandlers) {
 }
 
 private const val PERCENT = 100f
+private val SectionTitleInset = 4.dp
 private const val MIB = 1_048_576L
 private const val HALF_MIB = 524_288L

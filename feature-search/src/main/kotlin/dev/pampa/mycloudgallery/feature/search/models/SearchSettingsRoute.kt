@@ -14,6 +14,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.pampa.mycloudgallery.core.ai.contract.DeviceProbe
 import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardPort
+import dev.pampa.mycloudgallery.core.designsystem.design.BatterySaveResult
 import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingState
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingSwitch
@@ -63,23 +64,22 @@ class SearchSettingsViewModel @Inject constructor(
   /** La porta c'e' (il controllo si disegna) anche quando il valore non e' ancora letto: allora [battery] e' null e il controllo e' lo scheletro (BS-5). */
   val batteryBound: Boolean = batteryPort != null
 
-  private val failed = MutableStateFlow(false)
+  private val result = MutableStateFlow<BatterySaveResult?>(null)
+  private var requests = 0L
 
-  /** BS-5: l'ultima scelta della batteria non si e' salvata; il controllo torna al valore salvato e lo dice. */
-  val batterySaveFailed: StateFlow<Boolean> = failed
+  /** BS-5, BS2-2: l'esito dell'ultima scrittura **per richiesta** (identificativo, livello chiesto, riuscita): se non e' riuscita il controllo torna al valore salvato e lo dice. */
+  val batterySaveResult: StateFlow<BatterySaveResult?> = result
 
-  fun setBatteryLevel(percent: Int) = save { setLevel(percent) }
+  fun setBatteryLevel(percent: Int) = save(level = percent) { setLevel(percent) }
 
-  fun setBatteryForBackup(on: Boolean) = save { setForBackup(on) }
+  fun setBatteryForBackup(on: Boolean) = save(level = null) { setForBackup(on) }
 
-  fun setBatteryForAnalysis(on: Boolean) = save { setForAnalysis(on) }
+  fun setBatteryForAnalysis(on: Boolean) = save(level = null) { setForAnalysis(on) }
 
-  private fun save(write: suspend BatteryGuardPort.() -> Boolean) {
+  private fun save(level: Int?, write: suspend BatteryGuardPort.() -> Boolean) {
     val port = batteryPort ?: return
-    viewModelScope.launch {
-      failed.value = false
-      failed.value = !port.write()
-    }
+    val id = ++requests
+    viewModelScope.launch { result.value = BatterySaveResult(id = id, level = level, ok = port.write()) }
   }
 
   private companion object {
@@ -150,7 +150,7 @@ fun SearchSettingsRoute(actions: SearchActions, onBack: () -> Unit, viewModel: S
   val probeHot by controller.probeHot.collectAsStateWithLifecycle()
   val probeBusy by controller.probeBusy.collectAsStateWithLifecycle()
   val battery by viewModel.battery.collectAsStateWithLifecycle()
-  val batterySaveFailed by viewModel.batterySaveFailed.collectAsStateWithLifecycle()
+  val batterySaveResult by viewModel.batterySaveResult.collectAsStateWithLifecycle()
   val handlers = remember(controller, actions) { ActionSettingsHandlers(controller, actions) }
   SearchHost {
     SearchSettingsScreen(
@@ -159,7 +159,7 @@ fun SearchSettingsRoute(actions: SearchActions, onBack: () -> Unit, viewModel: S
       probeFailed = probeFailed, probeHot = probeHot, probeBusy = probeBusy,
       battery = battery,
       batteryBound = viewModel.batteryBound,
-      batterySaveFailed = batterySaveFailed,
+      batterySaveResult = batterySaveResult,
       onBatteryLevel = viewModel::setBatteryLevel,
       onBatteryForBackup = viewModel::setBatteryForBackup,
       onBatteryForAnalysis = viewModel::setBatteryForAnalysis,

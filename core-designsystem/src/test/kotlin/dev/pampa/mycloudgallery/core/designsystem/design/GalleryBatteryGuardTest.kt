@@ -2,6 +2,8 @@ package dev.pampa.mycloudgallery.core.designsystem.design
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
@@ -75,17 +77,24 @@ class GalleryBatteryGuardTest {
     onAnalysis: (Boolean) -> Unit = {},
     loading: Boolean = false,
     saveFailed: Boolean = false,
+    backupOnBattery: Boolean = true,
+    analysisOnBattery: Boolean = true,
+    fontScale: Float = 1f,
   ) {
     composeRule.setContent {
       MyCloudGalleryTheme(settings = EngineSettings()) {
-        GalleryBatteryGuard(
-          value = if (loading) null else BatteryGuardValue(level, forBackup, forAnalysis),
-          onLevelChange = {},
-          onForBackupChange = onBackup,
-          onForAnalysisChange = onAnalysis,
-          enabled = enabled,
-          saveFailed = saveFailed,
-        )
+        androidx.compose.runtime.CompositionLocalProvider(
+          androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(androidx.compose.ui.platform.LocalDensity.current.density, fontScale),
+        ) {
+          GalleryBatteryGuard(
+            value = if (loading) null else BatteryGuardValue(level, forBackup, forAnalysis, backupOnBattery, analysisOnBattery),
+            onLevelChange = {},
+            onForBackupChange = onBackup,
+            onForAnalysisChange = onAnalysis,
+            enabled = enabled,
+            saveResult = if (saveFailed) BatterySaveResult(id = 1, level = 60, ok = false) else null,
+          )
+        }
       }
     }
   }
@@ -127,21 +136,21 @@ class GalleryBatteryGuardTest {
   fun bs4_zeroECento_siMostranoVeri_ConUnaFraseSensata() {
     show(level = 0)
     composeRule.onNodeWithText("0%", useUnmergedTree = true).assertExists()
-    composeRule.onNodeWithText("Con lo 0% non si ferma niente", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("Non si ferma niente", useUnmergedTree = true).assertExists()
   }
 
   @Test
   fun bs4_cento_siMostraCento() {
     show(level = 100)
     composeRule.onNodeWithText("100%", useUnmergedTree = true).assertExists()
-    composeRule.onNodeWithText("Sotto questo livello si fermano backup e analisi", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("A batteria non parte niente", useUnmergedTree = true).assertExists()
   }
 
   @Test
   fun bs5_conIlValoreNonAncoraLetto_siVedeLoScheletro_nonUnVentiPerCentoFinto() {
     show(loading = true)
     assertThat(runCatching { composeRule.onNodeWithText("20%", useUnmergedTree = true).assertExists() }.isFailure).isTrue()
-    assertThat(runCatching { composeRule.onNodeWithText("Backup", useUnmergedTree = true).assertExists() }.isFailure).isTrue()
+    assertThat(runCatching { composeRule.onNodeWithText("Ferma il backup", useUnmergedTree = true).assertExists() }.isFailure).isTrue()
   }
 
   @Test
@@ -190,8 +199,59 @@ class GalleryBatteryGuardTest {
     g.onDrag(60)
     assertThat(g.onRelease()).isEqualTo(60)
     assertThat(g.shown).isEqualTo(60)
-    g.onFailed()
+    g.onFailed(60)
     assertThat(g.shown).isEqualTo(20)
+  }
+
+  // --- BS2-2: l'esito e' per richiesta -----------------------------------------------------------------------------
+
+  @Test
+  fun bs2_dueFallimentiDiFila_riportanoTutteEDueLeVolteAlSalvato_ancheConLoStessoLivello() {
+    val g = BatteryLevelGesture(saved = 20)
+    // Prima richiesta: 60, rifiutata subito.
+    g.onDrag(60)
+    assertThat(g.onRelease()).isEqualTo(60)
+    g.onFailed(60)
+    assertThat(g.shown).isEqualTo(20)
+    // Il genitore riprova: 70, rifiutata subito.
+    g.onDrag(70)
+    assertThat(g.onRelease()).isEqualTo(70)
+    g.onFailed(70)
+    assertThat(g.shown).isEqualTo(20)
+    // E ancora 70, rifiutata: lo stesso livello due volte di fila torna comunque al salvato.
+    g.onDrag(70)
+    assertThat(g.onRelease()).isEqualTo(70)
+    g.onFailed(70)
+    assertThat(g.shown).isEqualTo(20)
+  }
+
+  @Test
+  fun bs2_dueEsitiInRitardo_unFallimentoVecchioNonToccaLaScelta_piuNuova() {
+    val g = BatteryLevelGesture(saved = 20)
+    g.onDrag(60)
+    g.onRelease() // richiesta A: 60, in volo
+    g.onDrag(70)
+    g.onRelease() // richiesta B: 70, in volo
+    // L'esito di A (fallito) arriva dopo: la scelta ancora in volo e' B, non si tocca.
+    g.onFailed(60)
+    assertThat(g.shown).isEqualTo(70)
+    // L'esito di B (fallito): ora si torna al salvato.
+    g.onFailed(70)
+    assertThat(g.shown).isEqualTo(20)
+  }
+
+  @Test
+  fun bs2_unFallimentoDiUnInterruttore_nonPortaIlLivelloIndietro() {
+    val g = BatteryLevelGesture(saved = 20)
+    g.onDrag(60)
+    g.onRelease()
+    g.onFailed(null)
+    assertThat(g.shown).isEqualTo(60)
+  }
+
+  @Test
+  fun bs2_gliEsitiDiDueRichieste_nonSonoMaiUguali_ancheSeIlLivelloEUguale() {
+    assertThat(BatterySaveResult(id = 1, level = 70, ok = false)).isNotEqualTo(BatterySaveResult(id = 2, level = 70, ok = false))
   }
 
   @Test
@@ -200,7 +260,7 @@ class GalleryBatteryGuardTest {
     g.onDrag(60)
     g.onRelease()
     g.onDrag(70)
-    g.onFailed()
+    g.onFailed(60)
     assertThat(g.shown).isEqualTo(70)
     assertThat(g.onRelease()).isEqualTo(70)
   }
@@ -236,7 +296,7 @@ class GalleryBatteryGuardTest {
     val seen = mutableListOf<Boolean>()
     show(forBackup = true, onBackup = { seen += it })
 
-    composeRule.onNodeWithText("Backup", useUnmergedTree = true).performClick()
+    composeRule.onNodeWithText("Ferma il backup", useUnmergedTree = true).performClick()
 
     assertThat(seen).containsExactly(false)
   }
@@ -246,7 +306,7 @@ class GalleryBatteryGuardTest {
     val seen = mutableListOf<Boolean>()
     show(forAnalysis = false, onAnalysis = { seen += it })
 
-    composeRule.onNodeWithText("Analisi delle foto", useUnmergedTree = true).performClick()
+    composeRule.onNodeWithText("Ferma l’analisi", useUnmergedTree = true).performClick()
 
     assertThat(seen).containsExactly(true)
   }
@@ -256,7 +316,7 @@ class GalleryBatteryGuardTest {
     val seen = mutableListOf<Boolean>()
     show(enabled = false, onBackup = { seen += it })
 
-    composeRule.onNodeWithText("Backup", useUnmergedTree = true).performClick()
+    composeRule.onNodeWithText("Ferma il backup", useUnmergedTree = true).performClick()
 
     assertThat(seen).isEmpty()
   }
@@ -275,5 +335,58 @@ class GalleryBatteryGuardTest {
       MyCloudGalleryTheme(settings = EngineSettings()) { CompositionLocalProvider(LocalBatteryThreshold provides 60) { Text(batteryWaitText()) } }
     }
     composeRule.onNodeWithText("Batteria sotto il 60%").assertExists()
+  }
+
+  // --- BU-3: chi non puo' lavorare a batteria dice «Solo in carica» ------------------------------------------------
+
+  @Test
+  fun bu3_unGruppoCheLavoraSoloInCarica_dice_SoloInCarica_enonHaUnInterruttore() {
+    val seen = mutableListOf<Boolean>()
+    show(analysisOnBattery = false, onAnalysis = { seen += it })
+
+    composeRule.onNodeWithText("Solo in carica", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("Analisi delle foto", useUnmergedTree = true).performClick()
+    assertThat(seen).isEmpty()
+    assertThat(runCatching { composeRule.onNodeWithText("Ferma l’analisi", useUnmergedTree = true).assertExists() }.isFailure).isTrue()
+    // L'altro gruppo ha il suo interruttore.
+    composeRule.onNodeWithText("Ferma il backup", useUnmergedTree = true).assertExists()
+  }
+
+  @Test
+  fun bu3_laFrasiDiStato_contaSoloChiPuoLavorareABatteria() {
+    // Backup e analisi accesi, ma l'analisi lavora solo in carica: sotto il livello si ferma solo il backup.
+    show(analysisOnBattery = false)
+    composeRule.onNodeWithText("Sotto questo livello si ferma il backup", useUnmergedTree = true).assertExists()
+  }
+
+  @Test
+  fun bu3_senzaNessunoCheLavoriABatteria_laFraseDiceSoloInCarica() {
+    show(backupOnBattery = false, analysisOnBattery = false)
+    composeRule.onNodeWithText("Lavorano solo in carica", useUnmergedTree = true).assertExists()
+    composeRule.onAllNodesWithText("Solo in carica", useUnmergedTree = true).assertCountEquals(2)
+  }
+
+  // --- BU-5: la frase non si taglia, ne' a testo grande ---------------------------------------------------------
+
+  @Test
+  fun bu5_aTestoMoltoGrande_laFraseCEIntera() {
+    show(fontScale = 2f)
+    composeRule.onNodeWithText("Sotto questo livello si fermano backup e analisi", useUnmergedTree = true).assertExists()
+  }
+
+  // --- BU-4: la pista ----------------------------------------------------------------------------------------
+
+  @Test
+  fun bu4_laPistaVaDa0A85_leTacche5_80_eIlValoreScrittoRestaNeiLimiti() {
+    assertThat(BatteryGuard.TRACK_START).isEqualTo(0)
+    assertThat(BatteryGuard.TRACK_END).isEqualTo(85)
+    assertThat(BatteryGuard.levels.first()).isEqualTo(5)
+    assertThat(BatteryGuard.levels.last()).isEqualTo(80)
+    // Qualunque posizione del cursore, anche agli estremi della pista, si scrive entro 5..80.
+    for (position in listOf(0f, 1f, 2.4f, 2.6f, 82.4f, 84f, 85f)) {
+      assertThat(BatteryGuard.fromSlider(position)).isIn(BatteryGuard.levels)
+    }
+    assertThat(BatteryGuard.fromSlider(0f)).isEqualTo(5)
+    assertThat(BatteryGuard.fromSlider(85f)).isEqualTo(80)
   }
 }

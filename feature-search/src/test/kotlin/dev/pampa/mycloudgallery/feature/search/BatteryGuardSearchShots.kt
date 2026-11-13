@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue
+import dev.pampa.mycloudgallery.core.designsystem.design.BatterySaveResult
 import dev.pampa.mycloudgallery.core.designsystem.state.LocalBatteryThreshold
 import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisWait
@@ -53,6 +54,11 @@ internal enum class SearchGuardShot(val slug: String, val value: BatteryGuardVal
   CENTO("salvato-100", BatteryGuardValue(100, forBackup = true, forAnalysis = true)),
   CARICAMENTO("sto-caricando", null),
   NON_SALVATO("salvataggio-non-riuscito", BatteryGuardValue(20, forBackup = true, forAnalysis = true), failed = true),
+
+  // Giro 2 (BU-3): chi lavora solo in carica dice «Solo in carica» al posto dell'interruttore. `notte-di-serie` e' la situazione vera del preset di serie: l'analisi solo in carica, il backup solo per «Proteggi subito».
+  NOTTE_DI_SERIE("notte-di-serie-20", BatteryGuardValue(20, forBackup = true, forAnalysis = true, backupOnBattery = true, analysisOnBattery = false, backupNeedsPower = true)),
+  SOLO_IN_CARICA_BACKUP("backup-solo-in-carica", BatteryGuardValue(20, forBackup = true, forAnalysis = true, backupOnBattery = false, analysisOnBattery = true, backupNeedsPower = true)),
+  NESSUNO_ABATTERIA("nessuno-a-batteria", BatteryGuardValue(20, forBackup = true, forAnalysis = true, backupOnBattery = false, analysisOnBattery = false, backupNeedsPower = true)),
 }
 
 private const val SHOT_DIR = "../docs/screenshots/beta-grafica/B-soglia-batteria"
@@ -77,7 +83,7 @@ internal abstract class BatteryGuardSearchShotsBase(
   private val shot: SearchGuardShot,
   private val dark: Boolean,
   private val device: String,
-  private val large: Boolean,
+  private val scale: Float?,
 ) {
 
   @get:Rule
@@ -85,7 +91,7 @@ internal abstract class BatteryGuardSearchShotsBase(
 
   @Test
   fun capture() {
-    rule.setSearchContent(dark = dark, fontScale = if (large) LARGE_TEXT else null) {
+    rule.setSearchContent(dark = dark, fontScale = scale) {
       SearchSettingsScreen(
         state = SearchSamples.settingsIndexer,
         measuring = false,
@@ -96,7 +102,7 @@ internal abstract class BatteryGuardSearchShotsBase(
         onBack = {},
         battery = shot.value,
         batteryBound = true,
-        batterySaveFailed = shot.failed,
+        batterySaveResult = if (shot.failed) BatterySaveResult(id = 1, level = 60, ok = false) else null,
       )
     }
     val name = "impostazioni-analisi-${shot.slug}-${if (dark) "scuro" else "chiaro"}-$device"
@@ -121,7 +127,7 @@ internal abstract class BatteryGuardSearchShotsBase(
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = Application::class, qualifiers = "it-w360dp-h2800dp-xhdpi")
-internal class BatteryGuardSearchPhoneShots(shot: SearchGuardShot, dark: Boolean) : BatteryGuardSearchShotsBase(shot, dark, "telefono", large = false) {
+internal class BatteryGuardSearchPhoneShots(shot: SearchGuardShot, dark: Boolean) : BatteryGuardSearchShotsBase(shot, dark, "telefono", scale = null) {
   companion object {
     @JvmStatic
     @ParameterizedRobolectricTestRunner.Parameters(name = "{0} scuro={1}")
@@ -132,7 +138,7 @@ internal class BatteryGuardSearchPhoneShots(shot: SearchGuardShot, dark: Boolean
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = Application::class, qualifiers = "it-w1280dp-h2400dp-xhdpi")
-internal class BatteryGuardSearchTabletShots(shot: SearchGuardShot, dark: Boolean) : BatteryGuardSearchShotsBase(shot, dark, "tablet", large = false) {
+internal class BatteryGuardSearchTabletShots(shot: SearchGuardShot, dark: Boolean) : BatteryGuardSearchShotsBase(shot, dark, "tablet", scale = null) {
   companion object {
     @JvmStatic
     @ParameterizedRobolectricTestRunner.Parameters(name = "{0} scuro={1}")
@@ -144,7 +150,20 @@ internal class BatteryGuardSearchTabletShots(shot: SearchGuardShot, dark: Boolea
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = Application::class, qualifiers = "it-w360dp-h3600dp-xhdpi")
 internal class BatteryGuardSearchLargeTextShots(shot: SearchGuardShot, dark: Boolean) :
-  BatteryGuardSearchShotsBase(shot, dark, "telefono-testo-grande", large = true) {
+  BatteryGuardSearchShotsBase(shot, dark, "telefono-testo-grande", scale = LARGE_TEXT) {
+  companion object {
+    @JvmStatic
+    @ParameterizedRobolectricTestRunner.Parameters(name = "{0} scuro={1}")
+    fun data(): List<Array<Any>> = every(listOf(SearchGuardShot.PREDEFINITO, SearchGuardShot.SPENTI, SearchGuardShot.NOTTE_DI_SERIE))
+  }
+}
+
+/** Il testo a 2x (il massimo di Samsung): la frase non si taglia (BU-5). */
+@RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(application = Application::class, qualifiers = "it-w360dp-h5200dp-xhdpi")
+internal class BatteryGuardSearchDoubleTextShots(shot: SearchGuardShot, dark: Boolean) :
+  BatteryGuardSearchShotsBase(shot, dark, "telefono-testo-2x", scale = 2f) {
   companion object {
     @JvmStatic
     @ParameterizedRobolectricTestRunner.Parameters(name = "{0} scuro={1}")

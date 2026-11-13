@@ -318,19 +318,30 @@ private fun GuardSwitch(label: String, icon: @Composable () -> Unit, checked: Bo
   )
 }
 
-/** Un'attivita' che con le regole di adesso lavora solo in carica (BU-3): il segno della carica e due parole al posto di un interruttore che non farebbe niente. */
+/**
+ * Un'attivita' che con le regole di adesso lavora solo in carica (BU-3): il segno della carica e due parole al posto di un interruttore che non farebbe niente. Con il testo grande ([Dimens.RowStackedFontScale])
+ * le due parole vanno **sotto il nome** e il segno resta a destra, cosi' il nome non si spezza su tre righe.
+ */
 @Composable
 private fun GuardChargingOnly(label: String, icon: @Composable () -> Unit) {
   val only = stringResource(R.string.battery_guard_only_charging)
+  val stacked = LocalDensity.current.fontScale >= Dimens.RowStackedFontScale
+  val sign: @Composable () -> Unit = {
+    Icon(imageVector = Icons.Rounded.BatteryChargingFull, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(Dimens.ChargingGlyph))
+  }
   FluidListRow(
     title = label,
-    subtitle = "",
+    subtitle = if (stacked) only else "",
     leading = icon,
     leadingTile = false,
     badge = {
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.LineGap)) {
-        Icon(imageVector = Icons.Rounded.BatteryChargingFull, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(Dimens.ChargingGlyph))
-        Text(text = only, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      if (stacked) {
+        sign()
+      } else {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.LineGap)) {
+          sign()
+          Text(text = only, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
       }
     },
     disclosure = false,
@@ -404,6 +415,9 @@ private object Dimens {
   const val UnusedAlpha = 0.4f
   const val MinFill = 0.07f
   const val StackedFontScale = 1.5f
+
+  /** Da questo ingrandimento del testo «Solo in carica» va sotto il nome dell'attivita'. */
+  const val RowStackedFontScale = 1.15f
 }
 
 /** Chi si ferma sotto il livello: dai due interruttori (gia' filtrati da chi puo' lavorare a batteria). */

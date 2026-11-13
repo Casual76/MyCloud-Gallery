@@ -366,6 +366,22 @@ class GalleryBatteryGuardTest {
     composeRule.onAllNodesWithText("Solo in carica", useUnmergedTree = true).assertCountEquals(2)
   }
 
+  @Test
+  fun bu5_soloInCarica_aTestoGrande_stasottoIlNome_eAtestoNormaleStaAccanto() {
+    show(analysisOnBattery = false, fontScale = 1.3f)
+    val title = composeRule.onNodeWithText("Analisi delle foto", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+    val only = composeRule.onNodeWithText("Solo in carica", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+    assertThat(only.top).isAtLeast(title.bottom - 1f)
+  }
+
+  @Test
+  fun bu5_soloInCarica_aTestoNormale_stasullaStessaRigaDelNome() {
+    show(analysisOnBattery = false)
+    val title = composeRule.onNodeWithText("Analisi delle foto", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+    val only = composeRule.onNodeWithText("Solo in carica", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+    assertThat(only.top).isLessThan(title.bottom)
+  }
+
   // --- BU-5: la frase non si taglia, ne' a testo grande ---------------------------------------------------------
 
   @Test

@@ -89,7 +89,8 @@ internal abstract class BatteryGuardBackupShotsBase(
     folders = FoldersState.Ready(BackupSamples.phoneFolders),
     chosen = BackupSources(setOf(BackupSource.Camera, BackupSource.Screenshots, BackupSamples.phoneFolders.last().source)),
     deviceFolder = BackupSamples.deviceFolder,
-    protectNewPhotos = true,
+    // «Proteggi subito» acceso = il backup lavora a batteria (BatteryReach): uno stato con il backup solo in carica ha anche «Proteggi subito» spento.
+    protectNewPhotos = shot.value?.backupOnBattery != false,
     rulesAvailable = true,
     editable = true,
     battery = shot.value,
@@ -111,7 +112,8 @@ internal abstract class BatteryGuardBackupShotsBase(
       raw = raw,
       out = File("$SHOT_DIR/$name.png"),
       top = composeRule.onAllNodesWithText("Quando", useUnmergedTree = true).onFirst(),
-      bottom = composeRule.onAllNodesWithText("Che cosa protegge", useUnmergedTree = true).onFirst(),
+      // Dal titolo «Quando» alla nota «E con il cavo?», in fondo alla sezione «Batteria» (dopo il giro 2 la sezione sta sotto «Che cosa protegge»).
+      bottom = composeRule.onAllNodesWithText("E con il cavo?", useUnmergedTree = true).onFirst(),
     )
   }
 

@@ -58,21 +58,28 @@ class IncrementalSyncTest : PhoneSyncTestBase() {
     val rows = (1L..5L).map { store.put(photo(it, taken = T0 + it * MINUTE)) }
     val sync = newSync()
     sync.syncNow(SyncReason.APP_START)
+    // Pacchetto F: la scansione completa finisce con un confronto degli _ID (la prima osservazione delle non viste), che conta per il limite
+    // dei due minuti della riconciliazione rapida.
+    val scanned = catalog.mediaStoreCursor(PRIMARY)!!.lastReconcileAt
+    assertThat(scanned).isEqualTo(now)
+    advance(3 * MINUTE)
 
-    // Con deleted_files: l'incrementale lo vede subito.
+    // Con deleted_files: l'incrementale lo vede subito, senza bisogno del confronto degli _ID.
     store.remove(PRIMARY, 1)
     val fast = sync.syncNow(SyncReason.CONTENT_CHANGE)
     assertThat(fast.vanished).isEqualTo(1)
     assertThat(stateAt(rows[0])).isEqualTo(LocationState.ABSENT)
     assertThat(sync.stats.snapshot.value.deletedFilesAvailable).isTrue()
-    assertThat(catalog.mediaStoreCursor(PRIMARY)!!.lastReconcileAt).isNull()
+    assertThat(catalog.mediaStoreCursor(PRIMARY)!!.lastReconcileAt).isEqualTo(scanned)
 
-    // Senza (estensione assente): la generazione e' salita senza righe, quindi la riconciliazione rapida confronta gli _ID.
+    // Senza (estensione assente): la generazione e' salita senza righe, quindi la riconciliazione rapida confronta gli _ID. Pacchetto F
+    // (FS-1): alla prima osservazione la riga mancante si annota soltanto.
     store.supportsDeletedFiles = false
     store.remove(PRIMARY, 2)
     val quick = sync.syncNow(SyncReason.CONTENT_CHANGE)
-    assertThat(quick.vanished).isEqualTo(1)
-    assertThat(stateAt(rows[1])).isEqualTo(LocationState.ABSENT)
+    assertThat(quick.vanished).isEqualTo(0)
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.PRESENT)
+    assertThat(sync.stats.snapshot.value.suspectedAbsences).isEqualTo(1)
     assertThat(sync.stats.snapshot.value.deletedFilesAvailable).isFalse()
     assertThat(catalog.mediaStoreCursor(PRIMARY)!!.lastReconcileAt).isEqualTo(now)
 
@@ -80,12 +87,18 @@ class IncrementalSyncTest : PhoneSyncTestBase() {
     store.remove(PRIMARY, 3)
     assertThat(sync.syncNow(SyncReason.CONTENT_CHANGE).vanished).isEqualTo(0)
     assertThat(stateAt(rows[2])).isEqualTo(LocationState.PRESENT)
-    now += 3 * MINUTE
+    // La manutenzione, sei minuti dopo: la 2 e' alla seconda osservazione (assente), la 3 alla prima (annotata).
+    advance(6 * MINUTE)
     val daily = sync.syncNow(SyncReason.MAINTENANCE)
     assertThat(daily.vanished).isEqualTo(1)
-    assertThat(stateAt(rows[2])).isEqualTo(LocationState.ABSENT)
+    assertThat(stateAt(rows[1])).isEqualTo(LocationState.ABSENT)
+    assertThat(stateAt(rows[2])).isEqualTo(LocationState.PRESENT)
     assertThat(stateAt(rows[3])).isEqualTo(LocationState.PRESENT)
     assertThat(catalog.mediaStoreCursor(PRIMARY)!!.lastReconcileAt).isEqualTo(now)
+    advance(6 * MINUTE)
+    assertThat(sync.syncNow(SyncReason.MAINTENANCE).vanished).isEqualTo(1)
+    assertThat(stateAt(rows[2])).isEqualTo(LocationState.ABSENT)
+    assertThat(stateAt(rows[3])).isEqualTo(LocationState.PRESENT)
   }
 
   @Test
@@ -94,11 +107,15 @@ class IncrementalSyncTest : PhoneSyncTestBase() {
     val sync = newSync()
     sync.syncNow(SyncReason.APP_START)
     store.deletedFilesEmptyForApps = true
+    advance(3 * MINUTE)
 
     store.remove(PRIMARY, 2)
     val report = sync.syncNow(SyncReason.CONTENT_CHANGE)
     assertThat(sync.stats.snapshot.value.deletedFilesAvailable).isTrue()
-    assertThat(report.vanished).isEqualTo(1)
+    // Pacchetto F (FS-1): la riconciliazione rapida la annota; la seconda osservazione la rende assente.
+    assertThat(report.vanished).isEqualTo(0)
+    advance(6 * MINUTE)
+    assertThat(sync.syncNow(SyncReason.FOREGROUND).vanished).isEqualTo(1)
     assertThat(stateAt(rows[1])).isEqualTo(LocationState.ABSENT)
     assertThat(stateAt(rows[0])).isEqualTo(LocationState.PRESENT)
   }
@@ -179,9 +196,13 @@ class IncrementalSyncTest : PhoneSyncTestBase() {
     val sync = newSync()
     assertThat(sync.syncNow(SyncReason.APP_START).fullScan).isTrue()
     store.remove(PRIMARY, 1)
-    now += MINUTE
+    advance(MINUTE)
     val report = sync.syncNow(SyncReason.CONTENT_CHANGE)
     assertThat(report.fullScan).isTrue()
+    // Pacchetto F (FS-1): annotata alla fine della scansione, assente al giro dopo la seconda osservazione.
+    assertThat(stateAt(row)).isEqualTo(LocationState.PRESENT)
+    advance(6 * MINUTE)
+    assertThat(sync.syncNow(SyncReason.CONTENT_CHANGE).fullScan).isTrue()
     assertThat(stateAt(row)).isEqualTo(LocationState.ABSENT)
   }
 }

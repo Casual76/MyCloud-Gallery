@@ -1,17 +1,47 @@
 package dev.pampa.mycloudgallery.core.mediastore.sync
 
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
+import dev.pampa.mycloudgallery.core.database.ObservedPhonePosition
+import dev.pampa.mycloudgallery.core.database.dao.PhonePositionRow
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreRow
 import dev.pampa.mycloudgallery.core.model.FileStamp
 import dev.pampa.mycloudgallery.core.model.LocationKey
 import dev.pampa.mycloudgallery.core.model.LocationState
-import dev.pampa.mycloudgallery.core.model.LocationType
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.WorkStage
 import dev.pampa.mycloudgallery.core.model.WorkStatus
 
-/** Una posizione del telefono con l'`_ID` in cache (letto con la versione attuale del MediaStore). */
-data class CachedPhoneRow(val mediaStoreId: Long, val key: LocationKey)
+/** Un posto del telefono come lo scrive il MediaStore: percorso relativo e nome. Dati personali: niente nel `toString`. */
+class PhonePlace(val relativePath: String, val displayName: String) {
+  override fun equals(other: Any?): Boolean = other is PhonePlace && other.relativePath == relativePath && other.displayName == displayName
+
+  override fun hashCode(): Int = 31 * relativePath.hashCode() + displayName.hashCode()
+
+  override fun toString(): String = "PhonePlace"
+}
+
+/**
+ * Pacchetto F (FS-1): una posizione del telefono per il confronto degli `_ID`: [present] o assente, l'`_ID` in cache con la versione del
+ * MediaStore con cui e' stato letto ([msVersion]: un `_ID` di un'altra versione non dice niente, E-P22), il posto e [lastSeenAt] come l'ha
+ * letto la fotografia, con [observationRevision] persistita per ogni nuova osservazione (FS4-1: si segna assente solo se e' ancora tutto cosi').
+ */
+class PhonePosition(
+  val key: LocationKey,
+  val present: Boolean,
+  val mediaStoreId: Long?,
+  val msVersion: String?,
+  val place: PhonePlace,
+  val lastSeenAt: Long,
+  val observationRevision: Long = 0,
+) {
+  /** L'`_ID` in cache, se vale per la versione [current] del MediaStore. */
+  fun idFor(current: String): Long? = mediaStoreId?.takeIf { msVersion == current }
+
+  /** Come l'ha letta la fotografia: il confronto atomico prima di segnarla assente. */
+  fun observed(): ObservedPhonePosition = ObservedPhonePosition(key, mediaStoreId, msVersion, lastSeenAt, observationRevision)
+
+  override fun toString(): String = "PhonePosition(present=$present)"
+}
 
 /**
  * Le letture del catalogo che la sincronizzazione del telefono fa **senza** passare da `MediaCatalog`, che non le
@@ -23,13 +53,23 @@ data class CachedPhoneRow(val mediaStoreId: Long, val key: LocationKey)
 interface PhoneCatalogReads {
 
   /**
-   * I posti (presenti o non raggiungibili) che hanno in cache l'`_ID` [id] del volume, **letto con [msVersion]**: un
-   * `_ID` di un'altra versione del MediaStore puo' essere di un altro file (E-P22).
+   * Le posizioni **presenti** che hanno in cache l'`_ID` [id] del volume, **letto con [msVersion]**: un `_ID` di un'altra versione del
+   * MediaStore puo' essere di un altro file (E-P22). Pacchetto F (FS2-1): le cancellazioni di `deleted_files` passano da qui alla stessa
+   * conferma delle altre assenze.
    */
-  suspend fun liveAtMediaStoreRow(volume: String, id: Long, msVersion: String): List<LocationKey>
+  suspend fun positionsAtMediaStoreRow(volume: String, id: Long, msVersion: String): List<PhonePosition>
 
-  /** Le posizioni presenti del volume con un `_ID` in cache letto con [msVersion] (riconciliazione quotidiana). */
-  suspend fun presentWithCache(volume: String, msVersion: String): List<CachedPhoneRow>
+  /** Pacchetto F (FS3-1): fino a [limit] posizioni presenti nella cartella [folderKey] (`Location.Phone.folderKey`), in ordine di chiave. */
+  suspend fun presentInFolder(folderKey: String, limit: Int): List<PhonePosition>
+
+  /** Pacchetto F (FS3-1): fino a [limit] posizioni presenti del [volume], in ordine di chiave. */
+  suspend fun presentOnVolume(volume: String, limit: Int): List<PhonePosition>
+
+  /**
+   * Pacchetto F (FS-1): le posizioni del volume presenti e assenti (non le non raggiungibili), con l'`_ID` e la versione in cache e il posto,
+   * per il confronto degli `_ID` con il MediaStore (riconciliazione).
+   */
+  suspend fun phonePositions(volume: String): List<PhonePosition>
 
   /** Il timbro conosciuto del posto [key], se e' conosciuto e non assente. */
   suspend fun storedStamp(key: LocationKey): FileStamp?
@@ -50,16 +90,27 @@ class RoomPhoneCatalogReads(private val database: GalleryDatabase) : PhoneCatalo
   private val locations get() = database.locationDao()
   private val work get() = database.workStateDao()
 
-  override suspend fun liveAtMediaStoreRow(volume: String, id: Long, msVersion: String): List<LocationKey> =
-    locations.byMediaStoreId(volume, id)
-      .filter { it.locationType == LocationType.PHONE.code && it.mediaStoreVersion == msVersion && it.state != LocationState.ABSENT.code }
-      .map { LocationKey(it.locationKey) }
+  override suspend fun positionsAtMediaStoreRow(volume: String, id: Long, msVersion: String): List<PhonePosition> =
+    locations.phonePositionsAtRow(volume, id, msVersion).map(::position)
 
-  override suspend fun presentWithCache(volume: String, msVersion: String): List<CachedPhoneRow> =
-    locations.presentOnVolume(volume).mapNotNull { entity ->
-      val id = entity.mediaStoreId ?: return@mapNotNull null
-      if (entity.mediaStoreVersion != msVersion) null else CachedPhoneRow(id, LocationKey(entity.locationKey))
-    }
+  override suspend fun presentInFolder(folderKey: String, limit: Int): List<PhonePosition> =
+    locations.phonePresentInFolder(folderKey, limit).map(::position)
+
+  override suspend fun presentOnVolume(volume: String, limit: Int): List<PhonePosition> =
+    locations.phonePresentOnVolume(volume, limit).map(::position)
+
+  override suspend fun phonePositions(volume: String): List<PhonePosition> =
+    locations.phonePositionsOnVolume(volume).map(::position)
+
+  private fun position(row: PhonePositionRow) = PhonePosition(
+    key = LocationKey(row.locationKey),
+    present = row.state == LocationState.PRESENT.code,
+    mediaStoreId = row.mediaStoreId,
+    msVersion = row.mediaStoreVersion,
+    place = PhonePlace(row.relativePath.orEmpty(), row.displayName.orEmpty()),
+    lastSeenAt = row.lastSeenAt,
+    observationRevision = row.observationRevision,
+  )
 
   override suspend fun storedStamp(key: LocationKey): FileStamp? {
     val entity = locations.byKey(key.value) ?: return null
@@ -89,4 +140,37 @@ interface MediaStoreRowLookup {
 
   /** Le righe visibili (non `IS_PENDING`, non cestinate) di [ids] nel volume; quelle che mancano non ci sono piu'. */
   suspend fun rowsById(volume: String, ids: Collection<Long>): List<MediaStoreRow>
+}
+
+/** Una riga trovata dal controllo puntuale. [pending]: `IS_PENDING`, un file in scrittura: c'e', non e' una cancellazione. */
+class PointRow(val row: MediaStoreRow, val pending: Boolean) {
+  override fun toString(): String = "PointRow(pending=$pending)"
+}
+
+/**
+ * Pacchetto F (FS-1): il **controllo puntuale** prima di segnare assente una posizione che il MediaStore non mostra piu'. Una lista di `_ID`
+ * puo' arrivare parziale (un provider in ricostruzione dopo un riavvio o un aggiornamento) e un `_ID` di un'altra versione non dice niente:
+ * qui si chiede riga per riga, per `_ID` e per posto (percorso e nome), **anche le righe in scrittura** (`IS_PENDING`: una riga che diventa
+ * pending non e' una cancellazione), mai quelle cestinate (il cestino e' una cancellazione voluta). Una sorgente senza questo controllo non
+ * fa dedurre nessuna assenza: meglio un fantasma in piu' che una foto vera in meno.
+ */
+interface MediaStorePointCheck {
+
+  /** Le righe del volume con uno di questi `_ID` o in uno di questi posti, anche `IS_PENDING`, mai cestinate. */
+  suspend fun stillThere(volume: String, ids: Collection<Long>, places: Collection<PhonePlace>): List<PointRow>
+}
+
+/**
+ * Pacchetto F (FS2-2, FS3-1): la **prova sul disco**. Il MediaStore puo' omettere righe (un provider in ricostruzione, un indice a meta'), ma
+ * un file che il disco vede ancora non e' sparito (veto, sempre); uno che il disco dice **con certezza** di non avere e' la prova positiva della
+ * cancellazione (anche un file nel cestino ha un altro nome o un'altra cartella). "Non so" non e' mai una prova.
+ *
+ * Limite che non si puo' chiudere: un file in scrittura (`IS_PENDING`) di un'altra app, che ne' il MediaStore ne' FUSE mostrano a questa app,
+ * risponde come un file cancellato. Torna da solo quando l'altra app lo pubblica (riga nuova o di nuovo visibile: la lettura del telefono la
+ * rimette presente).
+ */
+interface PhoneFileProbe {
+
+  /** true: il file c'e'; false: il disco dice con certezza che non c'e'; null: non si sa (Android 10, volume o cartella non leggibili, errore). */
+  suspend fun exists(volume: String, place: PhonePlace): Boolean?
 }

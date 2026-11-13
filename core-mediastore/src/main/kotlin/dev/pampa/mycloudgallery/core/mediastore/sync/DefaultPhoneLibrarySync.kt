@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.common.coroutines.DispatcherProvider
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.database.MediaStoreCursor
+import dev.pampa.mycloudgallery.core.database.PhoneSuspect
 import dev.pampa.mycloudgallery.core.database.PhoneStamp
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreRow
@@ -26,6 +27,7 @@ import dev.pampa.mycloudgallery.core.metadata.contract.SourceClassifier
 import dev.pampa.mycloudgallery.core.model.FileStamp
 import dev.pampa.mycloudgallery.core.model.Fingerprint
 import dev.pampa.mycloudgallery.core.model.Location
+import dev.pampa.mycloudgallery.core.model.LocationKey
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.domain.ContentCandidate
@@ -60,11 +62,17 @@ import kotlinx.coroutines.withContext
  * - *Scansione completa* (prima lettura, `getVersion` cambiata, volume tornato, API 29 senza generazioni): dai piu'
  *   recenti, a lotti, con la **scorciatoia del timbro** (stesso posto, dimensione e data di modifica: nessun byte letto)
  *   e la generazione ignorata (E-P22). Il cursore salva l'ultimo `_ID` fatto **dopo** il lotto: dopo un riavvio si
- *   riprende da li' con lo stesso `scan_epoch` (E-P4, E-P8). A fine volume, **solo con accesso completo per tutta la
- *   scansione**, le posizioni non viste diventano assenti con il tetto del catalogo.
+ *   riprende da li' con lo stesso `scan_epoch` (E-P4, E-P8). A fine volume, solo con accesso completo anche dopo l'ultima
+ *   lettura, con il volume e la versione di prima e con gli `_ID` che rispondono, la scansione si chiude; le posizioni non
+ *   viste **non** diventano assenti qui: le giudica il confronto degli `_ID` (pacchetto F).
+ * - *Assenze dedotte* (un `_ID` che manca, una posizione non vista): in due tempi. Alla prima osservazione si annotano; diventano
+ *   assenti solo a un confronto successivo, dopo [PhoneSyncConfig.absenceConfirmAfter], se mancano ancora, se il controllo
+ *   puntuale ([MediaStorePointCheck], anche le righe `IS_PENDING`) non le trova e se non sono un'ondata sospetta. Una posizione
+ *   assente che ricompare con lo stesso `_ID` torna presente anche a generazione ferma.
  * - *Incrementale*: le righe con `GENERATION_MODIFIED` oltre quella salvata; la generazione si legge **prima** della
  *   query e si salva dopo il commit. Poi `deleted_files` come **accelerazione**: ogni riga cancellata (e non ricomparsa)
- *   diventa assente; la verita' resta la riconciliazione quotidiana degli `_ID` ([SyncReason.MAINTENANCE]).
+ *   diventa assente; la verita' resta il confronto degli `_ID`: al ritorno in primo piano, con "Aggiorna", quando la generazione
+ *   sale piu' delle righe viste e nella manutenzione quotidiana ([SyncReason.MAINTENANCE]).
  * - *Accesso parziale* (E-P1): si leggono solo le righe selezionate, **mai** un'assenza; il cursore torna a "scansione
  *   completa da fare" per quando l'accesso tornera' completo. [partialSelection] dice alla Libreria cosa e' accessibile.
  *
@@ -81,6 +89,9 @@ import kotlinx.coroutines.withContext
  * @param monotonicMs l'orologio dei budget, che non salta.
  * @param metadataPass la fase META, lanciata in primo piano dopo ogni giro ([attach]).
  * @param storageReady falso prima del primo sblocco (E-P2, E-P10, E-P13): `Paused(STORAGE_LOCKED)`.
+ * @param pointCheck il controllo puntuale prima di un'assenza dedotta (pacchetto F, FS-1); senza, nessuna assenza dedotta.
+ * @param fileProbe la prova sul disco (pacchetto F, FS2-2, FS3-1): un file che il disco vede ancora non diventa mai assente; uno che il disco
+ *   dice con certezza di non avere (con i vivi di controllo visti) e' la prova positiva. Senza, nessuna assenza: si annota e basta.
  */
 class DefaultPhoneLibrarySync(
   private val source: MediaStoreSource,
@@ -101,6 +112,8 @@ class DefaultPhoneLibrarySync(
    * prima di toccare il MediaStore, e si dichiara alla fine solo se il giro e' finito bene con l'accesso completo. Null = nessuno: il giro e' quello di sempre.
    */
   private val rereads: RereadLedger? = null,
+  private val pointCheck: MediaStorePointCheck? = source as? MediaStorePointCheck,
+  private val fileProbe: PhoneFileProbe? = source as? PhoneFileProbe,
 ) : PhoneLibrarySync {
 
   private val statusFlow = MutableStateFlow<SyncStatus>(SyncStatus.Idle(atMs = 0))
@@ -121,6 +134,35 @@ class DefaultPhoneLibrarySync(
   }
 
   private val runLock = Mutex()
+
+  /**
+   * Pacchetto F (FS-1, FS3-2): le posizioni che il MediaStore non mostra piu', annotate e in attesa di una prova, per volume. Copia in memoria
+   * delle annotazioni su disco ([MediaCatalog.phoneSuspects]), letta la prima volta che il processo incontra il volume: la manutenzione notturna
+   * o la prossima apertura riprendono da li'. Un'annotazione non scade mai da sola: resta finche' non arriva una prova (o la posizione torna).
+   * Solo dentro un giro (sotto [runLock]).
+   */
+  private val suspects = HashMap<String, HashMap<LocationKey, Suspect>>()
+
+  /** Se su disco possono esserci annotazioni (all'avvio non si sa): evita una scrittura a vuoto a ogni giro con l'accesso ridotto. */
+  private var suspectsOnDisk = true
+
+  /** Il numero del giro di questo processo (il primo e' 1). */
+  private var runNumber = 0L
+
+  /** Quando (orologio monotono) il prossimo giro da solo in primo piano: un'annotazione che matura, o un nuovo tentativo dopo un "non so". */
+  @Volatile private var nextConfirmAtMono: Long? = null
+
+  /** FS3-7: il prossimo tentativo in primo piano dopo una conferma finita in "non so" (orologio monotono), con il suo limite di frequenza. */
+  private val unknownRetryAtMono = HashMap<LocationKey, Long>()
+
+  /**
+   * Un'annotazione. [firstAt] (orologio di riferimento, su disco) dice da quando manca anche fra un processo e l'altro; [firstMono] (orologio
+   * monotono) c'e' solo se e' nata in questo processo, e allora l'attesa si misura con lui (un salto dell'orologio non la accorcia). [seenRun]
+   * e' il giro di questo processo che l'ha vista mancare per la prima volta: 0 = ripresa dal disco e non ancora rivista (FS3-2: una ripresa si
+   * prova solo dopo una nuova osservazione in questo processo).
+   */
+  private class Suspect(val firstAt: Long, val firstMono: Long?, var seenRun: Long, val msVersion: String)
+
   private val attachLock = Any()
   private var attached: Job? = null
 
@@ -160,14 +202,24 @@ class DefaultPhoneLibrarySync(
     launch(start = CoroutineStart.UNDISPATCHED) { access.state.drop(1).collect { triggers.trySend(SyncReason.PERMISSION_CHANGED) } }
     triggers.trySend(SyncReason.FOREGROUND)
     var meta: Job? = null
+    var recheck: Job? = null
     for (reason in triggers) {
       meta?.cancelAndJoin()
+      recheck?.cancel()
       try {
         syncNow(reason)
       } catch (e: CancellationException) {
         throw e
       } catch (e: Exception) {
         GalleryLog.w(TAG) { "giro in primo piano fallito: ${e.javaClass.simpleName}" }
+      }
+      // Pacchetto F: con assenze annotate che maturano (o un "non so" da riprovare, FS3-7), un giro da solo a quell'istante (piu' un margine),
+      // con l'orologio monotono: senza, la prova aspettava il prossimo ritorno in primo piano o un cambiamento.
+      nextConfirmAtMono?.takeIf { it > monotonicMs() }?.let { at ->
+        recheck = launch {
+          delay(at - monotonicMs() + config.absenceRecheckMargin.inWholeMilliseconds)
+          triggers.trySend(SyncReason.FOREGROUND)
+        }
       }
       val pass = metadataPass ?: continue
       meta = launch {
@@ -196,6 +248,15 @@ class DefaultPhoneLibrarySync(
   }
 
   private enum class VolumeOutcome { CONTINUE, STOP }
+
+  /** Pacchetto F: perche' una posizione e' candidata a diventare assente. */
+  private enum class Evidence {
+    /** Il MediaStore l'ha detta cancellata o nel cestino (`deleted_files`): una prova positiva, ma storica. */
+    REPORTED,
+
+    /** Il MediaStore non la mostra piu' (manca dagli `_ID`, non vista da una scansione completa): un'omissione, non una prova. */
+    OMITTED,
+  }
 
   /** Una riga con il suo posto. */
   private class Item(val row: MediaStoreRow, val location: Location.Phone)
@@ -238,6 +299,9 @@ class DefaultPhoneLibrarySync(
       }
       access.refresh()
       val start = access.state.value
+      runNumber++
+      // Pacchetto F: le annotazioni valgono solo finche' l'accesso resta completo; con un accesso ridotto si ricomincia da capo.
+      if (start.media != MediaAccess.FULL) forgetAllSuspects()
       if (start.media == MediaAccess.NONE) {
         // E-P15: permessi ritirati non vuol dire "il telefono e' vuoto". Nessuna lettura, nessuna scrittura.
         pause = PauseReason.NO_PERMISSION
@@ -305,6 +369,7 @@ class DefaultPhoneLibrarySync(
     }
 
     private fun finish(): SyncReport {
+      scheduleConfirm()
       val report = SyncReport(
         seen = seen,
         added = added,
@@ -334,6 +399,7 @@ class DefaultPhoneLibrarySync(
           fullScansCompleted = s.fullScansCompleted + fullScansCompleted,
           reconcileVanished = s.reconcileVanished + reconcileVanished,
           purgedAbsences = s.purgedAbsences + purged,
+          suspectedAbsences = suspects.values.sumOf { it.size },
         )
       }
       return report
@@ -345,6 +411,7 @@ class DefaultPhoneLibrarySync(
     private suspend fun handleUnmounted(mounted: Set<String>) {
       for (cursor in catalog.mediaStoreCursors()) {
         if (cursor.volume in mounted) continue
+        forgetVolumeSuspects(cursor.volume)
         catalog.markVolumeUnavailable(cursor.volume)
         if (cursor.generation != null || cursor.deletedGeneration != null || cursor.scanEpoch != null) {
           catalog.saveMediaStoreCursor(cursor.copy(generation = null, deletedGeneration = null, scanEpoch = null, scanResumeAfterId = null))
@@ -373,7 +440,7 @@ class DefaultPhoneLibrarySync(
       }
     }
 
-    /** Scansione completa, riprendibile; le assenze solo alla fine e solo con accesso completo. */
+    /** Scansione completa, riprendibile; nessuna assenza scritta qui (pacchetto F): le non viste le giudica il confronto degli _ID. */
     private suspend fun fullScan(volume: String, version: String, previous: MediaStoreCursor?): VolumeOutcome {
       fullScan = true
       var cursor = if (previous != null && previous.scanEpoch != null && previous.msVersion == version) {
@@ -415,46 +482,47 @@ class DefaultPhoneLibrarySync(
         cursor = next.copy(generation = lower(next.generation, floor))
         statusFlow.value = SyncStatus.Scanning(seen, total, full = true)
       }
-      if (!stillFullAccess()) return interrupted()
-      if (!vanishNotSeen(volume, epoch)) return interrupted()
+      // Pacchetto F (FS-1, FS-2, FS-5): la fine della lettura **non scrive assenze**. Prima di chiudere la scansione gli _ID del volume devono
+      // rispondere, non vuoti, e DOPO quella lettura l'accesso deve essere ancora completo e il volume montato con la stessa versione; se no
+      // la scansione resta aperta (non conclusa: il giro dopo ripete solo questa parte). Le posizioni non viste le giudica il confronto degli
+      // _ID, in due tempi: la prima osservazione e' subito dopo.
+      val live = liveIdsOrNull(volume)
+      if (live != null && live.isEmpty()) absencesBlocked++
+      if (live == null || live.isEmpty() || !stillFullAccess() || !stillSameVolume(volume, version)) {
+        // FS2-3: la fase finale non si e' conclusa. Il giro dopo rilegge dalla testa, non dopo la vecchia coda: le foto nuove (in testa)
+        // entrano anche mentre la scansione resta aperta. Le righe gia' viste passano dalla scorciatoia del timbro.
+        catalog.saveMediaStoreCursor(cursor.copy(scanResumeAfterId = null))
+        // FS3-5: un volume senza righe (tutto cancellato, anche dopo un cambio di versione) non chiude la scansione, ma le sue posizioni si
+        // annotano e si provano file per file come le altre: senza, i fantasmi restavano per sempre.
+        if (live != null && live.isEmpty() && stillFullAccess() && stillSameVolume(volume, version)) reconcile(volume, scanOpen = true)
+        return interrupted()
+      }
       catalog.saveMediaStoreCursor(cursor.copy(scanEpoch = null, scanResumeAfterId = null, lastFullScanAt = clock()))
       fullScansCompleted++
+      reconcile(volume)
       return VolumeOutcome.CONTINUE
     }
 
-    /**
-     * Fine di una scansione completa: le posizioni non viste diventano assenti, a tetti. Mai se il MediaStore dice di non
-     * avere nulla (un provider che risponde vuoto non e' un telefono svuotato) e mai oltre un'ondata sospetta. Falso se
-     * il budget e' finito: la scansione resta aperta e il prossimo giro ripete solo questa parte.
-     */
-    private suspend fun vanishNotSeen(volume: String, epoch: Long): Boolean {
-      val live = try {
-        source.allIds(volume)
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: SecurityException) {
-        throw e
-      } catch (e: Exception) {
-        return false
-      }
-      if (live.isEmpty()) {
-        absencesBlocked++
-        return true
-      }
-      val alarm = maxOf(config.vanishAlarmMin, live.size)
-      var total = 0
-      while (true) {
-        if (overBudget()) return false
-        val n = catalog.markVanishedNotSeenSince(volume, epoch, config.vanishCap)
-        total += n
-        vanished += n
-        if (n < config.vanishCap) break
-        if (total >= alarm) {
-          absencesBlocked++
-          break
-        }
-      }
-      return true
+    /** Gli `_ID` del volume, o null se il MediaStore non risponde (un errore non e' "nessuna riga"). */
+    private suspend fun liveIdsOrNull(volume: String): LongArray? = try {
+      source.allIds(volume)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: SecurityException) {
+      throw e
+    } catch (e: Exception) {
+      null
+    }
+
+    /** Pacchetto F (FS-1, FS-2): il volume e' ancora montato e con la stessa versione del MediaStore (un errore vale "no"). */
+    private suspend fun stillSameVolume(volume: String, version: String): Boolean = try {
+      volume in source.volumes() && source.version(volume) == version
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: SecurityException) {
+      throw e
+    } catch (e: Exception) {
+      false
     }
 
     /** Le righe cambiate dopo la generazione salvata, poi le cancellazioni come accelerazione. */
@@ -463,7 +531,15 @@ class DefaultPhoneLibrarySync(
       val now = source.generation(volume)
       // Generazioni sparite o tornate indietro senza cambio di versione: non ci si fida, scansione completa.
       if (now == null || now < since) return fullScan(volume, version, cursor.copy(generation = null))
-      if (now == since) return VolumeOutcome.CONTINUE
+      // Pacchetto F (12/11): al ritorno in primo piano (e con "Aggiorna") gli _ID si confrontano con la cache anche se la generazione e' ferma.
+      // Le cancellazioni fatte ad app chiusa possono non lasciare traccia: `deleted_files` puo' rispondere vuoto alle app, la stima "generazione
+      // salita piu' delle righe viste" sbaglia quando una transazione porta piu' righe (Quick Share, WhatsApp), e il giro in background puo'
+      // aver gia' portato avanti la generazione. Prima restava solo la manutenzione notturna in carica.
+      val onReturn = reason in RETURN_REASONS
+      if (now == since) {
+        if (onReturn && quickReconcileDue(cursor)) reconcile(volume)
+        return VolumeOutcome.CONTINUE
+      }
       val seenIds = HashSet<Long>()
       var after: Long? = null
       var floor: Long? = null
@@ -492,6 +568,7 @@ class DefaultPhoneLibrarySync(
       }
       deletedFilesAvailable = deleted != null
       var explained = returned
+      var reported: List<PhonePosition> = emptyList()
       if (deleted != null) {
         explained += deleted.count { (it.generationModified ?: Long.MIN_VALUE) in (since + 1)..now }
         // Solo fino alla generazione letta prima della query (le altre al prossimo giro, con le righe che le seguono) e
@@ -501,11 +578,7 @@ class DefaultPhoneLibrarySync(
           .map { it.id }
           .distinct()
           .toList()
-        for (id in gone) {
-          for (key in reads.liveAtMediaStoreRow(volume, id, version)) {
-            if (catalog.markVanished(key)) vanished++
-          }
-        }
+        reported = gone.flatMap { reads.positionsAtMediaStoreRow(volume, it, version) }.distinctBy { it.key }
       }
       // Un provider che ha risposto senza permessi non deve far avanzare la generazione oltre righe mai viste.
       if (!stillFullAccess()) return interrupted()
@@ -515,10 +588,14 @@ class DefaultPhoneLibrarySync(
           deletedGeneration = if (deleted != null) now else cursor.deletedGeneration,
         ),
       )
+      // Pacchetto F (FS2-1, FS3-3): una riga che il MediaStore dice cancellata (o finita nel cestino) e' una notizia **storica**: puo' essere
+      // gia' tornata. Diventa assente subito solo con la prova attuale ([confirmGone]: controllo puntuale e disco certo); con un "non so" entra
+      // fra le annotazioni, come un'omissione.
+      if (reported.isNotEmpty()) confirmGone(volume, version, reported, Evidence.REPORTED, alive = null, wave = false)
       // La generazione e' salita piu' di quanto spieghino le righe viste e quelle tolte: probabilmente cancellazioni che
       // `deleted_files` non dice (sull'emulatore API 37 risponde vuoto alle app). Si confrontano gli _ID con la cache
       // subito, al massimo ogni [PhoneSyncConfig.quickReconcileEvery], invece di aspettare la manutenzione quotidiana.
-      if (now - since > explained && quickReconcileDue(cursor)) reconcile(volume)
+      if ((now - since > explained || onReturn) && quickReconcileDue(cursor)) reconcile(volume)
       return VolumeOutcome.CONTINUE
     }
 
@@ -569,31 +646,320 @@ class DefaultPhoneLibrarySync(
       purged += catalog.purgeExpiredAbsences(config.purgeCap)
     }
 
-    private suspend fun reconcile(volume: String) {
+    /**
+     * Il confronto degli `_ID` con la cache (la verita' dietro `deleted_files`), pacchetto F (FS-1, FS2-2, FS3-1..7):
+     * - prima le posizioni del catalogo, poi gli `_ID` del MediaStore (un file salvato dall'app in mezzo non sembra sparito); con un accesso non
+     *   piu' completo o il volume cambiato DOPO la lettura non si conclude niente;
+     * - **recupero**: una posizione assente torna presente, anche a generazione ferma, se il suo `_ID` e' di nuovo vivo o se nel suo posto c'e'
+     *   di nuovo una riga con un `_ID` che il catalogo non conosce (a scorrimento, FS3-4);
+     * - una posizione presente con un `_ID` che manca, o con un `_ID` di un'altra versione, si **annota** (su disco) e basta: un'omissione non e'
+     *   una prova. Anche con zero `_ID` vivi (FS3-5: l'ultima foto, tutto il volume);
+     * - un'annotazione si prova in un giro successivo di questo processo e dopo [PhoneSyncConfig.absenceConfirmAfter] (orologio monotono; una
+     *   ripresa dal disco vuole prima una nuova osservazione in questo processo), con la stessa versione. Diventa assente solo se il controllo
+     *   puntuale non la trova **e** il disco dice con certezza che il file non c'e' ([confirmGone]); "non so" la lascia annotata, senza scadenza;
+     * - un'ondata (almeno `max(vanishAlarmMin, vivi)` mancanti) si prova solo con [PhoneSyncConfig.waveProbeSample] vivi di controllo: con meno
+     *   non si prova e non si annota niente (le annotazioni non potrebbero diventare niente).
+     */
+    private suspend fun reconcile(volume: String, scanOpen: Boolean = false) {
       val cursor = catalog.mediaStoreCursor(volume) ?: return
-      if (cursor.scanEpoch != null || cursor.generation == null) return
+      // Una scansione completa da fare viene prima (salvo un volume senza righe, FS3-5, che la tiene aperta). Su API 29 la generazione non c'e'
+      // mai: li' ogni giro e' una scansione completa, e il confronto viene dopo.
+      if (cursor.scanEpoch != null && !scanOpen) return
+      if (cursor.generation == null && source.generation(volume) != null) return
       val version = source.version(volume)
       if (cursor.msVersion != version) return
+      val positions = reads.phonePositions(volume)
       val live = source.allIds(volume)
-      if (live.isEmpty()) {
+      // Un permesso ridotto mentre si leggevano gli _ID ("foto selezionate") li riduce alla selezione; un volume tolto li svuota a meta'.
+      if (!stillFullAccess() || !stillSameVolume(volume, version)) {
+        completed = false
+        return
+      }
+      // Con la scansione aperta si confronta solo un volume senza righe (FS3-5): se adesso risponde, la chiude il giro dopo.
+      if (scanOpen && live.isNotEmpty()) return
+      if (live.isEmpty() && !scanOpen) absencesBlocked++
+      val liveSet = HashSet<Long>(live.size * 2)
+      live.forEach { liveSet += it }
+
+      recover(volume, version, positions, liveSet)
+
+      val missing = positions.filter { it.present && it.idFor(version).let { id -> id == null || id !in liveSet } }
+      val alive = positions.filter { it.present && it.idFor(version)?.let { id -> id in liveSet } == true }.sortedBy { it.key.value }
+      catalog.saveMediaStoreCursor(cursor.copy(lastReconcileAt = clock()))
+      val wave = missing.size >= maxOf(config.vanishAlarmMin, live.size)
+      if (wave && alive.size < config.waveProbeSample) {
+        // Un'ondata senza abbastanza vivi di controllo (un provider vuoto, un volume svuotato tutto): nessuna prova possibile.
         absencesBlocked++
         return
       }
-      val liveSet = HashSet<Long>(live.size * 2)
-      live.forEach { liveSet += it }
-      val missing = reads.presentWithCache(volume, version).filter { it.mediaStoreId !in liveSet }
-      if (missing.size > config.reconcileMaxDirect) {
-        // Troppe: decide una scansione completa, che ha le sue protezioni contro le ondate sospette.
-        catalog.saveMediaStoreCursor(cursor.copy(generation = null, lastReconcileAt = clock()))
+      val noted = notedFor(volume)
+      val missingKeys = missing.mapTo(HashSet()) { it.key }
+      val now = clock()
+      val nowMono = monotonicMs()
+      // Fuori chi non manca piu' o e' di un'altra versione; rifatta adesso una ripresa dal disco "dal futuro" (l'orologio e' tornato indietro).
+      val dropped = noted.filter { (key, s) -> key !in missingKeys || s.msVersion != version || (s.firstMono == null && s.firstAt > now) }
+      dropped.keys.forEach { noted.remove(it) }
+      val added = missing.filter { it.key !in noted }
+      added.forEach { noted[it.key] = Suspect(now, nowMono, runNumber, version) }
+      // Una ripresa dal disco che manca ancora: vista in questo processo adesso; la prova, in un giro dopo.
+      missing.forEach { p -> noted[p.key]?.takeIf { it.seenRun == 0L }?.seenRun = runNumber }
+      if (dropped.isNotEmpty() || added.isNotEmpty()) {
+        catalog.updatePhoneSuspects(
+          volume,
+          put = added.associate { it.key to PhoneSuspect(now, version) },
+          remove = dropped.mapValues { (_, s) -> PhoneSuspect(s.firstAt, s.msVersion) },
+        )
+        if (added.isNotEmpty()) suspectsOnDisk = true
+      }
+      val due = missing.filter { p -> noted[p.key]?.let { isDue(it, now, nowMono) } == true }
+      if (due.isNotEmpty()) confirmGone(volume, version, due, Evidence.OMITTED, alive, wave)
+    }
+
+    /**
+     * FS3-2: un'annotazione e' matura se e' stata vista mancare in un giro precedente di questo processo e da abbastanza tempo: con l'orologio
+     * monotono se e' nata qui; con quello di riferimento (salvato su disco) se e' ripresa da un processo prima, dopo la nuova osservazione.
+     */
+    private fun isDue(s: Suspect, now: Long, nowMono: Long): Boolean {
+      if (s.seenRun == 0L || s.seenRun >= runNumber) return false
+      val wait = config.absenceConfirmAfter.inWholeMilliseconds
+      val first = s.firstMono
+      return if (first != null) nowMono - first >= wait else now >= s.firstAt && now - s.firstAt >= wait
+    }
+
+    /**
+     * Il prossimo giro da solo in primo piano (orologio monotono): quando matura un'annotazione vista in questo processo, o il nuovo tentativo
+     * dopo un "non so" (FS3-7), mai prima che un confronto sia di nuovo permesso ([PhoneSyncConfig.quickReconcileEvery]). Solo istanti futuri:
+     * un'annotazione matura e non provata non fa girare a vuoto. Senza controllo puntuale o prova del disco, nessuno (non si proverebbe niente).
+     */
+    private fun scheduleConfirm() {
+      val every = config.quickReconcileEvery?.inWholeMilliseconds
+      if (fileProbe == null || pointCheck == null || every == null) {
+        nextConfirmAtMono = null
         return
       }
-      for (row in missing) {
-        if (catalog.markVanished(row.key)) {
-          vanished++
-          reconcileVanished++
-        }
+      val now = clock()
+      val nowMono = monotonicMs()
+      val wait = config.absenceConfirmAfter.inWholeMilliseconds
+      val ready = suspects.values.asSequence().flatMap { it.values.asSequence() }.filter { it.seenRun != 0L }.map { s ->
+        val first = s.firstMono
+        val matureAt = if (first != null) first + wait else nowMono + (s.firstAt + wait - now).coerceAtLeast(0)
+        // Vista solo in questo giro: la prova e' in un giro dopo.
+        if (s.seenRun >= runNumber) maxOf(matureAt, nowMono + 1) else matureAt
+      }.filter { it > nowMono }.minOrNull()
+      val next = listOfNotNull(ready, unknownRetryAtMono.values.filter { it > nowMono }.minOrNull()).minOrNull()
+      nextConfirmAtMono = next?.let { maxOf(it, nowMono + every) }
+    }
+
+    /**
+     * La prova, uguale per tutte le strade (pacchetto F, criterio del terzo giro): una posizione diventa assente **solo** se il controllo
+     * puntuale non la trova (per `_ID` e per posto, chiavi canoniche) **e** il disco dice con certezza che il file non c'e' (`stat` con ENOENT
+     * confermato dalla cartella visibile, e tutti i vivi di controllo visti). Ogni candidato si chiede sempre al disco: un "c'e'" e' un veto.
+     * "Non so" non scrive mai: un'omissione resta annotata, una cancellazione detta dal MediaStore entra fra le annotazioni (FS3-3). Accesso,
+     * volume, versione e generazione si ricontrollano dopo l'ultima lettura e prima di ogni lotto (con la generazione cambiata il controllo si
+     * rifa' una volta); ogni lotto e' una transazione che segna solo le posizioni ancora come le ha lette la fotografia (FS3-6).
+     *
+     * Limite dichiarato: un file in scrittura di un'altra app che ne' il MediaStore ne' FUSE mostrano risponde come un file cancellato; torna
+     * presente da solo quando viene pubblicato.
+     */
+    private suspend fun confirmGone(
+      volume: String,
+      version: String,
+      candidates: List<PhonePosition>,
+      evidence: Evidence,
+      alive: List<PhonePosition>?,
+      wave: Boolean,
+    ) {
+      val check = pointCheck
+      val probe = fileProbe
+      if (check == null || probe == null) {
+        // Senza controllo puntuale o senza prova del disco nessuna assenza: meglio un fantasma in piu'.
+        if (evidence == Evidence.REPORTED) noteReported(volume, version, candidates)
+        return
       }
-      catalog.saveMediaStoreCursor(cursor.copy(lastReconcileAt = clock()))
+      candidates.forEach { unknownRetryAtMono.remove(it.key) }
+      var pending = candidates
+      repeat(2) {
+        val generation = source.generation(volume)
+        val found = check.stillThere(volume, pending.mapNotNull { it.idFor(version) }, pending.map { it.place })
+        val foundIds = found.mapTo(HashSet()) { it.row.id }
+        // Il posto si confronta con la chiave del catalogo (maiuscole e Unicode normalizzati), non con le stringhe del MediaStore.
+        val foundKeys = found.mapNotNullTo(HashSet()) { it.row.locationOrNull(version)?.key }
+        val there = pending.filterTo(HashSet()) { p -> p.idFor(version)?.let { it in foundIds } == true || p.key in foundKeys }
+        forgetSuspects(volume, there.map { it.key })
+        // Chi c'e' e non e' in scrittura si rilegge: una posizione con l'_ID di un'altra versione impara quello nuovo.
+        val readable = found.filter { !it.pending }.map { it.row }.distinctBy { it.id }
+        if (readable.isNotEmpty()) processBatch(version, readable, seenAt = clock(), ignoreGeneration = true) { null }
+        val gone = pending.filter { it !in there }
+        if (gone.isEmpty()) return
+        // Il disco: ogni candidato sempre, poi i vivi di controllo, che deve vedere tutti perche' un suo "non c'e'" valga.
+        val answers = gone.associateWith { probe.exists(volume, it.place) }
+        val controls = controlsFor(volume, gone, alive, wave)
+        val trusted = controls.all { probe.exists(volume, it.place) == true }
+        if (!trusted) absencesBlocked++
+        val proven = if (trusted) gone.filter { answers[it] == false } else emptyList()
+        val unsure = gone.filter { answers[it] == null || (answers[it] == false && !trusted) }
+        if (unsure.isNotEmpty()) retryAfterUnknown(unsure)
+        if (evidence == Evidence.REPORTED) noteReported(volume, version, unsure)
+        // Dopo l'ultima lettura (controllo puntuale, disco): accesso completo, stesso volume, stessa versione. Se no il giro non e' concluso.
+        if (!stillFullAccess() || !stillSameVolume(volume, version)) {
+          completed = false
+          if (evidence == Evidence.REPORTED) noteReported(volume, version, proven)
+          return
+        }
+        if (proven.isEmpty()) return
+        // La generazione e' cambiata dopo il controllo puntuale (una riga ripristinata, pubblicata): il controllo si rifa', una volta.
+        if (source.generation(volume) != generation) {
+          pending = proven
+          return@repeat
+        }
+        writeAbsent(volume, version, proven, evidence, generation)
+        return
+      }
+      // La generazione non sta ferma: niente si scrive adesso, si riprova.
+      retryAfterUnknown(pending)
+      if (evidence == Evidence.REPORTED) noteReported(volume, version, pending)
+    }
+
+    /** Le assenze provate, a lotti: ognuno una transazione, con accesso, volume, versione e generazione ricontrollati prima. */
+    private suspend fun writeAbsent(volume: String, version: String, proven: List<PhonePosition>, evidence: Evidence, generation: Long?) {
+      for ((index, chunk) in proven.chunked(config.vanishCap).withIndex()) {
+        val stop = when {
+          overBudget() || !stillFullAccess() || !stillSameVolume(volume, version) -> {
+            completed = false
+            true
+          }
+          source.generation(volume) != generation -> {
+            retryAfterUnknown(proven.drop(index * config.vanishCap))
+            true
+          }
+          else -> false
+        }
+        if (stop) {
+          if (evidence == Evidence.REPORTED) noteReported(volume, version, proven.drop(index * config.vanishCap))
+          return
+        }
+        val marked = catalog.markPhoneVanishedIfUnchanged(chunk.map { it.observed() })
+        vanished += marked
+        if (evidence == Evidence.OMITTED) reconcileVanished += marked
+        forgetSuspects(volume, chunk.map { it.key })
+      }
+    }
+
+    /**
+     * FS3-1: i vivi di controllo, che il disco deve vedere tutti perche' un suo "non c'e'" valga: fino a [PhoneSyncConfig.probeSample] nella
+     * cartella di ogni candidato (lo stesso contesto di visibilita') e, sparsi in ordine di chiave su tutto il volume, altri
+     * [PhoneSyncConfig.probeSample]; in un'ondata [PhoneSyncConfig.waveProbeSample] (che ci siano tutti lo garantisce [reconcile], che senza
+     * abbastanza vivi non prova un'ondata). Mai un candidato o una posizione annotata. Senza vivi affatto (l'ultima foto) la lista e' vuota:
+     * decide la cartella visibile del disco (FS3-5). [alive] sono le posizioni con l'`_ID` vivo (dal confronto); null per le cancellazioni
+     * dette, che li prendono dal catalogo.
+     */
+    private suspend fun controlsFor(volume: String, gone: List<PhonePosition>, alive: List<PhonePosition>?, wave: Boolean): List<PhonePosition> {
+      val noted = suspects[volume].orEmpty()
+      val excluded = gone.mapTo(HashSet()) { it.key }
+      val folders = gone.mapNotNull { folderOf(volume, it) }.distinct()
+      val pool: List<PhonePosition>
+      val sameFolder: List<PhonePosition>
+      if (alive != null) {
+        pool = alive.filter { it.key !in excluded && it.key !in noted }
+        val byFolder = pool.groupBy { folderOf(volume, it) }
+        sameFolder = folders.flatMap { byFolder[it].orEmpty().take(config.probeSample) }
+      } else {
+        val limit = config.probeSample + excluded.size + CONTROL_SLACK
+        sameFolder = folders.flatMap { f ->
+          reads.presentInFolder(f, limit).filter { it.key !in excluded && it.key !in noted }.take(config.probeSample)
+        }
+        pool = reads.presentOnVolume(volume, limit).filter { it.key !in excluded && it.key !in noted }
+      }
+      val need = if (wave) config.waveProbeSample else config.probeSample
+      return (sameFolder + spread(pool, need)).distinctBy { it.key }
+    }
+
+    private fun folderOf(volume: String, p: PhonePosition): String? = try {
+      Location.Phone(volume, p.place.relativePath, p.place.displayName).folderKey
+    } catch (e: IllegalArgumentException) {
+      null
+    }
+
+    /** FS3-7: una prova finita in "non so" (o con la generazione che non sta ferma) si riprova in primo piano, non prima del limite. */
+    private fun retryAfterUnknown(positions: List<PhonePosition>) {
+      val at = monotonicMs() + config.absenceUnknownRetry.inWholeMilliseconds
+      positions.forEach { unknownRetryAtMono[it.key] = at }
+    }
+
+    /** FS3-3: una cancellazione detta dal MediaStore senza prova attuale entra fra le annotazioni, vista adesso in questo processo. */
+    private suspend fun noteReported(volume: String, version: String, positions: List<PhonePosition>) {
+      if (positions.isEmpty()) return
+      val noted = notedFor(volume)
+      val now = clock()
+      val nowMono = monotonicMs()
+      val added = positions.filter { it.key !in noted }.distinctBy { it.key }
+      if (added.isEmpty()) return
+      added.forEach { noted[it.key] = Suspect(now, nowMono, runNumber, version) }
+      catalog.updatePhoneSuspects(volume, put = added.associate { it.key to PhoneSuspect(now, version) }, remove = emptyMap())
+      suspectsOnDisk = true
+    }
+
+    /**
+     * Recupero (FS-1, FS2-5, FS3-4): posizioni assenti il cui `_ID` (della stessa versione) e' di nuovo vivo, o nel cui posto c'e' di nuovo una
+     * riga con un `_ID` che il catalogo non conosce. Le righe si rileggono e la registrazione le rimette presenti (stesso media, dalle impronte).
+     * Gli `_ID` sconosciuti si guardano a scorrimento, al piu' [PhoneSyncConfig.recoverCap] per giro, dal piu' alto: il giro dopo riprende sotto
+     * l'ultimo (punto di ripresa su disco) e, finiti, ricomincia. Cosi' un ripristinato "sotto" migliaia di sconosciuti torna in pochi giri.
+     */
+    private suspend fun recover(volume: String, version: String, positions: List<PhonePosition>, liveSet: Set<Long>) {
+      val check = pointCheck ?: return
+      val absent = positions.filter { !it.present }
+      if (absent.isEmpty()) return
+      val sameId = absent.mapNotNullTo(HashSet()) { p -> p.idFor(version)?.takeIf { it in liveSet } }
+      val known = positions.mapNotNullTo(HashSet()) { it.idFor(version) }
+      val after = catalog.phoneRecoverCursor(volume)
+      val below = liveSet.filter { it !in known && (after == null || it < after) }.sortedDescending()
+      val unknown = below.take(config.recoverCap)
+      val next = if (below.size > unknown.size) unknown.lastOrNull() else null
+      if (next != after) catalog.savePhoneRecoverCursor(volume, next)
+      if (sameId.isEmpty() && unknown.isEmpty()) return
+      val absentKeys = absent.mapTo(HashSet()) { it.key }
+      val rows = check.stillThere(volume, sameId + unknown, emptyList())
+        .filter { !it.pending }
+        .map { it.row }
+        .distinctBy { it.id }
+        .filter { it.id in sameId || it.locationOrNull(version)?.key in absentKeys }
+      if (rows.isNotEmpty()) processBatch(version, rows, seenAt = clock(), ignoreGeneration = true) { null }
+    }
+
+    // --- Annotazioni ------------------------------------------------------------------------------------
+
+    /** Le annotazioni di [volume]: dalla memoria, o dal disco la prima volta che il processo incontra il volume (non ancora riviste). */
+    private suspend fun notedFor(volume: String): HashMap<LocationKey, Suspect> = suspects.getOrPut(volume) {
+      HashMap<LocationKey, Suspect>().apply {
+        catalog.phoneSuspects(volume).forEach { (key, s) -> put(key, Suspect(s.firstAtMillis, firstMono = null, seenRun = 0, msVersion = s.msVersion)) }
+      }
+    }
+
+    private suspend fun forgetSuspects(volume: String, keys: Collection<LocationKey>) {
+      val noted = suspects[volume] ?: return
+      keys.forEach { unknownRetryAtMono.remove(it) }
+      val removed = keys.mapNotNull { key -> noted.remove(key)?.let { key to PhoneSuspect(it.firstAt, it.msVersion) } }.toMap()
+      if (removed.isNotEmpty()) catalog.updatePhoneSuspects(volume, emptyMap(), removed)
+    }
+
+    private suspend fun forgetVolumeSuspects(volume: String) {
+      suspects.remove(volume)
+      if (suspectsOnDisk) catalog.clearPhoneSuspects(volume)
+    }
+
+    private suspend fun forgetAllSuspects() {
+      suspects.clear()
+      nextConfirmAtMono = null
+      unknownRetryAtMono.clear()
+      if (!suspectsOnDisk) return
+      try {
+        catalog.clearPhoneSuspects()
+        suspectsOnDisk = false
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        GalleryLog.w(TAG) { "annotazioni non tolte: ${e.javaClass.simpleName}" }
+      }
     }
 
     // --- Un lotto ----------------------------------------------------------------------------------------
@@ -822,9 +1188,18 @@ class DefaultPhoneLibrarySync(
   private companion object {
     const val TAG = "PhoneSync"
 
+    /** Pacchetto F (FS3-1): posizioni in piu' lette dal catalogo per scegliere i vivi di controllo (alcune possono essere annotate). */
+    const val CONTROL_SLACK = 50
+
+    /** I giri dopo i quali gli `_ID` si confrontano con la cache anche a generazione ferma: l'app torna davanti all'utente. */
+    val RETURN_REASONS: Set<SyncReason> = setOf(SyncReason.APP_START, SyncReason.FOREGROUND, SyncReason.MANUAL)
+
     val PRIMARY_FIRST: Comparator<String> = compareBy<String> { it != "external_primary" }.thenBy { it }
 
     private val RAW_MIMES = setOf("image/x-adobe-dng", "image/dng", "image/x-canon-cr2", "image/x-nikon-nef", "image/x-sony-arw")
+
+    /** Al piu' [n] elementi presi a intervalli regolari su tutta la lista. */
+    fun <T> spread(list: List<T>, n: Int): List<T> = if (list.size <= n) list else List(n) { list[it * list.size / n] }
 
     fun MediaStoreRow.locationOrNull(version: String): Location.Phone? = try {
       phoneLocation(version)

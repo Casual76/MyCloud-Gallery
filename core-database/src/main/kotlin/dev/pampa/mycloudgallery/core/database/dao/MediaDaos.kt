@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.database.dao
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -18,6 +19,23 @@ import dev.pampa.mycloudgallery.core.database.entity.PlaceCandidateRow
 import dev.pampa.mycloudgallery.core.database.entity.StatusCount
 import dev.pampa.mycloudgallery.core.database.entity.VersionMetadataEntity
 import kotlinx.coroutines.flow.Flow
+
+/**
+ * Pacchetto F (FS-1): una posizione del telefono come la vede il confronto degli `_ID` ([LocationDao.phonePositionsOnVolume]). Il percorso e il
+ * nome sono dati personali: niente nel `toString`.
+ */
+class PhonePositionRow(
+  @ColumnInfo(name = "location_key") val locationKey: String,
+  @ColumnInfo(name = "state") val state: String,
+  @ColumnInfo(name = "media_store_id") val mediaStoreId: Long?,
+  @ColumnInfo(name = "media_store_version") val mediaStoreVersion: String?,
+  @ColumnInfo(name = "relative_path") val relativePath: String?,
+  @ColumnInfo(name = "display_name") val displayName: String?,
+  @ColumnInfo(name = "last_seen_at") val lastSeenAt: Long,
+  @ColumnInfo(name = "observation_revision") val observationRevision: Long = 0,
+) {
+  override fun toString(): String = "PhonePositionRow($state)"
+}
 
 /**
  * I media e il loro grafo. Le scritture che toccano piu' tabelle passano da `MediaCatalog`, che le
@@ -218,6 +236,40 @@ interface LocationDao {
 
   @Query("SELECT * FROM media_location WHERE location_type = 'phone' AND volume = :volume AND state = 'present'")
   suspend fun presentOnVolume(volume: String): List<MediaLocationEntity>
+
+  /**
+   * Pacchetto F (FS-1): le posizioni del telefono di un volume, presenti e assenti (non le non raggiungibili), con le sole colonne del
+   * confronto degli `_ID` con il MediaStore: chi manca, chi ha un `_ID` di un'altra versione, chi e' assente e ricompare. Solo lettura.
+   */
+  @Query(
+    "SELECT location_key, state, media_store_id, media_store_version, relative_path, display_name, last_seen_at, " +
+      "COALESCE((SELECT value FROM catalog_meta WHERE `key` = 'phone_observation_revision:' || location_key), 0) AS observation_revision FROM media_location " +
+      "WHERE location_type = 'phone' AND volume = :volume AND state IN ('present', 'absent')",
+  )
+  suspend fun phonePositionsOnVolume(volume: String): List<PhonePositionRow>
+
+  @Query(
+    "SELECT location_key, state, media_store_id, media_store_version, relative_path, display_name, last_seen_at, " +
+      "COALESCE((SELECT value FROM catalog_meta WHERE `key` = 'phone_observation_revision:' || location_key), 0) AS observation_revision FROM media_location " +
+      "WHERE location_type = 'phone' AND volume = :volume AND media_store_id = :id AND media_store_version = :version AND state = 'present'",
+  )
+  suspend fun phonePositionsAtRow(volume: String, id: Long, version: String): List<PhonePositionRow>
+
+  /** Pacchetto F (FS3-1): fino a [limit] posizioni presenti del telefono nella cartella [folderKey], in ordine di chiave (i vivi di controllo). */
+  @Query(
+    "SELECT location_key, state, media_store_id, media_store_version, relative_path, display_name, last_seen_at, " +
+      "COALESCE((SELECT value FROM catalog_meta WHERE `key` = 'phone_observation_revision:' || location_key), 0) AS observation_revision FROM media_location " +
+      "WHERE folder_key = :folderKey AND location_type = 'phone' AND state = 'present' ORDER BY location_key LIMIT :limit",
+  )
+  suspend fun phonePresentInFolder(folderKey: String, limit: Int): List<PhonePositionRow>
+
+  /** Pacchetto F (FS3-1): fino a [limit] posizioni presenti del telefono del [volume], in ordine di chiave (i vivi di controllo). */
+  @Query(
+    "SELECT location_key, state, media_store_id, media_store_version, relative_path, display_name, last_seen_at, " +
+      "COALESCE((SELECT value FROM catalog_meta WHERE `key` = 'phone_observation_revision:' || location_key), 0) AS observation_revision FROM media_location " +
+      "WHERE location_type = 'phone' AND volume = :volume AND state = 'present' ORDER BY location_key LIMIT :limit",
+  )
+  suspend fun phonePresentOnVolume(volume: String, limit: Int): List<PhonePositionRow>
 
   /**
    * Le posizioni di un volume che una scansione completa iniziata a [epoch] non ha visto: presenti (o non

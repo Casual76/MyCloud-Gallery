@@ -131,8 +131,14 @@ class IdentityTest : PhoneSyncTestBase() {
     val id = mediaAt(row)!!
     catalog.setPersonalFlags(id, PersonalFlags(favorite = true, hidden = true))
 
+    // Oltre i due minuti dal confronto con cui si chiude la prima scansione: la riconciliazione rapida e' ammessa.
+    advance(3 * MINUTE)
     store.oneUiTrash(PRIMARY, 1)
     sync.syncNow(SyncReason.CONTENT_CHANGE)
+    // Pacchetto F (FS-1): annotata alla prima osservazione, assente alla seconda (il cestino di One UI non e' una riga in scrittura).
+    assertThat(stateAt(row)).isEqualTo(LocationState.PRESENT)
+    advance(6 * MINUTE)
+    sync.syncNow(SyncReason.FOREGROUND)
     assertThat(stateAt(row)).isEqualTo(LocationState.ABSENT)
     assertThat(mediaCount()).isEqualTo(2)
 

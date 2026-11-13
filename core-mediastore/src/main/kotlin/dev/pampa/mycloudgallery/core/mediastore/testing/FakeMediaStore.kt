@@ -6,9 +6,14 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreRow
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreSource
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
 import dev.pampa.mycloudgallery.core.mediastore.contract.RowType
+import dev.pampa.mycloudgallery.core.mediastore.sync.MediaStorePointCheck
 import dev.pampa.mycloudgallery.core.mediastore.sync.MediaStoreRowLookup
 import dev.pampa.mycloudgallery.core.mediastore.sync.OriginalBytesUnavailableException
+import dev.pampa.mycloudgallery.core.mediastore.sync.PhoneFileProbe
+import dev.pampa.mycloudgallery.core.mediastore.sync.PhonePlace
+import dev.pampa.mycloudgallery.core.mediastore.sync.PointRow
 import dev.pampa.mycloudgallery.core.metadata.contract.MediaBytes
+import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -34,7 +39,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
  * dipende da posto, dimensione e data di modifica. Lo stesso file rimesso uguale ha gli stessi byte; un file modificato
  * (altra dimensione o data) ha byte diversi.
  */
-class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
+class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup, MediaStorePointCheck, PhoneFileProbe {
 
   private sealed interface Content {
     val size: Long
@@ -220,6 +225,28 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
     val stored = store(volume, row, if (content != null) Explicit(content) else virtualFor(row))
     volume.pending -= row.id
     volume.trashed -= row.id
+    changed.tryEmit(Unit)
+    return stored
+  }
+
+  /**
+   * Pacchetto F: piu' righe in **una** transazione del MediaProvider (un invio di Quick Share, un salvataggio di WhatsApp), quindi con la stessa
+   * `GENERATION_MODIFIED`: la generazione sale di uno, le righe nuove sono di piu'. Contenuto virtuale, della dimensione dichiarata.
+   */
+  fun putTogether(rows: List<MediaStoreRow>): List<MediaStoreRow> {
+    require(rows.isNotEmpty() && rows.map { it.volume }.distinct().size == 1) { "Un lotto di un volume solo." }
+    val v = volumeMap.getValue(rows.first().volume)
+    v.generation++
+    val generation = if (supportsGenerations) v.generation else null
+    val stored = rows.map { row ->
+      withGeneration(row, generation).also {
+        v.rows[row.id] = it
+        v.content[row.id] = virtualFor(row)
+        v.sortKeys[row.id] = sortKey(it)
+        v.pending -= row.id
+        v.trashed -= row.id
+      }
+    }
     changed.tryEmit(Unit)
     return stored
   }
@@ -526,6 +553,60 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
     return visible(v).filter { it.id in wanted }
   }
 
+  /** Pacchetto F (FS2-2): se falso, la prova sul disco non sa niente (Android 10, volume non leggibile): risponde null. */
+  var diskReadable: Boolean = true
+
+  /** Pacchetto F: un disco "cieco" (permesso tolto sotto FUSE, montaggio a meta'): nessun file c'e'. */
+  var diskBlind: Boolean = false
+
+  /** Pacchetto F: i file che il disco nasconde (in scrittura di un'altra app sotto FUSE), anche se ci sono: rispondono "non c'e'" (ENOENT). */
+  val diskHidden: MutableSet<Long> = HashSet()
+
+  /** Pacchetto F (FS3-1): i nomi dei file su cui il disco risponde con un errore diverso da ENOENT (EACCES, EIO): la prova dice "non so". */
+  val diskDenied: MutableSet<String> = HashSet()
+
+  /** Pacchetto F: quante volte e' stata chiesta la prova sul disco. */
+  var fileProbes: Int = 0
+    private set
+
+  /**
+   * Il disco: un file c'e' se una riga (anche in scrittura, anche fuori dalla selezione) e' in quel posto (maiuscole e Unicode non contano,
+   * come su FUSE) e non e' in un cestino (il cestino di sistema rinomina il file, quello di Galleria lo sposta). Senza permessi FUSE nasconde
+   * tutto: "non c'e'" anche per i file vivi (il disco cieco, che i vivi di controllo devono scoprire).
+   */
+  override suspend fun exists(volume: String, place: PhonePlace): Boolean? {
+    fileProbes++
+    val v = volumeMap[volume] ?: return null
+    if (!diskReadable || !v.mounted) return null
+    if (place.displayName in diskDenied) return null
+    if (diskBlind || accessRevoked) return false
+    val wanted = canonicalKey(volume, place.relativePath, place.displayName) ?: return null
+    return v.rows.values.any {
+      it.id !in v.trashed && it.id !in v.oneUiTrashed && it.id !in diskHidden && canonicalKey(volume, it.relativePath, it.displayName) == wanted
+    }
+  }
+
+  /** Pacchetto F: quante volte e' stato chiesto il controllo puntuale prima di un'assenza. */
+  var pointChecks: Int = 0
+    private set
+
+  /**
+   * Come il MediaProvider: le righe con quegli `_ID` o in quei posti, anche `IS_PENDING`, mai cestinate; con la selezione, solo quella. Il posto
+   * si confronta come l'adattatore vero (FS3-1): sulla chiave canonica, maiuscole e NFC/NFD non contano.
+   */
+  override suspend fun stillThere(volume: String, ids: Collection<Long>, places: Collection<PhonePlace>): List<PointRow> {
+    pointChecks++
+    val v = mounted(volume)
+    if (accessRevoked) return emptyList()
+    val wantedIds = ids.toSet()
+    val wantedKeys = places.mapNotNullTo(HashSet()) { canonicalKey(volume, it.relativePath, it.displayName) }
+    val selection = v.selection
+    return v.rows.values
+      .filter { it.id !in v.trashed && it.id !in v.oneUiTrashed && (selection == null || it.id in selection) }
+      .filter { it.id in wantedIds || canonicalKey(volume, it.relativePath, it.displayName) in wantedKeys }
+      .map { PointRow(it, pending = it.id in v.pending) }
+  }
+
   override suspend fun open(row: MediaStoreRow): MediaBytes {
     opens++
     if (accessRevoked || openRevoked) throw SecurityException("Permessi ritirati.")
@@ -626,6 +707,13 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
 
   private companion object {
     fun sortKey(row: MediaStoreRow): Long = row.dateTakenMs ?: row.dateModifiedMs
+
+    /** La chiave canonica di un posto (quella del catalogo), o null se il posto non e' valido. */
+    fun canonicalKey(volume: String, relativePath: String, displayName: String): String? = try {
+      Location.Phone(volume, relativePath, displayName).key.value
+    } catch (e: IllegalArgumentException) {
+      null
+    }
 
     val ORDER: Comparator<MediaStoreRow> = compareByDescending<MediaStoreRow> { sortKey(it) }.thenByDescending { it.id }
 

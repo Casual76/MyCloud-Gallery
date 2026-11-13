@@ -49,6 +49,28 @@ data class CatalogChange(
  * ([MediaCatalog.recordAll], [MediaCatalog.confirmAllPresent], [MediaCatalog.markVanishedNotSeenSince]) o
  * da solo con [MediaCatalog.saveMediaStoreCursor].
  */
+/**
+ * Pacchetto F (FS-1): una posizione del telefono che il MediaStore non mostrava, annotata a [firstAtMillis] (orologio di riferimento) con la
+ * versione del MediaStore [msVersion]: diventa assente solo con una prova positiva e attuale (FS3), mai per la sola attesa e mai con un'altra
+ * versione.
+ */
+data class PhoneSuspect(val firstAtMillis: Long, val msVersion: String)
+
+/** Prefisso delle revisioni per posizione in catalog_meta (nessuna modifica dello schema). */
+const val PHONE_OBSERVATION_REVISION_PREFIX = "phone_observation_revision:"
+
+/**
+ * Pacchetto F (FS3-6): una posizione del telefono come l'ha letta la fotografia di un confronto: si segna assente solo se nel catalogo e' ancora
+ * esattamente cosi' ([MediaCatalog.markPhoneVanishedIfUnchanged]).
+ */
+data class ObservedPhonePosition(
+  val key: LocationKey,
+  val mediaStoreId: Long?,
+  val mediaStoreVersion: String?,
+  val lastSeenAtMillis: Long,
+  val observationRevision: Long = 0,
+)
+
 data class MediaStoreCursor(
   val volume: String,
   /** La `MediaStore.getVersion()` con cui valgono gli `_ID` in cache. */

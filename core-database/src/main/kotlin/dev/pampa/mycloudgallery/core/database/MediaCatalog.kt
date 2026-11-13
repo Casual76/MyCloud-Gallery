@@ -36,6 +36,7 @@ import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.LocationId
 import dev.pampa.mycloudgallery.core.model.LocationKey
 import dev.pampa.mycloudgallery.core.model.LocationState
+import dev.pampa.mycloudgallery.core.model.LocationType
 import dev.pampa.mycloudgallery.core.model.Media
 import dev.pampa.mycloudgallery.core.model.MediaGroupId
 import dev.pampa.mycloudgallery.core.model.MediaGroupKind
@@ -326,6 +327,68 @@ class MediaCatalog(
     }
   }
 
+  /**
+   * Pacchetto F (FS3-6): segna assenti, in **una** transazione, le posizioni del telefono che sono ancora esattamente come le ha lette la
+   * fotografia del confronto: presenti, stesso `_ID` in cache, stessa versione del MediaStore, stesso `last_seen_at`
+   * e stessa revisione persistita dell'osservazione. Una posizione toccata
+   * nel frattempo (riletta, salvata dall'app, ricollegata a un'altra riga) resta com'e', qualunque cosa dica l'orologio: l'ordine non si deduce
+   * dai millisecondi. Quante ne ha segnate.
+   */
+  suspend fun markPhoneVanishedIfUnchanged(observed: List<ObservedPhonePosition>): Int = write { tx ->
+    val now = clock()
+    var marked = 0
+    for (o in observed) {
+      val entity = locationDao.byKey(o.key.value) ?: continue
+      if (entity.locationType != LocationType.PHONE.code || entity.state != LocationState.PRESENT.code) continue
+      if (entity.mediaStoreId != o.mediaStoreId || entity.mediaStoreVersion != o.mediaStoreVersion || entity.lastSeenAt != o.lastSeenAtMillis) continue
+      if ((metaDao.get(PHONE_OBSERVATION_REVISION_PREFIX + o.key.value) ?: 0L) != o.observationRevision) continue
+      locationDao.update(LocationRules.vanished(entity.toDomain(), now).toEntity())
+      tx.touch(mediaOf(LocationId(entity.locationId)))
+      marked++
+    }
+    marked
+  }
+
+  /**
+   * Pacchetto F (FS3-4): da quale `_ID` (escluso) riprende lo scorrimento degli `_ID` vivi sconosciuti al catalogo sul [volume], o null: dal
+   * piu' alto. Su disco, in `catalog_meta`, cosi' un processo nuovo non riparte sempre dagli stessi.
+   */
+  suspend fun phoneRecoverCursor(volume: String): Long? = metaDao.get(RECOVER + volume)
+
+  /** Pacchetto F (FS3-4): salva (o con null toglie) il punto di ripresa di [phoneRecoverCursor]. */
+  suspend fun savePhoneRecoverCursor(volume: String, afterId: Long?): Unit = write {
+    if (afterId == null) metaDao.delete(RECOVER + volume) else metaDao.put(RECOVER + volume, afterId)
+  }
+
+  /**
+   * Pacchetto F (FS-1): le posizioni del telefono di [volume] che il MediaStore non mostrava, annotate dalla lettura del telefono e in attesa
+   * di una conferma (posto → quando e con quale versione del MediaStore). Su disco, in `catalog_meta`: un processo nuovo (la manutenzione
+   * notturna, la prossima apertura) riprende da li'. Nessuna tabella nuova: chiavi `phone_suspect:<volume>:<lunghezza>:<versione>:<posto>`.
+   */
+  suspend fun phoneSuspects(volume: String): Map<LocationKey, PhoneSuspect> {
+    val prefix = suspectPrefix(volume)
+    return metaDao.range(prefix, suspectEnd(volume)).mapNotNull { row ->
+      val rest = row.key.removePrefix(prefix)
+      val colon = rest.indexOf(':')
+      val length = rest.substring(0, colon.coerceAtLeast(0)).toIntOrNull() ?: return@mapNotNull null
+      if (colon + 1 + length + 1 > rest.length) return@mapNotNull null
+      val version = rest.substring(colon + 1, colon + 1 + length)
+      val key = rest.substring(colon + 1 + length + 1)
+      if (key.isEmpty()) null else LocationKey(key) to PhoneSuspect(row.value, version)
+    }.toMap()
+  }
+
+  /** Pacchetto F: aggiunge e toglie annotazioni di [volume] in una transazione. Non tocca l'indice della timeline. */
+  suspend fun updatePhoneSuspects(volume: String, put: Map<LocationKey, PhoneSuspect>, remove: Map<LocationKey, PhoneSuspect>): Unit = write {
+    remove.forEach { (key, suspect) -> metaDao.delete(suspectKey(volume, suspect.msVersion, key)) }
+    put.forEach { (key, suspect) -> metaDao.put(suspectKey(volume, suspect.msVersion, key), suspect.firstAtMillis) }
+  }
+
+  /** Pacchetto F: dimentica le annotazioni di [volume], o di tutti i volumi (accesso non piu' completo). */
+  suspend fun clearPhoneSuspects(volume: String? = null): Unit = write {
+    if (volume == null) metaDao.deleteRange(SUSPECT, SUSPECT_END) else metaDao.deleteRange(suspectPrefix(volume), suspectEnd(volume))
+  }
+
   /** Un posto non contiene piu' il file (riga sparita dal MediaStore, file non trovato sul NAS). */
   suspend fun markVanished(key: LocationKey): Boolean = write { tx ->
     val entity = locationDao.byKey(key.value) ?: return@write false
@@ -349,12 +412,20 @@ class MediaCatalog(
    *
    * [cap]: al massimo tante posizioni per giro, le assenti da piu' tempo prima (E-P9: un salto in avanti
    * dell'orologio non svuota la libreria in un colpo; la manutenzione quotidiana passa [cap]).
+   *
+   * Pacchetto F (FS-4): la posizione del telefono di un media "perso prima del backup" (`lost_before_backup`) **resta** finche' il problema
+   * c'e': e' la prova che il telefono l'ha avuto, e senza di lei il media e il suo avviso uscirebbero dalle righe del backup dopo 60 giorni
+   * (la pagina direbbe "Tutto al sicuro" per una foto mai salvata). Il problema se ne va da solo quando la foto torna o il media torna al
+   * sicuro; un'azione dell'utente per archiviarlo oggi non c'e' (FS2-7): finche' resta, resta anche la posizione.
    */
   suspend fun purgeExpiredAbsences(cap: Int = Int.MAX_VALUE): Int = write { tx ->
     require(cap > 0) { "Il tetto e' positivo." }
     val now = clock()
     val shortest = minOf(LocationRules.PHONE_ABSENCE_TOLERANCE_MILLIS, LocationRules.NAS_ABSENCE_TOLERANCE_MILLIS)
-    val expired = locationDao.absentSince(now - shortest).map { it.toDomain() }.filter { LocationRules.isExpired(it, now) }.take(cap)
+    val expired = locationDao.absentSince(now - shortest).map { it.toDomain() }
+      .filter { LocationRules.isExpired(it, now) }
+      .filterNot { it.isPhone && problemDao.get(mediaOf(it.id).value)?.code == LOST_BEFORE_BACKUP }
+      .take(cap)
     expired.forEach { tx.touch(mediaOf(it.id)) }
     expired.forEach { locationDao.delete(it.id.value) }
     expired.size
@@ -768,6 +839,7 @@ class MediaCatalog(
     require(stamp.size == version.fingerprint.size) { "La copia ha una dimensione diversa dalla versione." }
     require(verifiedAtMillis == null || version.fingerprint.fullHash != null) { "Si verifica solo contro un hash completo noto." }
     val existing = locationDao.byKey(location.key.value)
+    advancePhoneObservation(location)
     val id = if (existing == null) {
       locationDao.insert(locationEntity(0, versionId, location, stamp, LocationState.PRESENT, null, verifiedAtMillis, now))
     } else {
@@ -791,6 +863,7 @@ class MediaCatalog(
       verifiedAtMillis = verifiedAtMillis,
       lastSeenAtMillis = clock(),
     )
+    advancePhoneObservation(to)
     locationDao.update(moved.toEntity())
     val mediaId = mediaOf(locationId)
     tx.touch(mediaId)
@@ -2053,7 +2126,10 @@ class MediaCatalog(
     val decision = if (whenUndecided == WhenUndecided.KEEP_SEPARATE) keepSeparate(decided) else decided
     val target = apply(tx, decision, observation, seenAt ?: clock())
     // Una posizione del telefono registrata presente: se il media era "perso prima del backup" non lo e' piu' (refreshDerived).
-    if (target != null && observation.location is Location.Phone) tx.phoneSeen += target.second.value
+    if (target != null && observation.location is Location.Phone) {
+      advancePhoneObservation(observation.location)
+      tx.phoneSeen += target.second.value
+    }
     if (whenUndecided == WhenUndecided.KEEP_SEPARATE && target != null && !fingerprintAdopted) {
       undecidedCandidates(decided)?.let { groupProbableDuplicates(tx, target.first, observation, it) }
     }
@@ -2152,6 +2228,15 @@ class MediaCatalog(
     return true
   }
 
+  /** Contatore per chiave, nella stessa transazione della scrittura. Non si elimina: evita ABA anche dopo una ricreazione. */
+  private suspend fun advancePhoneObservation(location: Location) {
+    if (location !is Location.Phone) return
+    val key = PHONE_OBSERVATION_REVISION_PREFIX + location.key.value
+    val previous = metaDao.get(key) ?: 0L
+    check(previous < Long.MAX_VALUE) { "Revisione osservazione esaurita" }
+    metaDao.put(key, previous + 1)
+  }
+
   private suspend fun confirmOne(tx: Tx, phone: Location.Phone, stamp: FileStamp, seenAt: Long, ignoreGeneration: Boolean): Boolean {
     val entity = locationDao.byKey(phone.key.value) ?: return false
     val before = entity.toDomain()
@@ -2165,6 +2250,7 @@ class MediaCatalog(
       lastSeenAtMillis = seenAt,
     )
     locationDao.update(after.toEntity())
+    advancePhoneObservation(phone)
     tx.phoneSeen += entity.locationId
     if (before.location != after.location || before.state != after.state) {
       val mediaId = mediaOf(before.id)
@@ -2398,6 +2484,7 @@ class MediaCatalog(
     plan.changedLocations.forEach { location ->
       val updated = observed[location.id]?.let { location.copy(location = it, lastSeenAtMillis = seenAt ?: location.lastSeenAtMillis) }
         ?: location
+      advancePhoneObservation(updated.location)
       locationDao.update(updated.toEntity())
     }
     mediaDao.setCurrentVersion(before.id.value, plan.media.currentVersionId.value, now)
@@ -2854,6 +2941,20 @@ class MediaCatalog(
 
     /** Chiave di `catalog_meta`: la versione del dataset dei luoghi dei `place_id`. */
     const val PLACES_DATASET: String = "places_dataset"
+
+    /** Pacchetto F: il prefisso delle annotazioni della lettura del telefono in `catalog_meta` (`;` e' il carattere dopo `:`). */
+    private const val SUSPECT: String = "phone_suspect:"
+    private const val SUSPECT_END: String = "phone_suspect;"
+
+    /** Pacchetto F (FS3-4): il punto di ripresa del recupero per volume. */
+    private const val RECOVER: String = "phone_recover:"
+
+    private fun suspectPrefix(volume: String): String = "$SUSPECT$volume:"
+
+    private fun suspectEnd(volume: String): String = "$SUSPECT$volume;"
+
+    private fun suspectKey(volume: String, version: String, key: LocationKey): String =
+      "${suspectPrefix(volume)}${version.length}:$version:${key.value}"
 
     /**
      * Ogni colonna che punta a `media` (tabella.colonna). [merge] le gestisce tutte prima di

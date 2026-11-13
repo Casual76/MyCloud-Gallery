@@ -114,6 +114,7 @@ class PhoneLibraryDiagnostics(
     syncExport["fullScansCompleted"] = ExportValue.Num(snapshot.fullScansCompleted.toLong())
     syncExport["reconcileVanished"] = ExportValue.Num(snapshot.reconcileVanished.toLong())
     syncExport["purgedAbsences"] = ExportValue.Num(snapshot.purgedAbsences.toLong())
+    syncExport["suspectedAbsences"] = ExportValue.Num(snapshot.suspectedAbsences.toLong())
     syncExport["metaDone"] = ExportValue.Num(snapshot.metaDone)
     syncExport["metaFailed"] = ExportValue.Num(snapshot.metaFailed)
     items += when {

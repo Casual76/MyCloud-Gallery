@@ -317,6 +317,11 @@ class CatalogV2Test : CatalogTestBase() {
 
     // Dopo la tolleranza (60 giorni) la pulizia ha anche lei un tetto per giro (E-P9); i media restano.
     now += 61 * DAY
+    // Pacchetto F (FS-4): mai salvate, sono "perse prima del backup": finche' il problema c'e' le loro posizioni restano (la prova che il
+    // telefono le ha avute). Archiviato il problema, la pulizia riprende con il suo tetto.
+    assertThat(ids.drop(2).map { db.backupProblemDao().get(it.value)?.code }).containsExactly("lost_before_backup", "lost_before_backup", "lost_before_backup")
+    assertThat(catalog.purgeExpiredAbsences(cap = 2)).isEqualTo(0)
+    ids.drop(2).forEach { catalog.markBackupProblem(it, null) }
     assertThat(catalog.purgeExpiredAbsences(cap = 2)).isEqualTo(2)
     assertThat(catalog.purgeExpiredAbsences(cap = 2)).isEqualTo(1)
     assertThat(catalog.purgeExpiredAbsences(cap = 2)).isEqualTo(0)

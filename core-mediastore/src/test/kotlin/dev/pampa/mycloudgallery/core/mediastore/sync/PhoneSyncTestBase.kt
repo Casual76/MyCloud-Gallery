@@ -89,6 +89,12 @@ abstract class PhoneSyncTestBase {
     rereads = rereads,
   )
 
+  /** Il tempo passa per tutti e due gli orologi (pacchetto F: le annotazioni delle assenze, su disco, contano l'orologio di riferimento). */
+  protected fun advance(ms: Long) {
+    now += ms
+    mono += ms
+  }
+
   protected fun setAccess(media: MediaAccess, mediaLocation: Boolean = true) {
     access.set(PhoneAccess(media, mediaLocation, setOf(PRIMARY)))
     store.mediaLocationGranted = mediaLocation

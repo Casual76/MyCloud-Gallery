@@ -540,24 +540,35 @@ class GalleryGraph(
       }
 
       override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) {
-        val core = core()
-        writing { core.actions.setHidden(ids, on) }
-        nas?.organizer?.personalChanged()
-        // Fase 7 (P9, D22): il widget di prova (solo debug) si ridisegna subito; in release non fa niente.
-        DeveloperTools.hiddenChanged(context)
-        // Fase 7 (P13): copertine e conteggi degli album condivisi senza aspettare il giro dopo.
-        onHiddenChanged()
-        // Fase 9 (P13): lo scaffale dei ricordi e la notifica in tendina (`prune`, `revalidate`), l'indice dei punti e la mini-mappa, subito.
-        analysisVisibility.changed()
-        for (listener in hiddenListeners) listener()
-        // Fase 10 (P13, D5): chi deve sapere **quali** media (il widget li svuota subito dalla Home, poi ridisegna).
-        for (listener in hiddenIdListeners) listener(ids, on)
+        // XL-3: il nastro dell'analisi chiude **all'inizio** dell'azione (la foto esce dalla Libreria dentro `core.actions.setHidden`, prima di scrivere il catalogo) e
+        // riapre alla sua fine, riuscita o fallita o annullata: una transizione in corso, non un avviso dato a cose fatte.
+        analysisVisibility.transition {
+          val core = core()
+          writing {
+            hiddenWriteHook?.invoke()
+            core.actions.setHidden(ids, on)
+          }
+          nas?.organizer?.personalChanged()
+          // Fase 7 (P9, D22): il widget di prova (solo debug) si ridisegna subito; in release non fa niente.
+          DeveloperTools.hiddenChanged(context)
+          // Fase 7 (P13): copertine e conteggi degli album condivisi senza aspettare il giro dopo.
+          onHiddenChanged()
+          // Fase 9 (P13): lo scaffale dei ricordi e la notifica in tendina (`prune`, `revalidate`), l'indice dei punti e la mini-mappa, subito.
+          analysisVisibility.changed()
+          for (listener in hiddenListeners) listener()
+          // Fase 10 (P13, D5): chi deve sapere **quali** media (il widget li svuota subito dalla Home, poi ridisegna).
+          for (listener in hiddenIdListeners) listener(ids, on)
+        }
       }
 
       // Fase 7 (P9, E-H2): quanti degli elementi nascosti i familiari vedono ancora (area comune, album condivisi).
       override suspend fun familyStillSees(ids: Set<MediaId>): Int = core().actions.familyStillSees(ids)
     },
   )
+
+  /** Solo per le prove (XL-3): gira dentro "Nascondi"/"Mostra", dopo il lucchetto e prima di toccare Libreria e catalogo: una scrittura lenta. */
+  @Volatile
+  internal var hiddenWriteHook: (suspend () -> Unit)? = null
 
   /** Fase 7 (P13): dopo un "Nascondi" o "Mostra" fatto qui (lo lega `AlbumsModule`: gli album condivisi ricalcolano copertine e conteggi). */
   @Volatile
@@ -1072,7 +1083,9 @@ class GalleryGraph(
       details = CatalogMediaDetailsSource(catalog, database),
       phone = parts.phone(PhoneInputs(context, database, catalog, extractor, clock, metaPriority,
         visibilityChanged = { analysisVisibility.changed() },
-        contentChanged = { analysisVisibility.contentChanged() })),
+        contentChanged = { analysisVisibility.contentChanged() },
+        // XL-1: la rilettura che copre l'avviso e' quella che riapre il nastro (non un'istantanea nuova qualunque).
+        rereads = analysisVisibility)),
     )
     checkActive()
     coreFlow.value = core

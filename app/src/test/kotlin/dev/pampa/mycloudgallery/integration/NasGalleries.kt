@@ -44,7 +44,7 @@ internal object NasGalleries {
       val reads = RoomPhoneCatalogReads(inputs.database)
       val stats = PhoneLibraryStats()
       val meta = DefaultMetadataPass(store, store, access, inputs.catalog, reads, inputs.extractor, clock = inputs.clock, stats = stats)
-      val sync = DefaultPhoneLibrarySync(store, access, inputs.catalog, reads, clock = inputs.clock, stats = stats, metadataPass = meta, priority = inputs.priority, selectionChanged = inputs.visibilityChanged)
+      val sync = DefaultPhoneLibrarySync(store, access, inputs.catalog, reads, clock = inputs.clock, stats = stats, metadataPass = meta, priority = inputs.priority, selectionChanged = inputs.visibilityChanged, rereads = inputs.rereads)
       return PhoneLibrary(
         sync = sync,
         access = access,

@@ -20,6 +20,8 @@ import dev.pampa.mycloudgallery.core.library.testing.FakeTimelineRepository
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogHiddenMask
 import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
 import dev.pampa.mycloudgallery.core.library.contract.VisibleMedia
+import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
+import dev.pampa.mycloudgallery.core.library.index.TimelinePatcher
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogVisibleMedia
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.model.ContentKey
@@ -40,6 +42,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -77,6 +80,10 @@ class AnalysisVisibilityIntegrationTest {
     val scope: CoroutineScope,
     val engine: MutableStateFlow<AiLive>,
     val keyOf: Map<MediaId, ContentKey>,
+    /** La barriera di produzione (con `withBoundary` o `realAccess`), null se il nastro ascolta il segnale di prova. */
+    val boundary: AnalysisVisibilityBoundary?,
+    /** L'istantanea che la Libreria pubblica (`PartialAccessTimeline`): quella che la barriera confronta. */
+    val visibleSnapshot: StateFlow<TimelineSnapshot?>,
   ) {
     /** Tutte le anteprime del nastro. */
     fun thumbs(flow: AnalysisFlow): List<AnalysisThumb> = listOfNotNull(flow.current) + flow.recent + flow.next
@@ -93,6 +100,8 @@ class AnalysisVisibilityIntegrationTest {
     realAccess: AndroidPhoneAccessReader? = null,
     timelineScope: CoroutineScope = scope,
     boundaryReady: (AnalysisVisibilityBoundary) -> Unit = {},
+    /** XL: la barriera di produzione anche senza il lettore vero dei permessi (accesso e selezione sono quelli della prova). */
+    withBoundary: Boolean = false,
     wrapMask: (HiddenMask) -> HiddenMask = { it },
     wrapVisible: (VisibleMedia) -> VisibleMedia = { it },
   ): Rig {
@@ -125,9 +134,13 @@ class AnalysisVisibilityIntegrationTest {
         reader.onChange { boundary.changed() }
         boundaryReady(boundary)
       }
+    } ?: if (withBoundary) {
+      AnalysisVisibilityBoundary({ access.value == MediaAccess.FULL && selection.value == null }, { visibleTimeline.snapshot.value }).also(boundaryReady)
+    } else {
+      null
     }
     val page = AppAnalysisLive(engineFlow, visible, mask, keys, facts, scope, boundary ?: changes, stopTimeoutMillis)
-    return Rig(world, base, access, selection, changes, page, target, others, scope, engineFlow, keyOf)
+    return Rig(world, base, access, selection, changes, page, target, others, scope, engineFlow, keyOf, boundary, visibleTimeline.snapshot)
   }
 
   @Test
@@ -530,6 +543,7 @@ class AnalysisVisibilityIntegrationTest {
     val REVOKED = Any()
     val ENGINE = Any()
     val CHANGED = Any()
+    val NOTICED = Any()
   }
   @Test
   @Config(sdk = [34])
@@ -587,6 +601,113 @@ class AnalysisVisibilityIntegrationTest {
       observer.cancel()
     } finally {
       unblock.countDown()
+      producer.cancel()
+      derived.cancel()
+      derivedDispatcher.close()
+      world?.db?.close()
+    }
+  }
+
+  // ---- XL: avviso di Android -> rilettura finita -> istantanea aggiornata -> il nastro riapre (XS5-1, XS5-2) ----------------------------------------
+
+  /**
+   * XS5-1. Un avviso di Android toglie la foto P dal telefono: il nastro chiude **subito**. Un'istantanea gia' in viaggio, **precedente alla rilettura** e con P ancora dentro (e' un
+   * oggetto diverso da quello catturato all'avviso), arriva **dopo** l'avviso: il nastro **resta neutro**. La rilettura (partita dopo l'avviso) finisce e dichiara il suo `change_seq`;
+   * finche' l'istantanea pubblicata e' piu' indietro il nastro resta chiuso; quando arriva quella che tiene conto della rilettura (senza P) il nastro riapre e P non c'e'.
+   * Produttore su `Default`, la vista autorizzata su un altro thread, un osservatore separato su `Unconfined`; i controlli negativi leggono `canResolve()` e `.value` (nessuna attesa).
+   * Mutazioni: riaprire all'arrivo di un'istantanea qualunque (la barriera di prima); dichiarare una rilettura senza aspettare l'istantanea.
+   */
+  @Test
+  fun unIstantaneaVecchiaInViaggioDopoUnAvvisoNonRiapreEPoiLaFotoToltaNonCe() = runBlocking<Unit> {
+    val producer = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val derivedDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    val derived = CoroutineScope(SupervisorJob() + derivedDispatcher)
+    val watcher = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    var world: BuiltWorld? = null
+    try {
+      val rig = rig(WorldSpec.nothingHidden(), producer, timelineScope = derived, withBoundary = true)
+      world = rig.world
+      val boundary = checkNotNull(rig.boundary)
+      val log = java.util.concurrent.CopyOnWriteArrayList<Any>()
+      watcher.launch { rig.page.live.collect { log += it } }
+      val before = rig.next { rig.target in rig.shown(it) }
+      val s0 = rig.world.snapshot
+      val seq = s0.seq
+
+      // Android avvisa: la foto P e' stata tolta dal telefono. Il nastro e' neutro **nello stesso istante**.
+      log += NOTICED
+      boundary.contentChanged()
+      val neutral = rig.page.live.value
+      assertThat(rig.shown(neutral)).isEmpty()
+      assertThat(neutral.visibilityGeneration).isGreaterThan(before.visibilityGeneration)
+
+      // S1, in viaggio da prima della rilettura, ha ancora P: arriva dopo l'avviso ed e' la nuova istantanea della Libreria. Non riapre.
+      val s1 = TimelinePatcher.withSeq(s0, seq + 1)
+      assertThat(s1.indexOf(rig.target)).isAtLeast(0)
+      rig.base.publish(s1)
+      withTimeout(20_000) { rig.visibleSnapshot.first { it === s1 } }
+      rig.engine.value = rig.engine.value.copy(finished = 11)
+      assertThat(boundary.canResolve()).isFalse()
+      assertThat(rig.shown(rig.page.live.value)).isEmpty()
+
+      // La rilettura (partita dopo l'avviso) e' finita e ha scritto il catalogo fino a seq + 2; l'istantanea pubblicata e' ancora a seq + 1: il nastro resta chiuso.
+      boundary.rereadFinished(boundary.noticeOrder(), catalogSeq = seq + 2)
+      assertThat(boundary.canResolve()).isFalse()
+      rig.engine.value = rig.engine.value.copy(finished = 12)
+      assertThat(rig.shown(rig.page.live.value)).isEmpty()
+
+      // Arriva l'istantanea che tiene conto della rilettura: senza P. Il nastro riapre e P non c'e'.
+      val s2 = TimelinePatcher.withSeq(TimelinePatcher.remove(s0, setOf(rig.target)), seq + 2)
+      assertThat(s2.indexOf(rig.target)).isLessThan(0)
+      rig.base.publish(s2)
+      val reopened = rig.next { rig.shown(it).isNotEmpty() }
+      assertThat(boundary.canResolve()).isTrue()
+      assertThat(rig.shown(reopened)).doesNotContain(rig.target)
+      assertThat(rig.shown(reopened)).containsAtLeastElementsIn(rig.others)
+      // E in nessun momento dopo l'avviso un'emissione ha mostrato P.
+      val after = log.dropWhile { it !== NOTICED }.drop(1).filterIsInstance<AnalysisFlow>()
+      assertThat(after.filter { rig.target in rig.shown(it) }).isEmpty()
+    } finally {
+      watcher.cancel()
+      producer.cancel()
+      derived.cancel()
+      derivedDispatcher.close()
+      world?.db?.close()
+    }
+  }
+
+  /**
+   * XS5-2, il caso piu' comune: l'avviso e' ridondante (o la foto e' un file in sospeso), la rilettura finisce bene **senza cambiare niente** e non arriva nessuna istantanea nuova. Il
+   * nastro deve riaprire lo stesso, con le stesse foto: la riapertura dipende dalla rilettura finita, non da un oggetto nuovo. Produttore su `Default`, osservatore separato.
+   * Mutazione: la rilettura che riapre ma non avvisa chi ascolta (nessun ricalcolo: il nastro resta vuoto finche' il motore non avanza).
+   */
+  @Test
+  fun unaRiletturaFinitaSenzaCambiamentiRiapreIlNastroConLeStesseFoto() = runBlocking<Unit> {
+    val producer = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val derivedDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    val derived = CoroutineScope(SupervisorJob() + derivedDispatcher)
+    var world: BuiltWorld? = null
+    try {
+      val rig = rig(WorldSpec.nothingHidden(), producer, timelineScope = derived, withBoundary = true)
+      world = rig.world
+      val boundary = checkNotNull(rig.boundary)
+      val observer = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+      observer.launch { rig.page.live.collect {} }
+      val before = rig.next { rig.target in rig.shown(it) }
+      val snapshot = rig.visibleSnapshot.value
+
+      boundary.contentChanged()
+      assertThat(rig.shown(rig.page.live.value)).isEmpty()
+      assertThat(boundary.canResolve()).isFalse()
+
+      // La rilettura (partita dopo l'avviso) finisce senza toccare il catalogo: change_seq e istantanea sono quelli di prima.
+      boundary.rereadFinished(boundary.noticeOrder(), catalogSeq = rig.world.snapshot.seq)
+      val back = rig.next { rig.target in rig.shown(it) }
+      assertThat(rig.visibleSnapshot.value).isSameInstanceAs(snapshot)
+      assertThat(rig.shown(back)).containsAtLeastElementsIn(rig.shown(before))
+      assertThat(back.visibilityGeneration).isGreaterThan(before.visibilityGeneration)
+      observer.cancel()
+    } finally {
       producer.cancel()
       derived.cancel()
       derivedDispatcher.close()

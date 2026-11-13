@@ -31,6 +31,16 @@ class AnalysisVisibilityWiringTest {
   @Test fun ritiroHaLaBarrieraDiretta() {
     assertThat(gallery).contains("analysisVisibility.retire()")
   }
+  @Test fun laRiletturaFinitaArrivaAllaBarriera() {
+    // XL: sincronizzazione <- grafo del telefono <- ingressi dell'app <- barriera della galleria.
+    assertThat(core).contains("rereads = rereads")
+    assertThat(phone).contains("rereads = inputs.rereads")
+    assertThat(gallery).contains("rereads = analysisVisibility)")
+    assertThat(source("core-mediastore/src/main/kotlin/dev/pampa/mycloudgallery/core/mediastore/sync/DefaultPhoneLibrarySync.kt")).contains("declareReread(ledger, noticeOrder)")
+  }
+  @Test fun nascondiEUnaTransizioneDellaBarriera() {
+    assertThat(gallery).contains("analysisVisibility.transition {")
+  }
   @Test fun nascostiEProviderUsanoLaStessaStrada() {
     assertThat(gallery).contains("        analysisVisibility.changed()")
     assertThat(source("app/src/main/kotlin/dev/pampa/mycloudgallery/di/AiModule.kt")).contains("graph.scope, gallery.analysisVisibility)")

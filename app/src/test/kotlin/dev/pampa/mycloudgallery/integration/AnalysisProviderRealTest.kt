@@ -86,7 +86,7 @@ class AnalysisProviderRealTest {
       val listenersBefore = phone.gallery.analysisVisibility.listenerCount
       val watching = scope.launch { source.live.collect {} }
       val before = try {
-        withTimeout(30_000) { source.live.first { it.shownIds().isNotEmpty() } }
+        withTimeout(Attese.TETTO) { source.live.first { it.shownIds().isNotEmpty() } }
       } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
         val engine = phone.stack.ai.live.value
         val facts = phone.stack.ai.parts.facts
@@ -110,7 +110,7 @@ class AnalysisProviderRealTest {
 
       // Il "Nascondi" vero della Libreria: la foto esce dal nastro e la generazione sale (chi disegna chiude cio' che aveva).
       phone.gallery.actions.setHidden(setOf(id), true)
-      val after = withTimeout(30_000) { source.live.first { id !in it.shownIds() && it.visibilityGeneration > before.visibilityGeneration } }
+      val after = withTimeout(Attese.TETTO) { source.live.first { id !in it.shownIds() && it.visibilityGeneration > before.visibilityGeneration } }
       assertThat(after.shownIds()).doesNotContain(id)
       assertThat(after.visibilityGeneration).isGreaterThan(before.visibilityGeneration)
       watching.cancel()
@@ -148,7 +148,7 @@ class AnalysisProviderRealTest {
     val observer = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     try {
       observer.launch { source.live.collect {} }
-      val before = withTimeout(30_000) { source.live.first { it.shownIds().isNotEmpty() } }
+      val before = withTimeout(Attese.TETTO) { source.live.first { it.shownIds().isNotEmpty() } }
       shadow.denyPermissions(images, videos)
       if (partial) shadow.grantPermissions("android.permission.READ_MEDIA_VISUAL_USER_SELECTED")
       phone.gallery.refreshAccess()
@@ -180,7 +180,7 @@ class AnalysisProviderRealTest {
       AlbumsModule.visibleMedia(phone.gallery), GalleryModule.hiddenMask(phone.gallery),
     )
     scope.launch { source.live.collect {} }
-    val before = withTimeout(30_000) { source.live.first { it.shownIds().distinct().size == 2 } }
+    val before = withTimeout(Attese.TETTO) { source.live.first { it.shownIds().distinct().size == 2 } }
     return Strip(phone, store, source, before.shownIds().distinct())
   }
 
@@ -204,7 +204,7 @@ class AnalysisProviderRealTest {
       val report = strip.phone.gallery.core().phone.sync.syncNow(SyncReason.CONTENT_CHANGE)
       assertThat(report.completed).isTrue()
       assertThat(report.added + report.updated + report.vanished).isEqualTo(0)
-      val back = withTimeout(30_000) { strip.source.live.first { it.shownIds().distinct().size == 2 } }
+      val back = withTimeout(Attese.TETTO) { strip.source.live.first { it.shownIds().distinct().size == 2 } }
       assertThat(back.shownIds().distinct()).containsExactlyElementsIn(strip.ids)
       // Nessuna istantanea nuova: la riapertura viene dalla rilettura finita.
       assertThat(strip.phone.gallery.visibleTimeline.snapshot.value).isSameInstanceAs(snapshot)
@@ -232,7 +232,7 @@ class AnalysisProviderRealTest {
 
       val report = strip.phone.gallery.core().phone.sync.syncNow(SyncReason.CONTENT_CHANGE)
       assertThat(report.vanished).isEqualTo(1)
-      val back = withTimeout(30_000) { strip.source.live.first { it.shownIds().isNotEmpty() } }
+      val back = withTimeout(Attese.TETTO) { strip.source.live.first { it.shownIds().isNotEmpty() } }
       val kept = back.shownIds().distinct()
       assertThat(kept).hasSize(1)
       val gone = (strip.ids - kept.toSet()).single()
@@ -264,7 +264,7 @@ class AnalysisProviderRealTest {
         release.await()
       }
       val action = work.launch { strip.phone.gallery.actions.setHidden(setOf(hidden), true) }
-      withTimeout(30_000) { entered.await() }
+      withTimeout(Attese.TETTO) { entered.await() }
 
       // La scrittura e' lenta e non e' ancora cominciata: la foto e' ancora nella Libreria, ma il nastro e' gia' neutro e chiuso.
       assertThat(strip.phone.gallery.visibleTimeline.snapshot.value!!.indexOf(hidden)).isAtLeast(0)
@@ -273,8 +273,8 @@ class AnalysisProviderRealTest {
       assertThat(strip.source.live.value.visibilityGeneration).isGreaterThan(before.visibilityGeneration)
 
       release.complete(Unit)
-      withTimeout(30_000) { action.join() }
-      val after = withTimeout(30_000) { strip.source.live.first { it.shownIds().isNotEmpty() } }
+      withTimeout(Attese.TETTO) { action.join() }
+      val after = withTimeout(Attese.TETTO) { strip.source.live.first { it.shownIds().isNotEmpty() } }
       assertThat(after.shownIds().distinct()).containsExactly(kept)
       assertThat(strip.phone.gallery.analysisVisibility.canResolve()).isTrue()
     } finally {

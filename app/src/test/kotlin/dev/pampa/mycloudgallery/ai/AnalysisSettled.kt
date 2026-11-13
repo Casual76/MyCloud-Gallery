@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.ai
 
 import dev.pampa.mycloudgallery.feature.search.contract.AnalysisFlow
 import dev.pampa.mycloudgallery.feature.search.contract.AnalysisThumb
+import dev.pampa.mycloudgallery.integration.Attese
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
@@ -14,7 +15,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * (se il mondo non mostra niente il risolto e' uguale al neutro e non ne esce un'altra: vale quello).
  */
 internal suspend fun StateFlow<AnalysisFlow>.settled(slots: Int, graceMillis: Long = 700): AnalysisFlow {
-  val early = withTimeout(30_000) { first { it.recent.size == slots } }
+  val early = withTimeout(Attese.TETTO) { first { it.recent.size == slots } }
   if (early.shownIds().isNotEmpty()) return early
   return withTimeoutOrNull(graceMillis) { first { it != early && it.recent.size == slots } } ?: early
 }

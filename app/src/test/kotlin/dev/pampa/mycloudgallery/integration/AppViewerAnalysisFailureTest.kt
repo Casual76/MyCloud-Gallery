@@ -65,11 +65,11 @@ class AppViewerAnalysisFailureTest {
       val id = MediaId(UUID(0L, 77L).toString())
       val seen = CopyOnWriteArrayList<MediaAnalysis>()
       val watching = scope.launch { viewer.observe(id).collect { seen += it } }
-      withTimeout(10_000) { while (seen.isEmpty()) delay(20) }
+      withTimeout(Attese.TETTO) { while (seen.isEmpty()) delay(20) }
       assertThat(seen.last().askFailed).isFalse()
 
       viewer.analyzeNow(id)
-      withTimeout(10_000) { while (seen.none { it.askFailed }) delay(20) }
+      withTimeout(Attese.TETTO) { while (seen.none { it.askFailed }) delay(20) }
       // Chi ha toccato lo vede, e la richiesta non e' nel registro.
       assertThat(seen.last().askFailed).isTrue()
       assertThat(device.stack.ai.urgent.urgent()).isEmpty()

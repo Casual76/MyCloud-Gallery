@@ -78,13 +78,13 @@ class AnalysisPauseIntegrationTest {
 
     // La tappa fermata era una richiesta dell'utente: il motivo vero e' il suo ("serve il Wi-Fi"), non "risparmio energetico" del background.
     ai.noteStage(confirmation(), user)
-    val verdict = withTimeout(10_000) { ai.decision.first { it is RuleDecision.NeedsConfirmation } }
+    val verdict = withTimeout(Attese.TETTO) { ai.decision.first { it is RuleDecision.NeedsConfirmation } }
     assertThat(verdict).isInstanceOf(RuleDecision.NeedsConfirmation::class.java)
     assertThat(asked.last()).isEqualTo(user)
 
     // Una tappa finita non lascia niente di fermo: torna a valere il lavoro in background.
     ai.noteStage(StageOutcome.Finished(stats), user)
-    withTimeout(10_000) {
+    withTimeout(Attese.TETTO) {
       while (asked.last() !is WorkRequest.Background) kotlinx.coroutines.delay(50)
     }
     assertThat(asked.last()).isInstanceOf(WorkRequest.Background::class.java)
@@ -104,12 +104,12 @@ class AnalysisPauseIntegrationTest {
 
     // Una richiesta dell'utente e' ferma per le regole (stato generico "regole"): il motivo e' quello del verdetto di adesso.
     ai.noteStage(confirmation(), user)
-    withTimeout(10_000) { ai.decision.first { it == RuleDecision.Wait(WaitReason.NeedsPower) } }
+    withTimeout(Attese.TETTO) { ai.decision.first { it == RuleDecision.Wait(WaitReason.NeedsPower) } }
 
     // Cambia l'ambiente (il telefono e' in carica ma ora e' la batteria a mancare): nessuna emissione del motore, solo l'evento.
     verdict = RuleDecision.Wait(WaitReason.BatteryLow(10, 20))
     triggers.emit(Unit)
-    val updated = withTimeout(10_000) { ai.decision.first { it is RuleDecision.Wait && it.reason is WaitReason.BatteryLow } }
+    val updated = withTimeout(Attese.TETTO) { ai.decision.first { it is RuleDecision.Wait && it.reason is WaitReason.BatteryLow } }
     assertThat(updated).isInstanceOf(RuleDecision.Wait::class.java)
     watcher.cancel()
     watcherScope.cancel()
@@ -144,10 +144,10 @@ class AnalysisPauseIntegrationTest {
     // Qualcuno guarda (la nuvola, la pagina): si ascolta; smette di guardare: si smette.
     val watcherScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Unconfined)
     val watcher = watcherScope.launch { ai.analysis.collect {} }
-    withTimeout(10_000) { while (active.get() < 1) kotlinx.coroutines.delay(20) }
+    withTimeout(Attese.TETTO) { while (active.get() < 1) kotlinx.coroutines.delay(20) }
     assertThat(subscribed.get()).isEqualTo(1)
     watcher.cancel()
-    withTimeout(10_000) { while (active.get() > 0) kotlinx.coroutines.delay(20) }
+    withTimeout(Attese.TETTO) { while (active.get() > 0) kotlinx.coroutines.delay(20) }
     watcherScope.cancel()
   }
 
@@ -171,14 +171,14 @@ class AnalysisPauseIntegrationTest {
       }
       val device = rig.founder()
       val first = watcherScope.launch { device.stack.ai.analysis.collect {} }
-      withTimeout(10_000) { while (attempts.get() < 1) kotlinx.coroutines.delay(20) }
+      withTimeout(Attese.TETTO) { while (attempts.get() < 1) kotlinx.coroutines.delay(20) }
       kotlinx.coroutines.delay(500)
       assertThat(uncaught).isEmpty()
       first.cancel()
       kotlinx.coroutines.delay(100)
       // Un nuovo sguardo riprova (l'ascolto non resta rotto per sempre) e l'errore e' di nuovo confinato.
       val again = watcherScope.launch { device.stack.ai.analysis.collect {} }
-      withTimeout(10_000) { while (attempts.get() < 2) kotlinx.coroutines.delay(20) }
+      withTimeout(Attese.TETTO) { while (attempts.get() < 2) kotlinx.coroutines.delay(20) }
       kotlinx.coroutines.delay(500)
       assertThat(uncaught).isEmpty()
       again.cancel()

@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.ai
 import android.app.Application
 import dev.pampa.mycloudgallery.gallery.AnalysisVisibilityBoundary
 import dev.pampa.mycloudgallery.core.mediastore.android.AndroidPhoneAccessReader
+import dev.pampa.mycloudgallery.integration.Attese
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -90,7 +91,7 @@ class AnalysisVisibilityIntegrationTest {
 
     fun shown(flow: AnalysisFlow): Set<MediaId> = thumbs(flow).filterIsInstance<AnalysisThumb.Shown>().mapTo(HashSet()) { it.id }
 
-    suspend fun next(predicate: (AnalysisFlow) -> Boolean): AnalysisFlow = withTimeout(20_000) { page.live.first(predicate) }
+    suspend fun next(predicate: (AnalysisFlow) -> Boolean): AnalysisFlow = withTimeout(Attese.TETTO) { page.live.first(predicate) }
   }
 
   private suspend fun rig(
@@ -308,11 +309,11 @@ class AnalysisVisibilityIntegrationTest {
       val log = java.util.concurrent.CopyOnWriteArrayList<Any>()
       val collector = watcher.launch { rig.page.live.collect { log += it } }
       // La prima risoluzione (accesso pieno) e' ferma dentro il filtro finale.
-      withTimeout(20_000) { entered.await() }
+      withTimeout(Attese.TETTO) { entered.await() }
       log += REVOKED
       rig.access.value = MediaAccess.NONE
       // La revoca si vede **subito**, anche con una risoluzione ferma: esce lo stato neutro prima che la risoluzione di prima si sblocchi.
-      withTimeout(5_000) {
+      withTimeout(Attese.TETTO) {
         while (log.dropWhile { it !== REVOKED }.drop(1).none { it is AnalysisFlow }) kotlinx.coroutines.delay(10)
       }
       // Si sblocca la risoluzione di prima: la sua Shown non e' piu' autorizzata e non deve uscire.
@@ -412,7 +413,7 @@ class AnalysisVisibilityIntegrationTest {
       // Una risoluzione nuova (il motore avanza) si ferma dentro il filtro finale, sul latch.
       stuck.armed.set(true)
       rig.engine.value = AiLive(current = rig.keyOf.getValue(rig.others.first()), recent = listOf(rig.keyOf.getValue(rig.target)), next = emptyList())
-      withTimeout(20_000) { stuck.entered.await() }
+      withTimeout(Attese.TETTO) { stuck.entered.await() }
 
       // Il proprietario segnala il cambio: al ritorno del callback il valore condiviso e' gia' neutro e di una generazione nuova.
       log += FIRED
@@ -456,12 +457,12 @@ class AnalysisVisibilityIntegrationTest {
       val resolved = rig.next { f -> rig.target in rig.shown(f) }
       stuck.armed.set(true)
       rig.engine.value = AiLive(current = rig.keyOf.getValue(rig.others.first()), recent = listOf(rig.keyOf.getValue(rig.target)), next = emptyList())
-      withTimeout(20_000) { stuck.entered.await() }
+      withTimeout(Attese.TETTO) { stuck.entered.await() }
 
       log += REVOKED
       rig.access.value = MediaAccess.NONE
       // Il neutro arriva **senza** aspettare la risoluzione ferma (il latch e' ancora chiuso).
-      withTimeout(5_000) {
+      withTimeout(Attese.TETTO) {
         while (rig.shown(rig.page.live.value).isNotEmpty() || rig.page.live.value.visibilityGeneration <= resolved.visibilityGeneration) kotlinx.coroutines.delay(10)
       }
       assertThat(stuck.latch.count).isEqualTo(1L)
@@ -518,7 +519,7 @@ class AnalysisVisibilityIntegrationTest {
 
       stuck.armed.set(true)
       rig.engine.value = AiLive(current = rig.keyOf.getValue(rig.others.first()), recent = listOf(rig.keyOf.getValue(rig.target)), next = emptyList())
-      withTimeout(20_000) { stuck.entered.await() }
+      withTimeout(Attese.TETTO) { stuck.entered.await() }
 
       log += FIRED
       rig.changes.fire()
@@ -645,7 +646,7 @@ class AnalysisVisibilityIntegrationTest {
       val s1 = TimelinePatcher.withSeq(s0, seq + 1)
       assertThat(s1.indexOf(rig.target)).isAtLeast(0)
       rig.base.publish(s1)
-      withTimeout(20_000) { rig.visibleSnapshot.first { it === s1 } }
+      withTimeout(Attese.TETTO) { rig.visibleSnapshot.first { it === s1 } }
       rig.engine.value = rig.engine.value.copy(finished = 11)
       assertThat(boundary.canResolve()).isFalse()
       assertThat(rig.shown(rig.page.live.value)).isEmpty()

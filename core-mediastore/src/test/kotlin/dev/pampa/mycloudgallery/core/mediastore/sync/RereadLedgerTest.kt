@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.RereadLedger
 import dev.pampa.mycloudgallery.core.mediastore.contract.SyncReason
 import dev.pampa.mycloudgallery.core.model.LocationState
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -109,6 +110,32 @@ class RereadLedgerTest : PhoneSyncTestBase() {
     now += MINUTE
     assertThat(sync.syncNow(SyncReason.CONTENT_CHANGE).completed).isTrue()
     assertThat(ledger.declared.map { it.first }).containsExactly(1L)
+  }
+
+  @Test
+  fun unGiroFermatoDalBudgetNonDichiaraEQuelloDopoSi() = runBlocking<Unit> {
+    (1L..6L).forEach { store.put(photo(it, taken = T0 + it * MINUTE)) }
+    val ledger = Ledger(order = 1)
+    val sync = newSync(rereads = ledger)
+    // Budget finito prima del primo lotto: il giro si ferma (riprendibile) senza errori ne' pause, e non ha riletto tutto il telefono.
+    val stopped = sync.runWithin(SyncReason.WORKER, 0.milliseconds)
+    assertThat(stopped.completed).isFalse()
+    assertThat(ledger.declared).isEmpty()
+    // Senza limite il giro finisce e dichiara.
+    assertThat(sync.syncNow(SyncReason.CONTENT_CHANGE).completed).isTrue()
+    assertThat(ledger.declared.map { it.first }).containsExactly(1L)
+  }
+
+  @Test
+  fun unGiroPartitoConAccessoParzialeNonDichiaraAnchePoiTornatoCompleto() = runBlocking<Unit> {
+    (1L..2L).forEach { store.put(photo(it, taken = T0 + it * MINUTE)) }
+    val ledger = Ledger(order = 1)
+    setAccess(MediaAccess.PARTIAL)
+    store.setSelection(PRIMARY, setOf(1L))
+    // L'utente concede tutto proprio mentre il giro finisce (la pubblicazione della selezione avvisa): il giro ha riletto solo la selezione, non dichiara.
+    val sync = newSync(selectionChanged = { setAccess(MediaAccess.FULL) }, rereads = ledger)
+    assertThat(sync.syncNow(SyncReason.PERMISSION_CHANGED).completed).isTrue()
+    assertThat(ledger.declared).isEmpty()
   }
 
   @Test

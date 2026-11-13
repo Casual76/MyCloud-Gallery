@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupSummary
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.backup.contract.StopBy
 import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
+import dev.pampa.mycloudgallery.core.designsystem.design.BatteryGuardValue
 import dev.pampa.mycloudgallery.core.designsystem.testing.A11yAssertions
 import dev.pampa.mycloudgallery.core.designsystem.testing.A11yConfig
 import dev.pampa.mycloudgallery.feature.backup.first.FirstBackupSheet
@@ -63,13 +64,14 @@ class BackupAccessibilityTest : BackupComposeBase() {
     FirstBackupSheet(visible = true, summary = summary, onTonight = {}, onNow = {}, onDismissRequest = {})
   }
 
-  private fun settings(folders: FoldersState = FoldersState.Ready(BackupSamples.phoneFolders)) = SettingsUi(
+  private fun settings(folders: FoldersState = FoldersState.Ready(BackupSamples.phoneFolders), battery: BatteryGuardValue? = null) = SettingsUi(
     folders = folders,
     chosen = BackupSources(setOf(BackupSource.Camera, BackupSource.Screenshots, BackupSamples.phoneFolders.last().source)),
     deviceFolder = BackupSamples.deviceFolder,
     protectNewPhotos = true,
     rulesAvailable = true,
     editable = true,
+    battery = battery,
   )
 
   /** Mostra [content] e controlla le regole a testo 1,0 e poi a 2,0 sulla stessa scena (la base ha la scala come stato). */
@@ -116,6 +118,10 @@ class BackupAccessibilityTest : BackupComposeBase() {
 
   @Test fun impostazioni() = clean("impostazioni") { BackupSettingsScreen(state = settings(), actions = SettingsActions(), onBack = {}) }
 
+  /** Pacchetto B: il controllo del livello di batteria nelle impostazioni (batteria, cursore, due interruttori), a testo 1,0 e 2,0. */
+  @Test fun impostazioniConIlLivelloDellaBatteria() =
+    clean("impostazioni, livello di batteria") { BackupSettingsScreen(state = settings(battery = BatteryGuardValue(35, true, false)), actions = SettingsActions(), onBack = {}) }
+
   @Test
   fun impostazioniCartelleNonLeggibili() =
     clean("impostazioni, cartelle non leggibili") { BackupSettingsScreen(state = settings(FoldersState.Unavailable), actions = SettingsActions(), onBack = {}) }
@@ -147,6 +153,12 @@ class BackupAccessibilityTest : BackupComposeBase() {
   @Test
   fun atfPaginaInCorso() {
     show { Page(page(running)) }
+    composeRule.onRoot().checkRoboAccessibility()
+  }
+
+  @Test
+  fun atfImpostazioniConIlLivelloDellaBatteria() {
+    show { BackupSettingsScreen(state = settings(battery = BatteryGuardValue(35, true, false)), actions = SettingsActions(), onBack = {}) }
     composeRule.onRoot().checkRoboAccessibility()
   }
 

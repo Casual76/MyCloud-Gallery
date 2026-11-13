@@ -19511,3 +19511,40 @@ quelli di `release-run.ps1`, non riscritti. Vale solo per la 1.0.0 beta: per la 
 decisione dell'utente, i gusci della deduplica (FS-3) e, fra i noti: i dispositivi revocati che non si tolgono dall'elenco, la sezione Backup della
 Diagnostica che mostra solo titoli e codici, e le voci elencate in `docs/aggiornamenti-in-app.md`. La checklist lunga di `release.ps1` (due settimane
 di beta, giorno della famiglia, copia offline di `pampa.jks`) resta dell'utente.
+
+### Seconda beta, 1.1.0-beta.01: che cosa entra e che cosa resta noto (13 novembre 2026)
+
+**Che cosa entra** (ramo `integra/beta-2`, da `main` dopo la prima beta):
+- **Indicizzazione visibile** (pacchetto X, `feat/indice-visibile-ui`): pagina «Analisi delle foto» con barra di stato e nastro delle foto in analisi,
+  «Analizza ora» dal visore con precedenza in coda. Il nastro mostra le foto vere **per decisione dell'utente del 13/11** («Preferirei averlo
+  implementato […] critici severi non servono, basta una review che la cosa funzioni e non abbia problemi gravi, poi se ci sono piccoli bug minori e
+  improbabili non importa»). Dopo un avviso di Android il nastro si chiude e riapre solo quando la rilettura del telefono partita dopo l'avviso e'
+  finita bene e l'istantanea della Libreria l'ha raggiunta (`RereadLedger`); «Nascondi» lo tiene chiuso dall'inizio alla fine dell'azione.
+- **Analisi nel pannello della nuvola** (XN, `feat/indice-nuvola`): decisione dell'utente del 13/11, «dalla home non si vede, ma cliccando sul tasto del
+  backup indica stato indicizzazione con la barra e a quando risale l'ultima sincronizzazione dell'indice con il NAS». L'ora e' quella dell'ultima
+  pubblicazione dell'indice (`ai_own_head.published_at`): cambia solo quando esce una pubblicazione nuova.
+- **Media spariti dal telefono** (F, `fix/media-telefono-spariti`): una posizione del telefono diventa assente da sola solo se il controllo puntuale
+  del MediaStore non la trova **e** `Os.stat` risponde che il file non esiste; un «non so» non scrive mai. La protezione dalla nuova osservazione
+  concorrente e' una revisione crescente per posizione in `catalog_meta` (nessuna migrazione).
+- **Soglia di batteria a scelta** (B, `feat/soglia-batteria`): richiesta dell'utente del 13/11, «un livello di batteria sotto il quale non
+  indicizzare, non fare il backup, o entrambi». Un livello (5..80%, passi di 5, di serie 20%) e due interruttori. Decisione dell'orchestratore sui
+  lavori comuni: sincronizzazione dell'indice e preparazione si fermano per il livello solo con entrambi gli interruttori accesi; le anteprime in alta
+  qualita' seguono il livello finche' almeno uno e' acceso; con entrambi spenti la soglia non ferma niente. Di serie il comportamento e' quello di prima.
+
+**Come e' stato controllato.** F: cinque giri, ultimo critico 8/10 «si' con residui piccoli». B: tre giri, regole 8/10 «si' con residui piccoli»,
+interfaccia «si' con ritocchi piccoli». X: cinque giri con il critico di sicurezza fermo a 7/10 sul solo nastro; poi, per decisione dell'utente, la
+correzione del nastro (XL) e **una sola rilettura pratica**: «funziona, nessun problema grave». XN: nessun critico dedicato (solo presentazione).
+
+**Noti, accettati per questa beta:**
+- Nastro: uscendo dall'app, cancellando una foto con un'altra app e tornando sulla pagina dell'analisi, per 1-3 secondi la foto puo' vedersi ancora nel
+  nastro (come nella Libreria); su un telefono che non segnala le cancellazioni le si vede al massimo ogni due minuti; durante raffiche di avvisi il
+  nastro lampeggia; un «Nascondi» arrivato da un altro dispositivo non chiude il nastro in anticipo. Il componente del nastro non e' ancora riusabile
+  per il backup (richiesta dell'utente per dopo: elemento e porta delle miniature neutri in `core-designsystem`).
+- Media spariti: scadenze dei nuovi tentativi che possono restare in memoria fino al riavvio (FS5-1); un'eccezione puo' consumare l'ultimo nuovo
+  tentativo automatico, lasciando un fantasma piu' a lungo (FS5-2); i contatori in `catalog_meta` crescono nel tempo e il costo sul telefono non e'
+  misurato (FS5-3). Tutti nel verso prudente: mai una foto vera nascosta.
+- Soglia di batteria: la sostituzione del lavoro in attesa puo' annullare una corsa partita in quell'istante (riprende dal suo punto, puo' ripetere il
+  media in corso); con un preset che chiede la corrente la sostituzione puo' svegliare un lavoro che torna subito in attesa; Android non fa partire
+  quattro lavori dell'app a batteria molto scarica, indipendentemente dalla soglia (`PhoneSyncWorker`, `LibraryMaintenanceWorker`,
+  `FacesNightlyWorker`, widget): invariato per scelta; «Fai ora» e «Analizza ora» non sono fermati dalla soglia (era gia' cosi').
+- Non ancora provato su un telefono vero niente di tutto questo: lo si fa sull'S25 prima di pubblicare.

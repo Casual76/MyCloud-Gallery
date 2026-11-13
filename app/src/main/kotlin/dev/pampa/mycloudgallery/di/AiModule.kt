@@ -27,6 +27,7 @@ import dev.pampa.mycloudgallery.core.search.contract.Today
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerControl
 import dev.pampa.mycloudgallery.feature.search.contract.TextReadingAccepted
 import dev.pampa.mycloudgallery.ai.AppAnalysisLive
+import dev.pampa.mycloudgallery.ai.VisibilitySignal
 import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
 import dev.pampa.mycloudgallery.core.library.contract.VisibleMedia
 import kotlinx.coroutines.channels.awaitClose
@@ -103,12 +104,12 @@ object AiModule {
   @Provides
   @Singleton
   fun analysisLive(stack: AiStack, graph: AppGraph, gallery: GalleryGraph, visible: VisibleMedia, mask: HiddenMask): AnalysisLiveSource {
-    val hiddenChanges = callbackFlow {
-      val listener: () -> Unit = { trySend(Unit) }
-      gallery.hiddenListeners += listener
-      awaitClose { gallery.hiddenListeners -= listener }
-    }.conflate()
-    return AppAnalysisLive(stack.ai.live, visible, mask, stack.search.keys, stack.ai.parts.facts, graph.scope, hiddenChanges)
+    // XS3-3: un callback sincrono per i "Nascondi" della Libreria (chi li possiede avvisa **prima** di tornare), registrato solo mentre il nastro e' guardato.
+    val hiddenSignal = VisibilitySignal { onChange ->
+      gallery.hiddenListeners += onChange
+      AutoCloseable { gallery.hiddenListeners -= onChange }
+    }
+    return AppAnalysisLive(stack.ai.live, visible, mask, stack.search.keys, stack.ai.parts.facts, graph.scope, hiddenSignal)
   }
 
   @Provides @Singleton fun deviceProbe(stack: AiStack, graph: AppGraph): DeviceProbe {

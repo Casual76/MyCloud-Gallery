@@ -19,4 +19,20 @@ internal suspend fun StateFlow<AnalysisFlow>.settled(slots: Int, graceMillis: Lo
   return withTimeoutOrNull(graceMillis) { first { it != early && it.recent.size == slots } } ?: early
 }
 
+/** XS3-2: il segnale di visibilita' di prova: [fire] chiama i callback registrati, sul thread di chi lo chiama, **prima di tornare**. */
+internal class TestVisibilitySignal : VisibilitySignal {
+  private val listeners = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
+
+  val registered: Int get() = listeners.size
+
+  override fun register(onChange: () -> Unit): AutoCloseable {
+    listeners += onChange
+    return AutoCloseable { listeners -= onChange }
+  }
+
+  fun fire() {
+    for (listener in listeners) listener()
+  }
+}
+
 internal fun AnalysisFlow.shownIds() = (listOfNotNull(current) + recent + next).filterIsInstance<AnalysisThumb.Shown>().map { it.id }

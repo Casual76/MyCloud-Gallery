@@ -59,7 +59,7 @@ class AnalysisVisibilityIntegrationTest {
     val base: FakeTimelineRepository,
     val access: MutableStateFlow<MediaAccess>,
     val selection: MutableStateFlow<Set<MediaId>?>,
-    val changes: MutableSharedFlow<Unit>,
+    val changes: TestVisibilitySignal,
     val page: AppAnalysisLive,
     val target: MediaId,
     val others: List<MediaId>,
@@ -96,7 +96,7 @@ class AnalysisVisibilityIntegrationTest {
     val visibleTimeline = PartialAccessTimeline(base, selection, access, scope)
     val visible = wrapVisible(CatalogVisibleMedia(world.db, visibleTimeline.snapshot))
     val mask = CatalogHiddenMask(world.db)
-    val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
+    val changes = TestVisibilitySignal()
 
     val cellIds = world.libraryCells.toList()
     val target = cellIds.first()
@@ -185,7 +185,7 @@ class AnalysisVisibilityIntegrationTest {
 
       // Nascondo il media scrivendo nel catalogo (come un "Nascondi" o un dato arrivato dagli altri): l'istantanea non cambia ancora.
       rig.world.db.personalDao().upsert(MediaPersonalEntity(rig.target.value, favorite = false, hidden = true, updatedAt = 9_000_000_000_000L))
-      rig.changes.emit(Unit)
+      rig.changes.fire()
 
       val after = rig.next { f -> rig.target !in rig.shown(f) }
       assertThat(rig.shown(after)).doesNotContain(rig.target)
@@ -320,7 +320,7 @@ class AnalysisVisibilityIntegrationTest {
 
       // Un "Nascondi" appena fatto: la generazione sale e il primo stato dopo e' tutto neutro.
       log += CHANGED
-      rig.changes.emit(Unit)
+      rig.changes.fire()
       val afterChange = rig.next { f -> f.visibilityGeneration > advanced.visibilityGeneration }
       assertThat(afterChange.visibilityGeneration).isGreaterThan(advanced.visibilityGeneration)
       val firstAfter = log.dropWhile { it !== CHANGED }.drop(1).filterIsInstance<AnalysisFlow>().first()
@@ -335,7 +335,118 @@ class AnalysisVisibilityIntegrationTest {
     }
   }
 
+  // ---- XS3-2: l'invalidazione e' sincrona, anche con una risoluzione lenta che non coopera -----------------------------------------------------
+
+  /**
+   * Il filtro finale che **si blocca su un latch** (un'attesa che non si puo' annullare, non una sospensione) dopo aver risposto con l'accesso di prima: la risoluzione
+   * resta ferma e non coopera con la cancellazione. [armed] la accende.
+   */
+  private class StuckVisible(private val real: VisibleMedia) : VisibleMedia by real {
+    val armed = java.util.concurrent.atomic.AtomicBoolean(false)
+    val latch = java.util.concurrent.CountDownLatch(1)
+    val entered = kotlinx.coroutines.CompletableDeferred<Unit>()
+
+    override suspend fun visible(ids: Collection<MediaId>): Set<MediaId> {
+      val answer = real.visible(ids)
+      if (armed.get()) {
+        entered.complete(Unit)
+        latch.await()
+      }
+      return answer
+    }
+  }
+
+  /**
+   * Il segnale del proprietario della visibilita' (un "Nascondi" della Libreria vera, una revoca): **quando il callback torna**, `live.value` non ha nessuna `Shown` della
+   * generazione vecchia, mentre una risoluzione lenta e non cooperativa e' ancora ferma; chi rientra entro lo stop legge gia' il neutro; e quando la risoluzione vecchia
+   * si sblocca il suo risultato non arriva mai al valore condiviso (le uniche `Shown` che compaiono dopo sono della generazione nuova). Il nastro gira su un thread vero e chi
+   * osserva e' `Unconfined` in un altro scope (ogni emissione si vede). Mutazioni: il callback che non scrive il neutro (si limita a chiedere un ricalcolo); il controllo di
+   * generazione tolto dalla scrittura.
+   */
+  @Test
+  fun ilSegnaleInvalidaSubitoIlValoreCondivisoAncheConUnaRisoluzioneNonCooperativa() = runBlocking<Unit> {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val watcher = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    lateinit var stuck: StuckVisible
+    val rig = rig(WorldSpec.nothingHidden(), scope) { real -> StuckVisible(real).also { stuck = it } }
+    try {
+      val log = java.util.concurrent.CopyOnWriteArrayList<Any>()
+      val watching = watcher.launch { rig.page.live.collect { log += it } }
+      val resolved = rig.next { f -> rig.target in rig.shown(f) }
+
+      // Una risoluzione nuova (il motore avanza) si ferma dentro il filtro finale, sul latch.
+      stuck.armed.set(true)
+      rig.engine.value = AiLive(current = rig.keyOf.getValue(rig.others.first()), recent = listOf(rig.keyOf.getValue(rig.target)), next = emptyList())
+      withTimeout(20_000) { stuck.entered.await() }
+
+      // Il proprietario segnala il cambio: al ritorno del callback il valore condiviso e' gia' neutro e di una generazione nuova.
+      log += FIRED
+      rig.changes.fire()
+      val now = rig.page.live.value
+      assertThat(rig.shown(now)).isEmpty()
+      assertThat(now.visibilityGeneration).isGreaterThan(resolved.visibilityGeneration)
+      assertThat(stuck.latch.count).isEqualTo(1L) // la risoluzione vecchia e' ancora ferma: non si e' aspettata
+
+      // Chi rientra entro lo stop (nessun osservatore per un attimo, il produttore e' ancora attivo) legge gia' il neutro.
+      watching.cancel()
+      assertThat(rig.shown(rig.page.live.value)).isEmpty()
+      val again = watcher.launch { rig.page.live.collect { log += it } }
+
+      // Si sblocca la risoluzione vecchia: il suo risultato non arriva al valore condiviso. Le `Shown` che compaiono dopo sono solo della generazione nuova.
+      stuck.armed.set(false)
+      stuck.latch.countDown()
+      kotlinx.coroutines.delay(700)
+      val after = log.dropWhile { it !== FIRED }.drop(1).filterIsInstance<AnalysisFlow>()
+      assertThat(after).isNotEmpty()
+      assertThat(after.filter { rig.shown(it).isNotEmpty() }.map { it.visibilityGeneration }.filter { it <= resolved.visibilityGeneration }).isEmpty()
+      again.cancel()
+    } finally {
+      stuck.latch.countDown()
+      watcher.cancel()
+      scope.cancel()
+      rig.world.close()
+    }
+  }
+
+  /** La stessa cosa per la **revoca dei permessi** (l'istantanea autorizzata sparisce): il neutro arriva mentre la risoluzione non cooperativa e' ancora ferma, e dopo non esce nessuna `Shown`. */
+  @Test
+  fun laRevocaInvalidaIlValoreCondivisoMentreUnaRisoluzioneNonCooperativaEFerma() = runBlocking<Unit> {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val watcher = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    lateinit var stuck: StuckVisible
+    val rig = rig(WorldSpec.nothingHidden(), scope) { real -> StuckVisible(real).also { stuck = it } }
+    try {
+      val log = java.util.concurrent.CopyOnWriteArrayList<Any>()
+      watcher.launch { rig.page.live.collect { log += it } }
+      val resolved = rig.next { f -> rig.target in rig.shown(f) }
+      stuck.armed.set(true)
+      rig.engine.value = AiLive(current = rig.keyOf.getValue(rig.others.first()), recent = listOf(rig.keyOf.getValue(rig.target)), next = emptyList())
+      withTimeout(20_000) { stuck.entered.await() }
+
+      log += REVOKED
+      rig.access.value = MediaAccess.NONE
+      // Il neutro arriva **senza** aspettare la risoluzione ferma (il latch e' ancora chiuso).
+      withTimeout(5_000) {
+        while (rig.shown(rig.page.live.value).isNotEmpty() || rig.page.live.value.visibilityGeneration <= resolved.visibilityGeneration) kotlinx.coroutines.delay(10)
+      }
+      assertThat(stuck.latch.count).isEqualTo(1L)
+
+      stuck.armed.set(false)
+      stuck.latch.countDown()
+      kotlinx.coroutines.delay(700)
+      val after = log.dropWhile { it !== REVOKED }.drop(1).filterIsInstance<AnalysisFlow>()
+      assertThat(after).isNotEmpty()
+      assertThat(after.filter { rig.shown(it).isNotEmpty() }).isEmpty()
+    } finally {
+      stuck.latch.countDown()
+      watcher.cancel()
+      scope.cancel()
+      rig.world.close()
+    }
+  }
+
   private companion object {
+    val FIRED = Any()
     val REVOKED = Any()
     val ENGINE = Any()
     val CHANGED = Any()

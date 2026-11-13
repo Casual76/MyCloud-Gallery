@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -112,7 +113,7 @@ abstract class AnalysisViewerScreenshotBase(private val dark: Boolean, private v
   @Test
   fun tuttiISegni() = shoot("capsule-analisi") {
     val format = ViewerFormat(LocalContext.current)
-    val now = LocalContext.current.getString(R.string.analysis_now)
+    val now = stringResource(R.string.analysis_now)
     Column(
       Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(24.dp),
       verticalArrangement = Arrangement.spacedBy(18.dp),

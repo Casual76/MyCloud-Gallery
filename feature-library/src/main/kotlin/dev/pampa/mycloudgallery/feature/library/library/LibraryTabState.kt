@@ -244,6 +244,9 @@ class LibraryTabState(
   /** Pacchetto X: lo stato dell'analisi delle foto, una riga nel pannello della nuvola. Di default niente da dire. */
   val analysis: StateFlow<dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus> =
     MutableStateFlow(dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus.Idle),
+  /** Pacchetto XN: a quando risale l'ultima sincronizzazione dell'indice dell'analisi con il NAS. Di default la riga non c'e'. */
+  val indexSync: StateFlow<dev.pampa.mycloudgallery.core.library.contract.LibraryIndexSync> =
+    MutableStateFlow(dev.pampa.mycloudgallery.core.library.contract.LibraryIndexSync.NotApplicable),
 ) {
   /** Quante foto e quanti video ci sono nella vista (il riepilogo in fondo). Si ricontano a ogni vista nuova. */
   var photoCount: Int by mutableIntStateOf(photoCount)

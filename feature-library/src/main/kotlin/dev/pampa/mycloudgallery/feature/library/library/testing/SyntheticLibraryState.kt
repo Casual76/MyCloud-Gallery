@@ -87,6 +87,8 @@ fun syntheticLibraryState(
   commands: LibraryCommands = SyntheticCommands,
   /** Grafica XU: lo stato dell'analisi delle foto (la riga nel pop-up della nuvola). */
   analysis: dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus = dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus.Idle,
+  /** Pacchetto XN: l'ultima sincronizzazione dell'indice dell'analisi con il NAS (la riga «Sul NAS» della sezione dell'analisi). */
+  indexSync: dev.pampa.mycloudgallery.core.library.contract.LibraryIndexSync = dev.pampa.mycloudgallery.core.library.contract.LibraryIndexSync.NotApplicable,
 ): LibraryTabState {
   val holder = SyntheticHolder(SyntheticLibrary(seed = seed, count = count, placeIds = FakePlaceData.IDS, mix = mix))
   val repository = FakeTimelineRepository(edit(holder.library.snapshot))
@@ -139,6 +141,7 @@ fun syntheticLibraryState(
     nas = MutableStateFlow(nas),
     backup = MutableStateFlow(backup),
     analysis = MutableStateFlow(analysis),
+    indexSync = MutableStateFlow(indexSync),
   )
 }
 

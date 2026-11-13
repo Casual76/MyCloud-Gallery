@@ -1,7 +1,7 @@
 package dev.pampa.mycloudgallery.feature.library.library
 
 import com.google.common.truth.Truth.assertThat
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryCloudState
+import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisWait
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
@@ -9,46 +9,35 @@ import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import org.junit.Test
 
 /**
- * Pacchetto X: l'analisi delle foto nella nuvola — una riga di lavoro nel pannello, senza una seconda riga fissa nel piede. Il glifo
- * resta la salute di rete, NAS e backup: l'analisi in corso non deve nascondere "Tutto al sicuro"; un suo problema pero' si vede.
+ * Pacchetto XN (decisione dell'utente, 13/11/2026): **dalla Libreria l'analisi non si vede**. Non e' una voce della nuvola (non ne cambia lo stato,
+ * il titolo, i problemi, lo spazio; non la crea da sola): ha la sua sezione in fondo al pannello, presente **sempre quando l'analisi e' accesa** su
+ * questo telefono. Le prove sul pannello disegnato sono in `LibraryCloudAnalysisSectionTest`.
  */
 class LibraryCloudAnalysisTest {
 
-  private val upToDate = LibraryNasStatus.UpToDate(atNasMillis = 1_000L)
-  private val allSafe = LibraryBackupStatus.AllSafe(atNasMillis = 2_000L)
-  private val running = LibraryAnalysisStatus.Running(remaining = 300, etaMinutes = 40, ready = 700, total = 1_000)
-
   @Test
-  fun inCorsoEntraNelPannelloSenzaCambiareIlGlifo() {
-    val cloud = libraryCloud(null, upToDate, allSafe, running)
-    assertThat(cloud).isNotNull()
-    assertThat(cloud!!.state).isEqualTo(GalleryCloudState.Saved)
-    assertThat(cloud.activity.map { it::class.simpleName }).contains("Analysis")
-    assertThat(cloud.problems).isEmpty()
+  fun laSezioneCeConLAnalisiAccesa() {
+    val on = listOf(
+      LibraryAnalysisStatus.Running(remaining = 300, etaMinutes = 40, ready = 700, total = 1_000),
+      LibraryAnalysisStatus.Running(remaining = null, etaMinutes = null, ready = null, total = null),
+      LibraryAnalysisStatus.Queued(remaining = 3, ready = 1, total = 4),
+      LibraryAnalysisStatus.AllReady,
+      LibraryAnalysisStatus.Problem("AI_STORAGE_LOW"),
+      LibraryAnalysisStatus.ModelMissing,
+    ) + LibraryAnalysisWait.entries.map { LibraryAnalysisStatus.Paused(it, remaining = 9, ready = 1, total = 10) }
+    for (status in on) assertWithMessage(status.toString()).that(analysisInPanel(status)).isTrue()
   }
 
   @Test
-  fun daSolaTieneLaNuvola() {
-    val cloud = libraryCloud(null, LibraryNasStatus.Idle, LibraryBackupStatus.Idle, running)
-    assertThat(cloud).isNotNull()
-    assertThat(cloud!!.state).isEqualTo(GalleryCloudState.Syncing)
-    val paused = libraryCloud(null, LibraryNasStatus.Idle, LibraryBackupStatus.Idle, LibraryAnalysisStatus.Paused(LibraryAnalysisWait.THERMAL, 9, 1, 10))
-    assertThat(paused!!.state).isEqualTo(GalleryCloudState.Waiting)
-    assertThat(paused.activity).hasSize(1)
+  fun spentaOFattaAltroveLaSezioneNonCe() {
+    assertThat(analysisInPanel(LibraryAnalysisStatus.Idle)).isFalse()
+    assertThat(analysisInPanel(LibraryAnalysisStatus.Disabled)).isFalse()
+    assertThat(analysisInPanel(LibraryAnalysisStatus.NotHere(ready = 3, total = 4))).isFalse()
   }
 
   @Test
-  fun unProblemaSiVedeConLaSuaAzione() {
-    val cloud = libraryCloud(null, upToDate, allSafe, LibraryAnalysisStatus.Problem("AI_STORAGE_LOW"))
-    assertThat(cloud!!.state).isEqualTo(GalleryCloudState.Attention)
-    assertThat(cloud.problems.map { it::class.simpleName }).containsExactly("Analysis")
-    assertThat(cloud.withAction).hasSize(1)
-  }
-
-  @Test
-  fun prontaOSpentaNonDiceNiente() {
-    assertThat(libraryCloud(null, LibraryNasStatus.Idle, LibraryBackupStatus.Idle, LibraryAnalysisStatus.AllReady)).isNull()
-    assertThat(libraryCloud(null, LibraryNasStatus.Idle, LibraryBackupStatus.Idle, LibraryAnalysisStatus.NotHere(3, 4))).isNull()
+  fun laNuvolaDaSolaNonNasceDallAnalisi() {
+    // Senza rete da dire, NAS e backup la nuvola non c'e': l'analisi non la crea (prima la teneva accesa da sola).
     assertThat(libraryCloud(null, LibraryNasStatus.Idle, LibraryBackupStatus.Idle)).isNull()
   }
 }

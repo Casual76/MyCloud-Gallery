@@ -38,9 +38,12 @@ import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisWait
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
+import dev.pampa.mycloudgallery.core.library.contract.LibraryIndexSync
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.feature.library.grid.RegisterComponentActivity
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
+import java.time.LocalDate
+import java.time.ZoneId
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
@@ -50,9 +53,11 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Grafica XU (12/11/2026): la riga dell'analisi delle foto nel pop-up della nuvola, nella scena di produzione (pop-up alla radice, sopra la Libreria
- * e la pillola), come gli screenshot di G1/I4. In corso (anello, conto, tempo, frecce sull'anello), in coda, in pausa con il perche', un problema;
- * chiaro e scuro, telefono (360 x 780 dp, il S25) e tablet, piu' il testo a 1,3x. Scrive in docs/screenshots/beta-grafica/X-indice-visibile.
+ * Grafica XU (12/11/2026), rifatta nel Pacchetto XN (13/11, decisione dell'utente): la **sezione dell'analisi** in fondo al pop-up della nuvola, nella
+ * scena di produzione (pop-up alla radice, sopra la Libreria e la pillola). Il titolo e il tasto restano del backup («Tutto al sicuro»); sotto il filo
+ * l'anello indaco con il segno sull'arco, lo stato detto una volta, il conto o il perche', e la riga «Sul NAS». In corso, in coda, in pausa (caldo e
+ * fuori dall'orario), finita, ferma per un problema, mai sul NAS, solo sul telefono; chiaro e scuro, telefono (360 x 780 dp, il S25) e tablet, piu' il
+ * testo a 1,3x. Scrive in docs/screenshots/beta-grafica/X-indice-visibile.
  */
 internal abstract class LibraryCloudAnalysisScreenshotBase(private val dark: Boolean, private val device: String) {
 
@@ -69,12 +74,13 @@ internal abstract class LibraryCloudAnalysisScreenshotBase(private val dark: Boo
     override suspend fun nasSpace(): LibraryNasSpace = LibraryNasSpace.Ready(usedBytes = 1_250_000_000_000L, totalBytes = 3_600_000_000_000L)
   }
 
-  private fun shoot(name: String, analysis: LibraryAnalysisStatus, fontScale: Float = 1f) {
+  private fun shoot(name: String, analysis: LibraryAnalysisStatus, fontScale: Float = 1f, indexSync: LibraryIndexSync = LibraryIndexSync.At(todayAt(14, 1))) {
     val state = syntheticLibraryState(
-      nas = LibraryNasStatus.UpToDate(atNasMillis = System.currentTimeMillis()),
-      backup = LibraryBackupStatus.AllSafe(atNasMillis = System.currentTimeMillis()),
+      nas = LibraryNasStatus.UpToDate(atNasMillis = todayAt(3, 12)),
+      backup = LibraryBackupStatus.AllSafe(atNasMillis = todayAt(3, 12)),
       commands = CloudCommands,
       analysis = analysis,
+      indexSync = indexSync,
     )
     composeRule.setContent {
       MyCloudGalleryTheme(settings = EngineSettings(themeMode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT)) {
@@ -151,6 +157,47 @@ internal abstract class LibraryCloudAnalysisScreenshotBase(private val dark: Boo
     org.junit.Assume.assumeTrue(device == "telefono")
     shoot("analisi-problema", LibraryAnalysisStatus.Problem("AI_STORAGE_LOW"))
   }
+
+  /** XN: la pausa pianificata si vede, come stato tranquillo (il segno grigio della pausa, nessun colore d'allarme). */
+  @Test
+  fun fuoriDallOrario() {
+    org.junit.Assume.assumeTrue(device == "telefono")
+    shoot("analisi-fuori-orario", LibraryAnalysisStatus.Paused(LibraryAnalysisWait.NIGHT_WINDOW, remaining = 2_700, ready = 12_300, total = 15_000))
+  }
+
+  /** XN: finita, l'anello pieno e verde con la spunta comune. */
+  @Test
+  fun finita() = shoot("analisi-finita", LibraryAnalysisStatus.AllReady)
+
+  @Test
+  fun finitaTestoGrande() {
+    org.junit.Assume.assumeTrue(device == "telefono" && !dark)
+    shoot("analisi-finita", LibraryAnalysisStatus.AllReady, fontScale = LARGE_TEXT)
+  }
+
+  /** XN: l'indice non e' ancora andato sul NAS. */
+  @Test
+  fun maiSulNas() {
+    org.junit.Assume.assumeTrue(device == "telefono")
+    shoot("analisi-mai-sul-nas", LibraryAnalysisStatus.Running(remaining = 900, etaMinutes = null, ready = 100, total = 1_000), indexSync = LibraryIndexSync.Never)
+  }
+
+  /** XN: l'indice resta sul telefono, la riga «Sul NAS» non c'e'. */
+  @Test
+  fun soloSulTelefono() {
+    org.junit.Assume.assumeTrue(device == "telefono" && !dark)
+    shoot("analisi-solo-telefono", LibraryAnalysisStatus.Running(remaining = 900, etaMinutes = null, ready = 100, total = 1_000), indexSync = LibraryIndexSync.NotApplicable)
+  }
+
+  /** XN: un giorno passato, la data intera (lo stesso formato dell'ultimo giro del backup). */
+  @Test
+  fun sulNasGiorniFa() {
+    org.junit.Assume.assumeTrue(device == "telefono" && !dark)
+    val earlier = LocalDate.now().minusDays(2).atTime(3, 12).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    shoot("analisi-sul-nas-giorni-fa", LibraryAnalysisStatus.Queued(remaining = 2_700, ready = 12_300, total = 15_000), indexSync = LibraryIndexSync.At(earlier))
+  }
+
+  private fun todayAt(hour: Int, minute: Int): Long = LocalDate.now().atTime(hour, minute).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
   companion object {
     const val DIR = "../docs/screenshots/beta-grafica/X-indice-visibile"

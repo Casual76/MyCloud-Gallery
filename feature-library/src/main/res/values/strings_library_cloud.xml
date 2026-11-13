@@ -67,4 +67,12 @@
   <string name="library_cloud_analysis_wait_data_cap">Dati del mese finiti</string>
   <string name="library_cloud_analysis_wait_preparation">Foto in preparazione</string>
   <string name="library_cloud_analysis_wait_other">Aspetta il momento giusto</string>
+
+  <!-- Pacchetto XN (decisione dell'utente, 13/11): la sezione dell'analisi in fondo al pannello, sempre presente con l'analisi accesa. Finita;
+       senza modello; a quando risale l'ultima sincronizzazione dell'indice con il NAS (stesso formato dell'ultimo giro del backup). -->
+  <string name="library_cloud_analysis_all_ready">Tutte analizzate</string>
+  <string name="library_cloud_analysis_model_missing">Manca il modello</string>
+  <string name="library_cloud_index_today">Sul NAS: oggi alle %1$s</string>
+  <string name="library_cloud_index_day">Sul NAS: %1$s alle %2$s</string>
+  <string name="library_cloud_index_never">Non ancora sul NAS</string>
 </resources>

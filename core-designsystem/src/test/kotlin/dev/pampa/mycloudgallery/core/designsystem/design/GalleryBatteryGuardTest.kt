@@ -94,19 +94,19 @@ class GalleryBatteryGuardTest {
     show(level = 20)
 
     composeRule.onNodeWithText("20%", useUnmergedTree = true).assertExists()
-    composeRule.onNodeWithText("Backup e analisi si fermano sotto il 20%", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("Sotto questo livello si fermano backup e analisi", useUnmergedTree = true).assertExists()
   }
 
   @Test
   fun leFrasiDiStato_sonoQuattro_unaPerOgniCombinazione() {
     show(level = 60, forBackup = true, forAnalysis = false)
-    composeRule.onNodeWithText("Il backup si ferma sotto il 60%", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("Sotto questo livello si ferma il backup", useUnmergedTree = true).assertExists()
   }
 
   @Test
   fun soloAnalisi_dice_chiSiFerma() {
     show(level = 35, forBackup = false, forAnalysis = true)
-    composeRule.onNodeWithText("L’analisi si ferma sotto il 35%", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("Sotto questo livello si ferma l’analisi", useUnmergedTree = true).assertExists()
   }
 
   @Test

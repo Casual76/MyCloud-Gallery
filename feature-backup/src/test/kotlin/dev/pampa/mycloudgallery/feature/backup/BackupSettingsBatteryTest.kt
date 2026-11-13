@@ -41,7 +41,7 @@ class BackupSettingsBatteryTest : ComposeBackupTallTest() {
     show { BackupSettingsScreen(state = ui(BatteryGuardValue(60, forBackup = true, forAnalysis = false)), actions = SettingsActions(), onBack = {}) }
 
     composeRule.onNodeWithText("60%", useUnmergedTree = true).assertExists()
-    composeRule.onNodeWithText("Il backup si ferma sotto il 60%", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("Sotto questo livello si ferma il backup", useUnmergedTree = true).assertExists()
     composeRule.onNodeWithText("Analisi delle foto", useUnmergedTree = true).assertExists()
     // La figura della batteria non e' piu' fra i segni «Il backup parte con»: il controllo e' la riga della batteria.
     composeRule.onNodeWithText("Batteria", useUnmergedTree = true).assertDoesNotExist()

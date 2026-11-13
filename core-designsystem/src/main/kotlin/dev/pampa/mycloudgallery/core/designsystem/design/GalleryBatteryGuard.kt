@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -83,12 +84,15 @@ fun GalleryBatteryGuard(
   var dragged by remember(saved) { mutableIntStateOf(saved) }
   val shown = dragged
   val state = BatteryGuard.stateOf(forBackup, forAnalysis)
-  val stateText = when (state) {
-    BatteryGuardState.BOTH -> stringResource(R.string.battery_guard_state_both, shown)
-    BatteryGuardState.BACKUP_ONLY -> stringResource(R.string.battery_guard_state_backup, shown)
-    BatteryGuardState.ANALYSIS_ONLY -> stringResource(R.string.battery_guard_state_analysis, shown)
-    BatteryGuardState.NONE -> stringResource(R.string.battery_guard_state_none)
-  }
+  // Il numero sta una volta sola, grande, accanto alla batteria: la frase dice solo chi si ferma «sotto questo livello».
+  val stateText = stringResource(
+    when (state) {
+      BatteryGuardState.BOTH -> R.string.battery_guard_state_both
+      BatteryGuardState.BACKUP_ONLY -> R.string.battery_guard_state_backup
+      BatteryGuardState.ANALYSIS_ONLY -> R.string.battery_guard_state_analysis
+      BatteryGuardState.NONE -> R.string.battery_guard_state_none
+    },
+  )
   val title = stringResource(R.string.battery_guard_title)
   val levelWord = stringResource(R.string.battery_guard_level, shown)
 
@@ -101,13 +105,16 @@ fun GalleryBatteryGuard(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(Dimens.HeaderGap),
     ) {
-      BatteryGlyph(fraction = shown / PERCENT)
+      // Con tutti e due gli interruttori spenti il livello non decide niente per backup e analisi: la figura sfuma, come una riga disattivata.
+      val unused = Modifier.alpha(if (state == BatteryGuardState.NONE) Dimens.UnusedAlpha else 1f)
+      BatteryGlyph(fraction = shown / PERCENT, modifier = unused)
       Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Dimens.LineGap)) {
         Text(
           text = levelWord,
           style = MaterialTheme.typography.headlineMedium.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Bold),
           color = MaterialTheme.colorScheme.onSurface,
           maxLines = 1,
+          modifier = unused,
         )
         Text(
           text = stateText,
@@ -190,9 +197,11 @@ private fun GuardSwitch(label: String, icon: @Composable () -> Unit, checked: Bo
 @Composable
 private fun BatteryGlyph(fraction: Float, modifier: Modifier = Modifier) {
   val reduced = LocalFluidMotionPolicy.current.reducedMotion
-  val filled = remember { Animatable(fraction) }
-  LaunchedEffect(fraction, reduced) {
-    if (reduced) filled.snapTo(fraction) else filled.animateTo(fraction, FluidMotion.smooth())
+  // Un livello basso ma non nullo (5%) deve vedersi: la cella non e' mai piu' sottile di un filo.
+  val target = if (fraction > 0f) fraction.coerceAtLeast(Dimens.MinFill) else 0f
+  val filled = remember { Animatable(target) }
+  LaunchedEffect(target, reduced) {
+    if (reduced) filled.snapTo(target) else filled.animateTo(target, FluidMotion.smooth())
   }
   val outline = MaterialTheme.colorScheme.onSurfaceVariant
   val body = ContinuousCornerShape(FluidRadius.Small)
@@ -222,7 +231,9 @@ private object Dimens {
   val HeaderPadding = 16.dp
   val HeaderGap = 16.dp
   val LineGap = 4.dp
-  val SliderInset = 8.dp
+  val SliderInset = 16.dp
+  const val UnusedAlpha = 0.4f
+  const val MinFill = 0.07f
   val BatteryWidth = 64.dp
   val BatteryHeight = 32.dp
   val BatteryStroke = 2.dp

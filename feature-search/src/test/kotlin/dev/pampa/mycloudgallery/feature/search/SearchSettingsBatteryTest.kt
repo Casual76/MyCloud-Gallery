@@ -58,7 +58,7 @@ class SearchSettingsBatteryTest {
     show(battery = BatteryGuardValue(levelPercent = 45, forBackup = false, forAnalysis = true))
 
     rule.onNodeWithText("45%", useUnmergedTree = true).assertExists()
-    rule.onNodeWithText("L’analisi si ferma sotto il 45%", useUnmergedTree = true).assertExists()
+    rule.onNodeWithText("Sotto questo livello si ferma l’analisi", useUnmergedTree = true).assertExists()
   }
 
   @Test

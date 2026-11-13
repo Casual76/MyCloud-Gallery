@@ -162,6 +162,19 @@ class BackupAccessibilityTest : BackupComposeBase() {
     composeRule.onRoot().checkRoboAccessibility()
   }
 
+  /** Con tutti e due gli interruttori spenti la batteria e il numero sfumano: devono restare leggibili per il controllo automatico. */
+  @Test
+  fun atfImpostazioniConIlLivelloDellaBatteriaESpenti() {
+    show { BackupSettingsScreen(state = settings(battery = BatteryGuardValue(20, false, false)), actions = SettingsActions(), onBack = {}) }
+    composeRule.onRoot().checkRoboAccessibility()
+  }
+
+  @Test
+  fun atfImpostazioniConIlLivelloDellaBatteriaESpentiAlBuio() {
+    show(dark = true) { BackupSettingsScreen(state = settings(battery = BatteryGuardValue(20, false, false)), actions = SettingsActions(), onBack = {}) }
+    composeRule.onRoot().checkRoboAccessibility()
+  }
+
   @Test
   fun atfImpostazioni() {
     show { BackupSettingsScreen(state = settings(), actions = SettingsActions(), onBack = {}) }

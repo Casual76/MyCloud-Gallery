@@ -10,9 +10,9 @@
   <string name="battery_guard_analysis">Analisi delle foto</string>
   <string name="battery_guard_on">Acceso</string>
   <string name="battery_guard_off">Spento</string>
-  <string name="battery_guard_state_both">Backup e analisi si fermano sotto il %1$d%%</string>
-  <string name="battery_guard_state_backup">Il backup si ferma sotto il %1$d%%</string>
-  <string name="battery_guard_state_analysis">L’analisi si ferma sotto il %1$d%%</string>
+  <string name="battery_guard_state_both">Sotto questo livello si fermano backup e analisi</string>
+  <string name="battery_guard_state_backup">Sotto questo livello si ferma il backup</string>
+  <string name="battery_guard_state_analysis">Sotto questo livello si ferma l’analisi</string>
   <string name="battery_guard_state_none">Backup e analisi non si fermano</string>
   <string name="battery_guard_info_label">E con il cavo?</string>
   <string name="battery_guard_info_detail">Il livello conta solo a batteria: con il cavo collegato il lavoro parte sempre. «Fai ora» e «Analizza adesso» partono comunque. Indice condiviso e anteprime si fermano sempre sotto il livello.</string>

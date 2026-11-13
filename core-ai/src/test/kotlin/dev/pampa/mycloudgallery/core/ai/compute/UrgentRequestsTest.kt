@@ -106,6 +106,47 @@ class UrgentRequestsTest {
   }
 
   /**
+   * XS3-1 (equita' dell'ordinario, via locale): con richieste **nuove a ogni confine di lotto** le richieste davanti non rinviano l'ordinario fino al budget. Dopo due lotti
+   * di soli media chiesti il lotto dopo e' ordinario: fra i primi sette media lavorati ce ne sono almeno due **mai chiesti** (oltre al primo, lavorato prima di ogni richiesta).
+   * Garanzia: almeno un lotto ogni tre. Mutazione: ordinare sempre le richieste davanti (`orderedFair` che restituisce `ordered`).
+   */
+  @Test
+  fun conRichiesteNuoveAOgniConfineUnLottoOgniTreVaAllOrdinarioSuTelefono() = runTest {
+    val f = TestFamily()
+    val phone = f.anna()
+    phone.restart(AiComputeConfig(batch = 1, reducedBatch = 1, localBatchLimit = 20))
+    val keys = (1..10).map { i ->
+      val key = f.nas.newKey()
+      phone.phoneMedia[key] = MediaKind.PHOTO to "dopo $i"
+      key
+    }
+    // A ogni media lavorato (i primi sei) arriva una richiesta nuova, per un media ancora da fare: dal decimo in giu'. Mai chiesti: 1, 2, 3 e 4.
+    phone.images.onImage = { n -> if (n in 1..6) phone.urgentKeys += keys[10 - n] }
+
+    phone.engine.run(AiScope.PhoneOnly, forever)
+
+    val order = numbersOf(phone.images.order, "dopo")
+    assertThat(order).containsNoDuplicates()
+    assertThat(order.take(7).count { it in 2..4 }).isAtLeast(2)
+  }
+
+  /** Lo stesso, **dentro un'unita'** del NAS: i media di una stessa parte (fino a 200) non aspettano il budget per colpa di richieste che arrivano a ogni lotto. */
+  @Test
+  fun conRichiesteNuoveAOgniConfineUnLottoOgniTreVaAllOrdinarioInUnUnita() = runTest {
+    val f = TestFamily()
+    val keys = (1..10).map { f.nas.add(common, concepts = "unita $it") }
+    val phone = f.anna()
+    phone.restart(AiComputeConfig(batch = 1, reducedBatch = 1))
+    phone.images.onImage = { n -> if (n in 1..6) phone.urgentKeys += keys[10 - n] }
+
+    phone.engine.run(AiScope.Share(common), forever)
+
+    val order = numbersOf(phone.images.order, "unita")
+    assertThat(order).containsNoDuplicates()
+    assertThat(order.take(7).count { it in 2..4 }).isAtLeast(2)
+  }
+
+  /**
    * XS2-2: un'unita' in cui ogni media e' rimasto in attesa (l'anteprima non c'e') lo dice al selettore (`STALLED`), un'unita' che ha dato lavoro no. Mutazione:
    * chiudere sempre con `Completed`.
    */

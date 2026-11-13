@@ -101,20 +101,29 @@ class LeasedWorkUnits(
     val visible = priority.visible.value
     if (published.refresh(share) is RemoteResult.Failed) stats.refreshFailures.incrementAndGet()
     val requested = if (visible.isNotEmpty()) source.monthsOf(share, pass, visible) else emptyList()
-    val requestedSet = requested.toHashSet()
     val ordered = source.months(share, pass)
     val leasing = rules.blockFor(share) == null && identity.writableRegistry() != null
     if (!alternatePriority) {
       val months = LinkedHashSet<String>()
       months += requested.take(maxPriorityMonthsPerCall)
       months += ordered
-      return claimFrom(share, pass, months.take(maxMonthsPerCall), leasing, visible, requestedSet)
+      return claimFrom(share, pass, months.take(maxMonthsPerCall), leasing, visible, requested.toHashSet())
     }
-    // Due classi: i mesi delle richieste (quelli senza lavoro per ultimi) e i mesi ordinari **senza** i mesi delle richieste; gli altri mesi di richieste
+    // XS3-1: la classe delle richieste e' fatta da **tutte** le richieste ([UnitPriority.requested]), non solo da quelle che hanno il turno ([visible]: al piu' 16 nel
+    // registro vero). Se la classe ordinaria escludesse solo i mesi delle richieste che hanno il turno, gli altri mesi di richieste (fino a 64) riempirebbero la finestra
+    // dei mesi ordinari e il mese vecchio con il lavoro pronto resterebbe fuori.
+    val everyRequest = priority.requested.value + visible
+    val allRequested = when {
+      everyRequest.isEmpty() -> emptyList()
+      everyRequest == visible -> requested
+      else -> source.monthsOf(share, pass, everyRequest)
+    }
+    val requestedSet = allRequested.toHashSet()
+    // Due classi: i mesi delle richieste (quelli senza lavoro per ultimi) e i mesi ordinari **senza** i mesi di nessuna richiesta; gli altri mesi di richieste
     // oltre la quota stanno in fondo alla classe degli ordinari (si servono se non c'e' altro).
-    val requestedOrder = deferStalled(share, pass, requested)
-    val priorityMonths = requestedOrder.take(maxPriorityMonthsPerCall)
-    val leftover = requestedOrder.drop(maxPriorityMonthsPerCall).take(maxPriorityMonthsPerCall)
+    val priorityMonths = deferStalled(share, pass, requested).take(maxPriorityMonthsPerCall)
+    val inQuota = priorityMonths.toHashSet()
+    val leftover = deferStalled(share, pass, allRequested.filter { it !in inQuota }).take(maxPriorityMonthsPerCall)
     val ordinaryOnly = if (requestedSet.isEmpty()) ordered else ordered.filter { it !in requestedSet }
     val ordinaryMonths = ordinaryOnly.take(maxMonthsPerCall) + leftover
     val ordinaryFirst = requestedSet.isNotEmpty() && preferOrdinary

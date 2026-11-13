@@ -116,7 +116,15 @@ sealed interface UnitOutcome {
  * (D12, proposta 11).
  */
 interface UnitPriority {
+  /** Le chiavi che passano **davanti** (e a turno): sullo schermo, o le poche richieste che hanno il loro turno adesso. Dice la quota e l'ordine del servizio prioritario. */
   val visible: StateFlow<Set<Long>>
+
+  /**
+   * XS3-1 (Pacchetto XF, giro 3): l'**insieme completo** delle chiavi che l'utente ha chiesto (sono di piu' di [visible]: il registro ne fa passare davanti al piu' 16 e
+   * le altre aspettano il loro turno). Dice **quali mesi appartengono alla classe delle richieste**: un mese di una richiesta che aspetta non e' un mese ordinario, e non
+   * deve riempire la finestra dei mesi ordinari al posto del mese vecchio con il lavoro pronto. Di serie coincide con [visible] (chi ha solo quelle: la preparazione, le prove).
+   */
+  val requested: StateFlow<Set<Long>> get() = visible
 }
 
 /**

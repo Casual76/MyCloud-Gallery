@@ -60,6 +60,15 @@ object SearchSamples {
     indexer = settingsIndexer.indexer.copy(status = AiStatus.Idle(null), toAnalyze = 0, nights = null, areasWithoutIndexer = emptyList(), analysis = LibraryAnalysisStatus.AllReady),
   )
 
+  /**
+   * Giro 4 (XU2-1): a questo dispositivo non resta niente da analizzare (`AllReady`) ma la copertura non e' completa: 10 file in un formato che non si
+   * legge. Il caso piu' comune di «finito»: la testata non deve dire un numero non vero.
+   */
+  val settingsAllReadyPartial: SearchSettingsState = settingsIndexer.copy(
+    indexer = settingsIndexer.indexer.copy(status = AiStatus.Idle(null), toAnalyze = 0, nights = null, areasWithoutIndexer = emptyList(), analysis = LibraryAnalysisStatus.AllReady),
+    coverage = SearchCoverage.Partial(covered = 14_990, total = 15_000, reasons = mapOf(CoverageReason.UNSUPPORTED to 10)),
+  )
+
   /** La lettura attiva per l'account ma questo dispositivo si e' escluso, e il testo della spiegazione e' cambiato: va riletto. */
   val settingsReadingChanged: SearchSettingsState = settingsIndexer.copy(
     textReading = TextReadingPageState(TextReadingState.OnForAccount(thisDevice = false), TextReadingSwitch.CURRENT_TEXT_VERSION, needsConsent = true),

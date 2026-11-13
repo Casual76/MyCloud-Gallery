@@ -40,6 +40,12 @@ internal enum class AnalysisShot(val file: String) {
   DISABLED("analisi-spenta"),
   SETTINGS("ricerca-e-modelli-testata"),
   SETTINGS_QUEUED("ricerca-e-modelli-testata-in-coda"),
+
+  // Giro 4.
+  SETTINGS_READY_PARTIAL("ricerca-e-modelli-tutto-pronto-copertura-parziale"),
+  BETWEEN("analisi-in-corso-fra-due-tappe"),
+  PREPARATION("analisi-in-attesa-foto-in-preparazione"),
+  NAS("analisi-in-pausa-nas"),
   ;
 
   @Composable
@@ -64,6 +70,16 @@ internal enum class AnalysisShot(val file: String) {
       PROBLEM -> AnalysisScreen(LibraryAnalysisStatus.Problem("AI_STORAGE_LOW"), s.restFlow(), s.thumbnails, NoAnalysisHandlers, onBack = {})
       DISABLED -> AnalysisScreen(LibraryAnalysisStatus.Disabled, AnalysisFlow.EMPTY, s.thumbnails, NoAnalysisHandlers, onBack = {})
       SETTINGS -> SearchSettingsScreen(SearchSamples.settingsIndexer, false, true, true, true, NoSearchSettingsHandlers, onBack = {})
+      SETTINGS_READY_PARTIAL -> SearchSettingsScreen(SearchSamples.settingsAllReadyPartial, false, true, true, true, NoSearchSettingsHandlers, onBack = {})
+      BETWEEN -> s.flow().let { AnalysisScreen(s.RUNNING, AnalysisFlow(null, it.recent, it.next), s.thumbnails, NoAnalysisHandlers, onBack = {}) }
+      PREPARATION -> AnalysisScreen(
+        LibraryAnalysisStatus.Paused(LibraryAnalysisWait.PREPARATION, 2_700, 12_300, 15_000),
+        s.restFlow(),
+        s.thumbnails,
+        NoAnalysisHandlers,
+        onBack = {},
+      )
+      NAS -> AnalysisScreen(LibraryAnalysisStatus.Paused(LibraryAnalysisWait.NAS, 2_700, 12_300, 15_000), s.restFlow(), s.thumbnails, NoAnalysisHandlers, onBack = {})
       SETTINGS_QUEUED -> SearchSettingsScreen(
         SearchSamples.settingsIndexer.copy(
           indexer = SearchSamples.settingsIndexer.indexer.copy(analysis = LibraryAnalysisStatus.Paused(LibraryAnalysisWait.THERMAL, 2_700, 12_300, 15_000)),
@@ -131,7 +147,24 @@ internal class AnalysisPhoneScreenshotTest(shot: AnalysisShot, dark: Boolean, sc
           AnalysisShot.NOT_HERE,
           AnalysisShot.DISABLED,
           AnalysisShot.SETTINGS_QUEUED,
+          AnalysisShot.SETTINGS_READY_PARTIAL,
+          AnalysisShot.BETWEEN,
+          AnalysisShot.PREPARATION,
+          AnalysisShot.NAS,
         )
+  }
+}
+
+/** XU2-13 (giro 4): il telefono in orizzontale (800 x 360 dp): testata e nastro affiancati, il nastro sopra la piega. */
+@RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(application = Application::class, qualifiers = "it-w800dp-h360dp-land-xhdpi")
+internal class AnalysisPhoneLandscapeScreenshotTest(shot: AnalysisShot, dark: Boolean, scale: Float?) :
+  AnalysisScreenshotBase(shot, dark, scale, "telefono-orizzontale") {
+  companion object {
+    @JvmStatic
+    @ParameterizedRobolectricTestRunner.Parameters(name = "{0} scuro={1} testo={2}")
+    fun data(): List<Array<Any?>> = every(AnalysisShot.RUNNING, AnalysisShot.PAUSED)
   }
 }
 

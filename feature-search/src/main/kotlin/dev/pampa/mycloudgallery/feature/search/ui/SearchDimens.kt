@@ -86,6 +86,12 @@ internal object SearchDimens {
 
   /** Da questa larghezza testata e nastro stanno affiancati (tablet in orizzontale); la testata li' e' larga cosi'. */
   val AnalysisSideBySide: Dp = 840.dp
+
+  /** XU2-13 (giro 4): con poca altezza (il telefono in orizzontale, sotto [AnalysisShortHeight]) testata e nastro si affiancano gia' da questa larghezza. */
+  val AnalysisSideBySideShort: Dp = 600.dp
+
+  /** Sotto questa altezza dello schermo la pagina dell'analisi e' "bassa" (il telefono in orizzontale). */
+  val AnalysisShortHeight: Dp = 480.dp
   val AnalysisHeroSideWidth: Dp = 380.dp
 
   /** La misura di lettura della pagina "Analisi delle foto": larga, perche' il nastro usa la larghezza del tablet. */

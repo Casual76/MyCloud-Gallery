@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
@@ -99,13 +100,20 @@ internal fun analysisRing(status: LibraryAnalysisStatus): AnalysisRing {
         description = stringResource(R.string.analysis_ring_description, percent, GalleryNumbers.format(ready), GalleryNumbers.format(total)),
       )
     }
-    status == LibraryAnalysisStatus.AllReady -> AnalysisRing(1f, busy = false, percent = FullPercent, ready = null, total = null, glyph = sign.glyph, done = true, description = null)
+    // XU2-1 (giro 4): «Tutto pronto» vuol dire che a **questo** dispositivo non resta niente da analizzare, non che ogni foto della libreria sia
+    // pronta (un file non supportato, un'area senza indicizzatore restano fuori): l'anello pieno del verde del «fatto» con l'icona dell'analisi,
+    // **senza percento** (nessun «100%» che non sia vero).
+    status == LibraryAnalysisStatus.AllReady -> allReadyRing(description = null)
     // In corso senza un totale: l'arco corto gira (in un livello suo). Gli altri stati senza numeri: l'anello vuoto e il glifo dello stato.
     status is LibraryAnalysisStatus.Running -> AnalysisRing(null, busy = true, percent = null, ready = null, total = null, glyph = sign.glyph, done = false, description = null)
     // Il glifo al centro e' l'analisi stessa: il perche' (la freccia, il triangolo...) lo dice gia' il mirino della pagina, una volta.
     else -> AnalysisRing(0f, busy = false, percent = null, ready = null, total = null, glyph = AnalysisGlyph, done = false, description = null)
   }
 }
+
+/** L'anello di «Tutto pronto» (XU2-1), lo stesso nelle due pagine: pieno, verde, l'icona dell'analisi al centro, nessun numero. */
+internal fun allReadyRing(description: String?): AnalysisRing =
+  AnalysisRing(1f, busy = false, percent = null, ready = null, total = null, glyph = AnalysisGlyph, done = true, description = description)
 
 /** Un tasto della testata: il primo pieno se e' la cosa da fare ([filled]), tonale se e' solo una possibilita'. */
 @Immutable
@@ -141,7 +149,7 @@ internal fun AnalysisHero(
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.spacedBy(SearchDimens.AnalysisHeroGap),
     ) {
-      HeroRing(ring = ring, mark = sign.mark, background = background)
+      HeroRing(ring = ring, mark = sign.mark, background = background, onOpen = onOpen)
       HeroTexts(label = label, line = line, sentence = sentence, onOpen = onOpen)
       if (buttons.isNotEmpty()) {
         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(SearchDimens.AnalysisLineGap)) {
@@ -165,10 +173,12 @@ internal fun AnalysisHero(
 
 /** L'anello con il centro e il segno di stato appoggiato sull'arco (come quello del Backup). */
 @Composable
-private fun HeroRing(ring: AnalysisRing, mark: GalleryIconStatus?, background: Color) {
+private fun HeroRing(ring: AnalysisRing, mark: GalleryIconStatus?, background: Color, onOpen: (() -> Unit)?) {
   val size = GalleryProgressRingDefaults.Hero
   val hue = if (ring.done) rememberGalleryStatusColors(GalleryIconStatus.Done).top else galleryRingColor(GalleryIconFamily.Search)
-  Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
+  // XU2-7 (giro 4): dove la testata apre la pagina, si tocca anche l'anello (la cosa piu' grande della scheda), non solo la scritta.
+  val touch = if (onOpen != null) Modifier.fluidPressable(onClick = onOpen, role = Role.Button, focusShape = FluidCapsuleShape) else Modifier
+  Box(modifier = Modifier.size(size).then(touch), contentAlignment = Alignment.Center) {
     GalleryProgressRing(
       progress = if (ring.busy) null else ring.progress,
       modifier = Modifier
@@ -261,6 +271,5 @@ private fun HeroTexts(label: String, line: AnalysisLine?, sentence: String, onOp
   }
 }
 
-private const val FullPercent = 100
 
 internal const val AnalysisStatusTag: String = "analisi-stato"

@@ -50,7 +50,7 @@
   <string name="library_cloud_action_analysis">Apri Analisi</string>
   <string name="library_cloud_analysis_running">Analisi in corso</string>
   <string name="library_cloud_analysis_queued">Analisi in coda</string>
-  <string name="library_cloud_analysis_queued_line">Riparte da sola</string>
+  <string name="library_cloud_analysis_queued_line">Parte da sola</string>
   <string name="library_cloud_analysis_paused">Analisi in pausa</string>
   <string name="library_cloud_analysis_problem">Analisi ferma</string>
   <string name="library_cloud_analysis_problem_storage">Memoria quasi piena</string>

@@ -47,13 +47,14 @@ internal val AnalysisGlyph: ImageVector get() = Icons.Rounded.ImageSearch
 
 internal fun analysisSign(status: LibraryAnalysisStatus): AnalysisSign = when (status) {
   is LibraryAnalysisStatus.Running -> AnalysisSign(GalleryIconStatus.Running, AnalysisGlyph, GalleryIconFamily.Search)
-  is LibraryAnalysisStatus.Queued -> AnalysisSign(GalleryIconStatus.Waiting, Icons.Rounded.HourglassTop, GalleryIconFamily.System)
-  is LibraryAnalysisStatus.Paused -> AnalysisSign(
-    // Le foto non ancora preparate non sono una pausa: si aspetta (la clessidra), e riparte da sola.
-    if (status.reason == LibraryAnalysisWait.PREPARATION) GalleryIconStatus.Waiting else GalleryIconStatus.Paused,
-    waitGlyph(status.reason),
-    waitFamily(status.reason),
-  )
+  // XU2-5 (giro 4): la clessidra una volta, sull'anello; nel mirino l'analisi stessa (non una seconda clessidra grande).
+  is LibraryAnalysisStatus.Queued -> AnalysisSign(GalleryIconStatus.Waiting, AnalysisGlyph, GalleryIconFamily.Search)
+  // Le foto non ancora preparate non sono una pausa: si aspetta (la clessidra sull'anello, una volta: XU2-5) e nel mirino l'analisi, come in coda.
+  is LibraryAnalysisStatus.Paused -> if (status.reason == LibraryAnalysisWait.PREPARATION) {
+    AnalysisSign(GalleryIconStatus.Waiting, AnalysisGlyph, GalleryIconFamily.Search)
+  } else {
+    AnalysisSign(GalleryIconStatus.Paused, waitGlyph(status.reason), waitFamily(status.reason))
+  }
   LibraryAnalysisStatus.AllReady -> AnalysisSign(GalleryIconStatus.Done, AnalysisGlyph, GalleryIconFamily.Search)
   LibraryAnalysisStatus.ModelMissing -> AnalysisSign(GalleryIconStatus.Attention, Icons.Rounded.Download, GalleryIconFamily.Search)
   LibraryAnalysisStatus.Disabled -> AnalysisSign(GalleryIconStatus.Stopped, Icons.Rounded.PowerSettingsNew, GalleryIconFamily.System)
@@ -119,13 +120,52 @@ internal fun analysisWaitRes(reason: LibraryAnalysisWait): Int = when (reason) {
   LibraryAnalysisWait.OTHER -> R.string.analysis_wait_other
 }
 
+/**
+ * XU2-4 e XU-12 (giro 4): **il tasto «Analizza ora» c'e'** solo dove una richiesta dell'utente fa davvero partire l'analisi, e vale per le due
+ * pagine (la testata di "Analisi delle foto" e quella di Ricerca e modelli). Una richiesta supera la fascia oraria, la carica, la batteria, il
+ * risparmio energetico, il caldo leggero (oltre la soglia dura il motore non parte comunque, e la testata lo dice), il limite di Android e la coda
+ * (`RuleEvaluator.userInitiated`); **non** supera il NAS che non risponde, il Wi-Fi (di casa o no), i dati del mese finiti (chiede una conferma
+ * che questo tasto non da'), il profilo non attivo, l'attesa generica e le foto ancora in preparazione (non c'e' niente da far partire). Mai in corso,
+ * con tutto pronto, su un altro dispositivo, spenta, senza modello, con un problema (che ha il suo tasto) o senza stato.
+ */
+internal fun analyzeNowShown(status: LibraryAnalysisStatus): Boolean = when (status) {
+  is LibraryAnalysisStatus.Queued -> true
+  is LibraryAnalysisStatus.Paused -> when (status.reason) {
+    LibraryAnalysisWait.NIGHT_WINDOW,
+    LibraryAnalysisWait.CHARGING,
+    LibraryAnalysisWait.BATTERY,
+    LibraryAnalysisWait.POWER_SAVER,
+    LibraryAnalysisWait.THERMAL,
+    LibraryAnalysisWait.ANDROID_LIMIT,
+    -> true
+    LibraryAnalysisWait.WIFI,
+    LibraryAnalysisWait.HOME_WIFI,
+    LibraryAnalysisWait.NAS,
+    LibraryAnalysisWait.DATA_CAP,
+    LibraryAnalysisWait.PREPARATION,
+    LibraryAnalysisWait.PROFILE,
+    LibraryAnalysisWait.OTHER,
+    -> false
+  }
+  LibraryAnalysisStatus.Idle,
+  is LibraryAnalysisStatus.Running,
+  LibraryAnalysisStatus.AllReady,
+  is LibraryAnalysisStatus.NotHere,
+  LibraryAnalysisStatus.Disabled,
+  LibraryAnalysisStatus.ModelMissing,
+  is LibraryAnalysisStatus.Problem,
+  -> false
+}
+
 /** L'etichetta della testata: due parole. Null = niente da dire. */
 @Composable
 internal fun analysisLabel(status: LibraryAnalysisStatus): String? = when (status) {
   LibraryAnalysisStatus.Idle -> null
   is LibraryAnalysisStatus.Running -> stringResource(R.string.analysis_hero_running)
   is LibraryAnalysisStatus.Queued -> stringResource(R.string.analysis_hero_queued)
-  is LibraryAnalysisStatus.Paused -> stringResource(R.string.analysis_hero_paused)
+  // XU2-5: le foto in preparazione non sono una pausa (il segno e' la clessidra): si aspetta.
+  is LibraryAnalysisStatus.Paused ->
+    stringResource(if (status.reason == LibraryAnalysisWait.PREPARATION) R.string.analysis_hero_waiting else R.string.analysis_hero_paused)
   LibraryAnalysisStatus.AllReady -> stringResource(R.string.analysis_hero_ready)
   LibraryAnalysisStatus.ModelMissing -> stringResource(R.string.analysis_hero_model)
   LibraryAnalysisStatus.Disabled -> stringResource(R.string.analysis_hero_disabled)

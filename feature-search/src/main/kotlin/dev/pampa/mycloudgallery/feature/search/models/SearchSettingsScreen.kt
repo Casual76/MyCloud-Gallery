@@ -187,7 +187,9 @@ private fun CoverageHero(coverage: SearchCoverage, explainIndexer: Boolean, anal
       // sull'arco, due parole e una riga; toccata apre la pagina "Analisi delle foto". La «i» e le sue frasi restano quelle della copertura.
       AnalysisHero(
         status = analysis,
-        ring = coverageRing(coverage, fraction, sentence + " " + subtitle),
+        // XU2-1 (giro 4): con «Tutto pronto» l'anello e' quello della pagina (pieno, verde, l'icona dell'analisi, nessun percento): mai un «99%»
+        // accanto alla spunta. Che cosa la ricerca non conosce ancora (non supportate, aree senza indicizzatore) lo dicono le righe qui sotto.
+        ring = if (analysis == LibraryAnalysisStatus.AllReady) allReadyRing(sentence + " " + subtitle) else coverageRing(coverage, fraction, sentence + " " + subtitle),
         onOpen = onOpenAnalysis,
         corner = {
           GalleryInfoButton(
@@ -382,7 +384,10 @@ private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handler
   val actions = buildList {
     problem?.let { code -> SearchCodes.actions(code).forEach { add(IndexerAction.Code(it)) } }
     if (probeRetry) add(IndexerAction.RetryProbe)
-    add(IndexerAction.IndexNow)
+    // XU2-4 e XU-12 (giro 4): con lo stato dell'analisi legato, «Analizza ora» c'e' solo dove una richiesta la fa davvero partire, con la stessa
+    // regola della pagina "Analisi delle foto" ([analyzeNowShown]): non in corso, non con tutto pronto, non su un altro dispositivo, non spenta,
+    // non con il NAS o il Wi-Fi che mancano. Senza stato legato (`Idle`: la ricerca non lo da') resta il tasto di sempre.
+    if (indexer.analysis == LibraryAnalysisStatus.Idle || analyzeNowShown(indexer.analysis)) add(IndexerAction.IndexNow)
   }
   // Finita l'analisi, «Fatto» basta: la riga della misura direbbe la stessa cosa («Niente da analizzare»). Lo stato si dice una volta.
   val allDone = indexer.toAnalyze <= 0 && !measuring && !probeFailed && !probeHot && !probeBusy &&
@@ -480,8 +485,9 @@ private fun MeasureRow(indexer: IndexerState, measuring: Boolean, probeFailed: B
     probeBusy -> stringResource(R.string.models_probe_busy_short) to ""
     probeFailed -> stringResource(R.string.models_probe_failed_short) to ""
     indexer.toAnalyze <= 0 -> stringResource(R.string.models_nothing_short) to ""
+    // XU2-8 (giro 4): con la testata dell'analisi in cima il conto delle foto da analizzare e' gia' li' (anello e pagina): qui solo le notti.
     indexer.nights != null -> pluralStringResource(R.plurals.models_nights_short, indexer.nights, indexer.nights) to
-      stringResource(R.string.models_to_analyze_short, GalleryNumbers.format(indexer.toAnalyze))
+      if (indexer.analysis != LibraryAnalysisStatus.Idle) "" else stringResource(R.string.models_to_analyze_short, GalleryNumbers.format(indexer.toAnalyze))
     else -> stringResource(R.string.models_to_analyze_short, GalleryNumbers.format(indexer.toAnalyze)) to ""
   }
   val speed = if (!measuring && !probeHot && !probeBusy && !probeFailed && probe != null) {

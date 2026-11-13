@@ -14,11 +14,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -53,6 +55,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
+import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
@@ -77,6 +80,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 // IL NASTRO DELL'ANALISI (grafica XU, 12/11/2026). L'utente: «un menu' che mostra in maniera animata le foto e video scorrere nel mentre che vengono
 // analizzati». Scelta: **una corsia** orizzontale che passa sotto **un mirino fermo** al centro. Le prossime arrivano da destra (piu' piccole, un po'
@@ -91,9 +96,9 @@ import kotlinx.coroutines.flow.conflate
 // IL COSTO, tenuto basso di proposito (oggi un foglio ha scaldato il telefono ridisegnandosi a ogni fotogramma):
 //  - superfici piene, nessun vetro e nessuna sfocatura sotto il nastro; il segnaposto sfocato e' una bitmap gia' pronta, non un effetto;
 //  - **un passo per volta e mai piu' di uno ogni [LaneStepMillis] (1,2 s)**: il motore puo' finire piu' foto al secondo, la pagina ne mostra il
-//    passo piu' recente (gli intermedi si saltano, la corsia scorre di piu' posti in un movimento solo). Un passo dura ~0,75 s (corsia con
-//    `standard` 0,36-0,40 s insieme al mirino che si apre con `snappy` 0,35 s, poi mirino che si chiude e luce con `snappy` 0,35 s: misurati
-//    simulando le molle di FluidMotion): fra un passo e l'altro restano **almeno ~0,45 s in cui niente si muove**;
+//    passo piu' recente (gli intermedi si saltano, la corsia scorre di piu' posti in un movimento solo). Un passo dura ~0,8 s (corsia con
+//    `standard` 0,36-0,40 s insieme al mirino che si apre con `snappy` 0,35 s, poi mirino che si chiude con `snappy` 0,35 s e la luce a durata
+//    fissa 0,4 s, giro 4): fra un passo e l'altro restano **almeno ~0,4 s in cui niente si muove**;
 //  - il movimento e' una sola molla ([shift]) letta **nel piazzamento** e nel livello di ciascuna anteprima, e il mirino legge la sua ([focus]) nel
 //    disegno: a ogni fotogramma si ripiazza e si ridisegna, **non si ricompone** niente;
 //  - nessun ciclo infinito; con la pagina non visibile i flussi non si raccolgono (ciclo di vita) e niente cambia; con il movimento ridotto le
@@ -111,10 +116,17 @@ import kotlinx.coroutines.flow.conflate
 // fotogramma della corsia si buttano (nessun riferimento vecchio resta in memoria) e il movimento si ferma; (3) ogni anteprima a schermo ha
 // un'identita' **legata alla generazione** in cui e' nata ([laneKey]): al cambio la sua composizione (miniatura, segnaposto ricordato) si smonta e
 // ne nasce una nuova, mai riusata; (4) lo stato neutro di passaggio non fa aspettare il passo ([rememberPaced]).
+//
+// DI PASSAGGIO (giro 4, XU2-2): l'occhio barrato vuol dire «foto che qui non si mostra» e si disegna **solo** per le caselle neutre che `:app` manda
+// in uno stato risolto. Le caselle neutre di passaggio sono **tessere vuote**, senza icona: (a) lo stato tutto neutro di una generazione nuova
+// (l'apertura della pagina, un cambio di visibilita') finche' non arriva il risolto o passa un passo ([BridgeTracker]); (b) le anteprime del
+// fotogramma trattenuto che il nastro di adesso non contiene piu' (una pausa, la fine di una tappa, una revoca a meta' passo: [passingSlots]).
+// Solo disegno: una tessera vuota non ha ne' byte ne' ThumbHash ne' riferimento, come la casella neutra. E uno stato fermo (niente nel mirino e
+// niente in arrivo: la pausa, la fine) si applica subito, senza aspettare la fine del passo ([rememberPaced]).
 
 /** Un'anteprima della corsia e il suo posto: 0 = nel mirino, negativo = finita (a sinistra), positivo = in arrivo (a destra). */
 @Immutable
-private class LaneEntry(val slot: Int, val thumb: AnalysisThumb?)
+private class LaneEntry(val slot: Int, val thumb: AnalysisThumb?, val passing: Boolean = false)
 
 /**
  * La corsia: [flow] e' il nastro gia' passato dal cancello di riservatezza in `:app`. [frozenShift] e' solo per gli screenshot (la corsia ferma a
@@ -161,13 +173,20 @@ internal fun AnalysisLane(
       light.snapTo(0f)
       coroutineScope {
         launch { focus.animateTo(1f, FluidMotion.snappy()) }
-        launch { light.animateTo(1f, FluidMotion.snappy()) }
+        // XU2-9: la luce e' una scansione, non un lampo: durata fissa e curva simmetrica dei token (la molla critica ne correva l'80% in 0,14 s).
+        launch { light.animateTo(1f, FluidMotion.crossFade(LaneLightMillis)) }
       }
     }
   }
   // XS2-1: il fotogramma trattenuto si disegna filtrato dal nastro di adesso (lo stesso fotogramma in cui il flusso revoca); se e' di una
   // generazione piu' vecchia non si usa affatto (giro 3).
-  val frame = visibleNow(frameBase(held, flow), flow)
+  val base = frameBase(held, flow)
+  val frame = visibleNow(base, flow)
+  // XU2-2 (giro 4): quali caselle neutre sono di passaggio (tessere vuote) e quali dette da `:app` in uno stato risolto (l'occhio barrato).
+  val passing = passingSlots(base, flow)
+  val bridges = remember { BridgeTracker(flow.visibilityGeneration) }
+  val bridge = bridges.isBridge(flow)
+  LaunchedEffect(flow) { bridges.follow(flow) }
   // Giro 3: alla generazione nuova il passo trattenuto e la corsia si buttano subito dopo questo fotogramma (nessun riferimento vecchio in
   // memoria) e il movimento si ferma dov'e': la corsia riparte dal valore di adesso.
   if (held.visibilityGeneration < flow.visibilityGeneration || pacedState.value.visibilityGeneration < flow.visibilityGeneration) {
@@ -182,6 +201,9 @@ internal fun AnalysisLane(
     light.snapTo(1f)
   }
   val running = frame.current != null
+  // XU2-6: fra un mese e l'altro (in corso, ma niente ancora nel mirino) il mirino resta della tinta della ricerca e dentro c'e' una tessera vuota:
+  // la foto che arriva la riempie. Non l'aspetto di «Tutto pronto».
+  val between = !running && status is LibraryAnalysisStatus.Running
   val description = laneDescription(frame)
   BoxWithConstraints(
     modifier = modifier
@@ -197,9 +219,10 @@ internal fun AnalysisLane(
     // Quante per lato ne entrano fino al bordo dello schermo (il nastro passa anche sotto il margine della pagina), piu' quelle che un passo porta.
     val perSide = with(density) { geometry.slotsTo((maxWidth / 2 + bleed).toPx()) } + MaxStep
     val entries = buildList {
-      frame.recent.take(perSide).forEachIndexed { index, thumb -> add(LaneEntry(-(index + 1), thumb)) }
-      add(LaneEntry(0, frame.current))
-      frame.next.take(perSide).forEachIndexed { index, thumb -> add(LaneEntry(index + 1, thumb)) }
+      fun entry(slot: Int, thumb: AnalysisThumb?) = LaneEntry(slot, thumb, passing = thumb == AnalysisThumb.Quiet && (bridge || slot in passing))
+      frame.recent.take(perSide).forEachIndexed { index, thumb -> add(entry(-(index + 1), thumb)) }
+      add(entry(0, frame.current))
+      frame.next.take(perSide).forEachIndexed { index, thumb -> add(entry(index + 1, thumb)) }
     }
     // Una chiave per anteprima; se lo stesso media comparisse due volte (finito e di nuovo in coda), la seconda prende anche il posto.
     val seen = HashSet<Any>()
@@ -228,7 +251,7 @@ internal fun AnalysisLane(
           // A meta' passo (lo screenshot) il mirino e' aperto: si stringe solo quando l'anteprima e' arrivata.
           val f = if (frozenShift != null) 0f else focus.value
           val l = if (frozenShift != null) 1f else light.value
-          drawGate(geometry, gate, if (running) accent else restInk, f, sweepAt = if (running && l < 1f) l else null, accent)
+          drawGate(geometry, gate, if (running || between) accent else restInk, f, sweepAt = if (running && l < 1f) l else null, accent)
         },
       content = {
         entries.forEachIndexed { index, entry ->
@@ -236,8 +259,8 @@ internal fun AnalysisLane(
           // L'identita' segue il media, non il posto: scorrendo, una miniatura gia' caricata resta la stessa.
           key(keys[index]) {
           when {
-            entry.slot == 0 && thumb == null -> RestCard(status, current)
-            thumb != null -> LaneThumb(thumb, thumbnails, current, frame.visibilityGeneration)
+            entry.slot == 0 && thumb == null -> if (between) BlankTile(current) else RestCard(status, current)
+            thumb != null -> LaneThumb(thumb, thumbnails, current, frame.visibilityGeneration, entry.passing)
             else -> Box(Modifier)
           }
           // Il segno «fatto» (solo le finite e quella di adesso, che lo prende uscendo) e il segno del video: a misura fissa.
@@ -376,9 +399,12 @@ private fun DrawScope.drawGate(geometry: LaneGeometry, gate: GateMetrics, color:
   }
 }
 
-/** Un'anteprima: la miniatura locale (o il segnaposto sfocato, gia' pronto) in una tessera piena; un media non mostrabile e' la casella neutra. */
+/**
+ * Un'anteprima: la miniatura locale (o il segnaposto sfocato, gia' pronto) in una tessera piena; un media non mostrabile e' la casella neutra con
+ * l'occhio barrato, una casella neutra di passaggio ([passing], XU2-2) la stessa tessera **vuota**.
+ */
 @Composable
-private fun LaneThumb(thumb: AnalysisThumb, thumbnails: SearchThumbnails?, side: Dp, generation: Long) {
+private fun LaneThumb(thumb: AnalysisThumb, thumbnails: SearchThumbnails?, side: Dp, generation: Long, passing: Boolean) {
   val shape = ContinuousCornerShape(FluidRadius.Card)
   // La generazione in cui questa composizione e' nata: con la chiave legata alla generazione ([laneKey]) non sopravvive a un cambio di visibilita'.
   val born = remember { generation }
@@ -387,7 +413,13 @@ private fun LaneThumb(thumb: AnalysisThumb, thumbnails: SearchThumbnails?, side:
       .size(side)
       .clip(shape)
       .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-      .testTag(if (thumb is AnalysisThumb.Quiet) AnalysisQuietTag else AnalysisShownTag)
+      .testTag(
+        when {
+          thumb is AnalysisThumb.Shown -> AnalysisShownTag
+          passing -> AnalysisPassingTag
+          else -> AnalysisQuietTag
+        },
+      )
       .semantics {
         hideFromAccessibility()
         // Solo per le prove (XS2-1: quale media e' a schermo); TalkBack non lo legge.
@@ -401,13 +433,15 @@ private fun LaneThumb(thumb: AnalysisThumb, thumbnails: SearchThumbnails?, side:
         val bitmap = image?.value ?: placeholder
         if (bitmap != null) Image(bitmap = bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
       }
-      // Niente foto, niente sfocato: una casella del colore dei gruppi con l'occhio barrato.
-      AnalysisThumb.Quiet -> Icon(
-        imageVector = Icons.Rounded.VisibilityOff,
-        contentDescription = null,
-        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.size(side * QuietGlyph).align(androidx.compose.ui.Alignment.Center),
-      )
+      // Niente foto, niente sfocato: una casella del colore dei gruppi con l'occhio barrato; di passaggio, vuota.
+      AnalysisThumb.Quiet -> if (!passing) {
+        Icon(
+          imageVector = Icons.Rounded.VisibilityOff,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.size(side * QuietGlyph).align(androidx.compose.ui.Alignment.Center),
+        )
+      }
     }
   }
 }
@@ -418,12 +452,24 @@ private fun VideoBadge() {
   Box(
     modifier = Modifier
       .size(SearchDimens.LaneMark)
-      .clip(ContinuousCornerShape(SearchDimens.LaneMark / 2))
+      .clip(FluidCapsuleShape)
       .background(GalleryOnPhoto.scrim()),
     contentAlignment = androidx.compose.ui.Alignment.Center,
   ) {
     Icon(imageVector = Icons.Rounded.PlayArrow, contentDescription = null, tint = GalleryOnPhoto.Content, modifier = Modifier.size(SearchDimens.LaneVideoGlyph))
   }
+}
+
+/** XU2-6: nel mirino in corso ma senza una foto ancora (fra un mese e l'altro): la tessera vuota che la prossima riempie. */
+@Composable
+private fun BlankTile(side: Dp) {
+  Box(
+    modifier = Modifier
+      .size(side)
+      .clip(ContinuousCornerShape(FluidRadius.Card))
+      .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+      .testTag(AnalysisBetweenTag),
+  )
 }
 
 /** Nel mirino quando non si analizza: una tessera piena con l'icona del perche' (e il suo segno), grande. Nessuna parola: la testata le ha gia' dette. */
@@ -517,6 +563,9 @@ private fun AnalysisFlow.hasShown(): Boolean =
 
 private fun AnalysisFlow.isEmpty(): Boolean = current == null && recent.isEmpty() && next.isEmpty()
 
+/** Uno stato fermo: niente nel mirino e niente in arrivo (una pausa, la fine di una tappa, tutto pronto). */
+private fun AnalysisFlow.isStill(): Boolean = current == null && next.isEmpty()
+
 /** Vero se [old] e [new] hanno gli stessi posti e in ogni posto la stessa cosa, o una casella neutra da una parte (revoca o risoluzione). */
 private fun sameShape(old: AnalysisFlow, new: AnalysisFlow): Boolean {
   if (old.recent.size != new.recent.size || old.next.size != new.next.size || (old.current == null) != (new.current == null)) return false
@@ -536,6 +585,48 @@ internal fun visibleNow(held: AnalysisFlow, now: AnalysisFlow): AnalysisFlow {
     AnalysisThumb.Quiet -> AnalysisThumb.Quiet
   }
   return AnalysisFlow(held.current?.let(::clean), held.recent.map(::clean), held.next.map(::clean), now.visibilityGeneration)
+}
+
+/**
+ * XU2-2 (giro 4): i posti del fotogramma trattenuto [held] che diventano caselle neutre **perche' il nastro di adesso [now] non da' piu' quel media**
+ * come anteprima (e' uscito dal nastro: una pausa, la fine di una tappa; o e' stato revocato): si disegnano come tessere vuote, non con l'occhio
+ * barrato. Vuoto se [held] e' [now]. Solo disegno: in quei posti [visibleNow] ha gia' messo la casella neutra.
+ */
+internal fun passingSlots(held: AnalysisFlow, now: AnalysisFlow): Set<Int> {
+  if (held === now) return emptySet()
+  val allowed = HashSet<Any>()
+  (listOfNotNull(now.current) + now.recent + now.next).forEach { thumb -> (thumb as? AnalysisThumb.Shown)?.let { allowed += it.id } }
+  return slotsOf(held).filter { (_, thumb) -> thumb is AnalysisThumb.Shown && thumb.id !in allowed }.mapTo(HashSet()) { it.first }
+}
+
+/**
+ * XU2-2 (giro 4): lo stato tutto neutro con cui si apre una generazione nuova (`:app` lo manda all'apertura e a ogni cambio di visibilita', prima di
+ * leggere) e' **di passaggio**: si disegna con tessere vuote finche' non arriva un altro valore della stessa generazione (il risolto) o passa un
+ * passo ([LaneStepMillis]: un risolto uguale al neutro, cioe' tutte davvero non mostrabili, lo StateFlow non lo riemette). Dopo, le caselle neutre
+ * hanno l'occhio barrato.
+ */
+@Stable
+internal class BridgeTracker(initialGeneration: Long) {
+  private var settled by mutableLongStateOf(initialGeneration)
+  private var opened by mutableStateOf<AnalysisFlow?>(null)
+
+  /** Vero se [flow] e' il primo stato, tutto neutro, di una generazione non ancora assestata. */
+  fun isBridge(flow: AnalysisFlow): Boolean {
+    if (flow.visibilityGeneration <= settled || flow.hasShown() || flow.isEmpty()) return false
+    val first = opened
+    return first == null || first === flow || first.visibilityGeneration < flow.visibilityGeneration
+  }
+
+  /** Da chiamare a ogni valore nuovo: apre il passaggio sul primo neutro di una generazione, lo chiude al valore dopo o a fine passo. */
+  suspend fun follow(flow: AnalysisFlow) {
+    if (flow.visibilityGeneration <= settled) return
+    if (isBridge(flow)) {
+      opened = flow
+      delay(LaneStepMillis)
+    }
+    settled = maxOf(settled, flow.visibilityGeneration)
+    opened = null
+  }
 }
 
 private fun slotsOf(flow: AnalysisFlow): List<Pair<Int, AnalysisThumb>> = buildList {
@@ -559,7 +650,9 @@ private fun rememberPaced(flow: AnalysisFlow): MutableState<AnalysisFlow> {
       val bridge = !value.hasShown() && value.visibilityGeneration > generation
       generation = maxOf(generation, value.visibilityGeneration)
       paced.value = value
-      if (!value.isEmpty() && !bridge) delay(LaneStepMillis)
+      // Giro 4 (XU2-2): l'attesa del passo si interrompe se arriva uno stato fermo (niente nel mirino, niente in arrivo: una pausa, la fine), che
+      // si applica subito; gli stati in movimento restano al passo di sempre.
+      if (!value.isEmpty() && !bridge) withTimeoutOrNull(LaneStepMillis) { snapshotFlow { latest.value }.first { it !== value && it.isStill() } }
     }
   }
   return paced
@@ -580,6 +673,8 @@ internal const val AnalysisLaneTag: String = "analisi-nastro"
 internal const val AnalysisShownTag: String = "analisi-anteprima"
 internal const val AnalysisQuietTag: String = "analisi-nascosta"
 internal const val AnalysisRestTag: String = "analisi-a-riposo"
+internal const val AnalysisPassingTag: String = "analisi-di-passaggio"
+internal const val AnalysisBetweenTag: String = "analisi-fra-due-tappe"
 
 /** Il passo piu' breve della corsia: sotto, il movimento diventerebbe continuo (e la pagina si ridisegnerebbe sempre). */
 internal const val LaneStepMillis: Long = 1_200L
@@ -601,5 +696,8 @@ private const val MarkOverlap = 0.7f
 private const val VideoInset = 0.3f
 private const val SweepBand = 0.22f
 private const val SweepAlpha = 0.38f
+
+/** XU2-9: quanto dura la luce che passa (fissa, fra 0,35 e 0,45 s), insieme al mirino che si chiude. */
+private const val LaneLightMillis = 400
 private const val QuietGlyph = 0.3f
 private const val RestTile = 0.42f

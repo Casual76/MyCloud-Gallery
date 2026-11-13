@@ -21,6 +21,8 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.AiWaitReason
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingState
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingSwitch
+import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisStatus
+import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisWait
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.feature.search.contract.SearchSettingsState
 import dev.pampa.mycloudgallery.feature.search.contract.TextReadingPageState
@@ -117,8 +119,11 @@ class SearchSettingsUiTest {
     assertThat(rule.onAllNodesWithText("CPU", substring = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
     assertThat(rule.onAllNodesWithText("GPU", substring = true, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
     scrollClick("Questo dispositivo analizza")
-    scrollClick("Analizza ora")
-    assertThat(handlers.calls).containsExactly("indexer:false", "indexNow").inOrder()
+    // Giro 4 (XU-12, XU2-4): in corso non c'e' niente da far partire, il tasto non c'e'.
+    assertThat(rule.onAllNodesWithText("Analizza ora").fetchSemanticsNodes()).isEmpty()
+    assertThat(handlers.calls).containsExactly("indexer:false")
+    // XU2-8: sotto la testata dell'analisi la misura dice le notti, non di nuovo «2.700 da analizzare».
+    assertThat(rule.onAllNodesWithText("2.700 da analizzare", useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
   }
 
   /** CU-19: sotto l'analisi un tasto solo, quello che serve adesso; le altre azioni, con le frasi intere, dietro il tocco sulla riga dello stato. */
@@ -127,9 +132,9 @@ class SearchSettingsUiTest {
     show(SearchSamples.settingsProblems)
     // Il calcolo e' fermo per lo spazio: il tasto e' il rimedio, non «Indicizza ora».
     assertThat(rule.onAllNodesWithText("Libera spazio").fetchSemanticsNodes()).hasSize(1)
-    // Pacchetto X: niente foglio dietro la riga di stato (lo stato sta in testata e nella pagina Analisi): le azioni sono a vista.
-    scrollClick("Analizza ora")
-    assertThat(handlers.calls).containsExactly("indexNow")
+    // Pacchetto X: niente foglio dietro la riga di stato (lo stato sta in testata e nella pagina Analisi): le azioni sono a vista. Giro 4 (XU2-4):
+    // con l'analisi ferma per un problema «Analizza ora» non la farebbe partire: resta solo il rimedio.
+    assertThat(rule.onAllNodesWithText("Analizza ora").fetchSemanticsNodes()).isEmpty()
     // Senza ricerche recenti nessun «0» accanto al tasto.
     assertThat(rule.onAllNodesWithText("0", useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
   }
@@ -263,7 +268,9 @@ class SearchSettingsUiTest {
 
   @Test
   fun iPulsantiEGliAnelliSonoDa48DpAncheAlTestoGrande() {
-    show(SearchSamples.settingsReadingOn, fontScale = 1.3f)
+    // Giro 4: «Analizza ora» c'e' solo dove una richiesta fa partire l'analisi (in coda).
+    val queued = SearchSamples.settingsReadingOn.indexer.copy(analysis = LibraryAnalysisStatus.Queued(remaining = 10, ready = 14_990, total = 15_000))
+    show(SearchSamples.settingsReadingOn.copy(indexer = queued), fontScale = 1.3f)
     val density = rule.density.density
     val indexNow = rule.onNodeWithText("Analizza ora").performScrollTo().fetchSemanticsNode()
     assertWithMessage("«Analizza ora» sotto i 48 dp").that(indexNow.boundsInRoot.height / density).isAtLeast(47.5f)
@@ -406,5 +413,40 @@ class SearchSettingsUiTest {
     shown("In coda").assertIsDisplayed()
     said("Le foto da analizzare sono in coda.").assertExists()
     noneSaid("Questo dispositivo non analizza le foto.")
+    // Giro 4 (XU2-4): in coda una richiesta la fa partire.
+    scrollClick("Analizza ora")
+    assertThat(handlers.calls).containsExactly("indexNow")
+  }
+
+  /**
+   * XU2-1 (giro 4): «Tutto pronto» con la copertura non completa (10 file non supportati): nessun «99%» accanto alla spunta, l'anello della pagina
+   * (pieno, l'icona dell'analisi) e la riga vera; cio' che la ricerca non conosce lo dice la riga del motivo. E nessun «Analizza ora».
+   */
+  @Test
+  fun tuttoProntoConLaCoperturaParzialeNonDiceNumeriFinti() {
+    show(SearchSamples.settingsAllReadyPartial)
+    shown("Tutto pronto").assertIsDisplayed()
+    shown("Niente da analizzare qui").assertIsDisplayed()
+    for (percent in listOf("99%", "100%")) assertThat(rule.onAllNodesWithText(percent, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+    assertThat(rule.onAllNodesWithText("Ogni foto si trova cercando", useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+    said("Formato non supportato").performScrollTo().assertExists()
+    assertThat(rule.onAllNodesWithText("Analizza ora").fetchSemanticsNodes()).isEmpty()
+  }
+
+  /** XU2-4 (giro 4): con il NAS che non risponde (o il Wi-Fi) un tocco non farebbe partire niente: il tasto non c'e'. */
+  @Test
+  fun conIlNasCheNonRispondeIlTastoNonCE() {
+    val nas = SearchSamples.settingsIndexer.indexer.copy(analysis = LibraryAnalysisStatus.Paused(LibraryAnalysisWait.NAS, 2_700, 12_300, 15_000))
+    show(SearchSamples.settingsIndexer.copy(indexer = nas))
+    shown("Il NAS non risponde").assertIsDisplayed()
+    assertThat(rule.onAllNodesWithText("Analizza ora").fetchSemanticsNodes()).isEmpty()
+  }
+
+  /** XU2-7 (giro 4): l'anello della testata apre la pagina dell'analisi, come la scritta. */
+  @Test
+  fun lAnelloApreLaPaginaDellAnalisi() {
+    show()
+    rule.onAllNodes(hasClickAction() and hasContentDescription("La ricerca per contenuto copre", substring = true)).onFirst().performClick()
+    assertThat(handlers.calls).containsExactly("openAnalysis")
   }
 }

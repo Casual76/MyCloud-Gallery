@@ -13,6 +13,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.ImageSearch
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.Icon
@@ -33,8 +34,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
@@ -119,7 +118,7 @@ private fun holdRes(hold: MediaAnalysisHold): Int = when (hold) {
 }
 
 /**
- * La capsula: la piastrella dell'analisi con il segno, le due parole (o «Analizza adesso» con la freccia, se [onClick] c'e'), il perche' sotto. Un
+ * La capsula: la piastrella dell'analisi con il segno, le due parole (o «Analizza adesso» con il ▶, se [onClick] c'e'), il perche' sotto. Un
  * nodo solo per TalkBack: lo stato e, se si tocca, l'azione.
  */
 @Composable
@@ -143,26 +142,26 @@ internal fun AnalysisCapsule(badge: AnalysisBadge, onClick: (() -> Unit)?, actio
   }
   val spoken = listOfNotNull(badge.note.description ?: badge.note.label, if (onClick != null) actionLabel else null).joinToString(". ")
   val press = if (onClick != null) Modifier.fluidPressable(onClick = onClick, role = Role.Button, focusShape = FluidCapsuleShape) else Modifier
-  Column(verticalArrangement = Arrangement.spacedBy(LineGap), modifier = modifier) {
+  Column(verticalArrangement = Arrangement.spacedBy(AnalysisCapsuleDimens.LineGap), modifier = modifier) {
     Row(
       modifier = Modifier
         .then(press)
-        .defaultMinSize(minHeight = CapsuleHeight)
+        .defaultMinSize(minHeight = AnalysisCapsuleDimens.Height)
         .clip(FluidCapsuleShape)
         .background(ground)
-        .padding(start = CapsuleStart, end = CapsuleEnd)
+        .padding(start = AnalysisCapsuleDimens.Start, end = if (onClick != null) AnalysisCapsuleDimens.EndWithAction else AnalysisCapsuleDimens.End)
         .clearAndSetSemantics {
           contentDescription = spoken
           if (onClick != null) role = Role.Button
         }
         .testTag(AnalysisCapsuleTag),
       verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(CapsuleGap),
+      horizontalArrangement = Arrangement.spacedBy(AnalysisCapsuleDimens.Gap),
     ) {
       GalleryIconTile(
         icon = Icons.Rounded.ImageSearch,
         family = GalleryIconFamily.Search,
-        size = TileSize,
+        size = AnalysisCapsuleDimens.Tile,
         status = badge.mark,
         ring = ground,
         statusDescription = null,
@@ -171,20 +170,28 @@ internal fun AnalysisCapsule(badge: AnalysisBadge, onClick: (() -> Unit)?, actio
           scaleY = pop.value
         },
       )
-      Text(
-        text = if (onClick != null) actionLabel else badge.note.label,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
-        color = ink,
-        maxLines = 2,
-      )
+      // XU2-3 (giro 4): quando si tocca, il ▶ di «Analizza ora» della testata dopo le parole (la stessa icona per la stessa azione): chi non legge
+      // distingue il tasto dalla capsula del backup accanto, dello stesso colore. Parole e ▶ piu' vicini fra loro che alla piastrella.
+      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AnalysisCapsuleDimens.ActionGap)) {
+        Text(
+          text = if (onClick != null) actionLabel else badge.note.label,
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.SemiBold,
+          color = ink,
+          maxLines = 2,
+          modifier = Modifier.weight(1f, fill = false),
+        )
+        if (onClick != null) {
+          Icon(imageVector = Icons.Rounded.PlayArrow, contentDescription = null, tint = ink, modifier = Modifier.size(AnalysisCapsuleDimens.Action))
+        }
+      }
     }
     badge.note.detail?.let { detail ->
       Text(
         text = detail,
         style = MaterialTheme.typography.bodySmall,
         color = scheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = CapsuleStart).clearAndSetSemantics { },
+        modifier = Modifier.padding(start = AnalysisCapsuleDimens.Start).clearAndSetSemantics { },
       )
     }
   }
@@ -193,9 +200,3 @@ internal fun AnalysisCapsule(badge: AnalysisBadge, onClick: (() -> Unit)?, actio
 internal const val AnalysisCapsuleTag: String = "visore-analisi"
 
 private const val PopFrom = 0.55f
-private val CapsuleHeight: Dp = 48.dp
-private val CapsuleStart: Dp = 6.dp
-private val CapsuleEnd: Dp = 14.dp
-private val CapsuleGap: Dp = 10.dp
-private val TileSize: Dp = 40.dp
-private val LineGap: Dp = 4.dp

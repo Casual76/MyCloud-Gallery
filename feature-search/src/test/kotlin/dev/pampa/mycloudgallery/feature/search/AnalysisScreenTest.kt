@@ -29,6 +29,11 @@ import dev.pampa.mycloudgallery.feature.search.contract.AnalysisFlow
 import dev.pampa.mycloudgallery.feature.search.models.AnalysisHandlers
 import dev.pampa.mycloudgallery.feature.search.models.AnalysisLaneTag
 import dev.pampa.mycloudgallery.feature.search.models.AnalysisQuietTag
+import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.core.library.contract.LibraryAnalysisWait
+import dev.pampa.mycloudgallery.feature.search.models.analyzeNowShown
+import dev.pampa.mycloudgallery.feature.search.models.AnalysisBetweenTag
+import dev.pampa.mycloudgallery.feature.search.models.AnalysisPassingTag
 import dev.pampa.mycloudgallery.feature.search.models.AnalysisRestTag
 import dev.pampa.mycloudgallery.feature.search.models.AnalysisScreen
 import dev.pampa.mycloudgallery.feature.search.models.AnalysisShownTag
@@ -136,7 +141,9 @@ class AnalysisScreenTest {
       AnalysisScreen(LibraryAnalysisStatus.AllReady, AnalysisScenes.restFlow(), AnalysisScenes.thumbnails, Recording(), onBack = {})
     }
     rule.onNodeWithText("Tutto pronto", useUnmergedTree = true).assertIsDisplayed()
-    rule.onAllNodesWithText("100%", useUnmergedTree = true).onFirst().assertIsDisplayed()
+    // Giro 4 (XU2-1): nessun percento (la libreria puo' avere file che non si analizzano), la riga vera.
+    assertThat(rule.onAllNodesWithText("100%", useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+    rule.onNodeWithText("Niente da analizzare qui", useUnmergedTree = true).assertIsDisplayed()
     rule.onNodeWithTag(AnalysisRestTag, useUnmergedTree = true).assertIsDisplayed()
     assertThat(rule.onAllNodesWithText("Analizza ora").fetchSemanticsNodes()).isEmpty()
   }
@@ -397,6 +404,120 @@ class AnalysisScreenTest {
     rule.mainClock.advanceTimeBy(STEP_AFTER)
     rule.waitForIdle()
     assertThat(steps.moving).containsExactly(1 to false)
+  }
+
+  // --- Giro 4 -----------------------------------------------------------------------------------------------------------------------------------
+
+  /** XU2-4 e XU-12: il tasto «Analizza ora» c'e' solo dove una richiesta fa davvero partire l'analisi. Una tabella per ogni stato e ogni perche'. */
+  @Test
+  fun ilTastoCESoloDoveUnaRichiestaFaPartire() {
+    val starts = setOf(
+      LibraryAnalysisWait.NIGHT_WINDOW,
+      LibraryAnalysisWait.CHARGING,
+      LibraryAnalysisWait.BATTERY,
+      LibraryAnalysisWait.POWER_SAVER,
+      LibraryAnalysisWait.THERMAL,
+      LibraryAnalysisWait.ANDROID_LIMIT,
+    )
+    for (reason in LibraryAnalysisWait.entries) {
+      assertWithMessage("in pausa per $reason").that(analyzeNowShown(LibraryAnalysisStatus.Paused(reason, 10, 5, 15))).isEqualTo(reason in starts)
+    }
+    // Esplicite, quelle della critica: il NAS, il Wi-Fi, il Wi-Fi di casa, le foto in preparazione.
+    for (reason in listOf(LibraryAnalysisWait.NAS, LibraryAnalysisWait.WIFI, LibraryAnalysisWait.HOME_WIFI, LibraryAnalysisWait.PREPARATION)) {
+      assertThat(analyzeNowShown(LibraryAnalysisStatus.Paused(reason, null, null, null))).isFalse()
+    }
+    val table = mapOf(
+      LibraryAnalysisStatus.Queued(10, 5, 15) to true,
+      LibraryAnalysisStatus.Queued(null, null, null) to true,
+      LibraryAnalysisStatus.Running(10, null, 5, 15) to false,
+      LibraryAnalysisStatus.AllReady to false,
+      LibraryAnalysisStatus.NotHere(5, 15) to false,
+      LibraryAnalysisStatus.Disabled to false,
+      LibraryAnalysisStatus.ModelMissing to false,
+      LibraryAnalysisStatus.Problem("AI_STORAGE_LOW") to false,
+      LibraryAnalysisStatus.Idle to false,
+    )
+    table.forEach { (status, shown) -> assertWithMessage("$status").that(analyzeNowShown(status)).isEqualTo(shown) }
+  }
+
+  /** XU2-4 e XU2-5 nella pagina: con il NAS che non risponde niente tasto; con le foto in preparazione «In attesa» e niente tasto. */
+  @Test
+  fun doveUnToccoNonFaPartireNienteIlTastoNonCE() {
+    var status by mutableStateOf<LibraryAnalysisStatus>(LibraryAnalysisStatus.Paused(LibraryAnalysisWait.NAS, 2_700, 12_300, 15_000))
+    rule.setSearchContent { AnalysisScreen(status, AnalysisScenes.restFlow(), AnalysisScenes.thumbnails, Recording(), onBack = {}) }
+    rule.onNodeWithText("Il NAS non risponde", useUnmergedTree = true).assertIsDisplayed()
+    assertThat(rule.onAllNodesWithText("Analizza ora").fetchSemanticsNodes()).isEmpty()
+    rule.runOnIdle { status = LibraryAnalysisStatus.Paused(LibraryAnalysisWait.PREPARATION, 2_700, 12_300, 15_000) }
+    rule.onNodeWithText("In attesa", useUnmergedTree = true).assertIsDisplayed()
+    assertThat(rule.onAllNodesWithText("In pausa", useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+    assertThat(rule.onAllNodesWithText("Analizza ora").fetchSemanticsNodes()).isEmpty()
+    // In coda si': una richiesta la fa passare davanti.
+    rule.runOnIdle { status = LibraryAnalysisStatus.Queued(2_700, 12_300, 15_000) }
+    rule.onNodeWithText("Parte da sola", useUnmergedTree = true).assertIsDisplayed()
+    rule.onNodeWithText("Analizza ora").assertIsDisplayed()
+  }
+
+  /**
+   * XU2-2 (riservatezza): la casella di passaggio (una revoca a meta' passo) e' una tessera vuota che non porta **nessun** dato del media: ne'
+   * il media ne' la generazione in cui era nata la sua anteprima, nessun figlio (niente immagine); il media revocato non ha nessun nodo.
+   */
+  @Test
+  fun laCasellaDiPassaggioNonPortaNessunDatoDelMedia() {
+    val gen1 = AnalysisScenes.flow().copy(visibilityGeneration = 1)
+    val target = gen1.recent[0] as AnalysisThumb.Shown
+    val state = showMutable(gen1)
+    rule.mainClock.advanceTimeBy(STEP_INSIDE)
+    emit(state, gen1.copy(recent = listOf(AnalysisThumb.Quiet) + gen1.recent.drop(1)))
+    val passing = rule.onAllNodesWithTag(AnalysisPassingTag, useUnmergedTree = true).fetchSemanticsNodes()
+    assertThat(passing).isNotEmpty()
+    passing.forEach { node ->
+      assertThat(node.config.contains(AnalysisMediaKey)).isFalse()
+      assertThat(node.config.contains(AnalysisBornKey)).isFalse()
+      assertThat(node.children).isEmpty()
+    }
+    assertThat(nodesOf(target)).isEmpty()
+  }
+
+  /**
+   * XU2-2: il neutro con cui si apre una generazione nuova e' di passaggio: tessere vuote (nessun occhio barrato, nessun dato); se non arriva altro
+   * (le foto sono davvero tutte non mostrabili), dopo un passo le caselle prendono l'occhio barrato.
+   */
+  @Test
+  fun ilNeutroDiPassaggioEFattoDiTessereVuote() {
+    val gen1 = AnalysisScenes.flow().copy(visibilityGeneration = 1)
+    val state = showMutable(gen1)
+    emit(state, neutralOf(gen1, generation = 2))
+    assertThat(rule.onAllNodesWithTag(AnalysisPassingTag, useUnmergedTree = true).fetchSemanticsNodes()).isNotEmpty()
+    assertThat(rule.onAllNodesWithTag(AnalysisQuietTag, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+    assertThat(rule.onAllNodes(SemanticsMatcher.keyIsDefined(AnalysisMediaKey), useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+    rule.mainClock.advanceTimeBy(STEP_AFTER)
+    rule.waitForIdle()
+    assertThat(rule.onAllNodesWithTag(AnalysisQuietTag, useUnmergedTree = true).fetchSemanticsNodes()).isNotEmpty()
+    assertThat(rule.onAllNodesWithTag(AnalysisPassingTag, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+  }
+
+  /** XU2-2: uno stato fermo (la pausa: niente nel mirino, niente in arrivo) si applica subito, senza aspettare la fine del passo. */
+  @Test
+  fun unoStatoFermoSiApplicaSubito() {
+    val gen1 = AnalysisScenes.flow().copy(visibilityGeneration = 1)
+    val next = gen1.next[0] as AnalysisThumb.Shown
+    val state = showMutable(gen1)
+    rule.mainClock.advanceTimeBy(STEP_INSIDE)
+    emit(state, AnalysisFlow(null, gen1.recent, emptyList(), visibilityGeneration = 1))
+    rule.mainClock.advanceTimeBy(FEW_FRAMES)
+    rule.waitForIdle()
+    // Dopo pochi fotogrammi (non 1,2 s): le prossime non ci sono piu', nemmeno come tessere di passaggio.
+    assertThat(nodesOf(next)).isEmpty()
+    assertThat(rule.onAllNodesWithTag(AnalysisPassingTag, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
+  }
+
+  /** XU2-6: in corso ma con il mirino vuoto (fra un mese e l'altro): una tessera vuota, non l'aspetto di «Tutto pronto». */
+  @Test
+  fun fraUnaTappaELAltraIlMirinoAspettaLaProssima() {
+    val flow = AnalysisScenes.flow()
+    rule.setSearchContent { AnalysisScreen(AnalysisScenes.RUNNING, AnalysisFlow(null, flow.recent, flow.next), AnalysisScenes.thumbnails, Recording(), onBack = {}) }
+    rule.onNodeWithTag(AnalysisBetweenTag, useUnmergedTree = true).assertExists()
+    assertThat(rule.onAllNodesWithTag(AnalysisRestTag, useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
   }
 
   private companion object {

@@ -14,8 +14,10 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagCode
@@ -85,12 +87,26 @@ private fun LazyItemScope.AnalysisStage(
 ) {
   val tall = Modifier.fillParentMaxHeight(StageOfScreenSide).heightIn(min = SearchDimens.LaneMinHeight)
   val lane = Modifier.fillParentMaxHeight(LaneOfScreen).heightIn(min = SearchDimens.LaneMinHeight)
+  // XU2-13 (giro 4): il telefono in orizzontale (poca altezza) affianca anche sotto la larghezza del tablet, o il nastro finirebbe sotto la piega.
+  val short = LocalConfiguration.current.screenHeightDp.dp < SearchDimens.AnalysisShortHeight
   BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-    if (maxWidth >= SearchDimens.AnalysisSideBySide) {
-      // XU-8: la testata in alto, sotto il titolo (non a meta' altezza); il nastro prende tutta l'altezza accanto.
-      Row(modifier = tall.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(SearchDimens.BlockGap)) {
+    if (maxWidth >= SearchDimens.AnalysisSideBySide || (short && maxWidth >= SearchDimens.AnalysisSideBySideShort)) {
+      // XU-8: la testata in alto, sotto il titolo (non a meta' altezza); il nastro prende tutta l'altezza accanto. Con poca altezza la riga e' alta
+      // quanto la testata o il nastro (il piu' alto dei due), cosi' la testata non si taglia.
+      Row(
+        modifier = (if (short) Modifier else tall).fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(SearchDimens.BlockGap),
+      ) {
         FluidListGroup(modifier = Modifier.width(SearchDimens.AnalysisHeroSideWidth)) { AnalysisHero(status, buttons = buttons, lineGlyph = false) }
-        AnalysisLane(status, flow, thumbnails, modifier = Modifier.weight(1f).fillMaxHeight(), bleed = SearchDimens.LaneNoBleed, frozenShift = frozenShift)
+        AnalysisLane(
+          status,
+          flow,
+          thumbnails,
+          modifier = Modifier.weight(1f).then(if (short) Modifier.fillParentMaxHeight(StageOfScreenSide).heightIn(min = SearchDimens.LaneMinHeight) else Modifier.fillMaxHeight()),
+          bleed = SearchDimens.LaneNoBleed,
+          frozenShift = frozenShift,
+        )
       }
     } else {
       Column(verticalArrangement = Arrangement.spacedBy(SearchDimens.BlockGap)) {
@@ -103,7 +119,8 @@ private fun LazyItemScope.AnalysisStage(
 
 /**
  * I tasti della testata: il rimedio di un problema (o del modello che manca) pieno, perche' e' la cosa da fare; «Analizza ora» tonale in coda o in
- * pausa, perche' e' una possibilita' (le regole del calcolo valgono comunque). Chi non analizza, chi ha finito e chi l'ha spenta non hanno tasti.
+ * una pausa che una richiesta supera ([analyzeNowShown]), perche' e' una possibilita'. Chi non analizza, chi ha finito, chi l'ha spenta, chi aspetta il
+ * NAS o il Wi-Fi e le foto in preparazione non hanno tasti.
  */
 @Composable
 private fun heroButtons(status: LibraryAnalysisStatus, handlers: AnalysisHandlers): List<AnalysisHeroButton> {
@@ -117,7 +134,8 @@ private fun heroButtons(status: LibraryAnalysisStatus, handlers: AnalysisHandler
       AnalysisHeroButton(stringResource(action.label), codeActionIcon(action), filled = index == 0) { handlers.onCodeAction(action) }
     }
   }
-  return if (status is LibraryAnalysisStatus.Queued || status is LibraryAnalysisStatus.Paused) {
+  // XU2-4 (giro 4): solo dove una richiesta la fa davvero partire (la stessa regola di Ricerca e modelli).
+  return if (analyzeNowShown(status)) {
     listOf(AnalysisHeroButton(stringResource(R.string.models_index_now), Icons.Rounded.PlayArrow, filled = false, onClick = handlers::onAnalyzeNow))
   } else {
     emptyList()

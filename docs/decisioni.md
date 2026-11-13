@@ -19482,3 +19482,32 @@ a ogni fotogramma, non e' senza rischio per la fluidita'; da guardare sul telefo
 della sola lettura, di una fase precedente), la seconda proposta di UU3-5 (la riga di Play Protect anche dopo un «Annulla» voluto).
 
 **Prove.** Vedi il resoconto del giro. Mutazioni del giro 3 (`docs/aggiornamenti-in-app-mutazioni.md`, sezione «Giro 3»): 25 eseguite, 22 cadono; M55, M79 e M80 non cadono perche' ognuna toglie uno solo di due fermi indipendenti (tolti insieme cadono: M72 e M78); le 15 del giro 2 il cui codice o la cui prova e' cambiato sono fra le 25.
+
+### Prima beta pubblicata: 1.0.0, canale beta (13 novembre 2026)
+
+**Che cosa e' stato pubblicato.** L'APK firmato con `pampa.jks` costruito dal commit `ae944b82` (tag `v1.0.0` su `main`), `versionCode` 1,
+109.409.653 byte, SHA-256 `f49880260658b20ab427a2f63bc0c8d25b2437a4e5576e53edc23a29a4e24173`, certificato `825738500ce9...637e43`. Release
+GitHub `beta-mycloud-gallery-v1.0.0` (asset `mycloud-gallery-1.0.0.apk`), elenco `manifest.json` su `main` scritto da `publisher.py` (commit
+`19d5ab71`), voce nel Pampa Store. Il repository `Casual76/MyCloud-Gallery` e' pubblico dal 13/11 (decisione dell'utente del 12/11: «Pubblico tutto
+com'e'»); prima del cambio, ricontrollati i 28 commit successivi al controllo dei segreti del 12/11 (`27dd7617`): nessun segreto, solo immagini di prova
+con dati finti.
+
+**Controlli fatti.** Controllo intero (`tools/check.ps1`, senza `-Bench`) verde su `c80e15f0`, con un falso allarme del passo 7h corretto in
+`ae944b82` (il nome della classe che ospita un outline di R8 non e' una chiamata alla libreria) e i sette passi sul bytecode rieseguiti sullo stesso
+APK; passi 0, 1, 2, 4, 5, 6, 7 di `release.ps1` verdi sull'APK firmato, senza ricostruirlo; prova a secco del publisher; dopo la pubblicazione
+`tools/release/verifica-elenco.ps1 -Canale beta -Versione 1.0.0` verde (la voce dell'elenco e l'asset pubblicato sono l'APK finale).
+
+**Sul telefono (S25, installato sopra la versione precedente, dati tenuti).** Pagina Backup: 100%, 7.116 su 7.116, «Al sicuro»; «Fai ora» fa un giro
+e torna «Al sicuro» (ultimo giro 14:25); nessuna riga «foto cancellate prima del backup»; avvio a freddo disegnato in 0,35 s; nessun arresto anomalo
+nel registro. Impostazioni → Aggiornamenti: prima della pubblicazione «Non riesco a controllare adesso» (elenco assente, atteso); dopo, «App
+aggiornata» sia su Stabile sia su Beta. Il canale dell'S25 e' rimasto su **Beta** (serve per ricevere la seconda beta).
+
+**ECCEZIONE DICHIARATA: benchmark non rifatti al rilascio.** Il passo 3 di `release.ps1` chiede `check.ps1 -Bench -BenchStrict` con l'S25
+collegato. Per questa prima beta **non e' stato eseguito**: l'utente considera fatte le misure del 10/11 (corse sull'S25 fermate da lui dopo piu' di
+tre ore) e ha deciso di non ripeterle. Il passo e' stato sostituito da una riga che lo dice nel resoconto del rilascio; tutti gli altri passi sono
+quelli di `release-run.ps1`, non riscritti. Vale solo per la 1.0.0 beta: per la prima stabile la decisione va ripresa.
+
+**Non fatto, da sapere.** La prova vera dell'aggiornamento dentro l'app (beta 1 → beta 2) si potra' fare solo con la seconda beta. Restano aperti, per
+decisione dell'utente, i gusci della deduplica (FS-3) e, fra i noti: i dispositivi revocati che non si tolgono dall'elenco, la sezione Backup della
+Diagnostica che mostra solo titoli e codici, e le voci elencate in `docs/aggiornamenti-in-app.md`. La checklist lunga di `release.ps1` (due settimane
+di beta, giorno della famiglia, copia offline di `pampa.jks`) resta dell'utente.

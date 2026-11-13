@@ -18,4 +18,4 @@
 # `release.ps1`; dopo la pubblicazione sul Pampa Store la riga diventa `pubblicata` con data e impronta (`release.ps1 -SegnaPubblicata`).
 #
 # versione  codice  stato     canale  data  sha256
-1.0.0       1       prevista  beta    -     -
+1.0.0  1  pubblicata  beta  2026-11-13  f49880260658b20ab427a2f63bc0c8d25b2437a4e5576e53edc23a29a4e24173

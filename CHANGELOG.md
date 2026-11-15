@@ -9,6 +9,26 @@ Come si scrive (per chi prepara una versione):
 - sotto ogni titolo, frasi corte che cominciano con `- `. Niente sigle, niente parole da tecnici: le legge tutta la famiglia;
 - la copia che sta dentro l'app è `feature-settings/src/main/res/raw/changelog.md` e deve essere uguale a questo file (un test lo controlla).
 
+## 1.1.0-beta.02
+
+### Novità
+- Anche il backup mostra il nastro delle foto e dei video che sta salvando, con un movimento breve a ogni completamento.
+- Puoi scegliere tutte le cartelle del telefono per il backup, comprese quelle della fotocamera e degli screenshot.
+
+### Correzioni
+- "Analizza ora" risponde subito e riavvia anche un lavoro rimandato. Le attese mostrano il motivo aggiornato.
+- Le foto non più disponibili sul telefono non creano code fantasma. Il nastro si ferma quando non resta niente da analizzare.
+- Un'analisi con il testo ancora da leggere resta da completare, senza rifare il lavoro già salvato.
+- La scelta di molti album funziona anche con migliaia di cartelle.
+
+### Sicurezza
+- Le anteprime del backup e di "Libera spazio" spariscono quando una foto viene nascosta o l'accesso cambia.
+- Il reset della famiglia protegge il passaggio alla nuova chiave e conserva il codice da riscrivere se la schermata viene ricreata.
+
+### Da sapere
+- È una versione di prova per il canale Beta.
+- Il nastro segue il lavoro effettivo: durante un'attesa o a lavoro finito non mostra nuovi file in elaborazione.
+
 ## 1.1.0-beta.01
 
 ### Novità

@@ -104,4 +104,29 @@ class ProveCampoBackupEngineTest {
     assertWithMessage("byte visti durante il caricamento: ${seen.distinct()}").that(midway).isNotEmpty()
     assertThat(seen.distinct().size).isAtLeast(3)
   }
+  @Test fun theConveyorTracksOnlyActiveAndSuccessfullyVerifiedFiles() = runTest {
+    val h = RealEngineKit()
+    h.kit.addPhoneMedia("IMG_1.jpg", NasContent.of(bytes(20_000, 7)))
+    val reading = CompletableDeferred<Unit>()
+    h.phone = { inner -> object : PhoneBytes by inner {
+      override suspend fun open(ref: PhoneRef): PhoneOpen { reading.complete(Unit); awaitCancellation() }
+    } }
+    h.restart()
+    val engine = h.engine
+    val job = launch { engine.run(BackupKind.PHOTOS, 1.hours, BackupTrigger.USER_NOW) }
+    reading.await()
+    assertThat(engine.live.value.active).hasSize(1)
+    assertThat(engine.live.value.recent).isEmpty()
+    job.cancelAndJoin()
+    assertThat(engine.live.value.active).isEmpty()
+    assertThat(engine.live.value.next).isEmpty()
+    assertThat(engine.live.value.finished).isEqualTo(0L)
+    h.phone = { it }
+    h.restart()
+    h.resumeUntilQuiet()
+    assertThat(h.engine.live.value.active).isEmpty()
+    assertThat(h.engine.live.value.recent).hasSize(1)
+    assertThat(h.engine.live.value.finished).isEqualTo(1L)
+  }
+
 }

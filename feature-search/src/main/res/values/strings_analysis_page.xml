@@ -74,4 +74,5 @@
     <string name="analysis_sentence_model_missing">Manca il modello di analisi su questo dispositivo.</string>
     <string name="analysis_sentence_problem">L’analisi è ferma: %1$s</string>
     <string name="analysis_sentence_disabled">L’analisi delle foto è spenta nelle impostazioni.</string>
+    <string name="analysis_hero_requested">Avvio richiesto</string>
 </resources>

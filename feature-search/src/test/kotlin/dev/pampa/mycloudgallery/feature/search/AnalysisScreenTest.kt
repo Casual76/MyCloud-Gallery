@@ -525,4 +525,12 @@ class AnalysisScreenTest {
     const val STEP_AFTER = 1_500L
     const val FEW_FRAMES = 100L
   }
+  @Test fun anAcceptedRequestIsVisibleBeforeAnalysisStarts() {
+    rule.setSearchContent {
+      AnalysisScreen(LibraryAnalysisStatus.Queued(4, null, null, requested = true), AnalysisFlow.EMPTY, null, Recording(), onBack = {})
+    }
+    rule.onNodeWithText("Avvio richiesto", useUnmergedTree = true).assertIsDisplayed()
+    assertThat(rule.onAllNodesWithText("Analizza ora").fetchSemanticsNodes()).isEmpty()
+  }
+
 }

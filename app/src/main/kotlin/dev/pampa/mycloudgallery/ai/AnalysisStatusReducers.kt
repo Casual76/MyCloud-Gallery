@@ -41,6 +41,8 @@ object AnalysisStatusReducers {
     val (ready, total) = readyTotal(facts.coverage)
     if (!facts.indexer) return LibraryAnalysisStatus.NotHere(ready, total)
     val remaining = facts.remaining
+    // Un motore che sta chiudendo o sincronizzando non ha altre foto da analizzare.
+    if (remaining == 0) return LibraryAnalysisStatus.AllReady
     return when (val status = facts.status) {
       is AiStatus.Running -> LibraryAnalysisStatus.Running(remaining, status.etaMinutes, ready, total)
       AiStatus.ModelMissing -> LibraryAnalysisStatus.ModelMissing
@@ -53,12 +55,14 @@ object AnalysisStatusReducers {
         else if (remaining != null) LibraryAnalysisStatus.Paused(LibraryAnalysisWait.NAS, remaining, ready, total)
         else fromRules(facts, ready, total)
       is AiStatus.Waiting -> when (status.reason) {
-        AiWaitReason.HOT -> pausedUnlessDone(LibraryAnalysisWait.THERMAL, facts, ready, total)
-        AiWaitReason.NAS_UNREACHABLE -> pausedUnlessDone(LibraryAnalysisWait.NAS, facts, ready, total)
+        AiWaitReason.HOT -> if (facts.decision != null) fromRules(facts, ready, total)
+          else pausedUnlessDone(LibraryAnalysisWait.THERMAL, facts, ready, total)
+        AiWaitReason.NAS_UNREACHABLE -> if (facts.decision != null) fromRules(facts, ready, total)
+          else pausedUnlessDone(LibraryAnalysisWait.NAS, facts, ready, total)
         AiWaitReason.STORAGE_LOW -> LibraryAnalysisStatus.Problem(AiDiag.AI_STORAGE_LOW.id)
         AiWaitReason.PREPARATION -> pausedUnlessDone(LibraryAnalysisWait.PREPARATION, facts, ready, total)
         AiWaitReason.NEXT_STAGE ->
-          if (remaining == 0) LibraryAnalysisStatus.AllReady else LibraryAnalysisStatus.Queued(remaining, ready, total)
+          if (remaining == 0) LibraryAnalysisStatus.AllReady else fromRules(facts, ready, total)
         // "Regole" e "rete" detti dal motore sono generici: il motivo vero lo dicono le regole di adesso.
         AiWaitReason.RULES, AiWaitReason.NO_NETWORK -> fromRules(facts, ready, total)
       }

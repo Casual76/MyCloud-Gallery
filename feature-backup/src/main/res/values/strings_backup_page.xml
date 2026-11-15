@@ -88,4 +88,5 @@
   <string name="backup_step_sources">Cosa salvare</string>
   <string name="backup_step_device_folder">La cartella sul NAS</string>
   <string name="backup_step_media_permission">Foto e video</string>
+    <string name="backup_lane_description">Backup: %1$d file in lavorazione, %2$d copie completate in questa sessione</string>
 </resources>

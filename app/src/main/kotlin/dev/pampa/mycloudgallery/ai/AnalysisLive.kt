@@ -266,7 +266,7 @@ class AppAnalysisLive(
     recent = engine.recent.map { AnalysisThumb.Quiet },
     next = engine.next.map { AnalysisThumb.Quiet },
     visibilityGeneration = number,
-    finished = engine.finished,
+    finished = engine.analyzed,
   )
 
   /**
@@ -278,7 +278,7 @@ class AppAnalysisLive(
     val start = synchronized(lock) { if (running && snapshotKnown && signal.canResolve()) Start(generation, lastSnapshot, engineLive.value) else null } ?: return
     val result = resolve(start.engine, start.snapshot, start.generation)
     synchronized(lock) {
-      if (running && signal.canResolve() && generation == start.generation &&
+      if (running && signal.canResolve() && engineLive.value == start.engine && generation == start.generation &&
         lastSnapshot === start.snapshot && visible.snapshot.value === start.snapshot) shared.value = result
     }
   }
@@ -312,7 +312,7 @@ class AppAnalysisLive(
       recent = engine.recent.map { thumb(it) },
       next = engine.next.map { thumb(it) },
       visibilityGeneration = number,
-      finished = engine.finished,
+      finished = engine.analyzed,
     )
   }
 

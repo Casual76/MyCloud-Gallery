@@ -33,6 +33,10 @@ import dev.pampa.mycloudgallery.core.trust.registry.RegistryVerifier
 import dev.pampa.mycloudgallery.core.trust.registry.TrustAnchor
 import java.security.SecureRandom
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -83,6 +87,11 @@ class NasFamilyReset(
     } catch (e: Exception) {
       null
     }
+    suspend fun restorePrevious() = withContext(NonCancellable) {
+      try { before?.putBack() } catch (e: Exception) {
+        GalleryLog.e(TAG, e) { "chiave di famiglia vecchia non rimessa" }
+      }
+    }
 
     // 1. Chiave nuova nella cassaforte (fallisce senza blocco schermo sicuro o se il foglio dell'impronta o del PIN e' annullato, M3).
     val newKey = FamilyKey.generate(random)
@@ -90,25 +99,26 @@ class NasFamilyReset(
     val stored = try {
       familyKeys.store(newKey, FamilyKeyUse.SAVE)
     } catch (e: CancellationException) {
+      restorePrevious()
       throw e
     } catch (e: Exception) {
       return@withLock ResetOutcome.Failed(OnboardingProblem.CREDENTIALS_NOT_SAVED)
     }
     if (stored is VaultResult.Refused) return@withLock ResetOutcome.Failed(problemOf(stored.reason))
+    var foundationStarted = false
     val outcome = try {
-      found(newKey, newFamilyId, privateShare, profile.commonShare, old.registry.version, old.registry.config, profile)
+      found(newKey, newFamilyId, privateShare, profile.commonShare, old.registry.version, old.registry.config, profile) { foundationStarted = true }
     } catch (e: CancellationException) {
+      // Prima della fondazione e' certo che il registro vecchio e' ancora quello attivo.
+      // Dopo, una cancellazione del chiamante non deve rimettere una chiave incompatibile col registro nuovo.
+      if (!foundationStarted) restorePrevious()
       throw e
     } catch (e: Exception) {
       GalleryLog.e(TAG, e) { "reset non riuscito" }
       ResetOutcome.Failed(OnboardingProblem.NAS_WRITE_FAILED)
     }
     if (outcome is ResetOutcome.Failed && before != null) {
-      try {
-        before.putBack() // si torna a poter amministrare la famiglia vecchia
-      } catch (e: Exception) {
-        GalleryLog.e(TAG, e) { "chiave di famiglia vecchia non rimessa" }
-      }
+      restorePrevious()
     }
     outcome
   }
@@ -121,6 +131,7 @@ class NasFamilyReset(
     knownVersion: Long,
     config: FamilyConfig,
     profile: LocalDeviceProfile,
+    onFoundation: () -> Unit,
   ): ResetOutcome {
     val now = nasClock.nowMillis()
     // 2. Kit nuovo, riletto e aperto con il codice prima della fondazione.
@@ -147,21 +158,27 @@ class NasFamilyReset(
       me,
     ).acceptedOrNull() ?: return ResetOutcome.Failed(OnboardingProblem.STEP_NOT_AVAILABLE)
     val authority = FamilyAuthority(newKey, nasClock)
+    currentCoroutineContext().ensureActive()
+    // Solo il passaggio registro -> stato locale e' indivisibile rispetto alla cancellazione del chiamante.
+    // Il kit e le attese precedenti restano cancellabili e ripristinano la cassaforte vecchia.
+    return withContext(NonCancellable) {
+    onFoundation()
     val founded = sessions.onShare(commonShare, Purpose.INTERACTIVE) { fs -> authority.refound(fs, newFamilyId, config, request, knownVersion) }
     val signed = when (founded) {
-      is NasResult.Err -> return ResetOutcome.Failed(problemOf(founded.error))
-      is NasResult.Ok -> founded.value ?: return ResetOutcome.Failed(OnboardingProblem.NAS_WRITE_FAILED)
+      is NasResult.Err -> return@withContext ResetOutcome.Failed(problemOf(founded.error))
+      is NasResult.Ok -> founded.value ?: return@withContext ResetOutcome.Failed(OnboardingProblem.NAS_WRITE_FAILED)
     }
 
     // 4. Lo stato fidato passa alla famiglia nuova: l'ancora del QR nuovo parte dalla fondazione.
     val anchor = TrustAnchor.create(newFamilyId, newKey.publicKey.fingerprint, signed.registry.version)
-      ?: return ResetOutcome.Failed(OnboardingProblem.REGISTRY_UNTRUSTED)
+      ?: return@withContext ResetOutcome.Failed(OnboardingProblem.REGISTRY_UNTRUSTED)
     val state = RegistryVerifier.accept(signed.bytes, null, anchor).acceptedOrNull()
-      ?: return ResetOutcome.Failed(OnboardingProblem.REGISTRY_UNTRUSTED)
+      ?: return@withContext ResetOutcome.Failed(OnboardingProblem.REGISTRY_UNTRUSTED)
     engine.install(snapshotOf(state, anchor))
     pendingCode = code
     pendingFingerprint = newKey.publicKey.fingerprint
-    return ResetOutcome.Done(newFamilyId)
+    ResetOutcome.Done(newFamilyId)
+    }
   }
 
   /** Il codice del kit nuovo in 7 gruppi, da mostrare con `FLAG_SECURE` (null se non c'e' un reset da confermare). */

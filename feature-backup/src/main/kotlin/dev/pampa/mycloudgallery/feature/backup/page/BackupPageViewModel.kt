@@ -48,6 +48,7 @@ internal data class BackupPageUi(
   val pendingTasks: Int = 0,
   /** 5B (IN-7): i file ricevuti da un'altra app che non sono ancora sul NAS (la scheda "Ricevuti in coda" compare solo con almeno uno). */
   val received: ReceivedCounts = ReceivedCounts.NONE,
+  val live: dev.pampa.mycloudgallery.core.backup.contract.BackupLive = dev.pampa.mycloudgallery.core.backup.contract.BackupLive.EMPTY,
 )
 
 @HiltViewModel
@@ -76,7 +77,7 @@ class BackupPageViewModel @Inject constructor(
     BackupPageUi(status = status, sources = sources, deviceFolder = deviceFolder, sheetOpen = open, pendingTasks = open5b.size)
   }
 
-  internal val state: StateFlow<BackupPageUi> = combine(base, receivedItems) { ui, arrived -> ui.copy(received = ReceivedCounts.of(arrived)) }.stateIn(
+  internal val state: StateFlow<BackupPageUi> = combine(base, receivedItems, port.live) { ui, arrived, live -> ui.copy(received = ReceivedCounts.of(arrived), live = live) }.stateIn(
     scope = viewModelScope,
     started = SharingStarted.WhileSubscribed(StopTimeoutMillis),
     initialValue = BackupPageUi(port.status.value, port.sources.value, folder.value, sheet.value, pending.value.size, ReceivedCounts.of(receivedItems.value)),

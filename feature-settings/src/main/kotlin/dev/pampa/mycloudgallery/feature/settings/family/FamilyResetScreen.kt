@@ -16,6 +16,7 @@ import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.runtime.Composable
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -104,6 +105,12 @@ internal class FamilyResetViewModel @Inject constructor(
 
   private val _state = MutableStateFlow(ResetUiState(isAdmin = isAdmin()))
   val state: StateFlow<ResetUiState> = _state.asStateFlow()
+
+  init {
+    // Il servizio conserva il codice finche' e' stato riscritto, anche se Android ricrea il ViewModel.
+    val (code, fingerprint) = takeNewCode()
+    if (code.isNotEmpty()) _state.update { it.copy(stage = ResetStage.DONE, newCode = code, newFingerprint = fingerprint) }
+  }
 
   private fun isAdmin(): Boolean = registry.status.value.let { it is TrustStatus.Approved && it.admin }
 
@@ -216,9 +223,12 @@ internal fun FamilyResetScreen(
 ) {
   // Il codice del kit nuovo e' un segreto: niente screenshot ne' anteprima nei recenti finche' si vede.
   SensitiveScreen(enabled = state.newCode.isNotEmpty())
+  val holdBack = state.stage == ResetStage.WORKING || state.newCode.isNotEmpty()
+  // Anche il completamento dello swipe Fluid passa dal dispatcher Back (engine 3.0.4).
+  if (holdBack) BackHandler { }
   FluidScreen(
     title = stringResource(R.string.reset_title),
-    onBack = onBack,
+    onBack = if (holdBack) null else onBack,
     ambient = FluidAmbient(tone = FluidHeroTone.Alert, motif = FluidHeroMotif.Glow),
   ) {
     if (state.stage == ResetStage.DONE && state.newCode.isNotEmpty()) {

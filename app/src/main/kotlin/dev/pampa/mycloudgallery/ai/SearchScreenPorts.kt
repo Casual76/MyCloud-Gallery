@@ -117,7 +117,7 @@ class AppIndexerControl(
       // PR-1 (E-I12): le aree senza indicizzatori, prima l'area comune.
       val areas = runCatching { stack.search.coverageNotices.areasWithoutIndexer() }.getOrDefault(emptyList())
         .distinct().sortedDescending().map { common -> if (common) AreaKind.COMMON_AREA else AreaKind.MY_PRIVATE_AREA }
-      backlogFlow.value = IndexerBacklog(((work?.photos ?: 0L) + (work?.videos ?: 0L)).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), areas)
+      backlogFlow.value = IndexerBacklog((work?.items ?: 0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), areas)
       // Revisione A: il testo letto sta nel registro dell'indice (le righe per chiave di prima non ci sono piu').
       spaceFlow.value = spaceCache.current()
     }
@@ -136,7 +136,7 @@ class AppIndexerControl(
     }
   }
 
-  override fun indexNow() = indexNowRequest()
+  override fun indexNow() = stack.ai.requestNow(indexNowRequest)
 
   override fun savedProbe(): ProbeResult? {
     val file = probeFile ?: return null

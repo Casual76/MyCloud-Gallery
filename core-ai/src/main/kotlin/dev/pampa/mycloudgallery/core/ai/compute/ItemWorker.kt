@@ -157,9 +157,10 @@ internal class ItemWorker(
    * per l'outbox vanno in [staged] ([share] null = risultati solo locali: i media del solo telefono). [localOnly]: niente NAS nemmeno per
    * l'HQ.
    */
-  suspend fun process(share: String?, item: Planned, localOnly: Boolean, staged: MutableList<AiEntry>? = null): ItemEnd {
+  suspend fun process(share: String?, item: Planned, localOnly: Boolean, staged: MutableList<AiEntry>? = null, onComputing: () -> Unit = {}): ItemEnd {
     if (item.todo.isEmpty()) return ItemEnd.SKIPPED
     val input = input(share, item, localOnly) ?: return ItemEnd.WAITING
+    onComputing()
     val key = item.key
     var did = false
     // Le voci per l'outbox: nella lista del lotto se c'e' (IX-6), altrimenti subito; mai per i media del solo telefono.
@@ -203,7 +204,10 @@ internal class ItemWorker(
           did = true
         }
         TextOutcome.Refused -> unsupported(key, AiClass.OCR, input.from)
-        TextOutcome.Failed, TextOutcome.Off -> Unit
+        // Il vettore gia' salvato resta valido, ma questo media aspetta ancora il testo.
+        // Non va nel nastro dei completati e conserva la richiesta urgente per il prossimo giro.
+        TextOutcome.Failed -> return ItemEnd.RETRY
+        TextOutcome.Off -> if (roles.textReadingHere.value) return ItemEnd.RETRY
       }
     }
     return if (did) ItemEnd.COMPUTED else ItemEnd.SKIPPED

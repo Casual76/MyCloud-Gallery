@@ -137,7 +137,7 @@ class AiComputeEngine(
       return session.result(AiStop.MODEL_MISSING)
     }
     if (session.storageLow()) return session.result(AiStop.STORAGE_LOW)
-    val result = when (scope) {
+    val result = try { when (scope) {
       is AiScope.Share -> {
         if (!isMine(scope.share)) {
           // D14: mai un'altra area privata. Non si chiama nessuna porta (ne' NAS, ne' catalogo, ne' pubblicatore).
@@ -147,6 +147,9 @@ class AiComputeEngine(
         session.share(scope.share)
       }
       AiScope.PhoneOnly -> session.phoneOnly()
+    } } finally {
+      liveFlow.value = liveFlow.value.copy(current = null, next = emptyList())
+      if (state.value is AiStatus.Running) state.value = AiStatus.Waiting(AiWaitReason.NEXT_STAGE)
     }
     // IX-4: il modello c'era ed era verificato (controllato sopra), ma il motore non e' partito ne' su GPU ne' su CPU: non e' "serve il modello",
     // e' un problema del motore (con il tasto "Diagnostica"). Il codice lo conta il motore (`AI_ENGINE_INIT_FAILED`).

@@ -295,6 +295,8 @@ class CatalogAiCandidates(
   private val phone: AppAiPhone? = null,
   /** XS-4: il media che l'utente ha toccato per chiedere una chiave (per ritrovare un media del solo telefono oltre il limite della lista). */
   private val mediaOfRequest: (ContentKey) -> MediaId? = { null },
+  /** Solo per il conteggio del calcolo: la pubblicazione resta nel lavoro del motore. */
+  private val savedFor: suspend (ContentKey, String) -> Set<AiClass> = { _, _ -> emptySet() },
 ) : AiCandidates {
   /**
    * XS-4: la lista di sempre (dal piu' recente, al piu' [limit]) con in piu' i candidati chiesti ([include]) che stanno nella share e che la
@@ -328,7 +330,7 @@ class CatalogAiCandidates(
       val settled = work.settled(share, media.map { it.contentKey })
       for (item in media) {
         val wanted = if (readingHere()) setOf(AiClass.VEC, AiClass.OCR) else setOf(AiClass.VEC)
-        val missing = wanted - settled[item.contentKey].orEmpty()
+        val missing = wanted - settled[item.contentKey].orEmpty() - savedFor(item.contentKey, share)
         if (missing.isNotEmpty()) out += AiCandidate(item.contentKey, item.kind, MediaSource.OTHER, missing)
         if (out.size >= limit) return out
       }

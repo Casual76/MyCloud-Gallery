@@ -16,6 +16,11 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
@@ -86,15 +91,22 @@ class BackupCovers(private val ports: BackupCoverPorts) {
   val view get() = ports.library.view
 
   internal val loader get() = ports.loader
+  internal val revision = ports.access?.revision ?: MutableStateFlow(0L)
+  internal fun open(): AutoCloseable = ports.access?.open() ?: AutoCloseable { }
+  internal suspend fun approve(owner: String, ids: Set<MediaId>) { ports.access?.approve(owner, ids) }
+  internal fun release(owner: String) { ports.access?.release(owner) }
+  internal fun allows(media: MediaId): Boolean = ports.library.view.value.viewIndexOf(media) >= 0 && ports.access?.allows(media) != false
 
   /** La foto di copertina di [source] (la piu' recente mostrabile), o null. */
   fun cover(source: BackupSource): MediaId? = shown[source.id]?.firstOrNull()
 
   /** La richiesta della miniatura di [media] in [view], o null se il media non e' nella Libreria visibile (un nascosto, un eliminato). */
   fun request(view: TimelineView, media: MediaId): ThumbRequest? {
+    if (!allows(media)) return null
     val viewIndex = view.viewIndexOf(media)
     if (viewIndex < 0) return null
     val ref = ports.library.refOrNull(media) ?: return null
+    if (!allows(media) || ports.library.view.value !== view) return null
     val index = view.snapshotIndex(viewIndex)
     val version = (view.snapshot as? ColumnarTimelineSnapshot)?.versionKeyAt(index) ?: DefaultVersionKey
     return ThumbRequest(ThumbKey(media, version, ThumbBucket.M), ref)
@@ -106,6 +118,8 @@ class BackupCovers(private val ports: BackupCoverPorts) {
    * cambia. Gira finche' la pagina e' composta.
    */
   suspend fun refresh(sources: List<BackupSource>, lookahead: Int = Lookahead): Unit = coroutineScope {
+    val lease = open()
+    try {
     if (sources.isEmpty()) {
       shown.clear()
       return@coroutineScope
@@ -124,19 +138,21 @@ class BackupCovers(private val ports: BackupCoverPorts) {
       }
     }
     var sent: List<ThumbKey>? = null
-    combine(visible.filterNotNull(), onScreen) { now, screen -> now to screen.keys }.conflate().collect { (now, screen) ->
+    combine(visible.filterNotNull(), onScreen, revision) { now, screen, _ -> now to screen.keys }.conflate().collect { (now, screen) ->
       val window = coverWindow(sources, screen, lookahead)
       val current = view.value
+      approve(CoverOwner, (window.visible + window.ahead).mapNotNull { now[it.id]?.firstOrNull() }.toSet())
       fun requestsOf(list: List<BackupSource>) = list.mapNotNull { source -> now[source.id]?.firstOrNull()?.let { request(current, it) } }
       val onScreenNow = requestsOf(window.visible)
       val ahead = requestsOf(window.ahead)
       val keys = (onScreenNow + ahead).map { it.key }
-      if (keys.isNotEmpty() && keys != sent) {
+      if (keys != sent) {
         ports.loader.window(onScreenNow, ahead)
         sent = keys
       }
       delay(WindowStepMs)
     }
+    } finally { release(CoverOwner); lease.close() }
   }
 
   companion object {
@@ -157,6 +173,7 @@ class BackupCovers(private val ports: BackupCoverPorts) {
 
     /** La versione di una miniatura quando la vista non e' quella a colonne (la stessa regola della griglia). */
     private const val DefaultVersionKey: Long = 1L
+    private const val CoverOwner = "backup-source-covers"
   }
 }
 
@@ -165,7 +182,8 @@ class BackupCovers(private val ports: BackupCoverPorts) {
 internal fun BackupCoverWindow(covers: BackupCovers?, sources: List<BackupSource>) {
   if (covers == null) return
   val ids = remember(sources) { sources.map { it.id } }
-  LaunchedEffect(covers, ids) { covers.refresh(sources) }
+  val lifecycle = LocalLifecycleOwner.current.lifecycle
+  LaunchedEffect(covers, ids, lifecycle) { lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { covers.refresh(sources) } }
 }
 
 /** Le copertine sullo schermo e quelle accanto: le richieste di [BackupCovers.refresh]. */
@@ -196,9 +214,11 @@ internal fun BoxScope.BackupSourceCover(source: BackupSource) {
   CoverPresence(covers, source)
   val media = covers.cover(source) ?: return
   val view by covers.view.collectAsState()
-  val request = remember(view, media) { covers.request(view, media) } ?: return
+  val revision by covers.revision.collectAsStateWithLifecycle()
+  val request = remember(view, media, revision) { covers.request(view, media) } ?: return
   val image = covers.loader.image(request.key, request.ref).value ?: return
-  Image(bitmap = image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+  Image(bitmap = image, contentDescription = null, contentScale = ContentScale.Crop,
+    modifier = Modifier.fillMaxSize().drawWithContent { if (covers.allows(media)) drawContent() })
 }
 
 /**

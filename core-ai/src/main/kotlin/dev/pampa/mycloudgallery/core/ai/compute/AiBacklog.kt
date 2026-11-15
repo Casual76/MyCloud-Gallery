@@ -36,10 +36,12 @@ class AiBacklog(
     var videos = 0L
     var texts = 0L
     var buffered = 0L
+    var pending = 0L
     for (c in unique) {
       val vec = AiClass.VEC in c.missing
       val ocr = reading && AiClass.OCR in c.missing
       if (!vec && !ocr) continue
+      pending++
       if (vec) if (c.kind == MediaKind.VIDEO) videos++ else photos++
       if (ocr) texts++
       val cls = if (c.kind == MediaKind.VIDEO) SegmentClass.FRAMES else SegmentClass.ANALYSIS
@@ -50,7 +52,7 @@ class AiBacklog(
       }
       if (vec && inBuffer) buffered++
     }
-    return AiWork(photos, videos, texts, buffered)
+    return AiWork(photos, videos, texts, buffered, pendingItems = pending)
   }
 
   private fun merge(same: List<AiCandidate>): AiCandidate =

@@ -89,6 +89,7 @@ class BackupCoversTest {
     val covers = covers(emptyMap())
     val plan = (0 until 8).map { idAt(it) }
     val hidden = Without(view, setOf(plan[0], plan[2]))
+    items.publish(hidden)
     val keys = freePreviewRequests(plan) { covers.request(hidden, it) }.map { it.key.mediaId }
     assertThat(keys).containsExactly(plan[1], plan[3], plan[4], plan[5]).inOrder()
     assertThat(keys).hasSize(FreePreviewCount)

@@ -255,7 +255,7 @@ internal class ComputeSession(
     var queue = ordered(claim.items, asked) { it.contentKey }
     var queueKeys = queue.map { it.contentKey }
     var doneInUnit = 0
-    showLive(null, queueKeys, -1)
+    restLive()
     var index = 0
     var stop: AiStop? = null
     var lastDone: ContentKey? = null
@@ -304,19 +304,23 @@ internal class ComputeSession(
         worker.plan(share, item.contentKey, item.kind, sources[item.contentKey] ?: MediaSource.OTHER, missing, others[item.contentKey].orEmpty(), staged)
       }
       worker.prefetch(share, planned, left(), config.fetchBatch)
+      val liveKeys = planned.filter { it.todo.isNotEmpty() }.map { it.key }
       for (item in planned) {
         quickGate()?.let { stop = it }
         if (stop != null) break
-        showLive(item.key, queueKeys, doneInUnit)
-        val end = worker.process(share, item, localOnly = false, staged = staged)
+        val end = worker.process(share, item, localOnly = false, staged = staged) {
+          showLive(item.key, liveKeys, liveKeys.indexOf(item.key))
+          running(queue.size)
+        }
         if (end == ItemEnd.MODEL_MISSING) {
           stop = AiStop.MODEL_MISSING
           break
         }
         counted(end, item.key)
+        restLive()
         doneInUnit++
         lastDone = item.key
-        running(queue.size)
+        if (item.todo.isNotEmpty()) running(queue.size)
       }
       askedRun.after(batch.map { it.contentKey }, asked)
       index += batch.size
@@ -415,7 +419,7 @@ internal class ComputeSession(
     var chosen = ordered(usableList, asked) { it.contentKey }
     var chosenKeys = chosen.map { it.contentKey }
     var doneInList = 0
-    showLive(null, chosenKeys, -1)
+    restLive()
     var index = 0
     while (index < chosen.size) {
       if (index > 0) gate()?.let { return it }
@@ -455,15 +459,18 @@ internal class ComputeSession(
           return it
         }
         val planned = worker.plan(share, candidate.contentKey, candidate.kind, candidate.source, candidate.missing, others[candidate.contentKey].orEmpty(), staged)
-        showLive(candidate.contentKey, chosenKeys, doneInList)
-        val end = worker.process(share, planned, localOnly = true, staged = staged)
+        val end = worker.process(share, planned, localOnly = true, staged = staged) {
+          showLive(candidate.contentKey, chosenKeys, doneInList)
+          running(chosen.size)
+        }
         if (end == ItemEnd.MODEL_MISSING) {
           if (share != null) stageAll(share, staged)
           return AiStop.MODEL_MISSING
         }
         counted(end, candidate.contentKey)
+        restLive()
         doneInList++
-        running(chosen.size)
+        if (planned.todo.isNotEmpty()) running(chosen.size)
       }
       if (share != null) stageAll(share, staged)
       askedRun.after(batch.map { it.contentKey }, asked)
@@ -483,6 +490,7 @@ internal class ComputeSession(
 
   /** Quanti media sono usciti dal lavoro da che il processo e' nato (contatore monotono, da una tappa all'altra): chi stima il residuo lo usa, non la testa di [recentKeys]. */
   private var finishedTotal: Long = live.value.finished
+  private var analyzedTotal: Long = live.value.analyzed
 
   /** Le urgenze di adesso, **l'ultima chiesta per prima**; un guasto del registro non ferma mai il calcolo (vale come nessuna). */
   private fun urgentKeys(): List<ContentKey> = try {
@@ -555,6 +563,7 @@ internal class ComputeSession(
   private fun counted(end: ItemEnd, key: ContentKey) {
     tally.count(end, key)
     if (end == ItemEnd.COMPUTED) {
+      analyzedTotal++
       recentKeys.remove(key)
       recentKeys.addFirst(key)
       while (recentKeys.size > AiLive.RECENT) recentKeys.removeLast()
@@ -576,12 +585,12 @@ internal class ComputeSession(
   /** Il media di adesso e i prossimi della coda [keys] dopo [currentAt] (la posizione del media di adesso), per la pagina "Analisi". */
   private fun showLive(current: ContentKey?, keys: List<ContentKey>, currentAt: Int) {
     val next = if (keys.isEmpty()) emptyList() else keys.subList(minOf(currentAt + 1, keys.size), minOf(keys.size, currentAt + 1 + AiLive.NEXT))
-    live.value = AiLive(current, recentKeys.toList(), next, finishedTotal)
+    live.value = AiLive(current, recentKeys.toList(), next, finishedTotal, analyzedTotal)
   }
 
   /** A tappa ferma: niente media di adesso ne' prossimi; le ultime finite restano (la pagina le mostra ferme). */
   private fun restLive() {
-    live.value = AiLive(null, recentKeys.toList(), emptyList(), finishedTotal)
+    live.value = AiLive(null, recentKeys.toList(), emptyList(), finishedTotal, analyzedTotal)
   }
 
   private fun running(total: Int) {

@@ -1,6 +1,14 @@
 package dev.pampa.mycloudgallery.feature.backup.free
 
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.drawWithContent
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.awaitCancellation
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
@@ -190,7 +198,27 @@ private fun FreeLine(icon: ImageVector, text: String) {
 internal fun FreePreviews(media: List<MediaId>, total: Int, modifier: Modifier = Modifier) {
   val covers = LocalBackupCovers.current ?: return
   val view by covers.view.collectAsState()
-  val requests = remember(view, media) { freePreviewRequests(media) { covers.request(view, it) } }
+  val revision by covers.revision.collectAsStateWithLifecycle()
+  val lifecycle = LocalLifecycleOwner.current.lifecycle
+  DisposableEffect(covers, lifecycle) {
+    var lease: AutoCloseable? = null
+    fun update() {
+      if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+        if (lease == null) lease = covers.open()
+      } else { covers.release(FreePreviewOwner); lease?.close(); lease = null }
+    }
+    val observer = LifecycleEventObserver { _, _ -> update() }
+    lifecycle.addObserver(observer)
+    update()
+    onDispose { lifecycle.removeObserver(observer); covers.release(FreePreviewOwner); lease?.close() }
+  }
+  LaunchedEffect(covers, media, view, revision, lifecycle) {
+    lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+      covers.approve(FreePreviewOwner, media.toSet())
+      awaitCancellation()
+    }
+  }
+  val requests = remember(view, media, revision) { freePreviewRequests(media) { covers.request(view, it) } }
   if (requests.isEmpty()) return
   // Giro 2 (CU-28 = CS-18): il «+N» si misura **prima** delle anteprime e prende tutta la larghezza che gli serve; le anteprime sono quante ne stanno
   // accanto (al piu' quattro). Prima il riquadro aveva una misura fissa e «+1.236» diventava «+1.23», un numero sbagliato.
@@ -214,9 +242,12 @@ internal fun FreePreviews(media: List<MediaId>, total: Int, modifier: Modifier =
     }
     val shown = freePreviewFit(requests.size, maxWidth, thumb, gap) { n -> chipWidth(texts[n]) }
     val more = texts[shown]
-    DisposableEffect(covers, requests.take(shown).map { it.key }) {
-      covers.loader.keep(FreePreviewOwner, requests.take(shown))
-      onDispose { covers.loader.keep(FreePreviewOwner, emptyList()) }
+    DisposableEffect(covers, lifecycle, requests.take(shown).map { it.key }) {
+      fun update() = covers.loader.keep(FreePreviewOwner, if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) requests.take(shown) else emptyList())
+      val observer = LifecycleEventObserver { _, _ -> update() }
+      lifecycle.addObserver(observer)
+      update()
+      onDispose { lifecycle.removeObserver(observer); covers.loader.keep(FreePreviewOwner, emptyList()) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally)) {
       requests.take(shown).forEach { request -> PreviewThumb(covers, request) }
@@ -263,7 +294,8 @@ private fun PreviewThumb(covers: BackupCovers, request: ThumbRequest) {
       .clip(ContinuousCornerShape(FluidRadius.Card))
       .background(MaterialTheme.colorScheme.surfaceContainerHighest),
   ) {
-    if (image != null) Image(bitmap = image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+    if (image != null) Image(bitmap = image, contentDescription = null, contentScale = ContentScale.Crop,
+      modifier = Modifier.fillMaxSize().drawWithContent { if (covers.allows(request.key.mediaId)) drawContent() })
   }
 }
 

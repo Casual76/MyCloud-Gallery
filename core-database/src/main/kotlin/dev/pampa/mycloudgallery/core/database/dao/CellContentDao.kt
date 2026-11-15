@@ -101,7 +101,9 @@ interface CellContentDao {
     private const val PHONE_ONLY_COLUMNS: String =
       "SELECT m.media_id AS media_id, m.current_version_id AS version_id, m.kind AS kind, m.source AS source, m.sort_time AS sort_time, " +
         "m.local_day AS local_day, v.size AS size, v.quick_hash AS quick_hash " +
-        "FROM media m JOIN media_version v ON v.version_id = m.current_version_id WHERE m.presence = 'phone_only'"
+        "FROM media m JOIN media_version v ON v.version_id = m.current_version_id WHERE m.presence = 'phone_only' " +
+        "AND EXISTS (SELECT 1 FROM media_location l JOIN media_store_cursor c ON c.volume = l.volume AND c.ms_version = l.media_store_version " +
+        "WHERE l.version_id = v.version_id AND l.location_type = 'phone' AND l.state = 'present' AND l.media_store_id IS NOT NULL)"
 
     const val PHONE_ONLY_FIRST_SQL: String = "$PHONE_ONLY_COLUMNS ORDER BY m.sort_time DESC, m.media_id DESC LIMIT :limit"
 

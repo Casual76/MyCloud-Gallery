@@ -361,4 +361,38 @@ class BackupQueriesTest : CatalogTestBase() {
     assertThat(plan).doesNotContain("SCAN")
     assertThat(plan).doesNotContain("TEMP B-TREE")
   }
+  @Test fun thousandsOfSelectedAlbumsUseBoundedParametersAndExactMembership() = runBlocking<Unit> {
+    val ids = bulk(4) { Spec(source = "camera", presence = "phone_only", safety = "no_nas_copy", todo = true,
+      phone = true, privateCopy = false, verifiedAt = null) }
+    val selected = (0..3004).map { CatalogSource.Folder("external_primary", "Pictures/Album $it é📷|:'/") }
+    val sql = db.openHelper.writableDatabase
+    val paths = listOf(selected.first().relativePath, selected.last().relativePath, selected.first().relativePath + "child/", "Pictures/ALBUM 0 é📷|:'/")
+    ids.forEachIndexed { i, id -> sql.execSQL("UPDATE media_location SET relative_path = ? WHERE version_id = (SELECT current_version_id FROM media WHERE media_id = ?)", arrayOf(paths[i], id)) }
+    val queries = listOfNotNull(BackupQueries.safetyByStatus("alessio", selected), BackupQueries.queuedBytes("alessio", selected),
+      BackupQueries.problemsByCode("alessio", selected), BackupQueries.safetyByStatus("alessio", listOf(CatalogSource.Camera) + selected, selected),
+      BackupQueries.candidates("alessio", selected, CatalogBackupKind.PHOTOS, null, 20))
+    queries.forEach { assertThat(it.argCount).isAtMost(999); sql.query(it).close() }
+    assertThat(catalog.safetyCounts(selected.toSet()).noNasCopy).isEqualTo(2)
+    assertThat(catalog.queuedBytes(selected.toSet())).isEqualTo(4_000_001L)
+    assertThat(catalog.backupCandidates(selected.toSet(), CatalogBackupKind.PHOTOS, null, 20).map { it.mediaId.value }).containsExactly(ids[0], ids[1])
+    assertThat(catalog.safetyCounts(setOf(CatalogSource.Camera), selected.toSet()).noNasCopy).isEqualTo(2)
+    assertThat(planOf(queries.last())).contains("index_media_backup_todo_sort_time_media_id")
+  }
+
+  @Test fun stalePhoneLocationsNeverCreateAnUploadOrAnalysisQueue() = runBlocking<Unit> {
+    val ids = bulk(5) { i -> Spec(source = "camera", presence = "phone_only", safety = if (i == 3) "safe" else "no_nas_copy",
+      todo = i != 3, phone = i != 4, privateCopy = false, verifiedAt = null) }
+    val sql = db.openHelper.writableDatabase
+    sql.execSQL("UPDATE media_location SET state = 'absent' WHERE version_id IN (SELECT current_version_id FROM media WHERE media_id IN (?, ?))", arrayOf(ids[1], ids[3]))
+    sql.execSQL("UPDATE media_location SET media_store_version = 'old-store' WHERE version_id = (SELECT current_version_id FROM media WHERE media_id = ?)", arrayOf(ids[2]))
+    val counts = catalog.safetyCounts(setOf(CatalogSource.Camera))
+    assertThat(counts.noNasCopy).isEqualTo(1)
+    assertThat(counts.safe).isEqualTo(1) // La storia delle copie sicure resta.
+    assertThat(catalog.queuedBytes(setOf(CatalogSource.Camera))).isEqualTo(2_000_000L)
+    assertThat(catalog.backupCandidates(setOf(CatalogSource.Camera), CatalogBackupKind.PHOTOS, null, 20).map { it.mediaId.value }).containsExactly(ids[0])
+    assertThat(catalog.phoneOnlyWork(null, 20).map { it.mediaId.value }).containsExactly(ids[0])
+    val chosen = setOf(CatalogSource.Folder("external_primary", "Pictures/Screenshots/"))
+    assertThat(catalog.safetyCounts(chosen).noNasCopy).isEqualTo(0)
+  }
+
 }

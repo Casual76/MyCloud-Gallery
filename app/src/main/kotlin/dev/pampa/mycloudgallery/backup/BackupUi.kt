@@ -38,6 +38,7 @@ import dev.pampa.mycloudgallery.feature.viewer.info.MediaBackupStates
 import dev.pampa.mycloudgallery.work.BackupWorkScheduling
 import dev.pampa.mycloudgallery.work.NasWorkScheduling
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -63,13 +64,14 @@ import kotlinx.coroutines.withContext
 class AppBackupOverview(backup: BackupGraph) : BackupOverview, BackupEntryStatus {
   override val status: StateFlow<BackupStatus> = backup.status
   override val sources: StateFlow<List<SourceStatus>> = backup.sources
+  override val live = backup.live
 }
 
 /**
  * Le cartelle del telefono che si possono scegliere come sorgente (§2.1): le righe del MediaStore **gia' lette** dal catalogo, una per
  * cartella con numero e peso. Il catalogo e' la stessa verita' da cui il piano sceglie i candidati: una seconda lettura completa del
- * MediaStore (decine di migliaia di righe) per riempire una pagina delle impostazioni non serve. Le cartelle della fotocamera e degli
- * screenshot hanno il loro interruttore e non si ripetono; con la recinzione di D13 (debug, account di prova) solo le due cartelle di prova.
+ * MediaStore (decine di migliaia di righe) per riempire una pagina delle impostazioni non serve. Si offrono tutte le cartelle presenti,
+ * comprese quelle selezionabili anche per categoria: una cartella scelta ha precedenza sulla categoria. Nessun limite arbitrario.
  *
  * O-2 (prove sul campo): quelle cartelle si riconoscono dal **percorso** (`SourceClassifier.folderOwner`), non dal tipo del media. Prima si
  * toglievano gli screenshot ovunque fossero: due "Screenshot_….png" dentro `mcg-prova` non si contavano nella loro cartella, e una cartella
@@ -81,22 +83,29 @@ class CatalogPhoneFolders(
   private val account: () -> String?,
 ) : PhoneFolders {
 
+  override val changes: kotlinx.coroutines.flow.Flow<Unit> get() = kotlinx.coroutines.flow.callbackFlow {
+    val observer = object : androidx.room.InvalidationTracker.Observer("media", "media_location", "media_store_cursor") {
+      override fun onInvalidated(tables: Set<String>) { trySend(Unit) }
+    }
+    database.invalidationTracker.addObserver(observer)
+    awaitClose { database.invalidationTracker.removeObserver(observer) }
+  }
+
   override suspend fun folders(): List<PhoneFolder> = withContext(Dispatchers.IO) {
     val me = account()
     val out = ArrayList<PhoneFolder>()
     database.openHelper.readableDatabase.query(
-      "SELECT l.volume, l.relative_path, COUNT(*), COALESCE(SUM(l.size), 0) FROM media_location l " +
+      "SELECT l.volume, l.relative_path, COUNT(DISTINCT m.media_id), COALESCE(SUM(l.size), 0) FROM media_location l " +
         "JOIN media_version v ON v.version_id = l.version_id JOIN media m ON m.media_id = v.media_id " +
         "WHERE l.location_type = 'phone' AND l.state = 'present' AND l.volume IS NOT NULL AND l.relative_path IS NOT NULL " +
-        "GROUP BY l.volume, l.relative_path ORDER BY COUNT(*) DESC LIMIT ?",
-      arrayOf<Any?>(MAX_FOLDERS + OWNED_FOLDERS_ROOM),
+        "AND (l.version_id = m.current_version_id OR v.kind = 'original') " +
+        "AND EXISTS (SELECT 1 FROM media_store_cursor c WHERE c.volume = l.volume AND c.ms_version = l.media_store_version) " +
+        "GROUP BY l.volume, l.relative_path ORDER BY COUNT(*) DESC, l.volume, l.relative_path",
     ).use { c ->
-      while (c.moveToNext() && out.size < MAX_FOLDERS) {
+      while (c.moveToNext()) {
         val volume = c.getString(0)
         val path = c.getString(1)
         if (volume.isBlank() || path.isBlank()) continue
-        // Le cartelle della fotocamera e degli screenshot hanno il loro interruttore (O-2: per percorso, non per tipo).
-        if (SourceClassifier.folderOwner(path) != null) continue
         // Fail closed: con una recinzione senza account noto non si offre niente.
         if (fence != null && (me == null || !fence.allowsPhoneFolder(me, path))) continue
         out += PhoneFolder(BackupSource.Folder(volume, path), media = c.getInt(2), bytes = c.getLong(3))
@@ -105,12 +114,6 @@ class CatalogPhoneFolders(
     out
   }
 
-  private companion object {
-    const val MAX_FOLDERS = 200
-
-    /** Posto in piu' per le cartelle della fotocamera e degli screenshot, che si leggono e poi si saltano. */
-    const val OWNED_FOLDERS_ROOM = 16
-  }
 }
 
 /** "Proteggi subito le foto nuove" (D34, Q7 (a)): l'impostazione del dispositivo, nelle regole. */

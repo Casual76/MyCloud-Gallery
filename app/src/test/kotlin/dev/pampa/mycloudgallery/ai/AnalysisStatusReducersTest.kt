@@ -99,4 +99,18 @@ class AnalysisStatusReducersTest {
     val buffer = AnalysisStatusReducers.reduce(facts(status = AiStatus.BufferOnlyDone(4)))
     assertThat(buffer).isEqualTo(LibraryAnalysisStatus.Paused(LibraryAnalysisWait.NAS, 10, 40, 100))
   }
+  @Test fun zeroRemainingOverridesAWorkerClosingItsStage() {
+    val running = AiStatus.Running(12, 12, null, AiBackend.CPU)
+    assertThat(AnalysisStatusReducers.reduce(facts(status = running, remaining = 0))).isEqualTo(LibraryAnalysisStatus.AllReady)
+  }
+
+  @Test fun aCooledPhoneUsesTheCurrentDecisionInsteadOfThePreviousHotStop() {
+    val ready = RuleDecision.Run(RunScope.FULL, network = NetworkClass.HOME_WIFI)
+    assertThat(AnalysisStatusReducers.reduce(facts(status = AiStatus.Waiting(AiWaitReason.HOT), decision = ready)))
+      .isEqualTo(LibraryAnalysisStatus.Queued(10, 40, 100))
+    val nowBattery = wait(WaitReason.BatteryLow(10, 20))
+    assertThat(AnalysisStatusReducers.reduce(facts(status = AiStatus.Waiting(AiWaitReason.HOT), decision = nowBattery)))
+      .isEqualTo(LibraryAnalysisStatus.Paused(LibraryAnalysisWait.BATTERY, 10, 40, 100))
+  }
+
 }

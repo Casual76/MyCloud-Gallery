@@ -193,6 +193,8 @@ data class AiLive(
   val next: List<ContentKey>,
   /** XS-7: quanti media sono usciti dal lavoro da che il processo e' nato (calcolati, gia' fatti da altri o non supportati): un contatore che non si perde se chi guarda salta emissioni. */
   val finished: Long = 0L,
+  /** Solo calcoli conclusi: la sincronizzazione di un risultato gia' pronto non anima il nastro. */
+  val analyzed: Long = finished,
 ) {
   override fun toString(): String = "AiLive(ora=${if (current != null) "si" else "no"}, fatte=${recent.size}, prossime=${next.size})"
 

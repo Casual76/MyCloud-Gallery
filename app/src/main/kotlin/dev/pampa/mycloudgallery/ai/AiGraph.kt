@@ -67,6 +67,9 @@ import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
+import androidx.room.InvalidationTracker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
@@ -367,6 +370,21 @@ class AiGraph(
    * uno a ogni media finito mentre la tappa gira, senza ricontare il database.
    */
   private val remaining = RemainingTracker()
+  private val factRefreshes = Channel<Unit>(Channel.CONFLATED)
+  private val requestPending = MutableStateFlow(false)
+  private val stageLock = Mutex()
+  private val backlogLock = Mutex()
+  @Volatile private var stageRunning = false
+
+  /** Il tocco riceve subito un esito dalle stesse regole del lavoro. */
+  fun requestNow(enqueue: () -> Unit) {
+    val request = WorkRequest.UserInitiated(BackgroundActivity.AI_COMPUTE, confirmed = true, writesToNas = true)
+    pausedRequest = request
+    requestPending.value = true
+    if (statusFlow.value !is AiStatus.Running) statusFlow.value = AiStatus.Waiting(AiWaitReason.RULES)
+    enqueue()
+    graphScope.launch { refreshDecision() }
+  }
 
   /** Il verdetto delle regole per il calcolo, rivalutato quando lo stato o il ruolo cambiano (mai a ogni fotogramma). */
   private val decisionFlow = MutableStateFlow<RuleDecision?>(null)
@@ -388,6 +406,8 @@ class AiGraph(
   val analysis: StateFlow<LibraryAnalysisStatus> = WatchedStateFlow(
     combine(indexer, statusFlow, remaining.state, search.engine.coverage, decisionFlow) { on, status, left, coverage, decision ->
       AnalysisStatusReducers.reduce(AnalysisStatusReducers.Facts(on, status, left, coverage, decision))
+    }.combine(requestPending) { status, pending ->
+      if (status is LibraryAnalysisStatus.Queued) status.copy(requested = pending) else status
     }.stateIn(
       graphScope, SharingStarted.Eagerly,
       AnalysisStatusReducers.reduce(AnalysisStatusReducers.Facts(indexer.value, statusFlow.value, null, search.engine.coverage.value, null)),
@@ -397,8 +417,21 @@ class AiGraph(
 
   init {
     graphScope.launch {
-      // A ogni tappa finita (e all'avvio): il lavoro che resta e il motivo vero di un'eventuale pausa.
-      statusFlow.collect { if (it !is AiStatus.Running) refreshAnalysisFacts() }
+      factRefreshes.receiveAsFlow().collect {
+        refreshAnalysisFacts()
+        delay(500L)
+      }
+    }
+    val catalogObserver = object : InvalidationTracker.Observer("media", "media_version", "media_location", "media_store_cursor") {
+      override fun onInvalidated(tables: Set<String>) { if (watchers.value > 0 && !stageRunning) factRefreshes.trySend(Unit) }
+    }
+    database.invalidationTracker.addObserver(catalogObserver)
+    job.invokeOnCompletion { database.invalidationTracker.removeObserver(catalogObserver) }
+    graphScope.launch {
+      statusFlow.collect { if (it !is AiStatus.Running) factRefreshes.trySend(Unit) }
+    }
+    graphScope.launch {
+      search.index.version.collect { if (watchers.value > 0 && !stageRunning) factRefreshes.trySend(Unit) }
     }
     graphScope.launch {
       indexer.collect { refreshAnalysisFacts() }
@@ -425,7 +458,7 @@ class AiGraph(
           }
         }.collectLatest { trigger ->
           when (trigger) {
-            DecisionTrigger.NOW -> refreshDecision()
+            DecisionTrigger.NOW -> { factRefreshes.trySend(Unit); refreshDecision() }
             DecisionTrigger.EVENT -> {
               delay(DECISION_CALM_MILLIS)
               refreshDecision()
@@ -447,7 +480,7 @@ class AiGraph(
   }
 
   private suspend fun refreshAnalysisFacts() {
-    quiet { backlog() }
+    if (!stageRunning) quiet { backlog() }
     refreshDecision()
   }
 
@@ -458,13 +491,14 @@ class AiGraph(
    */
   private suspend fun refreshDecision() {
     val request = AnalysisRequests.effective(pausedRequest)
-    decisionFlow.value = try {
+    val current = try {
       parts.decide?.invoke(request)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
       null
     }
+    if (AnalysisRequests.effective(pausedRequest) == request) decisionFlow.value = current
   }
 
   /** La richiesta dell'ultima tappa che si e' fermata (null = nessuna ferma: vale il lavoro in background). */
@@ -486,6 +520,7 @@ class AiGraph(
    * rete, NAS) e "riprendo fra poco" per una tappa finita per tempo. Si ricorda su file: la pagina lo ritrova in un altro processo.
    */
   fun noteStage(outcome: StageOutcome, request: WorkRequest? = null) {
+    requestPending.value = false
     // XS-7: la richiesta della tappa che si e' fermata decide il motivo che si mostra (prima di aggiornare lo stato, che fa rileggere il verdetto).
     pausedRequest = AnalysisRequests.pausedAfter(outcome, request)
     val note: AiStatus? = when (outcome) {
@@ -546,12 +581,12 @@ class AiGraph(
     )
     val created = AiComputeEngine(computeParts, recipe)
     engine = rt to created
-    remaining.observed(created.live.value.finished)
+    remaining.observed(created.live.value.analyzed)
     graphScope.launch {
       created.live.collect {
         liveFlow.value = it
         // XS-7: un media finito in piu' = un media in meno da fare (senza ricontare il database).
-        remaining.onFinished(it.finished)
+        remaining.onFinished(it.analyzed)
       }
     }
     graphScope.launch {
@@ -573,21 +608,26 @@ class AiGraph(
    * Una tappa del calcolo (D22): tutti gli ambiti di questo dispositivo in ordine (area privata propria, comune, solo telefono) con le
    * regole di [control]. Null senza NAS o a grafo fermo (niente da fare).
    */
-  suspend fun runStage(budget: Duration, control: AiRunControl, only: Boolean = false): List<Pair<AiScope, AiRunResult>>? {
-    if (stopped) return null
+  suspend fun runStage(budget: Duration, control: AiRunControl, only: Boolean = false): List<Pair<AiScope, AiRunResult>>? = stageLock.withLock {
+    requestPending.value = false
+    if (stopped) return@withLock null
     if (!indexer.value) {
       statusFlow.value = AiStatus.Off
-      return emptyList()
+      return@withLock emptyList()
     }
-    val rt = parts.nas() ?: return null
+    val rt = parts.nas() ?: return@withLock null
     // L'indice locale e' dove il calcolo salva: in un processo nato per il lavoro si apre qui (idempotente).
-    if (!search.open()) return null
+    if (!search.open()) return@withLock null
     // XS-2, XS-5: a inizio tappa il ciclo di lavoro toglie le richieste scadute, finite o non piu' servibili qui.
     quiet { urgentSweep.sweep(checkServable = true) }
+    quiet { backlog() }
+    stageRunning = true
     try {
       // XS-3: con [only] la tappa lavora solo i media chiesti dall'utente ("Analizza adesso") e poi si ferma.
-      return engineFor(rt).runAll(budget, control, only)
+      return@withLock engineFor(rt).runAll(budget, control, only)
     } finally {
+      stageRunning = false
+      factRefreshes.trySend(Unit)
       // IX-5: il 440M su GPU pesa circa 800 MB di PSS e non deve restare nel processo della galleria a tappa finita (la prossima lo riapre).
       withContext(NonCancellable) {
         runCatching { images.release() }
@@ -670,12 +710,23 @@ class AiGraph(
   }
 
   /** Il lavoro che resta su questo dispositivo (§2.8, `AiBacklog`): null senza NAS. */
-  suspend fun backlog(): dev.pampa.mycloudgallery.core.rules.estimate.AiWork? {
-    val rt = parts.nas() ?: return null
-    val work = dev.pampa.mycloudgallery.core.ai.compute.AiBacklog(roles, CatalogAiCandidates(rt.work, { textReadingHere.value }, phone), buffer, recipe).count()
+  suspend fun backlog(): dev.pampa.mycloudgallery.core.rules.estimate.AiWork? = backlogLock.withLock {
+    val rt = parts.nas() ?: run { remaining.set(null); return@withLock null }
+    val candidates = CatalogAiCandidates(rt.work, { textReadingHere.value }, phone, savedFor = { key, share ->
+      val vec = results.savedFor(key, recipe.version, share)
+      val ocr = if (recipe.version == recipe.ocrVersion) vec else results.savedFor(key, recipe.ocrVersion, share)
+      buildSet {
+        if (AiClass.VEC in vec) add(AiClass.VEC)
+        if (AiClass.OCR in ocr) add(AiClass.OCR)
+      }
+    })
+    val work = dev.pampa.mycloudgallery.core.ai.compute.AiBacklog(roles, candidates, buffer, recipe).count()
     // Pacchetto X: chiunque rilegga il lavoro che resta alimenta lo stato ridotto (niente seconda lettura per la pagina).
-    remaining.set(((work.photos + work.videos).coerceAtMost(Int.MAX_VALUE.toLong())).toInt())
-    return work
+    if (!stageRunning) {
+      remaining.set(work.items.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+      remaining.observed(engine?.second?.live?.value?.analyzed ?: 0L)
+    }
+    work
   }
 
   /** Il contatore dei contatori del calcolo di adesso (Diagnostica). */
@@ -710,7 +761,7 @@ class AiGraph(
     const val BUFFER_DIR = "ai-buffer"
 
     /** XS-7: un attimo di calma prima di rivalutare le regole dopo un evento (le raffiche di cambi contano una volta). */
-    const val DECISION_CALM_MILLIS: Long = 2_000L
+    const val DECISION_CALM_MILLIS: Long = 250L
 
     /** XS-5: l'indice fermo da un attimo prima di controllare se un altro dispositivo ha finito una richiesta. */
     const val INDEX_CALM_MILLIS: Long = 3_000L

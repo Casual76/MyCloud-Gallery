@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupRunResult
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSetupStep
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
+import dev.pampa.mycloudgallery.core.backup.contract.BackupLive
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStore
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.backup.contract.DeviceFolder
@@ -166,6 +167,24 @@ class SafeUploadEngine(
 
   override val status: StateFlow<BackupStatus> = state
 
+  private val liveLock = Any()
+  private val liveFlow = MutableStateFlow(BackupLive.EMPTY)
+  override val live: StateFlow<BackupLive> = liveFlow
+
+  private fun liveStarted(id: MediaId) = synchronized(liveLock) {
+    val old = liveFlow.value
+    liveFlow.value = old.copy(active = (old.active + id).distinct(), next = old.next - id)
+  }
+
+  private fun liveEnded(id: MediaId, success: Boolean) = synchronized(liveLock) {
+    val old = liveFlow.value
+    liveFlow.value = old.copy(
+      active = old.active - id,
+      recent = if (success) (listOf(id) + old.recent.filter { it != id }).take(BackupLive.WINDOW) else old.recent,
+      finished = old.finished + if (success) 1L else 0L,
+    )
+  }
+
   @Volatile private var stopRequested: StopBy? = null
 
   /** Le uscite della preparazione fra la lettura del telefono e il collegamento (D10), per elemento; poche e con un tetto. */
@@ -316,6 +335,9 @@ class SafeUploadEngine(
     val (mine, foreign) = ofKind.partition { it.kind == UploadKind.INCOMING || it.share.equals(share, ignoreCase = true) }
     if (foreign.isNotEmpty()) GalleryLog.w(TAG) { "elementi di un'altra area: ${foreign.size} aspettano (la share non e' piu' quella del motore)" }
     val queue = WorkQueue(round, mine)
+    synchronized(liveLock) {
+      liveFlow.value = liveFlow.value.copy(active = emptyList(), next = mine.map { it.mediaId }.distinct().take(BackupLive.WINDOW))
+    }
     repeat(foreign.size) { queue.park() }
     round.queue = queue
     round.publishRunning(queue)
@@ -329,6 +351,8 @@ class SafeUploadEngine(
       // punto di ripresa nel diario.
       if (state.value is BackupStatus.Running) state.value = BackupStatus.Stopped(stopRequested ?: StopBy.SYSTEM)
       throw e
+    } finally {
+      synchronized(liveLock) { liveFlow.value = liveFlow.value.copy(active = emptyList(), next = emptyList()) }
     }
     return finish(round, queue, round.halt.get())
   }
@@ -387,9 +411,12 @@ class SafeUploadEngine(
         return
       }
       round.active.incrementAndGet()
+      liveStarted(item.mediaId)
       try {
         driveItem(round, queue, item)
       } finally {
+        val completed = store.item(item.id)?.state
+        liveEnded(item.mediaId, completed == UploadState.DONE || completed == UploadState.LINKED_EXISTING)
         round.active.decrementAndGet()
       }
       round.publishRunning(queue)

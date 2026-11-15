@@ -43,11 +43,26 @@ object BackupQueries {
     /** `(l.volume = ? AND l.relative_path = ?) OR ...`, o `0`. */
     fun folderClause(l: String, args: MutableList<Any?>): String {
       if (folders.isEmpty()) return "0"
+      // Una query puo' ripetere la selezione due volte e aggiungere le cartelle escluse.
+      // Oltre 128 cartelle usiamo un solo parametro, anche su SQLite con limite 999.
+      // Hex UTF-8 rende i delimitatori inequivoci e mantiene il confronto esatto (anche Unicode).
+      if (folders.size > 128) {
+        args += folders.joinToString("", "|") { hex(it.volume) + ":" + hex(it.relativePath) + "|" }
+        return "instr(?, '|' || hex($l.volume) || ':' || hex($l.relative_path) || '|') > 0"
+      }
       folders.forEach {
         args += it.volume
         args += it.relativePath
       }
       return folders.joinToString(" OR ", "(", ")") { "(+$l.volume = ? AND +$l.relative_path = ?)" }
+    }
+
+    private fun hex(value: String): String = buildString {
+      val digits = "0123456789ABCDEF"
+      for (byte in value.toByteArray(Charsets.UTF_8)) {
+        val unsigned = byte.toInt() and 255
+        append(digits[unsigned ushr 4]); append(digits[unsigned and 15])
+      }
     }
   }
 
@@ -112,7 +127,7 @@ object BackupQueries {
     val filter = SourceFilter(sources)
     if (filter.isEmpty) return null
     val args = ArrayList<Any?>()
-    val where = inSources(filter, args, outside)
+    val where = inSources(filter, args, outside) + actionableSource(filter, args)
     args.add(0, me)
     return SimpleSQLiteQuery(
       "SELECT m.safety AS status, COUNT(*) AS count FROM media m WHERE m.owner_account = ? AND $where GROUP BY m.safety",
@@ -129,7 +144,7 @@ object BackupQueries {
     val filter = SourceFilter(sources)
     if (filter.isEmpty) return null
     val args = ArrayList<Any?>()
-    val where = inSources(filter, args)
+    val where = inSources(filter, args) + actionableSource(filter, args)
     args.add(0, me)
     return SimpleSQLiteQuery(
       "SELECT COALESCE(SUM(v.size), 0) FROM media m JOIN media_version v ON v.version_id = m.current_version_id " +
@@ -144,13 +159,25 @@ object BackupQueries {
     val filter = SourceFilter(sources)
     if (filter.isEmpty) return null
     val args = ArrayList<Any?>()
-    val where = inSources(filter, args, outside)
+    val where = inSources(filter, args, outside) + actionableSource(filter, args)
     args.add(0, me)
     return SimpleSQLiteQuery(
       "SELECT p.code AS code, COUNT(*) AS count FROM backup_problem p JOIN media m ON m.media_id = p.media_id " +
         "WHERE m.owner_account = ? AND $where GROUP BY p.code",
       args.toTypedArray(),
     )
+  }
+
+  /** Le assenze storiche servono alla sicurezza, mai a promettere un caricamento. */
+  private fun actionableSource(filter: SourceFilter, args: MutableList<Any?>): String {
+    val media = filter.mediaClause("m", args)
+    val folders = filter.folderClause("live", args)
+    return " AND (m.safety != 'no_nas_copy' OR EXISTS (SELECT 1 FROM media_version av " +
+      "JOIN media_location live ON live.version_id = av.version_id " +
+      "JOIN media_store_cursor cursor ON cursor.volume = live.volume AND cursor.ms_version = live.media_store_version " +
+      "WHERE av.media_id = m.media_id AND (av.version_id = m.current_version_id OR av.kind = 'original') " +
+      "AND live.location_type = 'phone' AND live.state = 'present' AND live.media_store_id IS NOT NULL " +
+      "AND ($media OR $folders)))"
   }
 
   /**

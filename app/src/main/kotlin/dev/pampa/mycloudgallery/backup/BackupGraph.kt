@@ -80,7 +80,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.Flow
@@ -884,6 +887,10 @@ class BackupGraph(
   /** Una riga per sorgente (§1.5 `SourceStatus`). */
   val sources: StateFlow<List<SourceStatus>> = sourcesFlow.asStateFlow()
 
+  val live: StateFlow<dev.pampa.mycloudgallery.core.backup.contract.BackupLive> = partsFlow
+    .flatMapLatest { it?.engine?.live ?: dev.pampa.mycloudgallery.core.backup.contract.BackupLive.NONE }
+    .stateIn(scope, SharingStarted.Eagerly, dev.pampa.mycloudgallery.core.backup.contract.BackupLive.EMPTY)
+
   private val footerFlow = MutableStateFlow<LibraryBackupStatus>(LibraryBackupStatus.Idle)
 
   /** Lo stato per il piede della Libreria (`BackupStatus` ridotto a `LibraryBackupStatus`). */
@@ -954,6 +961,15 @@ class BackupGraph(
     scope.launch { partsFlow.flatMapLatest { it?.engine?.status ?: emptyFlow() }.collect { kick() } }
     // BK-13: le regole (preset, soglie) cambiano perche' il backup aspetta.
     scope.launch { inputs.ruleSettings.observe().collect { kick() } }
+    scope.launch {
+      kotlinx.coroutines.flow.combine(statusFlow.subscriptionCount, footerFlow.subscriptionCount) { page, library -> page + library > 0 }
+        .flatMapLatest { watched ->
+          if (watched) nasInputs.stateProvider.observe().map { Unit }.catch { e ->
+            if (e is CancellationException) throw e
+            GalleryLog.w(TAG) { "stato del sistema non disponibile: ${e.javaClass.simpleName}" }
+          } else emptyFlow()
+        }.collect { kick() }
+    }
     // BK-11: "Mostra come principale" e "Separa" sono dati personali come preferiti e nascosti: la sincronizzazione parte accorpata.
     // P14 (D22, E-D15): "Ovunque" del viewer prende le copie di tutte le versioni (anche quelle in `Versioni/`) dall'elenco del backup.
     nas.organizer.everywhere = { id -> fiveB.everywhere(id) }

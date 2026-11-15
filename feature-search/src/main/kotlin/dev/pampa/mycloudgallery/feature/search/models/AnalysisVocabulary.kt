@@ -134,7 +134,7 @@ internal fun analysisWaitRes(reason: LibraryAnalysisWait): Int = when (reason) {
  * con tutto pronto, su un altro dispositivo, spenta, senza modello, con un problema (che ha il suo tasto) o senza stato.
  */
 internal fun analyzeNowShown(status: LibraryAnalysisStatus): Boolean = when (status) {
-  is LibraryAnalysisStatus.Queued -> true
+  is LibraryAnalysisStatus.Queued -> !status.requested
   is LibraryAnalysisStatus.Paused -> when (status.reason) {
     LibraryAnalysisWait.NIGHT_WINDOW,
     LibraryAnalysisWait.CHARGING,
@@ -167,7 +167,7 @@ internal fun analyzeNowShown(status: LibraryAnalysisStatus): Boolean = when (sta
 internal fun analysisLabel(status: LibraryAnalysisStatus): String? = when (status) {
   LibraryAnalysisStatus.Idle -> null
   is LibraryAnalysisStatus.Running -> stringResource(R.string.analysis_hero_running)
-  is LibraryAnalysisStatus.Queued -> stringResource(R.string.analysis_hero_queued)
+  is LibraryAnalysisStatus.Queued -> stringResource(if (status.requested) R.string.analysis_hero_requested else R.string.analysis_hero_queued)
   // XU2-5: le foto in preparazione non sono una pausa (il segno e' la clessidra): si aspetta.
   is LibraryAnalysisStatus.Paused ->
     stringResource(if (status.reason == LibraryAnalysisWait.PREPARATION) R.string.analysis_hero_waiting else R.string.analysis_hero_paused)

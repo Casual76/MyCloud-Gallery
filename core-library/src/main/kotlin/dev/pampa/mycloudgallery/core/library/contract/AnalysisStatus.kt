@@ -41,7 +41,7 @@ sealed interface LibraryAnalysisStatus {
   data class Running(val remaining: Int?, val etaMinutes: Int?, val ready: Int?, val total: Int?) : LibraryAnalysisStatus
 
   /** C'e' lavoro e le regole lo lascerebbero partire, ma in questo momento non sta girando (fra una tappa e l'altra). */
-  data class Queued(val remaining: Int?, val ready: Int?, val total: Int?) : LibraryAnalysisStatus
+  data class Queued(val remaining: Int?, val ready: Int?, val total: Int?, val requested: Boolean = false) : LibraryAnalysisStatus
 
   /** C'e' lavoro ma le regole lo fermano adesso: [reason] e' il motivo vero, mai "attesa delle regole". */
   data class Paused(val reason: LibraryAnalysisWait, val remaining: Int?, val ready: Int?, val total: Int?) : LibraryAnalysisStatus

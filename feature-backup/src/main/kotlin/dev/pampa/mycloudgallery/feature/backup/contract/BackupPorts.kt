@@ -25,6 +25,9 @@ import kotlinx.coroutines.flow.StateFlow
 interface BackupOverview {
   val status: StateFlow<BackupStatus>
 
+  val live: StateFlow<dev.pampa.mycloudgallery.core.backup.contract.BackupLive>
+    get() = dev.pampa.mycloudgallery.core.backup.contract.BackupLive.NONE
+
   /** Una riga per sorgente, nell'ordine in cui si mostrano (fotocamera e screenshot per prime, poi le cartelle aggiuntive). */
   val sources: StateFlow<List<SourceStatus>>
 }
@@ -43,6 +46,8 @@ data class PhoneFolder(val source: BackupSource, val media: Int, val bytes: Long
 
 /** Le cartelle del telefono con numero e peso. `:app` la lega a `MediaStoreSource`; la lettura puo' durare, quindi e' una chiamata. */
 fun interface PhoneFolders {
+  val changes: kotlinx.coroutines.flow.Flow<Unit> get() = kotlinx.coroutines.flow.emptyFlow()
+
   suspend fun folders(): List<PhoneFolder>
 }
 
@@ -59,7 +64,16 @@ fun interface SourceNewestMedia {
  * I3: le porte delle copertine, le stesse delle Raccolte. [library] e' la Libreria visibile (mai un nascosto ne' un eliminato), [loader] la cache
  * delle miniature della griglia, [newest] le ultime foto di ogni cartella. Opzionale: senza, le sorgenti hanno la piastrella della famiglia.
  */
-class BackupCoverPorts(val newest: SourceNewestMedia, val library: ViewerItems, val loader: ThumbnailLoader)
+class BackupCoverPorts(val newest: SourceNewestMedia, val library: ViewerItems, val loader: ThumbnailLoader, val access: BackupPreviewAccess? = null)
+
+/** Autorizzazione delle anteprime: controllo sincrono prima della richiesta e del disegno, filtro finale fuori dal thread UI. */
+interface BackupPreviewAccess {
+  val revision: StateFlow<Long>
+  fun open(): AutoCloseable
+  suspend fun approve(owner: String, ids: Set<MediaId>)
+  fun release(owner: String)
+  fun allows(id: MediaId): Boolean
+}
 
 /** Le regole del backup che l'utente tocca da qui (le altre sono nelle attivita'). Del dispositivo, non personali. */
 interface BackupRules {

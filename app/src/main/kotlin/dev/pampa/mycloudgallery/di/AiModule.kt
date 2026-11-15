@@ -92,7 +92,7 @@ object AiModule {
   @Provides
   @Singleton
   fun indexerControl(@ApplicationContext context: Context, stack: AiStack, graph: AppGraph): IndexerControl =
-    AppIndexerControl(stack, graph.scope, java.io.File(context.noBackupFilesDir, AppIndexerControl.PROBE_FILE)) { AiWorkScheduling.indexNow(context) }
+    AppIndexerControl(stack, graph.scope, java.io.File(context.noBackupFilesDir, AppIndexerControl.PROBE_FILE)) { AiWorkScheduling.indexNow(context, graph.scope) }
 
   /**
    * Pacchetto X: il nastro della pagina "Analisi delle foto" (le chiavi del motore dietro il cancello della Libreria). XS-1 (Pacchetto XF): la

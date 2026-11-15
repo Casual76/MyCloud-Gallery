@@ -144,6 +144,7 @@ internal fun AnalysisLane(
   bleed: Dp = GalleryDimens.Gutter,
   frozenShift: Float? = null,
 ) {
+  val flow = if (status == LibraryAnalysisStatus.AllReady) flow.copy(current = null, next = emptyList()) else flow
   val reduced = LocalFluidMotionPolicy.current.reducedMotion
   val pacedState = rememberPaced(flow)
   val paced = pacedState.value

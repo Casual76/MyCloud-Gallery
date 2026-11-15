@@ -24,6 +24,7 @@ import dev.pampa.mycloudgallery.feature.backup.ui.BackupCovers
 import java.util.Optional
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -152,14 +153,33 @@ class BackupSettingsViewModel @Inject constructor(
     ),
   )
 
-  init {
-    reloadFolders()
+  private var folderRead: kotlinx.coroutines.Job? = null
+
+  private var folderWatch: kotlinx.coroutines.Job? = null
+
+  init { reloadFolders() }
+
+  fun onShown() {
+    if (folderWatch?.isActive == true) return
+    folderWatch = viewModelScope.launch {
+      folders.changes.collectLatest {
+        kotlinx.coroutines.delay(500L)
+        reloadFolders()
+      }
+    }
+  }
+
+  fun onHidden() {
+    folderWatch?.cancel()
+    folderWatch = null
+    folderRead?.cancel()
   }
 
   /** Rilegge le cartelle del telefono (all'apertura e quando l'utente torna dal permesso). */
   fun reloadFolders() {
-    foldersState.value = FoldersState.Loading
-    viewModelScope.launch {
+    folderRead?.cancel()
+    if (foldersState.value !is FoldersState.Ready) foldersState.value = FoldersState.Loading
+    folderRead = viewModelScope.launch {
       foldersState.value = try {
         FoldersState.Ready(folders.folders())
       } catch (e: CancellationException) {

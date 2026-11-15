@@ -20,6 +20,16 @@ class FamilyResetViewModelTest {
     FamilyResetViewModel(FakeRegistryService(TrustStatus.Approved(admin)), reset)
 
   @Test
+  fun unNuovoViewModelRipresentaIlCodiceNonAncoraConfermato() = runTest {
+    val reset = FakeFamilyReset()
+    reset.reset(confirmedTwice = true)
+    val vm = viewModel(reset = reset)
+    assertThat(vm.state.value.stage).isEqualTo(ResetStage.DONE)
+    assertThat(vm.state.value.newCode.joinToString("-")).isEqualTo(reset.newCode)
+    assertThat(reset.attempts).isEqualTo(1)
+  }
+
+  @Test
   fun ilResetVuoleDueConfermeELaParolaGiusta() = runTest {
     val reset = FakeFamilyReset()
     val vm = viewModel(reset = reset)

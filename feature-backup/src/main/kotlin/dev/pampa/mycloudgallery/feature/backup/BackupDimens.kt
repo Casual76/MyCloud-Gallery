@@ -11,6 +11,13 @@ import androidx.compose.ui.unit.dp
  * stile nuovo).
  */
 internal object BackupDimens {
+  val LaneHeight = 136.dp
+  val LaneCurrent = 92.dp
+  val LaneSide = 64.dp
+  val LaneGap = 12.dp
+  val LaneMark = 22.dp
+  val LaneBorder = 2.dp
+
 
   /** Nessuno spazio. */
   val None: Dp = 0.dp

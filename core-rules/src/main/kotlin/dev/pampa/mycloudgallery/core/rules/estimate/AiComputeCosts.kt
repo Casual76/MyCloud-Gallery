@@ -21,12 +21,14 @@ data class AiWork(
   val videos: Long = 0L,
   val textReads: Long = 0L,
   val buffered: Long = 0L,
+  /** Media distinti con vettore o testo ancora da calcolare. */
+  val pendingItems: Long = photos + videos,
 ) {
   init {
-    require(photos >= 0 && videos >= 0 && textReads >= 0 && buffered >= 0) { "Un conteggio non puo' essere negativo." }
+    require(photos >= 0 && videos >= 0 && textReads >= 0 && buffered >= 0 && pendingItems >= 0) { "Un conteggio non puo' essere negativo." }
   }
 
-  val items: Long get() = photos + videos
+  val items: Long get() = pendingItems
 
   companion object {
     val NONE = AiWork()

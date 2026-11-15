@@ -23,6 +23,7 @@ import java.time.LocalTime
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.minutes
 import org.junit.Before
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -94,10 +95,10 @@ class AiWorkSchedulingTest {
   }
 
   @Test
-  fun ix1_indicizzaOraConLavoroPerTreTappeFaGirareTreTappe() {
+  fun ix1_indicizzaOraConLavoroPerTreTappeFaGirareTreTappe() = runBlocking<Unit> {
     Script.reset(stages = 3)
 
-    AiWorkScheduling.indexNow(context)
+    AiWorkScheduling.indexNow(context, this).join()
 
     assertThat(Script.ran.get()).isEqualTo(3)
     // La catena resta una richiesta dell'utente (nome e vincoli di "Indicizza ora") fino all'ultima tappa.
@@ -120,13 +121,15 @@ class AiWorkSchedulingTest {
   }
 
   @Test
-  fun ix1_unTocco_DiIndicizzaOraMentreUnGiroDelleNovitaGiraNonViene_Assorbito() {
+  fun ix1_unTocco_DiIndicizzaOraMentreUnGiroDelleNovitaGiraNonViene_Assorbito() = runBlocking<Unit> {
     // Il giro delle novita' chiede "Indicizza ora" mentre gira (l'utente tocca): con due nomi diversi la richiesta dell'utente parte; con il
     // nome condiviso di prima, `KEEP` la buttava perche' il giro in corso e' "non finito".
     Script.reset(stages = 1)
-    Script.duringRun = { AiWorkScheduling.indexNow(context) }
+    var nested: kotlinx.coroutines.Job? = null
+    Script.duringRun = { nested = AiWorkScheduling.indexNow(context, this) }
 
     AiWorkScheduling.afterNews(context)
+    nested?.join()
 
     assertThat(Script.users).containsExactly(false, true)
   }
@@ -235,4 +238,13 @@ class AiWorkSchedulingTest {
     val userNet = checkNotNull(user.constraints.requiredNetworkRequest)
     assertThat(userNet.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED)).isFalse()
   }
+  @Test fun anotherExplicitTapStartsNowInsteadOfKeepingADelayedManualRetry() = runBlocking<Unit> {
+    Script.reset(stages = 1)
+    AiWorkScheduling.continueCompute(context, user = true, delayMs = 3_600_000L)
+    assertThat(Script.ran.get()).isEqualTo(0)
+    AiWorkScheduling.indexNow(context, this).join()
+    assertThat(Script.ran.get()).isEqualTo(1)
+    assertThat(Script.users).containsExactly(true)
+  }
+
 }

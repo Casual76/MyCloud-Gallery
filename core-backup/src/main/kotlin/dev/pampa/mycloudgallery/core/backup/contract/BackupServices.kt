@@ -71,6 +71,8 @@ data class BackupRunResult(
 interface BackupEngine {
   val status: StateFlow<BackupStatus>
 
+  val live: StateFlow<BackupLive> get() = BackupLive.NONE
+
   suspend fun run(kind: BackupKind, budget: Duration, trigger: BackupTrigger): BackupRunResult
 
   suspend fun resumeAll(budget: Duration): BackupRunResult

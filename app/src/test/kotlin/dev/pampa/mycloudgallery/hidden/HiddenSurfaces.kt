@@ -378,6 +378,15 @@ internal object HiddenSurfaces {
       owner = "X", backing = Backing.PRODUCTION, sources = listOf("app/src/main/kotlin/dev/pampa/mycloudgallery/ai/AnalysisLive.kt"),
       probe = RealAnalysisProbes.analysis, live = true, alsoProvedBy = listOf("AnalysisVisibilityIntegrationTest", "AnalysisGateAndUrgentTest"),
     ),
+    SurfaceEntry(
+      id = "backup-previews", title = "Backup: nastro e copertine delle sorgenti", row = SpecRow.COLLECTIONS,
+      owner = "Backup", backing = Backing.PRODUCTION,
+      sources = listOf("app/src/main/kotlin/dev/pampa/mycloudgallery/backup/BackupPreviewAccess.kt",
+        "feature-backup/src/main/kotlin/dev/pampa/mycloudgallery/feature/backup/page/BackupLane.kt",
+        "feature-backup/src/main/kotlin/dev/pampa/mycloudgallery/feature/backup/free/FreeSpaceSummary.kt",
+        "feature-backup/src/main/kotlin/dev/pampa/mycloudgallery/feature/backup/ui/BackupCovers.kt"),
+      probe = RealBackupPreviewProbes.backup, live = true, alsoProvedBy = listOf("BackupPreviewAccessTest", "BackupAuthorizationReviewProbeTest"),
+    ),
 
     // --- Il codice vero di P6, P7 e P9 (i ricordi): integrazione del 30/10. Il motore vero e le schermate vere sul catalogo vero; dopo la pubblicazione il catalogo nasconde
     // alcuni elementi (senza che l'istantanea e lo scaffale lo sappiano) e ogni superficie deve toglierli (E-MEM5, E-H8, E-H10, D31) -------------------------------------------------------

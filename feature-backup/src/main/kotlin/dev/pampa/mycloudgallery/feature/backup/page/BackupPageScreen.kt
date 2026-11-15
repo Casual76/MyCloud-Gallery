@@ -126,6 +126,7 @@ internal fun BackupPageScreen(
       ) {
         // Punto 3: con il foglio del primo backup aperto la testata non si anima (il foglio sfoca la pagina: ogni fotogramma dietro costa).
         item(key = "status") { BackupHero(model = hero, share = share, still = state.sheetOpen) }
+        item(key = "live") { BackupLane(state.live, state.status, still = state.sheetOpen) }
         toCheckSection(state, actions)
         sourcesSection(state.sources, sourcesHalt(state.status))
         deviceSection(state, actions)

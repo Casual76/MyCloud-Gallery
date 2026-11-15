@@ -60,7 +60,7 @@ class RequestedBeyondLimitTest {
     val phone = AppAiPhone({ world.catalog }, noBytes, FakeAiResults(), unsupported, facts, AiRecipe.CURRENT)
     val work = CatalogAiWorkCatalog({ world.catalog }, { AccountId.of(HiddenWorldBuilder.ME) }, RoomAiReplicaStore(world.db), unsupported, AiRecipe.CURRENT, facts)
     val inverse = keyOf.entries.associate { (id, key) -> key to id }
-    val candidates = CatalogAiCandidates(work, { false }, phone) { key -> asked()?.takeIf { inverse[key] == it } }
+    val candidates = CatalogAiCandidates(work, { false }, phone, mediaOfRequest = { key -> asked()?.takeIf { inverse[key] == it } })
     return Ports(world, candidates, keyOf)
   }
 

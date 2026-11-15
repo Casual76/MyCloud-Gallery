@@ -25,6 +25,8 @@ import java.util.Optional
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -269,4 +271,23 @@ class BackupViewModelsTest {
     backgroundScope.launch { vm.state.collect {} }
     assertThat(vm.state.value).isEqualTo(FolderUi.Chosen(BackupSamples.deviceFolder))
   }
+  @Test fun newFoldersAppearWhileTheSettingsPageIsAlreadyOpen() = runTest(dispatcher) {
+    val signals = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    var known = emptyList<dev.pampa.mycloudgallery.feature.backup.contract.PhoneFolder>()
+    val folders = object : dev.pampa.mycloudgallery.feature.backup.contract.PhoneFolders {
+      override val changes = signals
+      override suspend fun folders() = known
+    }
+    val vm = BackupSettingsViewModel(Optional.of(FakeBackupSettings()), Optional.of(folders), Optional.empty(), Optional.empty())
+    backgroundScope.launch { vm.state.collect {} }
+    vm.onShown()
+    val added = dev.pampa.mycloudgallery.feature.backup.contract.PhoneFolder(BackupSource.Folder("external_primary", "Pictures/NewAlbum/"), 1, 500L)
+    known = listOf(added)
+    signals.emit(Unit)
+    advanceTimeBy(501L)
+    runCurrent()
+    assertThat(vm.state.value.choices.map { it.source }).contains(added.source)
+    vm.onHidden()
+  }
+
 }

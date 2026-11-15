@@ -102,6 +102,10 @@ fun BackupSettingsRoute(
   viewModel: BackupSettingsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
+  androidx.compose.runtime.DisposableEffect(viewModel) { onDispose { viewModel.onHidden() } }
+  androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_START) { viewModel.onShown() }
+  androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { viewModel.onHidden() }
+  androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { viewModel.reloadFolders() }
   val actions = remember(viewModel) {
     SettingsActions(
       setSource = viewModel::setSource,

@@ -51,6 +51,9 @@ import java.io.File
 import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.nanoseconds
@@ -128,8 +131,12 @@ object AiWorkScheduling {
   }
 
   /** "Indicizza ora" (D22): una richiesta dell'utente; una sola alla volta (un secondo tocco mentre gira o aspetta non ne mette un altro). */
-  fun indexNow(context: Context) {
-    WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(COMPUTE_NOW_WORK, ExistingWorkPolicy.KEEP, computeRequest(user = true))
+  fun indexNow(context: Context, scope: CoroutineScope) = scope.launch {
+    val manager = WorkManager.getInstance(context.applicationContext)
+    val running = manager.getWorkInfosForUniqueWorkFlow(COMPUTE_NOW_WORK).first()
+      .any { it.state == androidx.work.WorkInfo.State.RUNNING }
+    // Una tappa attiva continua; una richiesta ferma per un vecchio ritardo riparte subito.
+    manager.enqueueUniqueWork(COMPUTE_NOW_WORK, if (running) ExistingWorkPolicy.KEEP else ExistingWorkPolicy.REPLACE, computeRequest(user = true))
   }
 
   /**

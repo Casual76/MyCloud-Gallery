@@ -57,7 +57,8 @@ object BackupModule {
    * nascosto) e la cache delle miniature della griglia; le ultime foto di ogni cartella dal catalogo. Senza backup, nessuna foto (la piastrella).
    */
   @Provides fun backupCoverPorts(gallery: GalleryGraph, items: CollectionItemsSource, loader: ThumbnailLoader): BackupCoverPorts =
-    BackupCoverPorts(newest = gallery.backupUi?.newestMedia ?: NoNewestMedia, library = items.items(LibraryFilter.ALL), loader = loader)
+    BackupCoverPorts(newest = gallery.backupUi?.newestMedia ?: NoNewestMedia, library = items.items(LibraryFilter.ALL), loader = loader,
+      access = dev.pampa.mycloudgallery.backup.AppBackupPreviewAccess(gallery.visibleMedia, gallery.hiddenMask, gallery.analysisVisibility))
 }
 
 /** Senza backup: nessuna foto per le copertine. */

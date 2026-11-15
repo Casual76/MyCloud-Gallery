@@ -19576,3 +19576,27 @@ aggiornato via cavo: va provato su un altro dispositivo con la 1.0.0 e il canale
 
 **ECCEZIONE DICHIARATA: benchmark non rifatti al rilascio.** Come per la 1.0.0, il passo 3 di `release.ps1` (`check.ps1 -Bench -BenchStrict` con
 l'S25) non e' stato eseguito, per decisione dell'utente del 13/11 («va bene»). Vale per questa beta; per la prima stabile la decisione va ripresa.
+
+### Terza beta pubblicata: 1.1.0-beta.02, canale beta (15 novembre 2026)
+
+**Pubblicazione autorizzata.** L'utente ha chiesto il publish Beta dell'APK release gia' verificato. Versione `1.1.0-beta.02`,
+`versionCode` 3, 109.715.552 byte, SHA-256 `972906d54836fd443cf390170f00b2abddcf28a1ec3c9064e2afd766ed76f288`.
+Firma v1/v2/v3 con lo stesso certificato `pampa.jks` documentato. Sorgenti nel commit `4d9cbfcb197e057f5ec88756d841f76aacf18ca4` e tag
+`v1.1.0-beta.02`: i 59 file corrispondono alle impronte degli ingressi verificati prima del commit. E' stato riusato l'APK preparato,
+senza un'altra build durante la pubblicazione. Release: [1.1.0-beta.02](https://github.com/Casual76/MyCloud-Gallery/releases/tag/beta-mycloud-gallery-v1.1.0-beta.02);
+asset `mycloud-gallery-1.1.0-beta.02.apk`. Manifest dell'app aggiornato dal publisher (commit `b327f5f6`), indice Pampa Store aggiornato.
+
+**Che cosa cambia.** Stati e code di analisi e backup basati sul lavoro effettivo, niente candidati da posizioni del telefono ormai assenti,
+tutte le cartelle selezionabili, nastro del backup. Le tre review critiche hanno fatto correggere anche OCR parziale, limite dei parametri SQL
+con molti album, autorizzazione delle anteprime e cancellazione del reset famiglia; il riesame ha chiuso i rilievi assegnati.
+
+**Verifiche e limiti.** 350 test mirati distinti verdi (alcuni risultati riusati da Gradle con ingressi identici), `galleryLint` verde con
+48 report senza errori; ispezione dell'APK firmato: certificato, versione, manifest, permessi, assenza di strumenti di debug e fake, nove librerie
+native arm64 con allineamento a 16 KB e changelog incluso. Un helper di verifica restituiva una lista vuota annidata: enumerazione corretta solo
+nel processo di verifica, nessuna modifica allo script condiviso e nessun controllo disabilitato. Non sono dichiarati eseguiti il controllo intero
+di tutti i test, `check.ps1 -Bench -BenchStrict`, installazione o prove su telefono/emulatore. Nessuna misura fisica delle prestazioni.
+
+**Build e risorse.** Due giri con heap 2 GiB hanno esaurito la memoria a R8. Il singolo tentativo successivo autorizzato dall'utente in esclusiva
+ha eseguito R8 con 4 GiB, poi `assembleRelease` in JVM fresca da 2 GiB: 11,8 minuti totali, entrambi i posti rilasciati nel `finally`.
+Nessun altro tentativo. Pubblicazione con `publisher.py`, `--skip-build`, APK esplicito e anteprima controllata. Dopo il publish:
+`verifica-elenco.ps1` verde sul download pubblico, SHA-256 e peso identici; API GitHub e indice Pampa Store riletti e coerenti con la Beta.

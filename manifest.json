@@ -15,13 +15,13 @@
       "ref": "main"
     },
     "beta": {
-      "version": "1.1.0-beta.02",
+      "version": "1.1.0",
       "releaseDate": "2026-11-15",
-      "changelog": "NovitÃ :\n- Anche il backup mostra il nastro delle foto e dei video che sta salvando, con un movimento breve a ogni completamento.\n- Puoi scegliere tutte le cartelle del telefono per il backup, comprese quelle della fotocamera e degli screenshot.\n\nCorrezioni:\n- \"Analizza ora\" risponde subito e riavvia anche un lavoro rimandato. Le attese mostrano il motivo aggiornato.\n- Le foto non piÃ¹ disponibili sul telefono non creano code fantasma. Il nastro si ferma quando non resta niente da analizzare.\n- Un'analisi con il testo ancora da leggere resta da completare, senza rifare il lavoro giÃ  salvato.\n- La scelta di molti album funziona anche con migliaia di cartelle.\n\nSicurezza:\n- Le anteprime del backup e di \"Libera spazio\" spariscono quando una foto viene nascosta o l'accesso cambia.\n- Il reset della famiglia protegge il passaggio alla nuova chiave e conserva il codice da riscrivere se la schermata viene ricreata.\n\nDa sapere:\n- Ãˆ una versione di prova per il canale Beta.\n- Il nastro segue il lavoro effettivo: durante un'attesa o a lavoro finito non mostra nuovi file in elaborazione.",
-      "releaseTag": "beta-mycloud-gallery-v1.1.0-beta.02",
-      "apkAsset": "mycloud-gallery-1.1.0-beta.02.apk",
-      "sizeBytes": 109715552,
-      "sha256": "972906d54836fd443cf390170f00b2abddcf28a1ec3c9064e2afd766ed76f288"
+      "changelog": "Novità:\n- Il nastro del backup segue le foto e i video che vengono salvati sul NAS.\n- La pagina dell'analisi mostra il lavoro effettivo e il motivo delle attese.\n\nCorrezioni:\n- Si possono attivare anche gli ultimi album nell'elenco del backup. Le scelte rapide vengono conservate tutte.\n- Il caricamento delle cartelle non mostra più per errore che non ne hai scelta nessuna.\n- Il backup distingue le copie personali dalle foto presenti solo nell'area comune della famiglia.\n- Dopo l'aggiornamento dal NAS riparte anche la preparazione delle foto da analizzare.\n- Meno lavoro ripetuto in sottofondo e conteggi più rapidi con librerie grandi.\n- Il nastro dell'analisi si ferma durante le attese e quando non ci sono foto in elaborazione.\n\nSicurezza:\n- Le protezioni per la temperatura, la batteria e l'accesso alle foto restano attive anche quando un lavoro riparte.\n\nDa sapere:\n- Il caldo, la batteria e la rete possono rimandare backup e analisi: la pagina indica l'attesa in corso.",
+      "releaseTag": "stable-mycloud-gallery-v1.1.0",
+      "apkAsset": "mycloud-gallery-1.1.0.apk",
+      "sizeBytes": 109732972,
+      "sha256": "9ca8c0c6f4c83e0a6ca1b19c6d16933c1f92fcf8248fba0e6a4922e989a3c280"
     },
     "history": [
       {
@@ -42,6 +42,15 @@
         "sizeBytes": 109409653,
         "sha256": "f49880260658b20ab427a2f63bc0c8d25b2437a4e5576e53edc23a29a4e24173"
       }
-    ]
+    ],
+    "stable": {
+      "version": "1.1.0",
+      "releaseDate": "2026-11-15",
+      "changelog": "Novità:\n- Il nastro del backup segue le foto e i video che vengono salvati sul NAS.\n- La pagina dell'analisi mostra il lavoro effettivo e il motivo delle attese.\n\nCorrezioni:\n- Si possono attivare anche gli ultimi album nell'elenco del backup. Le scelte rapide vengono conservate tutte.\n- Il caricamento delle cartelle non mostra più per errore che non ne hai scelta nessuna.\n- Il backup distingue le copie personali dalle foto presenti solo nell'area comune della famiglia.\n- Dopo l'aggiornamento dal NAS riparte anche la preparazione delle foto da analizzare.\n- Meno lavoro ripetuto in sottofondo e conteggi più rapidi con librerie grandi.\n- Il nastro dell'analisi si ferma durante le attese e quando non ci sono foto in elaborazione.\n\nSicurezza:\n- Le protezioni per la temperatura, la batteria e l'accesso alle foto restano attive anche quando un lavoro riparte.\n\nDa sapere:\n- Il caldo, la batteria e la rete possono rimandare backup e analisi: la pagina indica l'attesa in corso.",
+      "releaseTag": "stable-mycloud-gallery-v1.1.0",
+      "apkAsset": "mycloud-gallery-1.1.0.apk",
+      "sizeBytes": 109732972,
+      "sha256": "9ca8c0c6f4c83e0a6ca1b19c6d16933c1f92fcf8248fba0e6a4922e989a3c280"
+    }
   }
 }

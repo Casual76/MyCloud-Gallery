@@ -15,15 +15,24 @@
       "ref": "main"
     },
     "beta": {
-      "version": "1.1.0-beta.01",
-      "releaseDate": "2026-11-13",
-      "changelog": "Novità:\n- L'analisi delle foto ora si vede: una pagina mostra a che punto è, con un nastro delle foto che l'app sta guardando in quel momento.\n- Dal visore puoi chiedere \"Analizza ora\" per una foto: passa davanti alle altre.\n- Toccando la nuvola in Libreria vedi anche a che punto è l'analisi e quando è stata salvata l'ultima volta sul NAS.\n- Batteria: scegli sotto quale livello l'app smette di fare il backup, l'analisi delle foto, o tutti e due. Lo trovi nelle impostazioni del backup e in quelle dell'analisi. Se non tocchi niente resta al 20%, come prima.\n\nCorrezioni:\n- Le foto cancellate dal telefono non restano più in attesa di essere salvate: il backup arriva al 100%.\n- Quando un lavoro aspetta per la batteria, l'app dice il livello vero, per esempio \"Batteria sotto il 60%\".\n\nSicurezza:\n- Una foto che cancelli o nascondi esce anche dal nastro dell'analisi.\n\nDa sapere:\n- È una versione di prova: arriva solo a chi ha scelto \"Beta\" in Impostazioni → Aggiornamenti.\n- \"Fai ora\" e \"Analizza ora\" partono anche sotto il livello di batteria scelto: il livello ferma solo il lavoro che l'app fa da sola.",
-      "releaseTag": "beta-mycloud-gallery-v1.1.0-beta.01",
-      "apkAsset": "mycloud-gallery-1.1.0-beta.01.apk",
-      "sizeBytes": 109698579,
-      "sha256": "5bc496d1f3548237f3ac2a679f048796f29460fa29b93274330e9d7871de2e40"
+      "version": "1.1.0-beta.02",
+      "releaseDate": "2026-11-15",
+      "changelog": "NovitÃ :\n- Anche il backup mostra il nastro delle foto e dei video che sta salvando, con un movimento breve a ogni completamento.\n- Puoi scegliere tutte le cartelle del telefono per il backup, comprese quelle della fotocamera e degli screenshot.\n\nCorrezioni:\n- \"Analizza ora\" risponde subito e riavvia anche un lavoro rimandato. Le attese mostrano il motivo aggiornato.\n- Le foto non piÃ¹ disponibili sul telefono non creano code fantasma. Il nastro si ferma quando non resta niente da analizzare.\n- Un'analisi con il testo ancora da leggere resta da completare, senza rifare il lavoro giÃ  salvato.\n- La scelta di molti album funziona anche con migliaia di cartelle.\n\nSicurezza:\n- Le anteprime del backup e di \"Libera spazio\" spariscono quando una foto viene nascosta o l'accesso cambia.\n- Il reset della famiglia protegge il passaggio alla nuova chiave e conserva il codice da riscrivere se la schermata viene ricreata.\n\nDa sapere:\n- Ãˆ una versione di prova per il canale Beta.\n- Il nastro segue il lavoro effettivo: durante un'attesa o a lavoro finito non mostra nuovi file in elaborazione.",
+      "releaseTag": "beta-mycloud-gallery-v1.1.0-beta.02",
+      "apkAsset": "mycloud-gallery-1.1.0-beta.02.apk",
+      "sizeBytes": 109715552,
+      "sha256": "972906d54836fd443cf390170f00b2abddcf28a1ec3c9064e2afd766ed76f288"
     },
     "history": [
+      {
+        "version": "1.1.0-beta.01",
+        "releaseDate": "2026-11-13",
+        "changelog": "Novità:\n- L'analisi delle foto ora si vede: una pagina mostra a che punto è, con un nastro delle foto che l'app sta guardando in quel momento.\n- Dal visore puoi chiedere \"Analizza ora\" per una foto: passa davanti alle altre.\n- Toccando la nuvola in Libreria vedi anche a che punto è l'analisi e quando è stata salvata l'ultima volta sul NAS.\n- Batteria: scegli sotto quale livello l'app smette di fare il backup, l'analisi delle foto, o tutti e due. Lo trovi nelle impostazioni del backup e in quelle dell'analisi. Se non tocchi niente resta al 20%, come prima.\n\nCorrezioni:\n- Le foto cancellate dal telefono non restano più in attesa di essere salvate: il backup arriva al 100%.\n- Quando un lavoro aspetta per la batteria, l'app dice il livello vero, per esempio \"Batteria sotto il 60%\".\n\nSicurezza:\n- Una foto che cancelli o nascondi esce anche dal nastro dell'analisi.\n\nDa sapere:\n- È una versione di prova: arriva solo a chi ha scelto \"Beta\" in Impostazioni → Aggiornamenti.\n- \"Fai ora\" e \"Analizza ora\" partono anche sotto il livello di batteria scelto: il livello ferma solo il lavoro che l'app fa da sola.",
+        "releaseTag": "beta-mycloud-gallery-v1.1.0-beta.01",
+        "apkAsset": "mycloud-gallery-1.1.0-beta.01.apk",
+        "sizeBytes": 109698579,
+        "sha256": "5bc496d1f3548237f3ac2a679f048796f29460fa29b93274330e9d7871de2e40"
+      },
       {
         "version": "1.0.0",
         "releaseDate": "2026-11-13",

@@ -38,6 +38,26 @@ import org.robolectric.annotation.GraphicsMode
 @Config(application = Application::class)
 class RequestedBeyondLimitTest {
 
+  @Test
+  fun monthBucketsPreserveEveryMediaAndTheirOrder() = runBlocking<Unit> {
+    val p = ports { null }
+    try {
+      val account = AccountId.of(HiddenWorldBuilder.ME)
+      val work = CatalogAiWorkCatalog({ p.world.catalog }, { account }, RoomAiReplicaStore(p.world.db), FileAiUnsupported(File(temp.root, "month-unsupported")))
+      for (share in listOf(HiddenWorldBuilder.PRIVATE_SHARE, HiddenWorldBuilder.COMMON_SHARE)) {
+        val rows = p.world.catalog.nasWorkRows(account, share)
+        assertThat(rows).isNotEmpty()
+        val expected = rows.groupBy { monthOf(it.localDay) }
+        assertThat(work.months(share)).containsExactlyElementsIn(expected.keys.sortedDescending()).inOrder()
+        for ((month, entries) in expected) {
+          assertThat(work.monthMedia(share, month).map { it.mediaId }).containsExactlyElementsIn(entries.map { it.mediaId }).inOrder()
+        }
+      }
+    } finally {
+      p.world.close()
+    }
+  }
+
   @get:Rule
   val temp = TemporaryFolder()
 

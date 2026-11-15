@@ -34,6 +34,10 @@
   </plurals>
   <string name="backup_source_not_saved">non si salva</string>
   <string name="backup_source_state_safe">Al sicuro</string>
+  <string name="backup_source_state_common_only">Solo nell’area comune</string>
+  <string name="backup_source_common_count">Solo nell’area comune: %1$s</string>
+  <string name="backup_common_detail">Questi elementi sono già sul NAS comune, ma non hanno ancora una copia privata protetta. Non sono caricamenti in coda.</string>
+  <string name="backup_hero_completed">Backup completato</string>
   <string name="backup_source_state_working">In corso</string>
   <string name="backup_source_state_problem">Da controllare</string>
   <string name="backup_source_state_off">Non salvata</string>

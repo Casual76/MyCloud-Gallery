@@ -46,7 +46,9 @@ internal suspend fun shareRows(catalog: MediaCatalog, account: AccountId, share:
 /** Il mese di un media (`aaaa-mm`, `0000-00` senza data), come le unita' della preparazione. */
 internal fun monthOf(localDay: Int?): String {
   if (localDay == null || localDay <= 0) return "0000-00"
-  return "%04d-%02d".format(Locale.ROOT, localDay / 10_000, localDay / 100 % 100)
+  val year = (localDay / 10_000).toString().padStart(4, '0')
+  val month = (localDay / 100 % 100).toString().padStart(2, '0')
+  return "$year-$month"
 }
 
 /**
@@ -75,7 +77,9 @@ class CatalogAiShareContent(
 
 /** Le righe dei file presenti di una share, ricordate finche' il catalogo non cambia e al piu' per poco (IX-6). */
 internal class ShareRowsCache(private val freshNanos: Long, private val nanos: () -> Long) {
-  private class Entry(val seq: Long, val at: Long, val rows: List<Pair<ContentKey, NasWorkItem>>, val keys: Set<ContentKey>)
+  private class Entry(val catalog: MediaCatalog, val owner: AccountId, val seq: Long, val at: Long, val rows: List<Pair<ContentKey, NasWorkItem>>, val keys: Set<ContentKey>) {
+    val months: Map<String, List<Pair<ContentKey, NasWorkItem>>> by lazy(LazyThreadSafetyMode.PUBLICATION) { rows.groupBy { monthOf(it.second.localDay) } }
+  }
 
   private val lock = Any()
   private val byShare = HashMap<String, Entry>()
@@ -84,13 +88,18 @@ internal class ShareRowsCache(private val freshNanos: Long, private val nanos: (
 
   suspend fun keysOf(catalog: MediaCatalog, owner: AccountId, share: String): Set<ContentKey> = entry(catalog, owner, share).keys
 
+  suspend fun monthsOf(catalog: MediaCatalog, owner: AccountId, share: String): List<String> = entry(catalog, owner, share).months.keys.sortedDescending()
+
+  suspend fun rowsOfMonth(catalog: MediaCatalog, owner: AccountId, share: String, month: String): List<Pair<ContentKey, NasWorkItem>> =
+    entry(catalog, owner, share).months[month].orEmpty()
+
   private suspend fun entry(catalog: MediaCatalog, owner: AccountId, share: String): Entry {
     val name = share.lowercase(Locale.ROOT)
     val seq = catalog.changeSeq()
     val now = nanos()
-    synchronized(lock) { byShare[name] }?.takeIf { it.seq == seq && now - it.at in 0..freshNanos }?.let { return it }
+    synchronized(lock) { byShare[name] }?.takeIf { it.catalog === catalog && it.owner == owner && it.seq == seq && now - it.at in 0..freshNanos }?.let { return it }
     val fresh = shareRows(catalog, owner, share)
-    val entry = Entry(seq, now, fresh, fresh.mapTo(HashSet()) { it.first })
+    val entry = Entry(catalog, owner, seq, now, fresh, fresh.mapTo(HashSet()) { it.first })
     synchronized(lock) { byShare[name] = entry }
     return entry
   }
@@ -236,7 +245,11 @@ class CatalogAiWorkCatalog(
     return cache.rowsOf(c, owner, share)
   }
 
-  override suspend fun months(share: String): List<String> = rows(share).map { monthOf(it.second.localDay) }.distinct().sortedDescending()
+  override suspend fun months(share: String): List<String> {
+    val c = catalog() ?: return emptyList()
+    val owner = account() ?: return emptyList()
+    return cache.monthsOf(c, owner, share)
+  }
 
   override suspend fun monthsOf(share: String, visible: Set<Long>): List<String> =
     rows(share).filter { it.first.short in visible }.map { monthOf(it.second.localDay) }.distinct().sortedDescending()
@@ -256,11 +269,14 @@ class CatalogAiWorkCatalog(
     }
   }
 
-  override suspend fun monthMedia(share: String, month: String): List<WorkItem> = rows(share).mapNotNull { (key, row) ->
-    if (monthOf(row.localDay) != month) return@mapNotNull null
-    val path = runCatching { SharePath.parseMediaPath(row.path.value) }.getOrNull() ?: return@mapNotNull null
-    facts?.put(key, ContentFact(row.mediaId, row.versionId, row.stamp.size, row.source, row.quickHash))
-    WorkItem(key, path, row.stamp, row.kind, row.mime, row.mediaId, row.versionId, emptySet())
+  override suspend fun monthMedia(share: String, month: String): List<WorkItem> {
+    val c = catalog() ?: return emptyList()
+    val owner = account() ?: return emptyList()
+    return cache.rowsOfMonth(c, owner, share, month).mapNotNull { (key, row) ->
+      val path = runCatching { SharePath.parseMediaPath(row.path.value) }.getOrNull() ?: return@mapNotNull null
+      facts?.put(key, ContentFact(row.mediaId, row.versionId, row.stamp.size, row.source, row.quickHash))
+      WorkItem(key, path, row.stamp, row.kind, row.mime, row.mediaId, row.versionId, emptySet())
+    }
   }
 
   override suspend fun settled(share: String, keys: Collection<ContentKey>): Map<ContentKey, Set<AiClass>> {

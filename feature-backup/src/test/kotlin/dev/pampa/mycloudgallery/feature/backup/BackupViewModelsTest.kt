@@ -141,6 +141,59 @@ class BackupViewModelsTest {
   // --- Le impostazioni -------------------------------------------------------------------------------------------------------
 
   @Test
+  fun savedChoicesAreLoadingUntilTheirCatalogRowsArrive() = runTest(dispatcher) {
+    val overview = FakeBackupOverview(sources = emptyList())
+    val settings = FakeBackupSettings(sources = BackupSources.DEFAULT)
+    val vm = BackupPageViewModel(Optional.of(overview), Optional.of(settings), Optional.empty())
+    backgroundScope.launch { vm.state.collect {} }
+    assertThat(vm.state.value.sourcesLoading).isTrue()
+    overview.sources.value = BackupSamples.sources
+    assertThat(vm.state.value.sourcesLoading).isFalse()
+    overview.sources.value = emptyList()
+    settings.setSources(BackupSources.NONE)
+    assertThat(vm.state.value.sourcesLoading).isFalse()
+  }
+
+  @Test
+  fun choosingAnAlbumWaitsForSavedChoicesInsteadOfOverwritingThem() = runTest(dispatcher) {
+    val delegate = FakeBackupSettings(sources = BackupSources.NONE)
+    val loaded = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val settings = object : dev.pampa.mycloudgallery.core.backup.contract.BackupSettings by delegate {
+      override val loaded = loaded
+    }
+    val vm = BackupSettingsViewModel(Optional.of(settings), Optional.empty(), Optional.empty(), Optional.empty())
+    backgroundScope.launch { vm.state.collect {} }
+    assertThat(vm.state.value.editable).isFalse()
+    val album = BackupSource.Folder("external_primary", "Pictures/Last/")
+    vm.setSource(album, true)
+    assertThat(delegate.sources.value.isEmpty).isTrue()
+    delegate.setSources(BackupSources.DEFAULT)
+    loaded.value = true
+    testScheduler.advanceUntilIdle()
+    assertThat(delegate.sources.value.sources).containsExactlyElementsIn(BackupSources.DEFAULT.sources + album)
+    assertThat(vm.state.value.editable).isTrue()
+  }
+
+  @Test
+  fun rapidAlbumChoicesSurviveSlowStorage() = runTest(dispatcher) {
+    val delegate = FakeBackupSettings(sources = BackupSources.NONE)
+    val slow = object : dev.pampa.mycloudgallery.core.backup.contract.BackupSettings by delegate {
+      override suspend fun setSources(sources: BackupSources) {
+        kotlinx.coroutines.delay(100)
+        delegate.setSources(sources)
+      }
+    }
+    val vm = BackupSettingsViewModel(Optional.of(slow), Optional.empty(), Optional.empty(), Optional.empty())
+    backgroundScope.launch { vm.state.collect {} }
+    val first = BackupSource.Folder("external_primary", "Pictures/First/")
+    val last = BackupSource.Folder("external_primary", "Pictures/Last/")
+    vm.setSource(first, true)
+    vm.setSource(last, true)
+    testScheduler.advanceUntilIdle()
+    assertThat(delegate.sources.value.sources).containsExactly(first, last)
+  }
+
+  @Test
   fun leSorgentiSiAccendonoESiSpengonoNelleImpostazioni() = runTest(dispatcher) {
     val settings = FakeBackupSettings(sources = BackupSources.DEFAULT)
     val vm = BackupSettingsViewModel(Optional.of(settings), Optional.of(FakePhoneFolders()), Optional.of(FakeBackupRules()), Optional.empty())

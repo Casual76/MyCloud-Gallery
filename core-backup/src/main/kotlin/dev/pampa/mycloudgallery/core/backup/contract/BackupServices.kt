@@ -112,6 +112,9 @@ interface BackupPlanner {
 interface BackupSettings {
   val sources: StateFlow<BackupSources>
 
+  /** Vero dopo la lettura delle scelte salvate: il vuoto iniziale non e' una scelta dell'utente. */
+  val loaded: StateFlow<Boolean> get() = LoadedSettings
+
   /** La cartella del dispositivo (D7), null finche' il primo backup non l'ha scelta. */
   val deviceFolder: StateFlow<DeviceFolder?>
 
@@ -119,6 +122,10 @@ interface BackupSettings {
 
   /** Sceglie la cartella del dispositivo una volta (E-B6: "Continua li'" o "Nuova cartella"); poi non cambia con il nome (E-B7). */
   suspend fun chooseFolder(folder: DeviceFolder)
+
+  companion object {
+    private val LoadedSettings: StateFlow<Boolean> = kotlinx.coroutines.flow.MutableStateFlow(true)
+  }
 }
 
 /** Che cosa verifica [SafetyVerifier] (D14). */

@@ -31,8 +31,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 // Impostazioni -> Backup (docs/fase5-progetto.md §2.1, D7, D34, E-B12, E-B20; D30): le sorgenti (fotocamera, screenshot e le altre cartelle
 // del telefono con numero e GB), la cartella del dispositivo e la regola "Proteggi subito le foto nuove". Il ViewModel salva le scelte nelle
@@ -115,6 +118,7 @@ class BackupSettingsViewModel @Inject constructor(
 
   private val foldersState = MutableStateFlow<FoldersState>(FoldersState.Loading)
   private val saveFailed = MutableStateFlow(false)
+  private val sourceWrites = Mutex()
   private val noSources: StateFlow<BackupSources> = MutableStateFlow(BackupSources.NONE)
   private val noFolder: StateFlow<DeviceFolder?> = MutableStateFlow<DeviceFolder?>(null)
 
@@ -138,7 +142,8 @@ class BackupSettingsViewModel @Inject constructor(
     },
     batteryFlow,
     batteryResult,
-  ) { ui, battery, result -> ui.copy(battery = battery, batteryLoading = batteryPort != null && battery == null, batterySaveResult = result) }.stateIn(
+    port?.loaded ?: flowOf(true),
+  ) { ui, battery, result, loaded -> ui.copy(editable = port != null && loaded, battery = battery, batteryLoading = batteryPort != null && battery == null, batterySaveResult = result) }.stateIn(
     scope = viewModelScope,
     started = SharingStarted.WhileSubscribed(StopTimeoutMillis),
     initialValue = SettingsUi(
@@ -147,7 +152,7 @@ class BackupSettingsViewModel @Inject constructor(
       deviceFolder = (port?.deviceFolder ?: noFolder).value,
       protectNewPhotos = rulesOrNone.protectNewPhotos.value,
       rulesAvailable = rulesPort != null,
-      editable = port != null,
+      editable = port != null && port.loaded.value,
       battery = batteryPort?.value?.value,
       batteryLoading = batteryPort != null && batteryPort.value.value == null,
     ),
@@ -193,15 +198,17 @@ class BackupSettingsViewModel @Inject constructor(
   /** Accende o spegne una sorgente (E-B12: togliere una cartella non cancella niente, i media nuovi non si caricano piu'). */
   fun setSource(source: BackupSource, on: Boolean) {
     val settings = port ?: return
-    val current = settings.sources.value.sources
-    val next = if (on) current + source else current - source
-    if (next == current) return
     viewModelScope.launch {
-      saveFailed.value = false
-      settings.setSources(BackupSources(next))
-      // OB-4 (review generale): con la memoria piena la scelta non si salva (l'archivio non lancia piu': restituisce il valore di prima) e lo stato resta com'era, quindi
-      // l'interruttore torna indietro. La nota sotto le sorgenti dice perche', con i componenti che ci sono.
-      saveFailed.value = settings.sources.value.sources != next
+      sourceWrites.withLock {
+        settings.loaded.first { it }
+        val current = settings.sources.value.sources
+        val next = if (on) current + source else current - source
+        if (next == current) return@withLock
+        saveFailed.value = false
+        settings.setSources(BackupSources(next))
+        // Una scrittura fallita restituisce il valore ancora salvato: la nota dice perche' l'interruttore torna indietro.
+        saveFailed.value = settings.sources.value.sources != next
+      }
     }
   }
 

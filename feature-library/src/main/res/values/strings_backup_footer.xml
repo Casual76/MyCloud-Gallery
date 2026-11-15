@@ -23,6 +23,8 @@
   </plurals>
 
   <string name="backup_footer_all_safe">Tutto al sicuro</string>
+  <string name="backup_footer_common_only">Solo nell’area comune: %1$s</string>
+  <string name="backup_footer_common_detail">Già sul NAS comune, senza una copia privata protetta. Nessun caricamento in coda.</string>
   <string name="backup_footer_all_safe_today">Oggi alle %1$s</string>
   <string name="backup_footer_all_safe_day">%1$s alle %2$s</string>
 

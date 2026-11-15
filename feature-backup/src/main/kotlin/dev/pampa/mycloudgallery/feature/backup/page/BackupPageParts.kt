@@ -157,11 +157,12 @@ private fun SourceCard(source: SourceStatus, halt: SourcesHalt?, cell: Dp, showM
   val state = sourceState(source, problems, halt)
   val mark = if (state == SourceState.Halted && halt != null) halt.mark else state.mark
   val stateLabel = stringResource(if (state == SourceState.Halted && halt != null) halt.pill else state.label)
-  val missing = (source.media - source.safe).coerceAtLeast(0)
+  val missing = (source.media - source.safe - source.onlyCommonCopy).coerceAtLeast(0)
   val count = when {
     !source.active -> CountLine(Icons.Rounded.CloudOff, source.media, mark)
     problems > 0 -> CountLine(Icons.Rounded.Warning, problems, mark)
     missing > 0 -> CountLine(Icons.Rounded.ArrowUpward, missing, mark)
+    source.onlyCommonCopy > 0 -> CountLine(Icons.Rounded.FolderShared, source.onlyCommonCopy, mark)
     else -> CountLine(Icons.Rounded.Check, source.media, mark)
   }
   val numbers = when {
@@ -169,6 +170,7 @@ private fun SourceCard(source: SourceStatus, halt: SourcesHalt?, cell: Dp, showM
       stringResource(R.string.backup_source_not_saved)
     problems > 0 -> pluralStringResource(R.plurals.backup_source_problems, problems, BackupText.count(problems))
     missing > 0 -> stringResource(R.string.backup_source_to_save, BackupText.count(missing))
+    source.onlyCommonCopy > 0 -> stringResource(R.string.backup_source_common_count, BackupText.count(source.onlyCommonCopy))
     else -> stringResource(R.string.backup_source_safe, BackupText.count(source.safe))
   }
   val fraction = if (source.media > 0) (source.safe.toFloat() / source.media).coerceIn(0f, 1f) else 1f
@@ -291,10 +293,10 @@ internal fun SourceCover(source: BackupSource, cell: Dp, mark: GalleryIconStatus
 
 /** Nessuna sorgente scelta: una riga con la piastrella e la strada per sceglierle, nelle impostazioni del backup. */
 @Composable
-internal fun SourcesEmpty() {
+internal fun SourcesEmpty(loading: Boolean = false) {
   FluidListGroup {
     FluidListRow(
-      title = stringResource(R.string.backup_sources_empty_title),
+      title = stringResource(if (loading) R.string.backup_settings_folders_loading else R.string.backup_sources_empty_title),
       subtitle = "",
       leading = { GalleryIconTile(spec = GalleryIcons.Library, status = GalleryIconStatus.Attention) },
       leadingTile = false,

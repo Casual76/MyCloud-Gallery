@@ -33,6 +33,9 @@ sealed interface LibraryBackupStatus {
   /** "Tutto al sicuro" · "Oggi alle 03:12": l'ultimo giro finito all'istante [atNasMillis] (null = non noto). */
   data class AllSafe(val atNasMillis: Long?) : LibraryBackupStatus
 
+  /** Giro finito; [items] media hanno solo la copia comune, non ancora una copia privata protetta. Nessun upload in corso. */
+  data class CompletedWithCommon(val items: Int, val atNasMillis: Long?) : LibraryBackupStatus
+
   /** "312 in coda" · "Attesa carica": [items] media aspettano per [wait]. */
   data class Queued(val items: Int, val wait: LibraryBackupWait) : LibraryBackupStatus
 

@@ -53,6 +53,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidItemSpacing
+import dev.antigravity.fluidengine.ui.fluid.fluidGlassGroupsIndexed
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -143,14 +145,16 @@ internal fun BackupSettingsScreen(
     hostPadding = hostPadding,
   ) { insets ->
     Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-      LazyColumn(
-        modifier = Modifier.fillMaxHeight().widthIn(max = BackupDimens.PageMaxWidth).fillMaxWidth(),
-        contentPadding = PaddingValues(start = GalleryDimens.Gutter, end = GalleryDimens.Gutter, top = insets.top, bottom = insets.bottom),
-        verticalArrangement = Arrangement.spacedBy(BackupDimens.BlockGap),
-      ) {
-        sourcesSection(state, actions)
-        folderSection(state, actions)
-        rulesSection(state, actions)
+      CompositionLocalProvider(LocalFluidItemSpacing provides BackupDimens.BlockGap) {
+        LazyColumn(
+          modifier = Modifier.fillMaxHeight().widthIn(max = BackupDimens.PageMaxWidth).fillMaxWidth(),
+          contentPadding = PaddingValues(start = GalleryDimens.Gutter, end = GalleryDimens.Gutter, top = insets.top, bottom = insets.bottom),
+          verticalArrangement = Arrangement.spacedBy(BackupDimens.BlockGap),
+        ) {
+          sourcesSection(state, actions)
+          folderSection(state, actions)
+          rulesSection(state, actions)
+        }
       }
     }
   }
@@ -160,14 +164,12 @@ internal fun BackupSettingsScreen(
 
 private fun LazyListScope.sourcesSection(state: SettingsUi, actions: SettingsActions) {
   item(key = "sources-title") { BackupSectionTitle(stringResource(R.string.backup_settings_section_sources)) }
-  item(key = "sources") {
-    FluidListGroup {
-      state.choices.forEachIndexed { index, choice ->
-        if (index > 0) FluidListDivider()
-        SourceSwitchRow(choice = choice, enabled = state.editable, onChange = { on -> actions.setSource(choice.source, on) })
-      }
-      if (state.folders is FoldersState.Loading) {
-        FluidListDivider()
+  fluidGlassGroupsIndexed(items = state.choices, key = "sources") { _, choice ->
+    SourceSwitchRow(choice = choice, enabled = state.editable, onChange = { on -> actions.setSource(choice.source, on) })
+  }
+  if (state.folders is FoldersState.Loading) {
+    item(key = "sources-loading") {
+      FluidListGroup {
         FluidListRow(
           title = stringResource(R.string.backup_settings_folders_loading),
           subtitle = "",

@@ -89,7 +89,7 @@ class CatalogPhoneFolders(
     }
     database.invalidationTracker.addObserver(observer)
     awaitClose { database.invalidationTracker.removeObserver(observer) }
-  }
+  }.flowOn(Dispatchers.IO)
 
   override suspend fun folders(): List<PhoneFolder> = withContext(Dispatchers.IO) {
     val me = account()

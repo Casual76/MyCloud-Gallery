@@ -5,6 +5,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiCandidate
 import dev.pampa.mycloudgallery.core.ai.contract.AiCandidates
 import dev.pampa.mycloudgallery.core.ai.contract.AiLive
 import dev.pampa.mycloudgallery.core.ai.contract.AiScope
+import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.testing.ProcessDeath
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaSource
@@ -17,6 +18,20 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
 class ConveyorTruthTest {
+  @Test fun missingPreviewsNeverClaimThatAnImageIsBeingAnalyzed() = runTest {
+    val family = TestFamily()
+    family.nas.add(TestFamily.COMMON, concepts = "not ready")
+    family.nas.of(TestFamily.COMMON).previews.clear()
+    val phone = family.anna()
+    val states = ArrayList<AiStatus>()
+    val watching = launch(Dispatchers.Unconfined) { phone.engine.status.collect { states += it } }
+    val result = phone.engine.run(AiScope.Share(TestFamily.COMMON), Duration.INFINITE)
+    watching.cancel()
+    assertThat(result.waitingForPreparation).isGreaterThan(0)
+    assertThat(phone.embedded).isEqualTo(0)
+    assertThat(states.filterIsInstance<AiStatus.Running>()).isEmpty()
+  }
+
   @Test fun publicationOfAnAlreadySavedResultNeverPretendsToAnalyzeItAgain() = runTest {
     val family = TestFamily()
     val key = family.nas.add(TestFamily.COMMON, concepts = "gia salvata")

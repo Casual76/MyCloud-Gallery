@@ -84,6 +84,11 @@ class VerificaFunzionaleBackupAppTest {
   /** I lavori avviati dall'utente registrati (JobScheduler non c'e'); [accept] = l'esito che Android darebbe (BS2-2). */
   private class RecordingJobs(private val accept: Boolean = true) : BackupJobs {
     val started = AtomicInteger()
+    val background = AtomicInteger()
+
+    override fun quickWork() { background.incrementAndGet() }
+
+    override fun versionWork(kind: BackupKind) { background.incrementAndGet() }
 
     override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean): Boolean {
       started.incrementAndGet()
@@ -119,6 +124,19 @@ class VerificaFunzionaleBackupAppTest {
 
   /** Aspetta, sul flusso dello stato, quello che soddisfa [predicate] (l'evento, non un tempo: vedi [Attese]). */
   private suspend fun BackupGraph.await(predicate: (BackupStatus) -> Boolean): BackupStatus = withTimeout(Attese.TETTO) { status.first(predicate) }
+
+  @Test
+  fun selectingAnExistingAlbumRequestsBackupWithoutAnotherMediaStoreScan() = runBlocking {
+    val jobs = RecordingJobs()
+    val rig = openRig(photos = 1, jobs = jobs)
+    rig.backup.settings.setSources(dev.pampa.mycloudgallery.core.backup.contract.BackupSources.NONE)
+    rig.backup.await { it is BackupStatus.NotConfigured && dev.pampa.mycloudgallery.core.backup.contract.BackupSetupStep.SOURCES in it.missing }
+    val before = jobs.background.get()
+    val album = dev.pampa.mycloudgallery.core.backup.contract.BackupSource.Folder(BackupRig.PRIMARY, "DCIM/Camera/")
+    rig.backup.settings.setSources(dev.pampa.mycloudgallery.core.backup.contract.BackupSources(setOf(album)))
+    until("scegliere l'album chiede il lavoro senza cambiare i media") { jobs.background.get() > before }
+    assertThat(jobs.started.get()).isEqualTo(0)
+  }
 
   /**
    * Aspetta che il problema ricordato (l'ultimo che ha fermato un giro) sia stato tolto **dal ricalcolo dello stato**: serve quando lo stato di prima

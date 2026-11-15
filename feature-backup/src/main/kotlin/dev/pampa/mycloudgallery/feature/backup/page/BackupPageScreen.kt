@@ -128,7 +128,7 @@ internal fun BackupPageScreen(
         item(key = "status") { BackupHero(model = hero, share = share, still = state.sheetOpen) }
         item(key = "live") { BackupLane(state.live, state.status, still = state.sheetOpen) }
         toCheckSection(state, actions)
-        sourcesSection(state.sources, sourcesHalt(state.status))
+        sourcesSection(state.sources, sourcesHalt(state.status), state.sourcesLoading)
         deviceSection(state, actions)
       }
     }
@@ -208,15 +208,16 @@ internal fun sourcesHalt(status: BackupStatus): SourcesHalt? = when (status) {
   else -> null
 }
 
-private fun LazyListScope.sourcesSection(sources: List<SourceStatus>, halt: SourcesHalt?) {
+private fun LazyListScope.sourcesSection(sources: List<SourceStatus>, halt: SourcesHalt?, loading: Boolean) {
   item(key = "sources-title") { BackupSectionTitle(stringResource(R.string.backup_section_sources)) }
   item(key = "sources") {
-    if (sources.isEmpty()) SourcesEmpty() else SourceGrid(sources = sources, halt = halt)
+    if (sources.isEmpty()) SourcesEmpty(loading) else SourceGrid(sources = sources, halt = halt)
   }
 }
 
 internal enum class SourceState(val label: Int, val mark: GalleryIconStatus) {
   Safe(R.string.backup_source_state_safe, GalleryIconStatus.Done),
+  CommonOnly(R.string.backup_source_state_common_only, GalleryIconStatus.Attention),
   Working(R.string.backup_source_state_working, GalleryIconStatus.Running),
 
   /** D-4: ci sono media da salvare ma il backup e' fermo (l'etichetta e il segno sono quelli di [SourcesHalt]). */
@@ -229,7 +230,8 @@ internal enum class SourceState(val label: Int, val mark: GalleryIconStatus) {
 internal fun sourceState(source: SourceStatus, problems: Int, halt: SourcesHalt?): SourceState = when {
   !source.active -> SourceState.Off
   problems > 0 -> SourceState.Problem
-  source.queued > 0 || source.safe < source.media -> if (halt != null) SourceState.Halted else SourceState.Working
+  source.queued > 0 || source.safe + source.onlyCommonCopy < source.media -> if (halt != null) SourceState.Halted else SourceState.Working
+  source.onlyCommonCopy > 0 -> SourceState.CommonOnly
   else -> SourceState.Safe
 }
 

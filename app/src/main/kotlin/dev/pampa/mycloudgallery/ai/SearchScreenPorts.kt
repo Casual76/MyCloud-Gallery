@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.ai
 
 import dev.pampa.mycloudgallery.core.ai.contract.AiBackend
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
+import dev.pampa.mycloudgallery.core.ai.contract.AiWaitReason
 import dev.pampa.mycloudgallery.core.ai.contract.ProbeResult
 import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.family.contract.RolesChange
@@ -19,12 +20,20 @@ import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+/** PREPARATION e' anche l'intervallo fra due immagini: non e' una tappa finita da ricontare. */
+internal suspend fun observeIndexerStageEnds(status: Flow<AiStatus>, refresh: () -> Unit) {
+  status.collect {
+    if (it !is AiStatus.Running && it != AiStatus.Waiting(AiWaitReason.PREPARATION)) refresh()
+  }
+}
 
 // Le PORTE di Cerca e della pagina Ricerca e modelli (feature-search, P8) sopra le impostazioni personali, i ruoli e `AiGraph` (P11). L'ordine dei
 // risultati non e' piu' una porta: la ricerca dentro la Libreria ordina solo per pertinenza (H4, scelta dell'utente dell'11/11).
@@ -106,7 +115,7 @@ class AppIndexerControl(
     refresh()
     // IX-3: il lavoro che resta e lo spazio si rileggono a ogni tappa finita (prima, solo alla nascita e dopo un cambio di ruolo).
     scope.launch {
-      stack.ai.status.collect { if (it !is AiStatus.Running) refresh() }
+      observeIndexerStageEnds(stack.ai.status, ::refresh)
     }
   }
 

@@ -60,7 +60,7 @@ class DefaultBackupSettings(
   override val deviceFolder: StateFlow<DeviceFolder?> = folder.asStateFlow()
 
   /** Vero dopo la prima lettura del magazzino. */
-  val loaded: StateFlow<Boolean> = loadedState.asStateFlow()
+  override val loaded: StateFlow<Boolean> = loadedState.asStateFlow()
 
   init {
     scope.launch { storage.data.collect(::apply) }

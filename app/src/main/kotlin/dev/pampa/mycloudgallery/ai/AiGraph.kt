@@ -60,6 +60,7 @@ import java.io.File
 import java.io.IOException
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
@@ -69,7 +70,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
-import androidx.room.InvalidationTracker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
@@ -422,11 +422,12 @@ class AiGraph(
         delay(500L)
       }
     }
-    val catalogObserver = object : InvalidationTracker.Observer("media", "media_version", "media_location", "media_store_cursor") {
-      override fun onInvalidated(tables: Set<String>) { if (watchers.value > 0 && !stageRunning) factRefreshes.trySend(Unit) }
+    // Room sincronizza i trigger anche alla registrazione: il grafo nasce sul Main, il flusso vive su IO.
+    // createFlow gestisce anche la rimozione dell'observer quando il grafo viene fermato.
+    graphScope.launch(Dispatchers.IO) {
+      database.invalidationTracker.createFlow("media", "media_version", "media_location", "media_store_cursor", emitInitialState = false)
+        .collect { if (watchers.value > 0 && !stageRunning) factRefreshes.trySend(Unit) }
     }
-    database.invalidationTracker.addObserver(catalogObserver)
-    job.invokeOnCompletion { database.invalidationTracker.removeObserver(catalogObserver) }
     graphScope.launch {
       statusFlow.collect { if (it !is AiStatus.Running) factRefreshes.trySend(Unit) }
     }

@@ -33,7 +33,7 @@ object BackupStatusReducers {
     val base = footerOf(status)
     if (incomingProblems <= 0) return base
     return when (base) {
-      LibraryBackupStatus.Idle, is LibraryBackupStatus.AllSafe, is LibraryBackupStatus.Queued, is LibraryBackupStatus.Paused ->
+      LibraryBackupStatus.Idle, is LibraryBackupStatus.AllSafe, is LibraryBackupStatus.CompletedWithCommon, is LibraryBackupStatus.Queued, is LibraryBackupStatus.Paused ->
         LibraryBackupStatus.Problem(INCOMING_FAILED_CODE, incomingProblems)
       else -> base
     }
@@ -64,7 +64,11 @@ object BackupStatusReducers {
         if (items > 0) LibraryBackupStatus.Queued(items, LibraryBackupWait.FIRST_BACKUP) else LibraryBackupStatus.Idle
       }
     }
-    is BackupStatus.UpToDate -> LibraryBackupStatus.AllSafe(status.atNasMillis)
+    is BackupStatus.UpToDate -> if (status.onlyCommonCopy > 0) {
+      LibraryBackupStatus.CompletedWithCommon(status.onlyCommonCopy, status.atNasMillis)
+    } else {
+      LibraryBackupStatus.AllSafe(status.atNasMillis)
+    }
     is BackupStatus.Waiting -> LibraryBackupStatus.Queued(status.items, waitOf(status.reason))
     is BackupStatus.Running -> when (status.trigger) {
       dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger.FIRST_BACKUP ->

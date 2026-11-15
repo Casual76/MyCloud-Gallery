@@ -320,7 +320,6 @@ internal class ComputeSession(
         restLive()
         doneInUnit++
         lastDone = item.key
-        if (item.todo.isNotEmpty()) running(queue.size)
       }
       askedRun.after(batch.map { it.contentKey }, asked)
       index += batch.size
@@ -470,7 +469,6 @@ internal class ComputeSession(
         counted(end, candidate.contentKey)
         restLive()
         doneInList++
-        if (planned.todo.isNotEmpty()) running(chosen.size)
       }
       if (share != null) stageAll(share, staged)
       askedRun.after(batch.map { it.contentKey }, asked)
@@ -591,6 +589,7 @@ internal class ComputeSession(
   /** A tappa ferma: niente media di adesso ne' prossimi; le ultime finite restano (la pagina le mostra ferme). */
   private fun restLive() {
     live.value = AiLive(null, recentKeys.toList(), emptyList(), finishedTotal, analyzedTotal)
+    state.value = AiStatus.Waiting(AiWaitReason.PREPARATION)
   }
 
   private fun running(total: Int) {

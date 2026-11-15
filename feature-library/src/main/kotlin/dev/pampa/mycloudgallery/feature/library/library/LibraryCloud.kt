@@ -250,8 +250,14 @@ internal fun libraryCloud(network: LibraryNetworkStatus?, nas: LibraryNasStatus,
 }
 
 /** L'ultima sincronizzazione che gli stati dicono adesso: la piu' recente fra "NAS aggiornato" e "tutto al sicuro". */
-internal fun lastSyncOf(nas: LibraryNasStatus, backup: LibraryBackupStatus): Long? =
-  listOfNotNull((nas as? LibraryNasStatus.UpToDate)?.atNasMillis, (backup as? LibraryBackupStatus.AllSafe)?.atNasMillis).maxOrNull()
+internal fun lastSyncOf(nas: LibraryNasStatus, backup: LibraryBackupStatus): Long? {
+  val backupAt = when (backup) {
+    is LibraryBackupStatus.AllSafe -> backup.atNasMillis
+    is LibraryBackupStatus.CompletedWithCommon -> backup.atNasMillis
+    else -> null
+  }
+  return listOfNotNull((nas as? LibraryNasStatus.UpToDate)?.atNasMillis, backupAt).maxOrNull()
+}
 
 private fun networkItem(status: LibraryNetworkStatus): CloudItem? = when (status.severity) {
   LibraryNetworkSeverity.Fine -> null
@@ -281,6 +287,7 @@ private fun backupItem(status: LibraryBackupStatus): CloudItem? = when (status) 
     CloudItem.Backup(status, if (status.wait == null && status.seen != null) GalleryCloudState.Syncing else GalleryCloudState.Waiting)
   is LibraryBackupStatus.FirstBackup, is LibraryBackupStatus.Running -> CloudItem.Backup(status, GalleryCloudState.Syncing)
   is LibraryBackupStatus.AllSafe -> CloudItem.Backup(status, GalleryCloudState.Saved)
+  is LibraryBackupStatus.CompletedWithCommon -> CloudItem.Backup(status, GalleryCloudState.Attention)
   // OA-10: un backup fermo non sparisce dalla nuvola (prima, con "NAS aggiornato", restava la spunta di "tutto salvato").
   is LibraryBackupStatus.Paused -> CloudItem.Backup(status, if (status.byUser) GalleryCloudState.Paused else GalleryCloudState.Waiting)
   is LibraryBackupStatus.Problem -> CloudItem.Backup(

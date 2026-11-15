@@ -18,6 +18,17 @@ import org.junit.Test
  */
 class LibraryCloudTest {
 
+  @Test
+  fun commonCopiesAreVisibleWithoutClaimingSafetyOrActivity() {
+    val common = LibraryBackupStatus.CompletedWithCommon(3, 2_000L)
+    val cloud = checkNotNull(libraryCloud(null, LibraryNasStatus.UpToDate(1_000L), common))
+    assertThat(cloud.savedByBackup).isFalse()
+    assertThat(cloud.activity).isEmpty()
+    assertThat(cloud.state).isEqualTo(GalleryCloudState.Attention)
+    assertThat(cloud.problems).hasSize(1)
+    assertThat(cloud.problems.single()).isInstanceOf(CloudItem.Backup::class.java)
+  }
+
   private fun network(severity: LibraryNetworkSeverity, action: LibraryNetworkAction = LibraryNetworkAction.DIAGNOSTICS) =
     LibraryNetworkStatus(severity = severity, label = "Rete ${severity.name}", action = action)
 
@@ -206,6 +217,9 @@ class LibraryCloudTest {
     assertThat(saved.lastSyncNasMillis).isEqualTo(2_000L)
     assertThat(saved.savedByBackup).isTrue()
     assertThat(lastSyncOf(upToDate, LibraryBackupStatus.Idle)).isEqualTo(1_000L)
+    assertThat(lastSyncOf(upToDate, LibraryBackupStatus.CompletedWithCommon(3, 2_000L))).isEqualTo(2_000L)
+    assertThat(lastSyncOf(LibraryNasStatus.Idle, LibraryBackupStatus.CompletedWithCommon(3, 2_000L))).isEqualTo(2_000L)
+    assertThat(lastSyncOf(upToDate, LibraryBackupStatus.CompletedWithCommon(3, null))).isEqualTo(1_000L)
     assertThat(lastSyncOf(LibraryNasStatus.Idle, LibraryBackupStatus.Running(1, 2, null))).isNull()
   }
 

@@ -9,6 +9,26 @@ Come si scrive (per chi prepara una versione):
 - sotto ogni titolo, frasi corte che cominciano con `- `. Niente sigle, niente parole da tecnici: le legge tutta la famiglia;
 - la copia che sta dentro l'app è `feature-settings/src/main/res/raw/changelog.md` e deve essere uguale a questo file (un test lo controlla).
 
+## 1.1.0
+
+### Novità
+- Il nastro del backup segue le foto e i video che vengono salvati sul NAS.
+- La pagina dell'analisi mostra il lavoro effettivo e il motivo delle attese.
+
+### Correzioni
+- Si possono attivare anche gli ultimi album nell'elenco del backup. Le scelte rapide vengono conservate tutte.
+- Il caricamento delle cartelle non mostra più per errore che non ne hai scelta nessuna.
+- Il backup distingue le copie personali dalle foto presenti solo nell'area comune della famiglia.
+- Dopo l'aggiornamento dal NAS riparte anche la preparazione delle foto da analizzare.
+- Meno lavoro ripetuto in sottofondo e conteggi più rapidi con librerie grandi.
+- Il nastro dell'analisi si ferma durante le attese e quando non ci sono foto in elaborazione.
+
+### Sicurezza
+- Le protezioni per la temperatura, la batteria e l'accesso alle foto restano attive anche quando un lavoro riparte.
+
+### Da sapere
+- Il caldo, la batteria e la rete possono rimandare backup e analisi: la pagina indica l'attesa in corso.
+
 ## 1.1.0-beta.02
 
 ### Novità

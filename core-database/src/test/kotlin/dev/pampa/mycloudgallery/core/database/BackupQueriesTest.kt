@@ -26,6 +26,18 @@ import kotlin.random.Random
 @RunWith(AndroidJUnit4::class)
 class BackupQueriesTest : CatalogTestBase() {
 
+  @Test
+  fun albumProblemCountsStartFromProblemsInsteadOfScanningTheWholeLibrary() = runBlocking<Unit> {
+    bulk(2_000) { Spec(presence = "phone_only", safety = "no_nas_copy", todo = true, phone = true, privateCopy = false, verifiedAt = null) }
+    val sources = setOf(CatalogSource.Folder("external_primary", "DCIM/Camera/"))
+    val query = checkNotNull(BackupQueries.problemsByCode("alessio", sources))
+    val plan = planOf(query)
+    assertThat(plan).contains("SCAN p")
+    assertThat(plan).contains("SEARCH m")
+    assertThat(plan.indexOf("SCAN p")).isLessThan(plan.indexOf("SEARCH m"))
+    assertThat(catalog.safetyCounts(sources).problems).isEmpty()
+  }
+
   /** Cosa scrivere per un media delle prove in massa. */
   private class Spec(
     val video: Boolean = false,

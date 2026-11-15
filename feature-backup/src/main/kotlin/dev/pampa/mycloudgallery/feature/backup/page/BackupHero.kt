@@ -154,7 +154,7 @@ internal class SafeShare(val safe: Int, val total: Int) {
     fun of(status: BackupStatus, sources: List<SourceStatus>): SafeShare {
       val active = sources.filter { it.active }
       val total = active.sumOf { it.media }
-      if (total == 0 && status is BackupStatus.UpToDate) return SafeShare(status.safeCount, status.safeCount)
+      if (total == 0 && status is BackupStatus.UpToDate) return SafeShare(status.safeCount, status.safeCount + status.onlyCommonCopy)
       return SafeShare(active.sumOf { it.safe.coerceAtMost(it.media) }, total)
     }
   }
@@ -199,9 +199,11 @@ internal fun heroModel(status: BackupStatus, actions: BackupPageActions, share: 
     }
   }
   is BackupStatus.UpToDate -> HeroModel(
-    mark = GalleryIconStatus.Done,
-    label = stringResource(R.string.backup_hero_safe),
-    line = status.atNasMillis?.let { stringResource(R.string.backup_status_last_run, atText(it)) },
+    mark = if (status.onlyCommonCopy > 0) GalleryIconStatus.Attention else GalleryIconStatus.Done,
+    label = stringResource(if (status.onlyCommonCopy > 0) R.string.backup_hero_completed else R.string.backup_hero_safe),
+    line = if (status.onlyCommonCopy > 0) stringResource(R.string.backup_source_common_count, BackupText.count(status.onlyCommonCopy))
+      else status.atNasMillis?.let { stringResource(R.string.backup_status_last_run, atText(it)) },
+    detail = if (status.onlyCommonCopy > 0) stringResource(R.string.backup_common_detail) else null,
     actions = listOf(HeroAction(stringResource(R.string.backup_do_now), Icons.Rounded.CloudUpload, actions.backupNow)),
     calmAction = true,
   )

@@ -60,6 +60,14 @@ import org.robolectric.annotation.GraphicsMode
 @Config(qualifiers = "it-w412dp-h1800dp-xhdpi")
 class BackupEntryTest {
 
+  @Test
+  fun copiesInTheCommonAreaAreNotCalledSafeOrRunning() {
+    val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+    val common = BackupStatus.UpToDate(7_124, null, onlyCommonCopy = 3)
+    assertThat(BackupEntryTexts.subtitleOf(context, common)).isEqualTo("Solo nell’area comune: 3")
+    assertThat(backupEntryMark(common)).isEqualTo(GalleryIconStatus.Attention)
+  }
+
   @get:Rule
   val rule = createAndroidComposeRule<ComponentActivity>()
 

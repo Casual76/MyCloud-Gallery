@@ -30,6 +30,20 @@ import org.junit.Test
  */
 open class FacesPublisherTest {
 
+  @Test
+  fun planningAContributionDoesNotReadTheDeviceKeyForEveryBody() = runTest {
+    val world = newWorld()
+    val phone = world.device("Telefono", "test")
+    repeat(160) { phone.compute(it + 1) }
+    var identityReads = 0
+    val identity = object : FacesSyncIdentity by phone.identity {
+      override val deviceId: String get() { identityReads++; return phone.id }
+    }
+    val publisher = NasFacesPublisher(identity, phone.switch, phone.remote, phone.archives, phone.publishStore, phone.attestation, phone.gate, world.clock)
+    assertThat(publisher.flush(FlushReason.UNIT_FINISHED)).isInstanceOf(FacesPublishOutcome.Published::class.java)
+    assertThat(identityReads).isLessThan(40)
+  }
+
   /** Il mondo della prova: in memoria (P3). La versione sul database dei volti (P6) lo sostituisce con lo stesso mondo sopra `RoomSyncStorage`. */
   protected open fun newWorld(): FacesSyncWorld = FacesSyncWorld()
 

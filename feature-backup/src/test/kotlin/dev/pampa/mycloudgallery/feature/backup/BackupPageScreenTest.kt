@@ -30,6 +30,7 @@ import dev.pampa.mycloudgallery.feature.backup.page.BackupPageUi
 import dev.pampa.mycloudgallery.feature.backup.page.SourceState
 import dev.pampa.mycloudgallery.feature.backup.page.SourcesHalt
 import dev.pampa.mycloudgallery.feature.backup.page.sourceState
+import dev.pampa.mycloudgallery.feature.backup.page.SafeShare
 import dev.pampa.mycloudgallery.feature.backup.page.coverMarkShown
 import dev.pampa.mycloudgallery.feature.backup.page.coverNameLines
 import dev.pampa.mycloudgallery.feature.backup.page.sourcesHalt
@@ -44,6 +45,26 @@ import org.junit.Test
  * per sorgente, "Fai ora" e "Ferma". La scena si mostra una volta per prova e lo stato cambia da uno stato, come fa il ViewModel.
  */
 class BackupPageScreenTest : ComposeBackupTest() {
+
+  @Test
+  fun commonCopiesHaveAStaticExplanationInsteadOfAnUploadThatNeverStarts() {
+    val source = SourceStatus(BackupSource.Camera, true, 10, 7, 0, emptyMap(), onlyCommonCopy = 3)
+    assertThat(sourceState(source, 0, null)).isEqualTo(SourceState.CommonOnly)
+    assertThat(sourceState(source.copy(media = 11, queued = 1), 0, null)).isEqualTo(SourceState.Working)
+    start(BackupStatus.UpToDate(7, null, onlyCommonCopy = 3), listOf(source))
+    composeRule.onNodeWithText("Backup completato").assertExists()
+    composeRule.onNodeWithText("Solo nell’area comune: 3").assertExists()
+  }
+
+  @Test
+  fun commonCopiesDoNotBecomeOneHundredPercentWhileAlbumRowsAreLoading() {
+    val status = BackupStatus.UpToDate(7, null, onlyCommonCopy = 3)
+    val share = SafeShare.of(status, emptyList())
+    assertThat(share.safe).isEqualTo(7)
+    assertThat(share.total).isEqualTo(10)
+    assertThat(share.percent).isEqualTo(70)
+    assertThat(SafeShare.of(status.copy(safeCount = 0), emptyList()).percent).isEqualTo(0)
+  }
 
   private val actions = RecordingBackupActions()
 

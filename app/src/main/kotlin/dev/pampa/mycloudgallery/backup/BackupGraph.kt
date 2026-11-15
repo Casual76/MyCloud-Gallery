@@ -89,6 +89,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -883,9 +884,19 @@ class BackupGraph(
   val status: StateFlow<BackupStatus> = statusFlow.asStateFlow()
 
   private val sourcesFlow = MutableStateFlow<List<SourceStatus>>(emptyList())
+  private val sourceRowsLock = Mutex()
 
   /** Una riga per sorgente (§1.5 `SourceStatus`). */
   val sources: StateFlow<List<SourceStatus>> = sourcesFlow.asStateFlow()
+
+  /** Lettura esplicita per la Diagnostica; le righe per album non si calcolano mentre nessuno le osserva. */
+  suspend fun sourceSnapshot(): List<SourceStatus> = sourceRowsLock.withLock {
+    if (stopped.get()) return@withLock emptyList()
+    val chosen = settings.sources.value
+    val rows = sourceStatuses(backupCatalogOrNull(), chosen)
+    if (chosen == settings.sources.value && !stopped.get()) sourcesFlow.value = rows
+    rows
+  }
 
   val live: StateFlow<dev.pampa.mycloudgallery.core.backup.contract.BackupLive> = partsFlow
     .flatMapLatest { it?.engine?.live ?: dev.pampa.mycloudgallery.core.backup.contract.BackupLive.NONE }
@@ -947,7 +958,25 @@ class BackupGraph(
       }
     }
     // Cio' che cambia lo stato: le impostazioni, il motore, i cancelli (emergenza, congelamento), l'accesso ai media e il NAS.
-    scope.launch { settings.sources.collect { kick() } }
+    scope.launch {
+      settings.sources.collect { chosen ->
+        nothingToDo = false
+        unservedQueue = -1
+        kick()
+        // Una cartella appena scelta deve chiedere gli stessi lavori di una nuova lettura del telefono.
+        // I lavori unici e i cancelli mantengono la pausa dell'utente e le regole di sfondo.
+        if (!chosen.isEmpty) try {
+          afterPhoneRead()
+        } catch (e: CancellationException) {
+          throw e
+        } catch (e: Exception) {
+          GalleryLog.w(TAG) { "lavoro dopo la scelta delle cartelle non chiesto: ${e.javaClass.simpleName}" }
+        }
+      }
+    }
+    scope.launch {
+      sourcesFlow.subscriptionCount.map { it > 0 }.distinctUntilChanged().collect { watching -> if (watching) kick() }
+    }
     scope.launch {
       settings.deviceFolder.collect { folder ->
         // Da quando c'e' una cartella il backup e' attivo: "fermo da 3 giorni" conta da qui (mai dalla configurazione del NAS).
@@ -999,7 +1028,7 @@ class BackupGraph(
 
     val status = composeStatus(sources, share, access, counts)
     statusFlow.value = status
-    sourcesFlow.value = sourceStatuses(catalog, sources)
+    if (sourcesFlow.subscriptionCount.value > 0) sourceSnapshot()
     // IN-7: i file ricevuti che non si sono caricati lo dicono anche qui (una query sull'indice di `state`, mai il NAS).
     val incomingProblems = try {
       fiveB.receivedQueue.problemCount()
@@ -1096,7 +1125,7 @@ class BackupGraph(
     // P14 (5B, D17, E-E6): versioni ferme perche' il PC ha cambiato il file sul NAS. Non e' un problema di un media: lo dice la pagina, con la
     // Diagnostica; riparte da solo dopo la verifica del NAS.
     fiveB.sourceChangedHolds().takeIf { it > 0 }?.let { return BackupStatus.Problem(BackupProblemCode.SOURCE_CHANGED, it) }
-    return BackupStatus.UpToDate(counts.safe, memory.lastComplete())
+    return BackupStatus.UpToDate(counts.safe, memory.lastComplete(), onlyCommonCopy = counts.onlyCommonCopy)
   }
 
   /**
@@ -1271,6 +1300,7 @@ class BackupGraph(
         safe = counts.safe,
         queued = BackupStatusReducers.queuedOf(counts),
         problems = counts.problems,
+        onlyCommonCopy = counts.onlyCommonCopy,
       )
     }
   }

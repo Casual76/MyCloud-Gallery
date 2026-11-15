@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.GppGood
+import androidx.compose.material.icons.rounded.FolderShared
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.PauseCircle
 import androidx.compose.runtime.Composable
@@ -79,6 +80,12 @@ internal fun backupFooterNote(status: LibraryBackupStatus): GalleryFooterNote? =
     label = stringResource(R.string.backup_footer_all_safe),
     glyph = Icons.Rounded.GppGood,
     detail = status.atNasMillis?.let { backupUpdatedAt(it) },
+  )
+  is LibraryBackupStatus.CompletedWithCommon -> GalleryFooterNote(
+    tone = GalleryFooterTone.Attention,
+    label = stringResource(R.string.backup_footer_common_only, GalleryNumbers.format(status.items)),
+    glyph = Icons.Rounded.FolderShared,
+    detail = stringResource(R.string.backup_footer_common_detail),
   )
   // Fase I (BF-6): il primo backup pronto non e' «in coda al prossimo giro»: e' da avviare (tocca a te), e il piede porta alla pagina.
   is LibraryBackupStatus.Queued -> if (status.wait == LibraryBackupWait.FIRST_BACKUP) {

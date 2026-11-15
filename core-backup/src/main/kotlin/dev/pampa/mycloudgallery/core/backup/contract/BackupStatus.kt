@@ -162,7 +162,7 @@ sealed interface BackupStatus {
   data class FirstBackupReady(val summary: BackupSummary) : BackupStatus
 
   /** Tutto al sicuro; [atNasMillis] e' la fine dell'ultimo giro (null = non nota). */
-  data class UpToDate(val safeCount: Int, val atNasMillis: Long?) : BackupStatus
+  data class UpToDate(val safeCount: Int, val atNasMillis: Long?, val onlyCommonCopy: Int = 0) : BackupStatus
 
   data class Waiting(val items: Int, val bytes: Long, val reason: WaitReason) : BackupStatus
 
@@ -197,6 +197,8 @@ data class SourceStatus(
   val safe: Int,
   val queued: Int,
   val problems: Map<BackupProblemCode, Int>,
+  /** Gia' sul NAS comune: non sono caricamenti in coda ne' copie private al sicuro. */
+  val onlyCommonCopy: Int = 0,
 ) {
   /** Il problema piu' grave della sorgente (il primo nell'ordine del §2.6), o null. */
   val worst: BackupProblemCode? get() = problems.keys.minByOrNull { it.ordinal }

@@ -51,7 +51,7 @@ class BackupDiagnostics(private val backup: BackupGraph, private val similar: Si
     val status = backup.status.value
     val share = backup.privateShare()
     val gate = share?.let { backup.gate.stateOf(it) }
-    val sources = backup.sources.value
+    val sources = backup.sourceSnapshot()
 
     // Lo stato.
     val state = linkedMapOf<String, ExportValue>(

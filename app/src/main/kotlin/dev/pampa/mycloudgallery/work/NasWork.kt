@@ -147,6 +147,16 @@ object NasWorkScheduling {
       .enqueue()
   }
 
+  /** Le novita' dell'indice possono aver bisogno delle anteprime prima dell'AI; il vecchio cooldown resta intatto. */
+  internal fun prepareAfterSync(context: Context, job: DiagJob, outcome: StageOutcome?) {
+    if (job != DiagJob.INDEX_SYNC || outcome !is StageOutcome.Finished) return
+    WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
+      PREP_NOW_WORK,
+      ExistingWorkPolicy.KEEP,
+      OneTimeWorkRequestBuilder<PreparationWorker>().setConstraints(connected()).addTag(TAG).build(),
+    )
+  }
+
   /**
    * F12, O-B16 (prove sul campo): dopo un cambio di qualita' delle anteprime la pagina dice "sto adattando lo spazio" ma la convergenza la fanno
    * i giri di sincronizzazione dell'indice (scaricano le classi nuove e, scendendo, rilasciano le vecchie), che prima aspettavano le 6 ore del giro
@@ -507,6 +517,8 @@ abstract class NasWorker(
     GalleryLog.d(tag) { "tappa: ${outcome?.javaClass?.simpleName}" }
     outcome?.let { graph.events.stage(diagJob, it) }
     if (triggersSimilarCopies && outcome != null) gallery.similarCopies?.requestRun()
+    // La scansione/sincronizzazione appena conclusa non deve lasciare la preparazione al giro periodico o a un vecchio ritardo.
+    NasWorkScheduling.prepareAfterSync(applicationContext, diagJob, outcome)
     // Fase 6 (P11, §1.4): dopo la sincronizzazione e la preparazione un giro del calcolo AI (lavoro unico, KEEP; senza il ruolo finisce subito).
     if (outcome is StageOutcome.Finished && (diagJob == DiagJob.INDEX_SYNC || diagJob == DiagJob.PREPARATION)) {
       AiWorkScheduling.afterNews(applicationContext)

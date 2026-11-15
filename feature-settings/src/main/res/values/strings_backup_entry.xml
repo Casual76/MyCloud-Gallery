@@ -8,6 +8,7 @@
   <string name="settings_backup_first_comparing">Preparo</string>
   <string name="settings_backup_first_ready">Pronto</string>
   <string name="settings_backup_up_to_date">Al sicuro</string>
+  <string name="settings_backup_common_only">Solo nell’area comune: %1$s</string>
   <string name="settings_backup_waiting">%1$s in coda</string>
   <string name="settings_backup_running">%1$s / %2$s</string>
   <!-- Giro 2 (BF2-4): le stesse parole della pagina Backup e del piede, per riferimento. -->

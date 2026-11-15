@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.pampa.mycloudgallery.core.backup.contract.BackupAction
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSettings
+import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.DeviceFolder
 import dev.pampa.mycloudgallery.core.backup.contract.PendingTask
@@ -49,6 +50,7 @@ internal data class BackupPageUi(
   /** 5B (IN-7): i file ricevuti da un'altra app che non sono ancora sul NAS (la scheda "Ricevuti in coda" compare solo con almeno uno). */
   val received: ReceivedCounts = ReceivedCounts.NONE,
   val live: dev.pampa.mycloudgallery.core.backup.contract.BackupLive = dev.pampa.mycloudgallery.core.backup.contract.BackupLive.EMPTY,
+  val sourcesLoading: Boolean = false,
 )
 
 @HiltViewModel
@@ -66,6 +68,8 @@ class BackupPageViewModel @Inject constructor(
 
   private val port: BackupOverview = overview.orElse(NoBackupOverview)
   private val folder: StateFlow<DeviceFolder?> = settings.orElse(null)?.deviceFolder ?: MutableStateFlow<DeviceFolder?>(null)
+  private val chosen = settings.orElse(null)?.sources ?: MutableStateFlow(BackupSources.NONE)
+  private val settingsLoaded = settings.orElse(null)?.loaded ?: MutableStateFlow(true)
   private val acts: BackupActions = actions.orElse(NoBackupActions)
   private val sheet = MutableStateFlow(false)
 
@@ -77,10 +81,13 @@ class BackupPageViewModel @Inject constructor(
     BackupPageUi(status = status, sources = sources, deviceFolder = deviceFolder, sheetOpen = open, pendingTasks = open5b.size)
   }
 
-  internal val state: StateFlow<BackupPageUi> = combine(base, receivedItems, port.live) { ui, arrived, live -> ui.copy(received = ReceivedCounts.of(arrived), live = live) }.stateIn(
+  internal val state: StateFlow<BackupPageUi> = combine(base, receivedItems, port.live, chosen, settingsLoaded) { ui, arrived, live, sources, loaded ->
+    ui.copy(received = ReceivedCounts.of(arrived), live = live, sourcesLoading = !loaded || (ui.sources.isEmpty() && !sources.isEmpty))
+  }.stateIn(
     scope = viewModelScope,
     started = SharingStarted.WhileSubscribed(StopTimeoutMillis),
-    initialValue = BackupPageUi(port.status.value, port.sources.value, folder.value, sheet.value, pending.value.size, ReceivedCounts.of(receivedItems.value)),
+    initialValue = BackupPageUi(port.status.value, port.sources.value, folder.value, sheet.value, pending.value.size, ReceivedCounts.of(receivedItems.value),
+      sourcesLoading = !settingsLoaded.value || (port.sources.value.isEmpty() && !chosen.value.isEmpty)),
   )
 
   /** Il riepilogo del primo backup (§2.11): il foglio si apre da un tocco, o da solo quando si arriva dalla rotta `backup/first`. */

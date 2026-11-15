@@ -296,16 +296,17 @@ class NasFacesPublisher(
   /** Il contributo di questo dispositivo adesso, nei segmenti stabili delle tre classi. */
   private suspend fun plan(open: FacesGate.Open, archive: FacesArchive, state: FacesPublishState, nasNow: Long): Plan {
     var skipped = 0
+    val deviceId = identity.deviceId
     // Corpi: **tutti** quelli calcolati qui, vincenti o no, per le chiavi attestate ("M3 dei volti"). Il contributo di un dispositivo non si
     // restringe mai (un corpo che oggi perde resta pubblicato): cosi' chi legge le stesse teste ha gli stessi corpi e sceglie lo stesso
     // vincitore, anche dopo che un dispositivo ha perso il suo stato locale.
     val attested = if (state.keys.isEmpty()) emptySet() else attestation.publishable(state.keys).intersect(state.keys)
     val bodies = ArrayList<Pair<ContentKey, FacesBody>>()
-    val found = archive.bodiesOf(identity.deviceId, attested)
+    val found = archive.bodiesOf(deviceId, attested)
     // I5: un corpo attestato che qui non si apre (o non c'e') non si pubblica: si conta, non sparisce in silenzio.
     skipped += attested.count { it !in found }
     for ((key, body) in found) {
-      if (body.author != identity.deviceId || key != body.contentKey) continue
+      if (body.author != deviceId || key != body.contentKey) continue
       if (!FacesWire.admits(body)) {
         skipped++
         continue

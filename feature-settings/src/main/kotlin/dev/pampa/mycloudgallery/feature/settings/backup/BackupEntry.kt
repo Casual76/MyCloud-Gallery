@@ -75,7 +75,7 @@ internal fun BackupEntryRow(status: BackupStatus?, onClick: () -> Unit) {
 /** Il segno sulla piastrella: lo stesso della testata della pagina Backup. */
 internal fun backupEntryMark(status: BackupStatus?): GalleryIconStatus? = when (status) {
   null -> null
-  is BackupStatus.UpToDate -> GalleryIconStatus.Done
+  is BackupStatus.UpToDate -> if (status.onlyCommonCopy > 0) GalleryIconStatus.Attention else GalleryIconStatus.Done
   is BackupStatus.Running -> GalleryIconStatus.Running
   is BackupStatus.Problem, is BackupStatus.NotConfigured -> GalleryIconStatus.Attention
   // Fase I (BF-5): lo stesso segno della testata della pagina Backup. Pronto: «tocca a te» (non il «!» d'allarme); si cerca: in corso solo se la scansione
@@ -114,7 +114,9 @@ internal object BackupEntryTexts {
           !status.summary.canStart -> res.getString(R.string.settings_backup_first_comparing)
           else -> res.getString(R.string.settings_backup_first_ready)
         }
-      is BackupStatus.UpToDate -> res.getString(R.string.settings_backup_up_to_date)
+      is BackupStatus.UpToDate -> if (status.onlyCommonCopy > 0) {
+        res.getString(R.string.settings_backup_common_only, ItalianCount.format(status.onlyCommonCopy))
+      } else res.getString(R.string.settings_backup_up_to_date)
       is BackupStatus.Waiting -> res.getString(R.string.settings_backup_waiting, ItalianCount.format(status.items))
       // Giro 2 (BF2-4): chiesto adesso e accettato, il motore non l'ha ancora preso: «Sto partendo» come la pagina e il piede, mai «0 / N».
       is BackupStatus.Running -> if (status.starting) {

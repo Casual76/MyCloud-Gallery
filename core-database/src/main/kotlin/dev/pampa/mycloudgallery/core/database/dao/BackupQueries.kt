@@ -41,7 +41,7 @@ object BackupQueries {
     }
 
     /** `(l.volume = ? AND l.relative_path = ?) OR ...`, o `0`. */
-    fun folderClause(l: String, args: MutableList<Any?>): String {
+    fun folderClause(l: String, args: MutableList<Any?>, indexed: Boolean = false): String {
       if (folders.isEmpty()) return "0"
       // Una query puo' ripetere la selezione due volte e aggiungere le cartelle escluse.
       // Oltre 128 cartelle usiamo un solo parametro, anche su SQLite con limite 999.
@@ -54,7 +54,8 @@ object BackupQueries {
         args += it.volume
         args += it.relativePath
       }
-      return folders.joinToString(" OR ", "(", ")") { "(+$l.volume = ? AND +$l.relative_path = ?)" }
+      val column = if (indexed) l else "+$l"
+      return folders.joinToString(" OR ", "(", ")") { "($column.volume = ? AND $column.relative_path = ?)" }
     }
 
     private fun hex(value: String): String = buildString {
@@ -162,7 +163,8 @@ object BackupQueries {
     val where = inSources(filter, args, outside) + actionableSource(filter, args)
     args.add(0, me)
     return SimpleSQLiteQuery(
-      "SELECT p.code AS code, COUNT(*) AS count FROM backup_problem p JOIN media m ON m.media_id = p.media_id " +
+      // I problemi sono pochi: partire dai media riesegue i predicati di cartella per tutta la libreria, anche senza problemi.
+      "SELECT p.code AS code, COUNT(*) AS count FROM backup_problem p CROSS JOIN media m ON m.media_id = p.media_id " +
         "WHERE m.owner_account = ? AND $where GROUP BY p.code",
       args.toTypedArray(),
     )
@@ -170,12 +172,13 @@ object BackupQueries {
 
   /** Le assenze storiche servono alla sicurezza, mai a promettere un caricamento. */
   private fun actionableSource(filter: SourceFilter, args: MutableList<Any?>): String {
-    val media = filter.mediaClause("m", args)
-    val folders = filter.folderClause("live", args)
-    return " AND (m.safety != 'no_nas_copy' OR EXISTS (SELECT 1 FROM media_version av " +
+    val media = filter.mediaClause("am", args)
+    val folders = filter.folderClause("live", args, indexed = true)
+    return " AND (m.safety != 'no_nas_copy' OR m.media_id IN (SELECT av.media_id FROM media_version av " +
+      "JOIN media am ON am.media_id = av.media_id " +
       "JOIN media_location live ON live.version_id = av.version_id " +
       "JOIN media_store_cursor cursor ON cursor.volume = live.volume AND cursor.ms_version = live.media_store_version " +
-      "WHERE av.media_id = m.media_id AND (av.version_id = m.current_version_id OR av.kind = 'original') " +
+      "WHERE (av.version_id = am.current_version_id OR av.kind = 'original') " +
       "AND live.location_type = 'phone' AND live.state = 'present' AND live.media_store_id IS NOT NULL " +
       "AND ($media OR $folders)))"
   }
@@ -192,19 +195,19 @@ object BackupQueries {
    * contro 503 "in coda"). La riga e l'anello non arrivavano mai al 100%.
    */
   private fun inSources(filter: SourceFilter, args: MutableList<Any?>, outside: Collection<CatalogSource.Folder> = emptyList()): String {
-    val media = filter.mediaClause("m", args).let { if (it == "0") it else "($it AND $ON_THIS_PHONE)" }
+    val media = filter.mediaClause("m", args).let { if (it == "0") it else "($it AND m.media_id IN ($PHONE_MEDIA_IDS))" }
     val belongs = if (filter.folders.isEmpty()) {
       "($media)"
     } else {
-      val folders = filter.folderClause("l", args)
-      "($media OR EXISTS (SELECT 1 FROM media_version v JOIN media_location l ON l.version_id = v.version_id " +
-        "WHERE v.media_id = m.media_id AND l.location_type = 'phone' AND $folders))"
+      val folders = filter.folderClause("l", args, indexed = true)
+      "($media OR m.media_id IN (SELECT v.media_id FROM media_version v JOIN media_location l ON l.version_id = v.version_id " +
+        "WHERE l.location_type = 'phone' AND $folders))"
     }
     val excluded = SourceFilter(outside)
     if (excluded.folders.isEmpty()) return belongs
-    val chosen = excluded.folderClause("x", args)
-    return "($belongs AND NOT EXISTS (SELECT 1 FROM media_version xv JOIN media_location x ON x.version_id = xv.version_id " +
-      "WHERE xv.media_id = m.media_id AND x.location_type = 'phone' AND $chosen))"
+    val chosen = excluded.folderClause("x", args, indexed = true)
+    return "($belongs AND m.media_id NOT IN (SELECT xv.media_id FROM media_version xv JOIN media_location x ON x.version_id = xv.version_id " +
+      "WHERE x.location_type = 'phone' AND $chosen))"
   }
 
   /**
@@ -294,6 +297,11 @@ object BackupQueries {
     "(EXISTS (SELECT 1 FROM media_version pv JOIN media_location pl ON pl.version_id = pv.version_id " +
       "WHERE pv.media_id = m.media_id AND pl.location_type = 'phone') " +
       "OR EXISTS (SELECT 1 FROM backup_item pb WHERE pb.media_id = m.media_id AND pb.kind = 'new_copy'))"
+
+  /** La stessa appartenenza, materializzata una volta per i conteggi anziche' ricercata per ogni media della libreria. */
+  private const val PHONE_MEDIA_IDS: String =
+    "SELECT pv.media_id FROM media_version pv JOIN media_location pl ON pl.version_id = pv.version_id WHERE pl.location_type = 'phone' " +
+      "UNION SELECT pb.media_id FROM backup_item pb WHERE pb.kind = 'new_copy' AND pb.media_id IS NOT NULL"
 
   private const val FORMER_PHONE_MEDIA: String = "AND $ON_THIS_PHONE "
 

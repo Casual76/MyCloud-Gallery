@@ -19600,3 +19600,29 @@ di tutti i test, `check.ps1 -Bench -BenchStrict`, installazione o prove su telef
 ha eseguito R8 con 4 GiB, poi `assembleRelease` in JVM fresca da 2 GiB: 11,8 minuti totali, entrambi i posti rilasciati nel `finally`.
 Nessun altro tentativo. Pubblicazione con `publisher.py`, `--skip-build`, APK esplicito e anteprima controllata. Dopo il publish:
 `verifica-elenco.ps1` verde sul download pubblico, SHA-256 e peso identici; API GitHub e indice Pampa Store riletti e coerenti con la Beta.
+
+### Prima stabile pubblicata: 1.1.0, canale stable (15 novembre 2026)
+
+**Richiesta e artefatto.** Pubblicazione richiesta dall'utente dopo il collaudo diagnostico sull'S25. Sorgenti nel commit
+`493f60f168cfe96f6e207f61ec4326472570b89e`, tag `v1.1.0`, engine fermo a 3.0.4. APK di produzione ottimizzato, non debuggable e non
+profileable, `versionCode` 4, 109.732.972 byte, SHA-256 `9ca8c0c6f4c83e0a6ca1b19c6d16933c1f92fcf8248fba0e6a4922e989a3c280`.
+Firme v1/v2/v3 e certificato pampa.jks documentato verificati; nove librerie arm64 allineate a 16 KB. Release
+[1.1.0](https://github.com/Casual76/MyCloud-Gallery/releases/tag/stable-mycloud-gallery-v1.1.0), asset `mycloud-gallery-1.1.0.apk`.
+Il publisher aggiorna sia Stabile sia Beta alla stabile; la precedente beta.02 resta nello storico.
+
+**Correzioni e prove.** Ultimi album attivabili, scelte delle cartelle serializzate e stato di caricamento esplicito; meno lavoro ripetuto su database,
+raggruppamento dei mesi e identita' del dispositivo; osservatori Room fuori dal thread principale; copie solo comuni distinte dal backup personale;
+preparazione riattivata dopo la sincronizzazione dell'indice; nastro dell'analisi fermo durante le attese. Tre reviewer hanno riesaminato i rilievi del
+delta. I 41 file delle correzioni coincidono con le impronte verificate prima della release. Riutilizzati i giri mirati da 214, 161 e 42 test, parzialmente
+sovrapposti: non si sommano. Lint selezionato senza errori (83 avvisi). Per il rilascio: 8 test del changelog verdi, lint vital di release completato,
+18 controlli sul file compilato verdi, incluso lo stato delle quattro recinzioni e i cancelli, firme, manifest, permessi, changelog e Baseline Profile.
+Anteprima publisher verificata; download pubblico confrontato con l'APK locale tramite `verifica-elenco.ps1`, peso e SHA-256 identici.
+
+**Risorse e limiti.** Una sola esecuzione R8 con 4 GiB riuscita; la finestra esclusiva di 25 minuti si e' chiusa durante il successivo lint di
+confezionamento. Un completamento con veto R8 si e' fermato perche' l'azione di veto invalidava il riuso del task; nessun nuovo calcolo R8.
+Il coordinatore ha autorizzato un distinto confezionamento di 10 minuti a 2 GiB, con R8 escluso e output riusciti congelati: successo in 353 secondi,
+impronte di tre dex e mapping identiche prima/dopo, stessi dex verificati dentro l'APK. Ogni posto rilasciato e JVM proprie chiuse. Nessuna modifica
+agli script condivisi o all'engine. Non rieseguiti il controllo intero e i benchmark sul dispositivo; nessuna installazione fisica dell'APK ottimizzato.
+Il precedente diagnostico ha verificato sull'S25 i controlli degli album e un avanzamento reale di preparazione/analisi. ANR su S22 non qualificato:
+nessun S22 o relativo tracciato disponibile. Restano indagini distinte sull'esportazione diagnostica vuota e sul percorso storico D31 dei buffer di analisi;
+non sono dichiarate risolte da questa release.
